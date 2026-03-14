@@ -20,8 +20,11 @@ Diese Custom Integration verbindet dein **Bosch eBike Smart System** mit Home As
 - **Bike-Daten:** Kilometerstand, Motorstunden (gesamt & mit Unterstützung), maximale Unterstützungsgeschwindigkeit, aktive Unterstützungsmodi, Schiebehilfe-Geschwindigkeit, nächster Service-Kilometerstand
 - **Batterie-Daten:** Gelieferte Wh über Lebensdauer, Ladezyklen (gesamt, am Rad, extern)
 - **Letzte Fahrt:** Distanz, Dauer, Durchschnitts-/Maximalgeschwindigkeit, Trittfrequenz (avg/max), Fahrerleistung in Watt (avg/max), Kalorienverbrauch, Höhenmeter (Anstieg/Abstieg), Titel, Datum
+- **Gesamtstatistiken:** Anzahl aller Fahrten, Gesamtdistanz, Gesamtfahrzeit, Gesamtkalorien, Gesamthöhenmeter, Durchschnittswerte für Geschwindigkeit/Leistung/Trittfrequenz über alle Fahrten
+- **GPS-Track-Export:** Export aller Fahrten als GPX-Dateien (mit Speed, Cadence, Power als Garmin TrackPointExtension)
+- **Interaktive Kartendarstellung:** Custom Lovelace Card mit GPS-Tracks, geschwindigkeitsabhängiger Farbcodierung, Date-Picker und Prev/Next-Navigation
 - **Automatische Token-Aktualisierung** über Refresh-Token
-- **30-Minuten-Polling-Intervall**
+- **30-Minuten-Polling-Intervall** (beim ersten Start werden alle Fahrten importiert)
 
 ### Voraussetzungen
 
@@ -56,11 +59,14 @@ Dies ist der wichtigste Schritt. Du musst eine "App" im Bosch-Portal anlegen, um
 3. Klicke auf **"App erstellen"** (oder "Create App")
 4. Fülle das Formular aus:
    - **App-Name:** z. B. `Home Assistant`
+   - **Login URL:** `https://p9.authz.bosch.com/auth/realms/obc/protocol/openid-connect/auth`
    - **Redirect URI:** `http://localhost:8888/callback`
 
-   > **Wichtig:** Die Redirect-URI muss **exakt** `http://localhost:8888/callback` lauten. Diese wird für den OAuth2-Authentifizierungsflow benötigt.
+   > **Wichtig:** Die Login URL muss der Bosch OAuth-Endpunkt sein (siehe oben). Die Redirect-URI muss **exakt** `http://localhost:8888/callback` lauten.
 
 5. Nach dem Erstellen erhältst du eine **Client-ID** (im Format `euda-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`). Kopiere diese — du brauchst sie gleich.
+
+> **Hinweis:** Die App muss von Bosch genehmigt werden. Das kann einige Stunden bis wenige Tage dauern. Du erhältst eine E-Mail, sobald die App freigeschaltet ist. Erst danach funktionieren die nächsten Schritte (Datenfreigabe und Token-Austausch).
 
 #### 4. Datenfreigabe im Flow Portal aktivieren
 
@@ -96,11 +102,30 @@ Ohne Datenfreigabe liefert die API ein leeres Ergebnis!
 
 Die Integration wird nun deine Bike-Daten abrufen und Sensor-Entities erstellen.
 
+#### 6. Kartenansicht einrichten (optional)
+
+Die Integration enthält eine interaktive Lovelace-Karte zur Anzeige deiner GPS-Tracks.
+
+1. Gehe zu **Einstellungen → Dashboards → Ressourcen → Hinzufügen**
+2. URL: `/bosch_ebike/bosch-ebike-map-card.js`
+3. Typ: **JavaScript-Modul**
+4. Füge die Karte zu deinem Dashboard hinzu:
+   ```yaml
+   type: custom:bosch-ebike-map-card
+   height: 500
+   ```
+
+Die Karte zeigt:
+- GPS-Track mit geschwindigkeitsabhängiger Farbcodierung (blau → grün → gelb → rot)
+- Start-/Endpunkt-Marker
+- Fahrtinformationen (Distanz, Dauer, Speed, Höhenmeter, Kalorien)
+- Date-Picker und Prev/Next-Buttons zum Durchblättern aller Fahrten
+
 #### HACS-Installation (Alternative)
 
 1. Öffne HACS in Home Assistant
 2. Klicke auf **"Benutzerdefinierte Repositories"** (drei Punkte oben rechts)
-3. Füge die Repository-URL hinzu: `https://github.com/volkerhauffe/ha-bosch-ebike`
+3. Füge die Repository-URL hinzu: `https://github.com/Xunil99/ha-bosch-ebike`
 4. Kategorie: **Integration**
 5. Installiere die Integration und starte Home Assistant neu
 
@@ -115,6 +140,8 @@ Die Integration wird nun deine Bike-Daten abrufen und Sensor-Entities erstellen.
 | Token-Austausch fehlgeschlagen | Prüfe, ob die Redirect-URI exakt `http://localhost:8888/callback` lautet |
 | Kilometerstand unrealistisch hoch | Der Odometer wird in Metern geliefert und automatisch in km umgerechnet |
 | Aktivitätsdaten fehlen | Prüfe, ob die Aktivitäten-Freigabe im Flow Portal aktiv ist |
+| Kein "Daten freigeben"-Button | Die App muss erst von Bosch genehmigt werden (E-Mail abwarten) |
+| Token nicht akzeptiert | App noch nicht genehmigt — warte auf die Bestätigungs-E-Mail von Bosch |
 
 ---
 
@@ -152,6 +179,24 @@ Die Integration wird nun deine Bike-Daten abrufen und Sensor-Entities erstellen.
 | Last Ride Calories | kcal | Kalorienverbrauch |
 | Last Ride Elevation Gain/Loss | m | Höhenmeter (Anstieg/Abstieg) |
 
+#### Gesamtstatistiken (über alle Fahrten)
+| Sensor | Einheit | Beschreibung |
+|--------|---------|--------------|
+| Total Rides | — | Anzahl aller Fahrten |
+| Total Distance (Activities) | km | Gesamtdistanz aller Fahrten |
+| Total Ride Duration | h | Gesamtfahrzeit |
+| Total Calories | kcal | Gesamt-Kalorienverbrauch |
+| Total Elevation Gain | m | Gesamt-Höhenmeter |
+| Avg Speed (All Rides) | km/h | Durchschnittsgeschwindigkeit über alle Fahrten |
+| Avg Rider Power (All Rides) | W | Durchschnittliche Fahrerleistung |
+| Avg Cadence (All Rides) | rpm | Durchschnittliche Trittfrequenz |
+
+#### Buttons
+| Button | Beschreibung |
+|--------|--------------|
+| Import All GPS Data | Exportiert GPS-Tracks aller Fahrten als GPX-Dateien |
+| Import Latest GPS Data | Exportiert den GPS-Track der letzten Fahrt als GPX |
+
 ---
 
 <a id="english"></a>
@@ -169,8 +214,11 @@ This custom integration connects your **Bosch eBike Smart System** to Home Assis
 - **Bike data:** Odometer, motor hours (total & with assist), max assist speed, active assist modes, walk assist speed, next service odometer
 - **Battery data:** Delivered Wh over lifetime, charge cycles (total, on-bike, off-bike)
 - **Last ride:** Distance, duration, avg/max speed, cadence (avg/max), rider power in watts (avg/max), calories burned, elevation gain/loss, title, date
+- **Aggregate statistics:** Total rides, total distance, total ride time, total calories, total elevation, averages for speed/power/cadence across all rides
+- **GPS track export:** Export all rides as GPX files (with speed, cadence, power as Garmin TrackPointExtension)
+- **Interactive map card:** Custom Lovelace card with GPS tracks, speed-based color coding, date picker and prev/next navigation
 - **Automatic token refresh** via refresh token
-- **30-minute polling interval**
+- **30-minute polling interval** (all rides are imported on first startup)
 
 ### Prerequisites
 
@@ -205,11 +253,14 @@ This is the most important step. You need to create an "App" in the Bosch portal
 3. Click **"Create App"**
 4. Fill in the form:
    - **App Name:** e.g., `Home Assistant`
+   - **Login URL:** `https://p9.authz.bosch.com/auth/realms/obc/protocol/openid-connect/auth`
    - **Redirect URI:** `http://localhost:8888/callback`
 
-   > **Important:** The redirect URI must be **exactly** `http://localhost:8888/callback`. This is required for the OAuth2 authentication flow.
+   > **Important:** The Login URL must be the Bosch OAuth endpoint shown above. The redirect URI must be **exactly** `http://localhost:8888/callback`.
 
 5. After creating the app, you will receive a **Client-ID** (format: `euda-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`). Copy it — you'll need it shortly.
+
+> **Note:** The app needs to be approved by Bosch. This can take a few hours to a couple of days. You will receive an email once the app is approved. The following steps (data sharing and token exchange) will only work after approval.
 
 #### 4. Enable Data Sharing in the Flow Portal
 
@@ -245,11 +296,30 @@ Without data sharing enabled, the API will return empty results!
 
 The integration will now fetch your bike data and create sensor entities.
 
+#### 6. Set Up the Map Card (optional)
+
+The integration includes an interactive Lovelace card for displaying your GPS tracks.
+
+1. Go to **Settings → Dashboards → Resources → Add**
+2. URL: `/bosch_ebike/bosch-ebike-map-card.js`
+3. Type: **JavaScript Module**
+4. Add the card to your dashboard:
+   ```yaml
+   type: custom:bosch-ebike-map-card
+   height: 500
+   ```
+
+The card shows:
+- GPS track with speed-based color coding (blue → green → yellow → red)
+- Start/end point markers
+- Ride information (distance, duration, speed, elevation, calories)
+- Date picker and prev/next buttons for browsing all rides
+
 #### HACS Installation (Alternative)
 
 1. Open HACS in Home Assistant
 2. Click **"Custom repositories"** (three dots in the top right)
-3. Add the repository URL: `https://github.com/volkerhauffe/ha-bosch-ebike`
+3. Add the repository URL: `https://github.com/Xunil99/ha-bosch-ebike`
 4. Category: **Integration**
 5. Install the integration and restart Home Assistant
 
@@ -264,6 +334,8 @@ The integration will now fetch your bike data and create sensor entities.
 | Token exchange failed | Check that redirect URI is exactly `http://localhost:8888/callback` |
 | Odometer unrealistically high | The odometer is delivered in meters and automatically converted to km |
 | Activity data missing | Check that activity sharing is enabled in the Flow Portal |
+| No "Share data" button visible | The app needs to be approved by Bosch first — wait for the confirmation email |
+| Token not accepted | App not yet approved — wait for the approval email from Bosch |
 
 ---
 
@@ -301,6 +373,24 @@ The integration will now fetch your bike data and create sensor entities.
 | Last Ride Calories | kcal | Calories burned |
 | Last Ride Elevation Gain/Loss | m | Elevation gain/loss |
 
+#### Aggregate Statistics (all rides)
+| Sensor | Unit | Description |
+|--------|------|-------------|
+| Total Rides | — | Number of all rides |
+| Total Distance (Activities) | km | Total distance across all rides |
+| Total Ride Duration | h | Total ride time |
+| Total Calories | kcal | Total calories burned |
+| Total Elevation Gain | m | Total elevation gain |
+| Avg Speed (All Rides) | km/h | Average speed across all rides |
+| Avg Rider Power (All Rides) | W | Average rider power |
+| Avg Cadence (All Rides) | rpm | Average cadence |
+
+#### Buttons
+| Button | Description |
+|--------|-------------|
+| Import All GPS Data | Exports GPS tracks of all rides as GPX files |
+| Import Latest GPS Data | Exports the GPS track of the latest ride as GPX |
+
 ---
 
 ### License
@@ -309,6 +399,6 @@ MIT License — see [LICENSE](LICENSE) for details.
 
 ### Credits
 
-Built by [Volker Hauffe](https://github.com/volkerhauffe).
+Built by [Volker Hauffe](https://github.com/Xunil99).
 
 This integration uses the official [Bosch eBike Data Act API](https://portal.bosch-ebike.com/data-act).
