@@ -144,6 +144,33 @@ class BoschEBikeAPI:
         summaries = data.get("activitySummaries", [])
         return summaries[0] if summaries else None
 
+    async def get_all_activities(self, page_size: int = 50) -> list[dict[str, Any]]:
+        """Fetch all activity summaries with pagination."""
+        all_activities: list[dict[str, Any]] = []
+        offset = 0
+
+        while True:
+            data = await self._get(
+                f"{ACTIVITIES_ENDPOINT}?limit={page_size}&offset={offset}&sort=-startTime"
+            )
+            summaries = data.get("activitySummaries", [])
+            if not summaries:
+                break
+
+            all_activities.extend(summaries)
+
+            total = data.get("pagination", {}).get("total", 0)
+            offset += page_size
+            _LOGGER.debug(
+                "Bosch eBike: Fetched %d/%d activities", len(all_activities), total
+            )
+
+            if offset >= total:
+                break
+
+        _LOGGER.info("Bosch eBike: Imported %d activities total", len(all_activities))
+        return all_activities
+
 
 class AuthError(Exception):
     """Authentication error."""

@@ -30,20 +30,41 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             update_interval=timedelta(minutes=DEFAULT_SCAN_INTERVAL),
         )
         self.api = api
+        self._initial_import_done = False
+        self._all_activities: list[dict[str, Any]] = []
 
     async def _async_update_data(self) -> dict[str, Any]:
-        """Fetch bikes and latest activity from Bosch API."""
+        """Fetch bikes and activities from Bosch API."""
         try:
-            _LOGGER.debug("Fetching bike data from Bosch API")
             bikes = await self.api.get_bikes()
-            _LOGGER.debug("Got %d bikes", len(bikes))
-            latest_activity = await self.api.get_latest_activity()
-            _LOGGER.debug("Got latest activity: %s", "yes" if latest_activity else "no")
+
+            if not self._initial_import_done:
+                # First run: import ALL activities
+                _LOGGER.info("Bosch eBike: Initial import — fetching all activities...")
+                self._all_activities = await self.api.get_all_activities()
+                self._initial_import_done = True
+                _LOGGER.info(
+                    "Bosch eBike: Initial import complete — %d activities loaded",
+                    len(self._all_activities),
+                )
+            else:
+                # Subsequent runs: only fetch latest activity
+                latest = await self.api.get_latest_activity()
+                if latest:
+                    latest_id = latest.get("id")
+                    if self._all_activities and self._all_activities[0].get("id") == latest_id:
+                        # Same activity, update in place
+                        self._all_activities[0] = latest
+                    else:
+                        # New activity, prepend
+                        self._all_activities.insert(0, latest)
+                        _LOGGER.info(
+                            "Bosch eBike: New activity detected: %s", latest.get("title")
+                        )
+
         except AuthError as err:
-            _LOGGER.error("Authentication error: %s", err)
             raise ConfigEntryAuthFailed(str(err)) from err
         except Exception as err:
-            _LOGGER.error("Error fetching data: %s", err)
             raise UpdateFailed(f"Error fetching data: {err}") from err
 
         # Persist updated tokens back to config entry
@@ -56,7 +77,10 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             },
         )
 
+        latest_activity = self._all_activities[0] if self._all_activities else None
+
         return {
             "bikes": bikes,
             "latest_activity": latest_activity,
+            "all_activities": self._all_activities,
         }

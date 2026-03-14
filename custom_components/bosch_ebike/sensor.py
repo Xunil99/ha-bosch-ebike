@@ -40,6 +40,7 @@ class BoschBikeSensorDescription(SensorEntityDescription):
 
     value_fn: Callable[[dict], Any]
     is_activity: bool = False
+    is_aggregate: bool = False
 
 
 def _format_assist_modes(data: dict) -> str | None:
@@ -240,6 +241,104 @@ ACTIVITY_SENSORS: tuple[BoschBikeSensorDescription, ...] = (
 )
 
 
+def _sum_activities(activities: list[dict], key: str, *subkeys: str, divisor: float = 1.0) -> float | None:
+    """Sum a value across all activities."""
+    if not activities:
+        return None
+    total = 0.0
+    for a in activities:
+        val = _safe_get(a, key, *subkeys) if subkeys else a.get(key)
+        if val is not None:
+            total += val
+    return round(total / divisor, 2) if divisor != 1.0 else round(total, 2)
+
+
+def _avg_activities(activities: list[dict], key: str, *subkeys: str) -> float | None:
+    """Average a value across all activities."""
+    if not activities:
+        return None
+    values = []
+    for a in activities:
+        val = _safe_get(a, key, *subkeys) if subkeys else a.get(key)
+        if val is not None:
+            values.append(val)
+    return round(sum(values) / len(values), 2) if values else None
+
+
+AGGREGATE_SENSORS: tuple[BoschBikeSensorDescription, ...] = (
+    BoschBikeSensorDescription(
+        key="total_rides",
+        name="Total Rides",
+        icon="mdi:counter",
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        value_fn=lambda activities: len(activities) if activities else 0,
+        is_aggregate=True,
+    ),
+    BoschBikeSensorDescription(
+        key="total_distance_activities",
+        name="Total Distance (Activities)",
+        native_unit_of_measurement=UnitOfLength.KILOMETERS,
+        device_class=SensorDeviceClass.DISTANCE,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        icon="mdi:map-marker-distance",
+        value_fn=lambda activities: _sum_activities(activities, "distance", divisor=1000),
+        is_aggregate=True,
+    ),
+    BoschBikeSensorDescription(
+        key="total_duration",
+        name="Total Ride Duration",
+        native_unit_of_measurement=UnitOfTime.HOURS,
+        device_class=SensorDeviceClass.DURATION,
+        icon="mdi:timer-outline",
+        value_fn=lambda activities: _sum_activities(activities, "durationWithoutStops", divisor=3600),
+        is_aggregate=True,
+    ),
+    BoschBikeSensorDescription(
+        key="total_calories",
+        name="Total Calories",
+        native_unit_of_measurement="kcal",
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        icon="mdi:fire",
+        value_fn=lambda activities: _sum_activities(activities, "caloriesBurned"),
+        is_aggregate=True,
+    ),
+    BoschBikeSensorDescription(
+        key="total_elevation_gain",
+        name="Total Elevation Gain",
+        native_unit_of_measurement=UnitOfLength.METERS,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        icon="mdi:elevation-rise",
+        value_fn=lambda activities: _sum_activities(activities, "elevation", "gain"),
+        is_aggregate=True,
+    ),
+    BoschBikeSensorDescription(
+        key="avg_speed_all_rides",
+        name="Avg Speed (All Rides)",
+        native_unit_of_measurement=UnitOfSpeed.KILOMETERS_PER_HOUR,
+        icon="mdi:speedometer-medium",
+        value_fn=lambda activities: _avg_activities(activities, "speed", "average"),
+        is_aggregate=True,
+    ),
+    BoschBikeSensorDescription(
+        key="avg_power_all_rides",
+        name="Avg Rider Power (All Rides)",
+        native_unit_of_measurement=UnitOfPower.WATT,
+        device_class=SensorDeviceClass.POWER,
+        icon="mdi:lightning-bolt",
+        value_fn=lambda activities: _avg_activities(activities, "riderPower", "average"),
+        is_aggregate=True,
+    ),
+    BoschBikeSensorDescription(
+        key="avg_cadence_all_rides",
+        name="Avg Cadence (All Rides)",
+        native_unit_of_measurement="rpm",
+        icon="mdi:rotate-right",
+        value_fn=lambda activities: _avg_activities(activities, "cadence", "average"),
+        is_aggregate=True,
+    ),
+)
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
@@ -269,6 +368,10 @@ async def async_setup_entry(
 
         # Activity sensors (attached to first bike)
         for desc in ACTIVITY_SENSORS:
+            entities.append(BoschEBikeSensor(coordinator, desc, bike_id, drive_name))
+
+        # Aggregate sensors (statistics across all rides)
+        for desc in AGGREGATE_SENSORS:
             entities.append(BoschEBikeSensor(coordinator, desc, bike_id, drive_name))
 
     async_add_entities(entities)
@@ -345,6 +448,10 @@ class BoschEBikeSensor(CoordinatorEntity[BoschEBikeCoordinator], SensorEntity):
     @property
     def native_value(self) -> Any:
         """Return the sensor value."""
+        if self.entity_description.is_aggregate:
+            all_activities = self.coordinator.data.get("all_activities", [])
+            return self.entity_description.value_fn(all_activities)
+
         if self.entity_description.is_activity:
             activity = self.coordinator.data.get("latest_activity")
             if not activity:
