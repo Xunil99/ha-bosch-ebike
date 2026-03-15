@@ -75,7 +75,7 @@ Ohne Datenfreigabe liefert die API ein leeres Ergebnis!
 1. Gehe zu **[flow.bosch-ebike.com](https://flow.bosch-ebike.com)**
 2. Melde dich mit deiner **SingleKey ID** an
 3. Wähle oben im Menü **"Data Act"** aus
-4. Suche den Eintrag **"EBike Data"** und **aktiviere** ihn
+4. Suche den Eintrag **"Home Assistant"** und **aktiviere** ihn
 
 > **Hinweis:** Wenn du die Datenfreigabe nicht aktivierst, wird die Integration zwar ohne Fehler starten, aber **keine Entities anzeigen** (0 Bikes, keine Aktivitäten).
 
@@ -284,7 +284,7 @@ Without data sharing enabled, the API will return empty results!
 1. Go to **[flow.bosch-ebike.com](https://flow.bosch-ebike.com)**
 2. Sign in with your **SingleKey ID**
 3. Select **"Data Act"** from the top menu
-4. Find the entry **"EBike Data"** and **activate** it
+4. Find the entry **"Home Assistant"** and **activate** it
 
 > **Note:** If you don't activate data sharing, the integration will start without errors but will show **no entities** (0 bikes, no activities).
 
