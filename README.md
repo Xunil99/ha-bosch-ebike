@@ -238,8 +238,8 @@ This custom integration connects your **Bosch eBike Smart System** to Home Assis
 ### Prerequisites
 
 1. An eBike with **Bosch Smart System** (e.g., Performance Line CX, SX, etc.)
-2. A **Bosch SingleKey ID** account [singlekey-id.com](https://singlekey-id.com)
-3. Access to the **Bosch eBike Flow Portal** [flow.bosch-ebike.com](https://flow.bosch-ebike.com)
+2. A **Bosch SingleKey ID** account ([singlekey-id.com](https://singlekey-id.com))
+3. Access to the **Bosch eBike Flow Portal** ([flow.bosch-ebike.com](https://flow.bosch-ebike.com))
 
 ---
 
