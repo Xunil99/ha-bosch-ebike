@@ -30,7 +30,7 @@ Diese Custom Integration verbindet dein **Bosch eBike Smart System** mit Home As
 
 1. Ein eBike mit **Bosch Smart System** (z. B. Performance Line CX, SX, etc.)
 2. Ein **Bosch SingleKey ID** Account ([singlekey-id.com](https://singlekey-id.com))
-3. Zugang zum **Bosch eBike Flow Portal** ([portal.bosch-ebike.com](https://portal.bosch-ebike.com))
+3. Zugang zum **Bosch eBike Flow Portal** ([flow.bosch-ebike.com](flow.bosch-ebike.com))
 
 ---
 
@@ -48,7 +48,7 @@ Diese Custom Integration verbindet dein **Bosch eBike Smart System** mit Home As
 1. Installiere die **Bosch eBike Flow App** auf deinem Smartphone ([iOS](https://apps.apple.com/app/bosch-ebike-flow/id1504451498) / [Android](https://play.google.com/store/apps/details?id=com.bosch.ebike))
 2. Melde dich mit deiner SingleKey ID an
 3. Koppele dein eBike über Bluetooth mit der App
-4. Dein Bike erscheint nun im Flow Portal unter [portal.bosch-ebike.com](https://portal.bosch-ebike.com)
+4. Dein Bike erscheint nun im Flow Portal unter [flow.bosch-ebike.com](https://flow.bosch-ebike.com)
 
 #### 3. App im Bosch Data Act Portal registrieren
 
@@ -239,7 +239,7 @@ This custom integration connects your **Bosch eBike Smart System** to Home Assis
 
 1. An eBike with **Bosch Smart System** (e.g., Performance Line CX, SX, etc.)
 2. A **Bosch SingleKey ID** account ([singlekey-id.com](https://singlekey-id.com))
-3. Access to the **Bosch eBike Flow Portal** ([portal.bosch-ebike.com](https://portal.bosch-ebike.com))
+3. Access to the **Bosch eBike Flow Portal** ([flow.bosch-ebike.com](https://flow.bosch-ebike.com))
 
 ---
 
@@ -257,7 +257,7 @@ This custom integration connects your **Bosch eBike Smart System** to Home Assis
 1. Install the **Bosch eBike Flow App** on your smartphone ([iOS](https://apps.apple.com/app/bosch-ebike-flow/id1504451498) / [Android](https://play.google.com/store/apps/details?id=com.bosch.ebike))
 2. Sign in with your SingleKey ID
 3. Pair your eBike via Bluetooth with the app
-4. Your bike will now appear in the Flow Portal at [portal.bosch-ebike.com](https://portal.bosch-ebike.com)
+4. Your bike will now appear in the Flow Portal at [flow.bosch-ebike.com](https://flow.bosch-ebike.com)
 
 #### 3. Register an App in the Bosch Data Act Portal
 
