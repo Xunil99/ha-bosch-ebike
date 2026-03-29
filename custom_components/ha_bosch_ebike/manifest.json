@@ -1,5 +1,5 @@
 {
-  "domain": "bosch_ebike",
+  "domain": "ha_bosch_ebike",
   "name": "Bosch eBike (Smart System)",
   "codeowners": ["@volkerhauffe"],
   "config_flow": true,
