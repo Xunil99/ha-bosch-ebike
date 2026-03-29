@@ -34,7 +34,7 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     if os.path.isdir(card_dir):
         await hass.http.async_register_static_paths([
             StaticPathConfig(
-                "/bosch_ebike/bosch-ebike-map-card.js",
+                "/ha_bosch_ebike/bosch-ebike-map-card.js",
                 os.path.join(card_dir, "bosch-ebike-map-card.js"),
                 cache_headers=False,
             )

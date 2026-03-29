@@ -1,6 +1,6 @@
 """Constants for Bosch eBike integration."""
 
-DOMAIN = "bosch_ebike"
+DOMAIN = "ha_bosch_ebike"
 
 AUTH_BASE_URL = "https://p9.authz.bosch.com/auth/realms/obc/protocol/openid-connect"
 AUTH_URL = f"{AUTH_BASE_URL}/auth"
