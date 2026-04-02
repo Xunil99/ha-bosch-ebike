@@ -59,8 +59,6 @@ Dies ist der wichtigste Schritt. Du musst eine "App" im Bosch-Portal anlegen, um
 
 5. Nach dem Erstellen erhältst du eine **Client-ID** (im Format `euda-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`).
 
-> **Hinweis:** Die App muss von Bosch genehmigt werden. Das kann einige Stunden bis wenige Tage dauern. Du erhältst eine E-Mail, sobald die App freigeschaltet ist. Erst danach funktionieren die nächsten Schritte.
-
 #### Schritt 2: Client-ID sichern
 
 Kopiere die gerade erstellte **Client-ID** in ein Text-File oder einen Notizzettel — du brauchst sie später zum Einfügen per Copy & Paste.
@@ -171,8 +169,7 @@ Die Integration enthält eine interaktive Lovelace-Karte zur Anzeige deiner GPS-
 | Token-Austausch fehlgeschlagen | Prüfe, ob die Redirect-URI exakt `http://localhost:8888/callback` lautet |
 | Kilometerstand unrealistisch hoch | Der Odometer wird in Metern geliefert und automatisch in km umgerechnet |
 | Aktivitätsdaten fehlen | Prüfe, ob die Aktivitäten-Freigabe im Flow Portal aktiv ist |
-| Kein "Daten freigeben"-Button | Die App muss erst von Bosch genehmigt werden (E-Mail abwarten) |
-| Token nicht akzeptiert | App noch nicht genehmigt — warte auf die Bestätigungs-E-Mail von Bosch |
+| Token nicht akzeptiert | Prüfe, ob die Client-ID korrekt eingegeben wurde |
 
 ---
 
@@ -284,8 +281,6 @@ This is the most important step. You need to create an "App" in the Bosch portal
 
 5. After creating the app, you will receive a **Client-ID** (format: `euda-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`).
 
-> **Note:** The app needs to be approved by Bosch. This can take a few hours to a couple of days. You will receive an email once the app is approved. The following steps will only work after approval.
-
 #### Step 2: Save your Client-ID
 
 Copy the **Client-ID** you just created into a text file or note — you will need it later for copy & paste.
@@ -396,8 +391,7 @@ The integration includes an interactive Lovelace card for displaying your GPS tr
 | Token exchange failed | Check that redirect URI is exactly `http://localhost:8888/callback` |
 | Odometer unrealistically high | The odometer is delivered in meters and automatically converted to km |
 | Activity data missing | Check that activity sharing is enabled in the Flow Portal |
-| No "Share data" button visible | The app needs to be approved by Bosch first — wait for the confirmation email |
-| Token not accepted | App not yet approved — wait for the approval email from Bosch |
+| Token not accepted | Check that the Client-ID was entered correctly |
 
 ---
 
