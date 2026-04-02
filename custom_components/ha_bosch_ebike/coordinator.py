@@ -32,6 +32,8 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.api = api
         self._initial_import_done = False
         self._all_activities: list[dict[str, Any]] = []
+        self._latest_activity_details: list[dict[str, Any]] | None = None
+        self._latest_activity_id: str | None = None
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch bikes and activities from Bosch API."""
@@ -79,8 +81,20 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         latest_activity = self._all_activities[0] if self._all_activities else None
 
+        # Fetch GPS details for the latest activity (for start/end coordinates)
+        if latest_activity:
+            activity_id = latest_activity.get("id")
+            if activity_id and activity_id != self._latest_activity_id:
+                try:
+                    details = await self.api.get_activity_detail(activity_id)
+                    self._latest_activity_details = details
+                    self._latest_activity_id = activity_id
+                except Exception:
+                    pass  # GPS details are optional, don't fail the whole update
+
         return {
             "bikes": bikes,
             "latest_activity": latest_activity,
             "all_activities": self._all_activities,
+            "latest_activity_details": self._latest_activity_details,
         }

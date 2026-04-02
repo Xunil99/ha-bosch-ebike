@@ -238,6 +238,15 @@ ACTIVITY_SENSORS: tuple[BoschBikeSensorDescription, ...] = (
         value_fn=lambda d: _safe_get(d, "elevation", "loss"),
         is_activity=True,
     ),
+    BoschBikeSensorDescription(
+        key="last_ride_end_time",
+        translation_key="last_ride_end_time",
+        name="Last Ride End Time",
+        device_class=SensorDeviceClass.TIMESTAMP,
+        icon="mdi:calendar-clock",
+        value_fn=lambda d: _safe_get(d, "endTime"),
+        is_activity=True,
+    ),
 )
 
 
@@ -339,6 +348,24 @@ AGGREGATE_SENSORS: tuple[BoschBikeSensorDescription, ...] = (
 )
 
 
+GPS_COORDINATE_SENSORS: tuple[BoschBikeSensorDescription, ...] = (
+    BoschBikeSensorDescription(
+        key="last_ride_start_location",
+        translation_key="last_ride_start_location",
+        name="Last Ride Start Location",
+        icon="mdi:map-marker",
+        value_fn=lambda d: None,  # handled in BoschGPSSensor
+    ),
+    BoschBikeSensorDescription(
+        key="last_ride_end_location",
+        translation_key="last_ride_end_location",
+        name="Last Ride End Location",
+        icon="mdi:map-marker-check",
+        value_fn=lambda d: None,  # handled in BoschGPSSensor
+    ),
+)
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
@@ -373,6 +400,10 @@ async def async_setup_entry(
         # Aggregate sensors (statistics across all rides)
         for desc in AGGREGATE_SENSORS:
             entities.append(BoschEBikeSensor(coordinator, desc, bike_id, drive_name))
+
+        # GPS coordinate sensors (start/end location)
+        for desc in GPS_COORDINATE_SENSORS:
+            entities.append(BoschGPSSensor(coordinator, desc, bike_id, drive_name))
 
     async_add_entities(entities)
 
@@ -463,3 +494,65 @@ class BoschEBikeSensor(CoordinatorEntity[BoschEBikeCoordinator], SensorEntity):
             if bike.get("id") == self._bike_id:
                 return self.entity_description.value_fn(bike)
         return None
+
+
+class BoschGPSSensor(CoordinatorEntity[BoschEBikeCoordinator], SensorEntity):
+    """Sensor for GPS start/end coordinates from activity details."""
+
+    entity_description: BoschBikeSensorDescription
+    _attr_has_entity_name = True
+
+    def __init__(
+        self,
+        coordinator: BoschEBikeCoordinator,
+        description: BoschBikeSensorDescription,
+        bike_id: str,
+        drive_name: str,
+    ) -> None:
+        super().__init__(coordinator)
+        self.entity_description = description
+        self._bike_id = bike_id
+        self._attr_unique_id = f"{bike_id}_{description.key}"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, bike_id)},
+            name=drive_name,
+            manufacturer="Bosch",
+            model=drive_name,
+        )
+
+    def _get_coordinate(self, index: int) -> dict[str, float] | None:
+        """Get coordinate at given index from activity details."""
+        details = self.coordinator.data.get("latest_activity_details")
+        if not details:
+            return None
+        # Filter valid coordinates (non-zero)
+        valid = [
+            p for p in details
+            if p.get("latitude") and p.get("longitude")
+            and p["latitude"] != 0 and p["longitude"] != 0
+        ]
+        if not valid:
+            return None
+        point = valid[index]
+        return {"latitude": point["latitude"], "longitude": point["longitude"]}
+
+    @property
+    def native_value(self) -> str | None:
+        """Return formatted coordinate string."""
+        is_start = "start" in self.entity_description.key
+        coord = self._get_coordinate(0 if is_start else -1)
+        if not coord:
+            return None
+        return f"{coord['latitude']:.6f}, {coord['longitude']:.6f}"
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        """Return lat/lon as separate attributes for use in automations."""
+        is_start = "start" in self.entity_description.key
+        coord = self._get_coordinate(0 if is_start else -1)
+        if not coord:
+            return None
+        return {
+            "latitude": coord["latitude"],
+            "longitude": coord["longitude"],
+        }
