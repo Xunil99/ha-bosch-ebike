@@ -125,7 +125,7 @@ Die Integration enthält eine interaktive Lovelace-Karte zur Anzeige deiner GPS-
 2. Klicke oben rechts auf das **⋮ Drei-Punkte-Menü** → **Ressourcen**
 3. Klicke auf **+ Ressource hinzufügen** (unten rechts)
 4. Gib folgende Daten ein:
-   - **URL:** `/bosch_ebike/bosch-ebike-map-card.js`
+   - **URL:** `/ha_bosch_ebike/bosch-ebike-map-card.js`
    - **Ressourcentyp:** JavaScript-Modul
 5. Klicke auf **Erstellen**
 
