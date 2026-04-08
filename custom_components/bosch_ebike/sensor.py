@@ -4,10 +4,8 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any
-
-import logging
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -25,8 +23,6 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import DOMAIN
 from .coordinator import BoschEBikeCoordinator
 
-_LOGGER = logging.getLogger(__name__)
-
 
 def _safe_get(data: dict, *keys: str, default: Any = None) -> Any:
     """Safely traverse nested dicts."""
@@ -39,6 +35,25 @@ def _safe_get(data: dict, *keys: str, default: Any = None) -> Any:
     return data
 
 
+def _parse_timestamp(value: str | None) -> datetime | None:
+    """Parse Bosch API timestamp strings into datetime objects for HA."""
+    if not value or not isinstance(value, str):
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def _format_timestamp(value: str | None, include_time: bool = True) -> str | None:
+    """Format Bosch API timestamps for fixed display in Home Assistant."""
+    dt = _parse_timestamp(value)
+    if dt is None:
+        return None
+    dt = dt.astimezone()
+    return dt.strftime("%d.%m.%Y %H:%M:%S" if include_time else "%d.%m.%Y")
+
+
 @dataclass(frozen=True, kw_only=True)
 class BoschBikeSensorDescription(SensorEntityDescription):
     """Describe a Bosch eBike sensor."""
@@ -46,32 +61,6 @@ class BoschBikeSensorDescription(SensorEntityDescription):
     value_fn: Callable[[dict], Any]
     is_activity: bool = False
     is_aggregate: bool = False
-
-
-def _parse_timestamp(value: Any) -> datetime | None:
-    """Parse an ISO 8601 timestamp string to a timezone-aware datetime object.
-
-    HA requires TIMESTAMP sensors to return timezone-aware datetime objects.
-    Bosch API returns strings like "2026-03-07T13:26:44Z" or "2026-03-07T13:26:44.000Z".
-    """
-    if value is None:
-        return None
-    if isinstance(value, datetime):
-        if value.tzinfo is None:
-            return value.replace(tzinfo=timezone.utc)
-        return value
-    if not isinstance(value, str) or not value.strip():
-        _LOGGER.debug("Bosch eBike: _parse_timestamp got non-string: %s (%s)", value, type(value))
-        return None
-    try:
-        # Python 3.11+ handles "Z" natively in fromisoformat
-        dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
-        return dt
-    except (ValueError, TypeError) as err:
-        _LOGGER.warning("Bosch eBike: Failed to parse timestamp '%s': %s", value, err)
-        return None
 
 
 def _format_assist_modes(data: dict) -> str | None:
@@ -209,9 +198,8 @@ ACTIVITY_SENSORS: tuple[BoschBikeSensorDescription, ...] = (
         key="last_ride_date",
         translation_key="last_ride_date",
         name="Last Ride Date",
-        device_class=SensorDeviceClass.TIMESTAMP,
         icon="mdi:calendar",
-        value_fn=lambda d: _parse_timestamp(_safe_get(d, "startTime")),
+        value_fn=lambda d: _format_timestamp(_safe_get(d, "startTime"), include_time=False),
         is_activity=True,
     ),
     BoschBikeSensorDescription(
@@ -273,18 +261,16 @@ ACTIVITY_SENSORS: tuple[BoschBikeSensorDescription, ...] = (
         key="last_ride_start_time",
         translation_key="last_ride_start_time",
         name="Last Ride Start Time",
-        device_class=SensorDeviceClass.TIMESTAMP,
         icon="mdi:calendar-clock",
-        value_fn=lambda d: _parse_timestamp(_safe_get(d, "startTime")),
+        value_fn=lambda d: _format_timestamp(_safe_get(d, "startTime")),
         is_activity=True,
     ),
     BoschBikeSensorDescription(
         key="last_ride_end_time",
         translation_key="last_ride_end_time",
         name="Last Ride End Time",
-        device_class=SensorDeviceClass.TIMESTAMP,
         icon="mdi:calendar-clock",
-        value_fn=lambda d: _parse_timestamp(_safe_get(d, "endTime")),
+        value_fn=lambda d: _format_timestamp(_safe_get(d, "endTime")),
         is_activity=True,
     ),
 )
@@ -527,17 +513,7 @@ class BoschEBikeSensor(CoordinatorEntity[BoschEBikeCoordinator], SensorEntity):
             activity = self.coordinator.data.get("latest_activity")
             if not activity:
                 return None
-            value = self.entity_description.value_fn(activity)
-            # Debug logging for timestamp sensors
-            if self.entity_description.device_class == SensorDeviceClass.TIMESTAMP:
-                _LOGGER.debug(
-                    "Bosch eBike: Sensor '%s' raw activity keys=%s, value=%s (%s)",
-                    self.entity_description.key,
-                    list(activity.keys()) if isinstance(activity, dict) else "N/A",
-                    value,
-                    type(value).__name__,
-                )
-            return value
+            return self.entity_description.value_fn(activity)
 
         # Find this bike in coordinator data
         for bike in self.coordinator.data.get("bikes", []):
@@ -575,11 +551,17 @@ class BoschGPSSensor(CoordinatorEntity[BoschEBikeCoordinator], SensorEntity):
         details = self.coordinator.data.get("latest_activity_details")
         if not details:
             return None
+
+        points = details.get("activityDetails", []) if isinstance(details, dict) else details
+
         # Filter valid coordinates (non-zero)
         valid = [
-            p for p in details
-            if p.get("latitude") and p.get("longitude")
-            and p["latitude"] != 0 and p["longitude"] != 0
+            p for p in points
+            if isinstance(p, dict)
+            and p.get("latitude") is not None
+            and p.get("longitude") is not None
+            and p["latitude"] != 0
+            and p["longitude"] != 0
         ]
         if not valid:
             return None

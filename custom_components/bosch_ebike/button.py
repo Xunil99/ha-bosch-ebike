@@ -17,6 +17,18 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from .const import DOMAIN
 from .coordinator import BoschEBikeCoordinator
 
+
+def _safe_get(data: dict, *keys: str, default: Any = None) -> Any:
+    """Safely traverse nested dicts."""
+    for key in keys:
+        if not isinstance(data, dict):
+            return default
+        data = data.get(key)
+        if data is None:
+            return default
+    return data
+
+
 _LOGGER = logging.getLogger(__name__)
 
 # GPS export directory inside HA config
@@ -46,41 +58,42 @@ def _activity_to_gpx(
     ]
 
     valid_points = 0
+    
     for point in points:
-        lat = point.get("latitude")
-        lon = point.get("longitude")
-        # Filter invalid (0,0) coordinates (Null Island)
-        if lat is None or lon is None:
-            continue
-        if lat == 0 and lon == 0:
-            continue
-        if not (-90 <= lat <= 90 and -180 <= lon <= 180):
-            continue
+       lat = point.get("latitude")
+       lon = point.get("longitude")
+       # Filter invalid (0,0) coordinates (Null Island)
+       if lat is None or lon is None:
+           continue
+       if lat == 0 and lon == 0:
+           continue
+       if not (-90 <= lat <= 90 and -180 <= lon <= 180):
+           continue
 
-        valid_points += 1
-        gpx_lines.append(f'      <trkpt lat="{lat}" lon="{lon}">')
+       valid_points += 1
+       gpx_lines.append(f'      <trkpt lat="{lat}" lon="{lon}">')
 
-        altitude = point.get("altitude")
-        if altitude is not None:
-            gpx_lines.append(f"        <ele>{altitude}</ele>")
+       altitude = point.get("altitude")
+       if altitude is not None:
+           gpx_lines.append(f"        <ele>{altitude}</ele>")
 
-        # Add speed, cadence, power as extensions
-        speed = point.get("speed")
-        cadence = point.get("cadence")
-        power = point.get("riderPower")
-        if any(v is not None for v in (speed, cadence, power)):
-            gpx_lines.append("        <extensions>")
-            gpx_lines.append("          <gpxtpx:TrackPointExtension>")
-            if speed is not None:
-                gpx_lines.append(f"            <gpxtpx:speed>{speed}</gpxtpx:speed>")
-            if cadence is not None:
-                gpx_lines.append(f"            <gpxtpx:cad>{cadence}</gpxtpx:cad>")
-            if power is not None:
-                gpx_lines.append(f"            <gpxtpx:power>{power}</gpxtpx:power>")
-            gpx_lines.append("          </gpxtpx:TrackPointExtension>")
-            gpx_lines.append("        </extensions>")
+       # Add speed, cadence, power as extensions
+       speed = point.get("speed")
+       cadence = point.get("cadence")
+       power = point.get("riderPower")
+       if any(v is not None for v in (speed, cadence, power)):
+           gpx_lines.append("        <extensions>")
+           gpx_lines.append("          <gpxtpx:TrackPointExtension>")
+           if speed is not None:
+               gpx_lines.append(f"            <gpxtpx:speed>{speed}</gpxtpx:speed>")
+           if cadence is not None:
+               gpx_lines.append(f"            <gpxtpx:cad>{cadence}</gpxtpx:cad>")
+           if power is not None:
+               gpx_lines.append(f"            <gpxtpx:power>{power}</gpxtpx:power>")
+           gpx_lines.append("          </gpxtpx:TrackPointExtension>")
+           gpx_lines.append("        </extensions>")
 
-        gpx_lines.append("      </trkpt>")
+       gpx_lines.append("      </trkpt>")
 
     if valid_points == 0:
         return None
@@ -92,6 +105,28 @@ def _activity_to_gpx(
     ])
 
     return "\n".join(gpx_lines)
+    
+
+# *********************************************************************************************************
+#-- PE  Einzelne CSV Zeile pro Aktivität:
+
+def _activity_to_pe_csvline(
+    detail_response: dict[str, Any], title: str = "eBike Ride", stime: str = "2000-01-01T00:00:00Z", etime: str = "2000-01-01T00:00:00Z", dist: int = 0, avgspeed: int = 0, \
+     odostart: int = 0, netdura: int = 0, calories: int = 0, avg_cad: int = 0, avg_pwr: int = 0, ele_gain: int = 0, ele_loss: int = 0
+) -> str | None:
+
+    points = detail_response.get("activityDetails", [])
+    if not points or not isinstance(points, list):
+        return None
+
+    c34 = chr(34)
+    csv_line = f"{c34}{title}{c34},{stime},{etime},{dist},{avgspeed},{odostart},{netdura},{calories},{avg_cad},{avg_pwr},{ele_gain},{ele_loss}"
+
+    return csv_line + "\n"
+
+
+# ---------------------------------------------------------------------------------------------------------
+# *********************************************************************************************************
 
 
 async def async_setup_entry(
@@ -112,6 +147,9 @@ async def async_setup_entry(
         )
         entities.append(
             BoschGPSImportButton(coordinator, bike_id, drive_name)
+        )
+        entities.append(
+            BoschGPSExportButton(coordinator, bike_id, drive_name)
         )
         entities.append(
             BoschGPSImportSingleButton(coordinator, bike_id, drive_name)
@@ -171,11 +209,6 @@ class BoschGPSImportButton(ButtonEntity):
             no_gps = 0
 
             for idx, activity_id in enumerate(activity_ids):
-                # Check if already exported
-                gpx_path = os.path.join(export_dir, f"{activity_id}.gpx")
-                if os.path.exists(gpx_path):
-                    skipped += 1
-                    continue
 
                 try:
                     detail = await self._coordinator.api.get_activity_detail(activity_id)
@@ -184,7 +217,14 @@ class BoschGPSImportButton(ButtonEntity):
                     summary = next(
                         (a for a in all_activities if a.get("id") == activity_id), {}
                     )
-                    ride_title = summary.get("title", "eBike Ride")
+                    ride_title     = summary.get("title", "eBike Ride")
+                    ride_stime     = summary.get("startTime", "eBike Ride")
+                    gpx_path = os.path.join(export_dir, f"trk_{ride_stime}.gpx")
+                    gpx_path = gpx_path.replace(":","-")
+                    # Check if already exported
+                    if os.path.exists(gpx_path):
+                        skipped += 1
+                        continue
 
                     gpx_content = _activity_to_gpx(detail, title=ride_title)
                     if gpx_content:
@@ -225,6 +265,127 @@ class BoschGPSImportButton(ButtonEntity):
 
         finally:
             self._importing = False
+
+
+# ****************************************************************************************************************************
+# ----------------   PE  angepasste Button Klasse zum reinen Export der Tourdaten als CSV, ohne trackpoints --------------
+
+class BoschGPSExportButton(ButtonEntity):
+    """Button to Export GPS summary info for ALL activities."""
+
+    _attr_has_entity_name = True
+    _attr_icon = "mdi:map-marker-path"
+
+    def __init__(
+        self,
+        coordinator: BoschEBikeCoordinator,
+        bike_id: str,
+        drive_name: str,
+    ) -> None:
+        self._coordinator = coordinator
+        self._bike_id = bike_id
+        self._attr_unique_id = f"{bike_id}_export_all_gps"
+        self._attr_name = "Export track summary CSV"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, bike_id)},
+            name=drive_name,
+            manufacturer="Bosch",
+            model=drive_name,
+        )
+        self._importing = False
+
+    async def async_press(self) -> None:
+        """Handle button press — export all GPS data."""
+        if self._importing:
+            _LOGGER.warning("Bosch eBike: GPS export already in progress")
+            return
+
+        self._importing = True
+        try:
+            all_activities = self._coordinator.data.get("all_activities", [])
+            if not all_activities:
+                _LOGGER.warning("Bosch eBike: No activities to export GPS data from")
+                return
+
+            activity_ids = [a.get("id") for a in all_activities if a.get("id")]
+            _LOGGER.info(
+                "Bosch eBike: Starting GPS export for %d activities...", len(activity_ids)
+            )
+
+            # Create export directory
+            export_dir = self.hass.config.path(GPS_EXPORT_DIR)
+            os.makedirs(export_dir, exist_ok=True)
+
+            exported = 0
+            csv_output = ""
+
+            for idx, activity_id in enumerate(activity_ids):
+
+                try:
+                    detail = await self._coordinator.api.get_activity_detail(activity_id)
+
+                    # Get title from the summary data
+                    summary = next(
+                        (a for a in all_activities if a.get("id") == activity_id), {}
+                    )
+                    ride_title     = summary.get("title", "eBike Ride")
+                    ride_distance  = summary.get("distance", "eBike Ride")
+                    ride_odostart  = summary.get("startOdometer", "eBike Ride")
+                    ride_stime     = summary.get("startTime", "eBike Ride")
+                    ride_etime     = summary.get("endTime", "eBike Ride")
+                    ride_netdura   = summary.get("durationWithoutStops", "eBike Ride")
+                    ride_calories  = summary.get("caloriesBurned", "eBike Ride")
+                    ride_avg_speed = _safe_get(summary, "speed", "average")
+                    ride_avg_cad   = _safe_get(summary, "cadence", "average")
+                    ride_avg_pwr   = _safe_get(summary, "riderPower", "average")
+                    ride_ele_gain  = _safe_get(summary, "elevation", "gain")
+                    ride_ele_loss  = _safe_get(summary, "elevation", "loss")
+
+                    csv_entry = _activity_to_pe_csvline(detail, title=ride_title, stime=ride_stime, etime=ride_etime, dist=ride_distance, avgspeed=ride_avg_speed \
+                    , odostart=ride_odostart, netdura=ride_netdura, calories=ride_calories, avg_cad=ride_avg_cad, avg_pwr=ride_avg_pwr \
+                    , ele_gain=ride_ele_gain, ele_loss=ride_ele_loss)
+
+                    csv_output = csv_output + csv_entry
+                    if csv_entry:
+                        exported += 1
+
+                except Exception as err:
+                    _LOGGER.warning(
+                        "Bosch eBike: Failed to fetch detail for %s: %s", activity_id, err
+                    )
+
+                if (idx + 1) % 10 == 0:
+                    _LOGGER.info(
+                        "Bosch eBike: GPS export progress: %d/%d", idx + 1, len(activity_ids)
+                    )
+
+            
+            # Ausgabe CSV:
+            csv_name = os.path.join(export_dir, "bosch_tracks.csv")
+            if csv_output:
+                await self.hass.async_add_executor_job(
+                    _write_file, csv_name, csv_output
+                )
+            
+            _LOGGER.info(
+                "Bosch eBike: GPS export complete. Exported: %d, tracks",
+                exported,
+            )
+
+            # Create a persistent notification
+            pn_async_create(self.hass,
+                f"GPS export complete!\n\n"
+                f"- **Exported:** {exported} tracks\n"
+                f"File saved to: `{csv_name}`",
+                title="Bosch eBike GPS Export",
+                notification_id="bosch_ebike_gps_export",
+            )
+
+        finally:
+            self._importing = False
+
+# ----------------------------------------------------------------------------------------------------------------------------
+# ****************************************************************************************************************************
 
 
 class BoschGPSImportSingleButton(ButtonEntity):
