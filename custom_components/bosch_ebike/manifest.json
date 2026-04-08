@@ -1,11 +1,11 @@
 {
   "domain": "ha_bosch_ebike",
   "name": "Bosch eBike (Smart System)",
-  "codeowners": ["@volkerhauffe"],
+  "codeowners": ["@Xunil99"],
   "config_flow": true,
-  "documentation": "https://github.com/volkerhauffe/ha-bosch-ebike",
+  "documentation": "https://github.com/Xunil99/ha-bosch-ebike",
   "iot_class": "cloud_polling",
-  "issue_tracker": "https://github.com/volkerhauffe/ha-bosch-ebike/issues",
+  "issue_tracker": "https://github.com/Xunil99/ha-bosch-ebike/issues",
   "requirements": [],
   "version": "1.0.0"
 }
