@@ -8,7 +8,9 @@ import os
 import voluptuous as vol
 
 from homeassistant.components import websocket_api
+from homeassistant.components.frontend import async_register_built_in_panel
 from homeassistant.components.http import StaticPathConfig
+from homeassistant.components.lovelace.resources import ResourceStorageCollection
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
@@ -31,14 +33,35 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
 
     # Register static path for the Lovelace card
     card_dir = os.path.join(os.path.dirname(__file__), "www")
+    card_url = "/ha_bosch_ebike/bosch-ebike-map-card.js"
     if os.path.isdir(card_dir):
         await hass.http.async_register_static_paths([
             StaticPathConfig(
-                "/ha_bosch_ebike/bosch-ebike-map-card.js",
+                card_url,
                 os.path.join(card_dir, "bosch-ebike-map-card.js"),
                 cache_headers=False,
             )
         ])
+
+        # Auto-register as Lovelace resource so the card works without manual setup
+        try:
+            if "lovelace" in hass.data:
+                resources: ResourceStorageCollection = hass.data["lovelace"]["resources"]
+                # Check if already registered
+                existing = [
+                    r for r in resources.async_items()
+                    if r.get("url") == card_url
+                ]
+                if not existing:
+                    await resources.async_create_item(
+                        {"res_type": "module", "url": card_url}
+                    )
+                    _LOGGER.info("Registered Lovelace resource: %s", card_url)
+        except Exception:
+            _LOGGER.debug(
+                "Could not auto-register Lovelace resource. "
+                "Add manually: %s (JavaScript Module)", card_url
+            )
 
     return True
 
