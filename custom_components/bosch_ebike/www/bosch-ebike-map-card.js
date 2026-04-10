@@ -7,10 +7,10 @@ const LEAFLET_JS = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
 
 const MAP_STYLES = {
   osm: {
-    label: "OSM",
+    label: "CARTO",
     name: "Standard",
-    url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-    options: { maxZoom: 19, updateWhenIdle: true, keepBuffer: 2 }
+    url: "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
+    options: { maxZoom: 19, updateWhenIdle: true, keepBuffer: 2, attribution: '&copy; OpenStreetMap contributors &copy; CARTO' }
   },
   topo: {
     label: "Topo",
