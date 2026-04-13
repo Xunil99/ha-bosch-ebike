@@ -12,7 +12,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from homeassistant.exceptions import ConfigEntryAuthFailed
 
 from .api import BoschEBikeAPI, AuthError
-from .const import DOMAIN, DEFAULT_SCAN_INTERVAL
+from .const import DOMAIN, DEFAULT_SCAN_INTERVAL, DEFAULT_BATTERY_CAPACITY_WH
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -34,6 +34,75 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._all_activities: list[dict[str, Any]] = []
         self._latest_activity_details: list[dict[str, Any]] | None = None
         self._latest_activity_id: str | None = None
+        # Battery consumption tracking (Wh delta between polls)
+        self._prev_delivered_wh: float | None = None
+        self._prev_activity_ids: set[str] = set()
+        self._battery_capacity_wh: float = DEFAULT_BATTERY_CAPACITY_WH
+        self._activity_consumption: dict[str, dict[str, Any]] = {}
+
+    def set_battery_capacity(self, capacity_wh: float) -> None:
+        """Set the battery capacity (configurable by user)."""
+        self._battery_capacity_wh = capacity_wh
+
+    def _track_battery_consumption(self, bikes: list[dict[str, Any]]) -> None:
+        """Track deliveredWhOverLifetime changes and allocate to activities."""
+        current_wh: float | None = None
+        for bike in bikes:
+            for battery in bike.get("batteries", []) or []:
+                wh = battery.get("deliveredWhOverLifetime")
+                if wh is not None:
+                    current_wh = wh
+                    break
+            if current_wh is not None:
+                break
+
+        if current_wh is None:
+            return
+
+        current_ids = {a.get("id") for a in self._all_activities if a.get("id")}
+
+        if self._prev_delivered_wh is not None:
+            delta_wh = current_wh - self._prev_delivered_wh
+            if delta_wh > 0:
+                new_ids = current_ids - self._prev_activity_ids
+                new_activities = [
+                    a for a in self._all_activities if a.get("id") in new_ids
+                ]
+
+                if new_activities:
+                    total_distance = sum(
+                        a.get("distance", 0) or 0 for a in new_activities
+                    )
+
+                    for activity in new_activities:
+                        aid = activity.get("id")
+                        if not aid:
+                            continue
+                        dist = activity.get("distance", 0) or 0
+                        if total_distance > 0 and len(new_activities) > 1:
+                            share = delta_wh * (dist / total_distance)
+                            is_exact = False
+                        else:
+                            share = delta_wh
+                            is_exact = len(new_activities) == 1
+
+                        self._activity_consumption[aid] = {
+                            "consumed_wh": round(share, 1),
+                            "capacity_wh": self._battery_capacity_wh,
+                            "is_exact": is_exact,
+                            "percentage": round(
+                                (share / self._battery_capacity_wh) * 100, 1
+                            ) if self._battery_capacity_wh > 0 else 0,
+                        }
+                        _LOGGER.info(
+                            "Battery consumption for activity %s: %.1f Wh (%.1f%%)",
+                            aid, share,
+                            (share / self._battery_capacity_wh) * 100
+                            if self._battery_capacity_wh > 0 else 0,
+                        )
+
+        self._prev_delivered_wh = current_wh
+        self._prev_activity_ids = current_ids
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch bikes and activities from Bosch API."""
@@ -92,9 +161,14 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 except Exception:
                     pass  # GPS details are optional, don't fail the whole update
 
+        # Battery consumption tracking via Wh delta
+        self._track_battery_consumption(bikes)
+
         return {
             "bikes": bikes,
             "latest_activity": latest_activity,
             "all_activities": self._all_activities,
             "latest_activity_details": self._latest_activity_details,
+            "activity_consumption": self._activity_consumption,
+            "battery_capacity_wh": self._battery_capacity_wh,
         }

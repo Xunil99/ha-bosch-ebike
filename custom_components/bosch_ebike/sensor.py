@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from homeassistant.components.sensor import (
@@ -61,6 +61,31 @@ class BoschBikeSensorDescription(SensorEntityDescription):
     value_fn: Callable[[dict], Any]
     is_activity: bool = False
     is_aggregate: bool = False
+
+
+def _calc_difficulty(activity: dict) -> float | None:
+    """Calculate elevation gain per km (difficulty factor)."""
+    gain = _safe_get(activity, "elevation", "gain")
+    distance = activity.get("distance")
+    if not gain or not distance or distance <= 0:
+        return None
+    distance_km = distance / 1000
+    if distance_km <= 0:
+        return None
+    return round(gain / distance_km, 1)
+
+
+def _calc_days_since(activity: dict) -> int | None:
+    """Calculate days since the last ride."""
+    start = _safe_get(activity, "startTime")
+    if not start:
+        return None
+    dt = _parse_timestamp(start)
+    if not dt:
+        return None
+    now = datetime.now(timezone.utc)
+    delta = now - dt
+    return max(0, delta.days)
 
 
 def _format_assist_modes(data: dict) -> str | None:
@@ -273,6 +298,47 @@ ACTIVITY_SENSORS: tuple[BoschBikeSensorDescription, ...] = (
         value_fn=lambda d: _format_timestamp(_safe_get(d, "endTime")),
         is_activity=True,
     ),
+    BoschBikeSensorDescription(
+        key="last_ride_difficulty",
+        translation_key="last_ride_difficulty",
+        name="Last Ride Difficulty",
+        native_unit_of_measurement="m/km",
+        icon="mdi:terrain",
+        value_fn=lambda d: _calc_difficulty(d),
+        is_activity=True,
+    ),
+    BoschBikeSensorDescription(
+        key="days_since_last_ride",
+        translation_key="days_since_last_ride",
+        name="Days Since Last Ride",
+        native_unit_of_measurement=UnitOfTime.DAYS,
+        icon="mdi:calendar-alert",
+        value_fn=lambda d: _calc_days_since(d),
+        is_activity=True,
+    ),
+)
+
+# Battery consumption sensors (Wh delta tracking)
+BATTERY_CONSUMPTION_SENSORS: tuple[BoschBikeSensorDescription, ...] = (
+    BoschBikeSensorDescription(
+        key="last_ride_battery_wh",
+        translation_key="last_ride_battery_wh",
+        name="Last Ride Battery Consumption",
+        native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
+        device_class=SensorDeviceClass.ENERGY,
+        icon="mdi:battery-minus",
+        value_fn=lambda d: None,
+        is_activity=True,
+    ),
+    BoschBikeSensorDescription(
+        key="last_ride_battery_percent",
+        translation_key="last_ride_battery_percent",
+        name="Last Ride Battery Percent",
+        native_unit_of_measurement="%",
+        icon="mdi:battery-50",
+        value_fn=lambda d: None,
+        is_activity=True,
+    ),
 )
 
 
@@ -431,6 +497,10 @@ async def async_setup_entry(
         for desc in GPS_COORDINATE_SENSORS:
             entities.append(BoschGPSSensor(coordinator, desc, bike_id, drive_name))
 
+        # Battery consumption sensors (Wh delta tracking)
+        for desc in BATTERY_CONSUMPTION_SENSORS:
+            entities.append(BoschBatteryConsumptionSensor(coordinator, desc, bike_id, drive_name))
+
     async_add_entities(entities)
 
 
@@ -587,4 +657,63 @@ class BoschGPSSensor(CoordinatorEntity[BoschEBikeCoordinator], SensorEntity):
         return {
             "latitude": coord["latitude"],
             "longitude": coord["longitude"],
+        }
+
+
+class BoschBatteryConsumptionSensor(CoordinatorEntity[BoschEBikeCoordinator], SensorEntity):
+    """Sensor for estimated battery consumption per ride (Wh delta tracking)."""
+
+    entity_description: BoschBikeSensorDescription
+    _attr_has_entity_name = True
+
+    def __init__(
+        self,
+        coordinator: BoschEBikeCoordinator,
+        description: BoschBikeSensorDescription,
+        bike_id: str,
+        drive_name: str,
+    ) -> None:
+        super().__init__(coordinator)
+        self.entity_description = description
+        self._bike_id = bike_id
+        self._attr_unique_id = f"{bike_id}_{description.key}"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, bike_id)},
+            name=drive_name,
+            manufacturer="Bosch",
+            model=drive_name,
+        )
+
+    def _get_consumption(self) -> dict[str, Any] | None:
+        """Get consumption data for the latest activity."""
+        activity = self.coordinator.data.get("latest_activity")
+        if not activity:
+            return None
+        aid = activity.get("id")
+        if not aid:
+            return None
+        consumption = self.coordinator.data.get("activity_consumption", {})
+        return consumption.get(aid)
+
+    @property
+    def native_value(self) -> float | None:
+        """Return Wh or percentage depending on sensor key."""
+        consumption = self._get_consumption()
+        if not consumption:
+            return None
+        if "percent" in self.entity_description.key:
+            return consumption.get("percentage")
+        return consumption.get("consumed_wh")
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        """Return additional consumption details."""
+        consumption = self._get_consumption()
+        if not consumption:
+            return None
+        return {
+            "consumed_wh": consumption.get("consumed_wh"),
+            "percentage": consumption.get("percentage"),
+            "capacity_wh": consumption.get("capacity_wh"),
+            "is_exact": consumption.get("is_exact"),
         }
