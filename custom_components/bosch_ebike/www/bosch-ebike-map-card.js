@@ -582,24 +582,30 @@ class BoschEBikeMapCard extends HTMLElement {
     const ele = activity.elevation?.gain != null ? Math.round(activity.elevation.gain) : "–";
     const cal = activity.caloriesBurned != null ? Math.round(activity.caloriesBurned) : "–";
 
-    const compactStats = `
+    // Difficulty: elevation gain per km
+    const distKm = activity.distance ? activity.distance / 1000 : 0;
+    const eleGain = activity.elevation?.gain ?? 0;
+    const difficulty = distKm > 0 ? (eleGain / distKm).toFixed(1) : "–";
+
+    // Battery consumption
+    const cons = activity.consumption;
+    const battWh = cons?.consumed_wh != null ? cons.consumed_wh.toFixed(1) : "–";
+    const battPct = cons?.percentage != null ? cons.percentage.toFixed(1) : "–";
+
+    const statsHtml = `
       <div class="eb-stat"><div class="eb-val">${dist} km</div><div class="eb-lbl">Distanz</div></div>
       <div class="eb-stat"><div class="eb-val">${dur} min</div><div class="eb-lbl">Dauer</div></div>
       <div class="eb-stat"><div class="eb-val">${avgS}</div><div class="eb-lbl">Ø km/h</div></div>
       <div class="eb-stat"><div class="eb-val">${maxS}</div><div class="eb-lbl">Max km/h</div></div>
       <div class="eb-stat"><div class="eb-val">${ele} m</div><div class="eb-lbl">Höhenmeter ↑</div></div>
       <div class="eb-stat"><div class="eb-val">${cal} kcal</div><div class="eb-lbl">Kalorien</div></div>
+      <div class="eb-stat"><div class="eb-val">${difficulty} m/km</div><div class="eb-lbl">Schwierigkeit</div></div>
+      <div class="eb-stat"><div class="eb-val">${battWh} Wh</div><div class="eb-lbl">Akku</div></div>
+      <div class="eb-stat"><div class="eb-val">${battPct} %</div><div class="eb-lbl">Akku %</div></div>
     `;
-    this._$("eb-stats").innerHTML = compactStats;
+    this._$("eb-stats").innerHTML = statsHtml;
     this._$("eb-fullscreen-title").textContent = activity.title || "Unbenannte Fahrt";
-    this._$("eb-fullscreen-meta").innerHTML = `
-      <div class="eb-stat"><div class="eb-val">${dist} km</div><div class="eb-lbl">Distanz</div></div>
-      <div class="eb-stat"><div class="eb-val">${dur} min</div><div class="eb-lbl">Dauer</div></div>
-      <div class="eb-stat"><div class="eb-val">${avgS}</div><div class="eb-lbl">Ø km/h</div></div>
-      <div class="eb-stat"><div class="eb-val">${maxS}</div><div class="eb-lbl">Max km/h</div></div>
-      <div class="eb-stat"><div class="eb-val">${ele} m</div><div class="eb-lbl">Höhenmeter ↑</div></div>
-      <div class="eb-stat"><div class="eb-val">${cal} kcal</div><div class="eb-lbl">Kalorien</div></div>
-    `;
+    this._$("eb-fullscreen-meta").innerHTML = statsHtml;
     this._renderFullscreenProfile();
 
     if (forceTrackReload || this._currentTrackActivityId !== activity.id || !this._currentTrack.length) {

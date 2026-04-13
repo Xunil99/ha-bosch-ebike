@@ -120,10 +120,12 @@ async def ws_list_activities(
         return
 
     all_activities = coordinator.data.get("all_activities", [])
+    activity_consumption = coordinator.data.get("activity_consumption", {})
     result = []
     for a in all_activities:
-        result.append({
-            "id": a.get("id"),
+        aid = a.get("id")
+        entry = {
+            "id": aid,
             "title": a.get("title", ""),
             "startTime": a.get("startTime", ""),
             "endTime": a.get("endTime", ""),
@@ -132,7 +134,10 @@ async def ws_list_activities(
             "speed": a.get("speed", {}),
             "elevation": a.get("elevation", {}),
             "caloriesBurned": a.get("caloriesBurned"),
-        })
+        }
+        if aid and aid in activity_consumption:
+            entry["consumption"] = activity_consumption[aid]
+        result.append(entry)
 
     connection.send_result(msg["id"], {"activities": result})
 
