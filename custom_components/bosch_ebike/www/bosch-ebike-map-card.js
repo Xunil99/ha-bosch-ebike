@@ -140,6 +140,8 @@ class BoschEBikeMapCard extends HTMLElement {
     this._fullscreenOpen = false;
     this._mapStyle = "osm";
     this._fullscreenTab = "map";
+    this._sortKey = "date";
+    this._sortAsc = false;
     this._inlineBaseLayer = null;
     this._fullscreenBaseLayer = null;
 
@@ -248,6 +250,23 @@ class BoschEBikeMapCard extends HTMLElement {
         background:var(--card-background-color,#fff); color:var(--primary-text-color,#333);
       }
       .eb-ctr { font-size:13px; color:var(--secondary-text-color,#666); white-space:nowrap; flex-shrink:0; }
+      .eb-sort {
+        display:flex; align-items:center; gap:8px; padding:6px 12px;
+        background:var(--secondary-background-color,#f5f5f5);
+        border-bottom:1px solid var(--divider-color,#e0e0e0);
+      }
+      .eb-sort select {
+        flex:1; min-width:0; padding:5px 8px;
+        border:1px solid var(--divider-color,#ccc); border-radius:6px; font-size:13px;
+        background:var(--card-background-color,#fff); color:var(--primary-text-color,#333);
+      }
+      .eb-sort button {
+        width:36px; height:36px; flex-shrink:0;
+        background:var(--primary-color,#03a9f4); color:#fff;
+        border:none; border-radius:8px; cursor:pointer; font-size:16px;
+        display:flex; align-items:center; justify-content:center;
+      }
+      .eb-sort-lbl { font-size:12px; color:var(--secondary-text-color,#666); white-space:nowrap; flex-shrink:0; }
       .eb-map-wrap { position:relative; }
       .eb-map { width:100% !important; height:${h}px !important; min-height:${h}px; z-index:0; position:relative; }
       .eb-overlay-msg {
@@ -350,6 +369,22 @@ class BoschEBikeMapCard extends HTMLElement {
         <button id="eb-next">▶</button>
         <span id="eb-ctr" class="eb-ctr">–</span>
       </div>
+      <div class="eb-sort">
+        <span class="eb-sort-lbl">Sortierung:</span>
+        <select id="eb-sort-key">
+          <option value="date">Datum</option>
+          <option value="distance">Distanz</option>
+          <option value="duration">Dauer</option>
+          <option value="avgSpeed">Ø Geschw.</option>
+          <option value="maxSpeed">Max Geschw.</option>
+          <option value="elevation">Höhenmeter</option>
+          <option value="calories">Kalorien</option>
+          <option value="difficulty">Schwierigkeit</option>
+          <option value="batteryWh">Akku Wh</option>
+          <option value="batteryPct">Akku %</option>
+        </select>
+        <button id="eb-sort-dir" title="Sortierrichtung umkehren">↓</button>
+      </div>
       <div class="eb-map-wrap">
         <div id="eb-map" class="eb-map"></div>
         <div class="eb-map-tools">
@@ -416,6 +451,16 @@ class BoschEBikeMapCard extends HTMLElement {
     });
     this._$("eb-fullscreen-overlay").addEventListener("click", (e) => {
       if (e.target === this._$("eb-fullscreen-overlay")) this._closeFullscreen();
+    });
+
+    this._$("eb-sort-key").addEventListener("change", (e) => {
+      this._sortKey = e.target.value;
+      this._applySort();
+    });
+    this._$("eb-sort-dir").addEventListener("click", () => {
+      this._sortAsc = !this._sortAsc;
+      this._$("eb-sort-dir").textContent = this._sortAsc ? "↑" : "↓";
+      this._applySort();
     });
 
     this._updateStyleButtons();
@@ -543,6 +588,36 @@ class BoschEBikeMapCard extends HTMLElement {
     }
 
     await this._show(0, false);
+  }
+
+  _getSortValue(activity, key) {
+    switch (key) {
+      case "date": return new Date(activity.startTime || 0).getTime();
+      case "distance": return activity.distance || 0;
+      case "duration": return activity.durationWithoutStops || 0;
+      case "avgSpeed": return activity.speed?.average ?? 0;
+      case "maxSpeed": return activity.speed?.maximum ?? 0;
+      case "elevation": return activity.elevation?.gain ?? 0;
+      case "calories": return activity.caloriesBurned ?? 0;
+      case "difficulty": {
+        const d = activity.distance ? activity.distance / 1000 : 0;
+        return d > 0 ? (activity.elevation?.gain ?? 0) / d : 0;
+      }
+      case "batteryWh": return activity.consumption?.consumed_wh ?? 0;
+      case "batteryPct": return activity.consumption?.percentage ?? 0;
+      default: return 0;
+    }
+  }
+
+  _applySort() {
+    const key = this._sortKey;
+    const asc = this._sortAsc;
+    this._activities.sort((a, b) => {
+      const va = this._getSortValue(a, key);
+      const vb = this._getSortValue(b, key);
+      return asc ? va - vb : vb - va;
+    });
+    this._show(0, true);
   }
 
   async _show(index, forceTrackReload = true) {
