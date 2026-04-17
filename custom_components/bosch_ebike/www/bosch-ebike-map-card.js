@@ -1040,12 +1040,18 @@ class BoschEBikeMapCard extends HTMLElement {
 
     const pointDistancesKm = [];
     const rawElevations = [];
+    const rawCadences = [];
+    const rawPowers = [];
     let cumulative = 0;
 
     for (let i = 0; i < pts.length; i += 1) {
       if (i > 0) cumulative += this._distanceMeters(pts[i - 1], pts[i]);
       pointDistancesKm.push(cumulative / 1000);
       rawElevations.push(this._pointElevation(pts[i]));
+      const c = pts[i].cadence;
+      rawCadences.push(Number.isFinite(c) ? c : null);
+      const p = pts[i].power;
+      rawPowers.push(Number.isFinite(p) ? p : null);
     }
 
     const validEntries = rawElevations
@@ -1059,6 +1065,8 @@ class BoschEBikeMapCard extends HTMLElement {
 
     const trimmedDistancesKm = pointDistancesKm.slice(startIdx);
     const trimmedElevations = rawElevations.slice(startIdx);
+    const trimmedCadences = rawCadences.slice(startIdx);
+    const trimmedPowers = rawPowers.slice(startIdx);
     if (trimmedDistancesKm.length < 2 || trimmedElevations.length < 2) return null;
 
     const distanceOffsetKm = trimmedDistancesKm[0] || 0;
@@ -1093,15 +1101,41 @@ class BoschEBikeMapCard extends HTMLElement {
     const totalKm = normalizedDistancesKm[normalizedDistancesKm.length - 1] || 0;
     const sampleDistances = [];
     const sampleElevations = [];
+    const sampleCadences = [];
+    const samplePowers = [];
 
+    // Bucket boundaries (by index in the trimmed arrays)
+    const n = normalizedDistancesKm.length;
     for (let i = 0; i < samples; i += 1) {
       const targetKm = totalKm * (i / Math.max(1, samples - 1));
       let idx = normalizedDistancesKm.findIndex((d) => d >= targetKm);
-      if (idx === -1) idx = normalizedDistancesKm.length - 1;
+      if (idx === -1) idx = n - 1;
       idx = Math.max(0, Math.min(sanitizedElevations.length - 1, idx));
       sampleDistances.push(targetKm);
       sampleElevations.push(sanitizedElevations[idx]);
+
+      // Bucket average for cadence / power (smooths noise, shows pauses correctly)
+      const bucketStart = Math.floor((i / Math.max(1, samples)) * n);
+      const bucketEnd = Math.max(bucketStart + 1, Math.floor(((i + 1) / Math.max(1, samples)) * n));
+      let cSum = 0, cCount = 0, pSum = 0, pCount = 0;
+      for (let j = bucketStart; j < bucketEnd && j < n; j += 1) {
+        if (trimmedCadences[j] != null) { cSum += trimmedCadences[j]; cCount += 1; }
+        if (trimmedPowers[j] != null) { pSum += trimmedPowers[j]; pCount += 1; }
+      }
+      sampleCadences.push(cCount > 0 ? cSum / cCount : null);
+      samplePowers.push(pCount > 0 ? pSum / pCount : null);
     }
+
+    // Stats for cadence / power (only over non-null moving values)
+    const cadencesValid = trimmedCadences.filter((v) => v != null && v > 0);
+    const powersValid = trimmedPowers.filter((v) => v != null);
+    const avgCadence = cadencesValid.length ? cadencesValid.reduce((a, b) => a + b, 0) / cadencesValid.length : null;
+    const maxCadence = cadencesValid.length ? Math.max(...cadencesValid) : null;
+    const avgPower = powersValid.length ? powersValid.reduce((a, b) => a + b, 0) / powersValid.length : null;
+    const maxPower = powersValid.length ? Math.max(...powersValid) : null;
+
+    const hasCadence = sampleCadences.some((v) => v != null);
+    const hasPower = samplePowers.some((v) => v != null);
 
     const activity = this._activities[this._idx] || {};
     const avgSpeed = activity.speed?.average;
@@ -1115,9 +1149,76 @@ class BoschEBikeMapCard extends HTMLElement {
       totalKm,
       sampleDistances,
       sampleElevations,
+      sampleCadences,
+      samplePowers,
+      hasCadence,
+      hasPower,
+      avgCadence,
+      maxCadence,
+      avgPower,
+      maxPower,
       avgSpeed: Number.isFinite(avgSpeed) ? avgSpeed : null,
       maxSpeed: Number.isFinite(maxSpeed) ? maxSpeed : null,
     };
+  }
+
+  _renderMiniChart(title, rangeText, samples, unit, color, fillColor, minValue, maxValue, showAxis) {
+    const width = 1000;
+    const height = 160;
+    const padL = 46;
+    const padR = 8;
+    const padT = 18;
+    const padB = showAxis ? 24 : 8;
+    const chartW = width - padL - padR;
+    const chartH = height - padT - padB;
+    const span = Math.max(1, maxValue - minValue);
+
+    // Build polyline with null-handling: break line where no data
+    const segments = [];
+    let current = [];
+    samples.forEach((v, i) => {
+      if (v == null) {
+        if (current.length) { segments.push(current); current = []; }
+      } else {
+        const x = padL + (chartW * i) / Math.max(1, samples.length - 1);
+        const y = padT + chartH - (((v - minValue) / span) * chartH);
+        current.push(`${x.toFixed(1)},${y.toFixed(1)}`);
+      }
+    });
+    if (current.length) segments.push(current);
+
+    const linesSvg = segments.map((seg) =>
+      `<polyline points="${seg.join(' ')}" fill="none" stroke="${color}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"></polyline>`
+    ).join('');
+
+    // Fill (only useful for elevation — keep optional)
+    let fillSvg = '';
+    if (fillColor && segments.length === 1) {
+      const seg = segments[0];
+      const firstX = seg[0].split(',')[0];
+      const lastX = seg[seg.length - 1].split(',')[0];
+      fillSvg = `<polyline points="${firstX},${height - padB} ${seg.join(' ')} ${lastX},${height - padB}" fill="${fillColor}" stroke="none"></polyline>`;
+    }
+
+    const gridTicks = [0, 0.5, 1].map((t) => {
+      const y = padT + chartH - (chartH * t);
+      const label = Math.round(minValue + span * t);
+      return `<line x1="${padL}" y1="${y.toFixed(1)}" x2="${width - padR}" y2="${y.toFixed(1)}" stroke="rgba(0,0,0,.08)" stroke-dasharray="3 4" />
+              <text x="0" y="${(y + 4).toFixed(1)}" font-size="11" fill="rgba(0,0,0,.55)">${label}</text>`;
+    }).join('');
+
+    return `
+      <div class="eb-profile-head">
+        <div class="eb-profile-title">${title}</div>
+        <div class="eb-profile-range">${rangeText}</div>
+      </div>
+      <svg class="eb-profile-chart" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" aria-label="${title}">
+        ${gridTicks}
+        ${fillSvg}
+        ${linesSvg}
+        <text x="${padL - 4}" y="${padT - 4}" font-size="10" fill="rgba(0,0,0,.55)" text-anchor="end">${unit}</text>
+      </svg>
+    `;
   }
 
   _renderFullscreenProfile() {
@@ -1130,44 +1231,67 @@ class BoschEBikeMapCard extends HTMLElement {
       return;
     }
 
-    const { minEle, maxEle, ascent, descent, totalKm, sampleDistances, sampleElevations, avgSpeed, maxSpeed } = profile;
-    const width = 1000;
-    const height = 180;
-    const padL = 22;
-    const padR = 8;
-    const padT = 12;
-    const padB = 24;
-    const chartW = width - padL - padR;
-    const chartH = height - padT - padB;
-    const eleSpan = Math.max(8, maxEle - minEle);
-
-    const points = sampleElevations.map((ele, i) => {
-      const x = padL + (chartW * i) / Math.max(1, sampleElevations.length - 1);
-      const y = padT + chartH - (((ele - minEle) / eleSpan) * chartH);
-      return `${x.toFixed(1)},${y.toFixed(1)}`;
-    }).join(' ');
-
-    const area = `${padL},${height - padB} ${points} ${width - padR},${height - padB}`;
-    const ticks = [0, 0.25, 0.5, 0.75, 1].map((t) => {
-      const y = padT + chartH - (chartH * t);
-      const label = Math.round(minEle + eleSpan * t);
-      return `<line x1="${padL}" y1="${y.toFixed(1)}" x2="${width - padR}" y2="${y.toFixed(1)}" stroke="rgba(0,0,0,.08)" stroke-dasharray="3 4" />
-              <text x="0" y="${(y + 4).toFixed(1)}" font-size="11" fill="rgba(0,0,0,.55)">${label} m</text>`;
-    }).join('');
+    const {
+      minEle, maxEle, ascent, descent, totalKm,
+      sampleElevations, sampleCadences, samplePowers,
+      hasCadence, hasPower,
+      avgCadence, maxCadence, avgPower, maxPower,
+      avgSpeed, maxSpeed,
+    } = profile;
 
     const fmtKm = (v) => `${v.toFixed(v >= 10 ? 1 : 2).replace('.', ',')} km`;
     const axisLabels = [0, 0.25, 0.5, 0.75, 1].map((t) => fmtKm(totalKm * t));
 
+    // Höhe
+    const eleChart = this._renderMiniChart(
+      "Höhenprofil",
+      `Min ${Math.round(minEle)} m · Max ${Math.round(maxEle)} m`,
+      sampleElevations,
+      "m",
+      "#89b52b",
+      "rgba(139,195,74,.20)",
+      minEle, maxEle,
+      false
+    );
+
+    // Kadenz
+    let cadChart = '';
+    if (hasCadence) {
+      const cadMin = 0;
+      const cadMax = Math.max(20, Math.ceil((maxCadence || 0) / 10) * 10);
+      cadChart = this._renderMiniChart(
+        "Trittfrequenz",
+        `Ø ${avgCadence != null ? Math.round(avgCadence) : '–'} rpm · Max ${maxCadence != null ? Math.round(maxCadence) : '–'} rpm`,
+        sampleCadences,
+        "rpm",
+        "#f39c12",
+        null,
+        cadMin, cadMax,
+        false
+      );
+    }
+
+    // Leistung
+    let powChart = '';
+    if (hasPower) {
+      const powMin = 0;
+      const powMax = Math.max(50, Math.ceil((maxPower || 0) / 50) * 50);
+      powChart = this._renderMiniChart(
+        "Leistung",
+        `Ø ${avgPower != null ? Math.round(avgPower) : '–'} W · Max ${maxPower != null ? Math.round(maxPower) : '–'} W`,
+        samplePowers,
+        "W",
+        "#e74c3c",
+        null,
+        powMin, powMax,
+        true
+      );
+    }
+
     el.innerHTML = `
-      <div class="eb-profile-head">
-        <div class="eb-profile-title">Höhenprofil</div>
-        <div class="eb-profile-range">Min ${Math.round(minEle)} m · Max ${Math.round(maxEle)} m</div>
-      </div>
-      <svg class="eb-profile-chart" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" aria-label="Höhenprofil">
-        ${ticks}
-        <polyline points="${area}" fill="rgba(139,195,74,.20)" stroke="none"></polyline>
-        <polyline points="${points}" fill="none" stroke="#89b52b" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"></polyline>
-      </svg>
+      ${eleChart}
+      ${cadChart}
+      ${powChart}
       <div class="eb-profile-axis">
         ${axisLabels.map((label) => `<span>${label}</span>`).join('')}
       </div>
