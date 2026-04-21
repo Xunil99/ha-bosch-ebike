@@ -8,6 +8,7 @@ from typing import Any
 
 from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.exceptions import ConfigEntryAuthFailed
 
@@ -15,6 +16,9 @@ from .api import BoschEBikeAPI, AuthError
 from .const import DOMAIN, DEFAULT_SCAN_INTERVAL, DEFAULT_BATTERY_CAPACITY_WH
 
 _LOGGER = logging.getLogger(__name__)
+
+STORAGE_VERSION = 1
+STORAGE_KEY_SUFFIX = "consumption_state"
 
 
 class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
@@ -39,13 +43,60 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._prev_activity_ids: set[str] = set()
         self._battery_capacity_wh: float = DEFAULT_BATTERY_CAPACITY_WH
         self._activity_consumption: dict[str, dict[str, Any]] = {}
+        # Persistent storage for consumption state (survives HA restarts)
+        self._store: Store = Store(
+            hass, STORAGE_VERSION, f"{DOMAIN}_{STORAGE_KEY_SUFFIX}"
+        )
+        self._state_loaded = False
+
+    async def async_load_persisted_state(self) -> None:
+        """Restore battery consumption state from disk (once at startup)."""
+        if self._state_loaded:
+            return
+        data = await self._store.async_load()
+        if isinstance(data, dict):
+            prev_wh = data.get("prev_delivered_wh")
+            if isinstance(prev_wh, (int, float)):
+                self._prev_delivered_wh = float(prev_wh)
+            prev_ids = data.get("prev_activity_ids")
+            if isinstance(prev_ids, list):
+                self._prev_activity_ids = {x for x in prev_ids if isinstance(x, str)}
+            consumption = data.get("activity_consumption")
+            if isinstance(consumption, dict):
+                self._activity_consumption = {
+                    k: v for k, v in consumption.items() if isinstance(v, dict)
+                }
+            capacity = data.get("battery_capacity_wh")
+            if isinstance(capacity, (int, float)) and capacity > 0:
+                self._battery_capacity_wh = float(capacity)
+            _LOGGER.debug(
+                "Loaded persisted consumption state: prev_wh=%s, activities=%d",
+                self._prev_delivered_wh,
+                len(self._activity_consumption),
+            )
+        self._state_loaded = True
+
+    async def _async_save_state(self) -> None:
+        """Persist the battery consumption state to disk."""
+        await self._store.async_save(
+            {
+                "prev_delivered_wh": self._prev_delivered_wh,
+                "prev_activity_ids": sorted(self._prev_activity_ids),
+                "activity_consumption": self._activity_consumption,
+                "battery_capacity_wh": self._battery_capacity_wh,
+            }
+        )
 
     def set_battery_capacity(self, capacity_wh: float) -> None:
         """Set the battery capacity (configurable by user)."""
         self._battery_capacity_wh = capacity_wh
+        self.hass.async_create_task(self._async_save_state())
 
-    def _track_battery_consumption(self, bikes: list[dict[str, Any]]) -> None:
-        """Track deliveredWhOverLifetime changes and allocate to activities."""
+    def _track_battery_consumption(self, bikes: list[dict[str, Any]]) -> bool:
+        """Track deliveredWhOverLifetime changes and allocate to activities.
+
+        Returns True if persistent state changed and should be saved.
+        """
         current_wh: float | None = None
         for bike in bikes:
             for battery in bike.get("batteries", []) or []:
@@ -57,9 +108,10 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 break
 
         if current_wh is None:
-            return
+            return False
 
         current_ids = {a.get("id") for a in self._all_activities if a.get("id")}
+        state_changed = False
 
         if self._prev_delivered_wh is not None:
             delta_wh = current_wh - self._prev_delivered_wh
@@ -94,6 +146,7 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                                 (share / self._battery_capacity_wh) * 100, 1
                             ) if self._battery_capacity_wh > 0 else 0,
                         }
+                        state_changed = True
                         _LOGGER.info(
                             "Battery consumption for activity %s: %.1f Wh (%.1f%%)",
                             aid, share,
@@ -101,8 +154,15 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                             if self._battery_capacity_wh > 0 else 0,
                         )
 
-        self._prev_delivered_wh = current_wh
-        self._prev_activity_ids = current_ids
+        # Basislinie aktualisieren
+        if self._prev_delivered_wh != current_wh:
+            self._prev_delivered_wh = current_wh
+            state_changed = True
+        if self._prev_activity_ids != current_ids:
+            self._prev_activity_ids = current_ids
+            state_changed = True
+
+        return state_changed
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch bikes and activities from Bosch API."""
@@ -161,8 +221,13 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 except Exception:
                     pass  # GPS details are optional, don't fail the whole update
 
+        # Restore persisted consumption state on first run
+        await self.async_load_persisted_state()
+
         # Battery consumption tracking via Wh delta
-        self._track_battery_consumption(bikes)
+        state_changed = self._track_battery_consumption(bikes)
+        if state_changed:
+            await self._async_save_state()
 
         return {
             "bikes": bikes,
