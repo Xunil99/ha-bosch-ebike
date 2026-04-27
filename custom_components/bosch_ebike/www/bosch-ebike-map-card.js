@@ -145,6 +145,9 @@ class BoschEBikeMapCard extends HTMLElement {
     this._wikiSummaries = new Map();  // pageId → {extract, thumbnail}
     this._wikiGroup = null;
     this._fullscreenWikiGroup = null;
+    // Which activityId is currently rendered on each map (avoid re-rendering and killing open popups)
+    this._wikiRenderedInline = null;
+    this._wikiRenderedFullscreen = null;
 
     this._map = null;
     this._trackGroup = null;
@@ -1056,6 +1059,7 @@ class BoschEBikeMapCard extends HTMLElement {
     this._map = null;
     this._trackGroup = null;
     this._wikiGroup = null;
+    this._wikiRenderedInline = null;
     this._inlineBaseLayer = null;
 
     const mapEl = this._$("eb-map");
@@ -1079,6 +1083,7 @@ class BoschEBikeMapCard extends HTMLElement {
     this._fullscreenMap = null;
     this._fullscreenTrackGroup = null;
     this._fullscreenWikiGroup = null;
+    this._wikiRenderedFullscreen = null;
     this._fullscreenBaseLayer = null;
 
     const mapEl = this._$("eb-fullscreen-map");
@@ -1113,6 +1118,8 @@ class BoschEBikeMapCard extends HTMLElement {
     if (this._fullscreenWikiGroup) {
       try { this._fullscreenWikiGroup.clearLayers(); } catch (_) {}
     }
+    this._wikiRenderedInline = null;
+    this._wikiRenderedFullscreen = null;
   }
 
   /// Wikipedia language code based on HA locale, fallback en
@@ -1263,9 +1270,19 @@ class BoschEBikeMapCard extends HTMLElement {
     if (!this._wikiEnabled) return;
     const Leaflet = window.L;
     if (!Leaflet) return;
+    const aid = this._currentTrackActivityId;
 
-    const renderTo = (map, groupRefName) => {
+    const popupOpts = {
+      maxWidth: 300,
+      closeOnClick: false,  // don't close when clicking on the map
+      autoClose: false,     // don't close when another popup opens
+    };
+
+    const renderTo = (map, groupRefName, renderedRefName) => {
       if (!map) return;
+      // Already rendered for this activity → keep markers (and any open popup) alive
+      if (this[renderedRefName] === aid && this[groupRefName]) return;
+
       let group = this[groupRefName];
       if (!group) {
         group = Leaflet.layerGroup().addTo(map);
@@ -1281,17 +1298,18 @@ class BoschEBikeMapCard extends HTMLElement {
           iconAnchor: [14, 14],
         });
         const marker = Leaflet.marker([art.lat, art.lon], { icon, title: art.title });
-        marker.bindPopup(this._wikiPopupHtml(art, true), { maxWidth: 300 });
+        marker.bindPopup(this._wikiPopupHtml(art, true), popupOpts);
         marker.on("popupopen", async () => {
           const summary = await this._fetchWikiSummary(art.pageId, art.title, art.lang);
           marker.setPopupContent(this._wikiPopupHtml(art, false, summary));
         });
         marker.addTo(group);
       }
+      this[renderedRefName] = aid;
     };
 
-    renderTo(this._map, "_wikiGroup");
-    renderTo(this._fullscreenMap, "_fullscreenWikiGroup");
+    renderTo(this._map, "_wikiGroup", "_wikiRenderedInline");
+    renderTo(this._fullscreenMap, "_fullscreenWikiGroup", "_wikiRenderedFullscreen");
   }
 
   _wikiPopupHtml(article, loading, summary = null) {
