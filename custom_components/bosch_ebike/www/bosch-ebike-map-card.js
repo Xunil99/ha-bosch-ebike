@@ -4,6 +4,15 @@
  */
 
 const LEAFLET_JS = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
+const LEAFLET_CSS = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
+
+function ensureLeafletCss() {
+  if (document.querySelector(`link[href="${LEAFLET_CSS}"]`)) return;
+  const link = document.createElement("link");
+  link.rel = "stylesheet";
+  link.href = LEAFLET_CSS;
+  document.head.appendChild(link);
+}
 
 const MAP_STYLES = {
   osm: {
@@ -85,6 +94,7 @@ const LEAFLET_INLINE_CSS = `
 `;
 
 function ensureLeaflet() {
+  ensureLeafletCss();
   if (window.L && typeof window.L.map === "function") return Promise.resolve(window.L);
   if (window.__ebikeLeafletPromise) return window.__ebikeLeafletPromise;
 
