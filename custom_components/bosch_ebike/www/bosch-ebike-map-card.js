@@ -128,6 +128,13 @@ class BoschEBikeMapCard extends HTMLElement {
     this._idx = 0;
     this._currentTrack = [];
     this._currentTrackActivityId = null;
+    // Wikipedia overlay
+    this._wikiEnabled = (typeof localStorage !== "undefined" && localStorage.getItem("eb-wiki-enabled") === "1");
+    this._wikiArticles = new Map();   // activityId → [{pageId, title, lat, lon, lang}]
+    this._wikiLoading = new Set();    // activity IDs currently being fetched
+    this._wikiSummaries = new Map();  // pageId → {extract, thumbnail}
+    this._wikiGroup = null;
+    this._fullscreenWikiGroup = null;
 
     this._map = null;
     this._trackGroup = null;
@@ -272,6 +279,34 @@ class BoschEBikeMapCard extends HTMLElement {
         display:flex; align-items:center; justify-content:center;
       }
       .eb-sort-lbl { font-size:12px; color:var(--secondary-text-color,#666); white-space:nowrap; flex-shrink:0; }
+      .eb-icon-btn.eb-active {
+        background:rgba(11,132,199,.95) !important;
+        outline:2px solid rgba(255,255,255,.6);
+      }
+      .eb-wiki-marker {
+        background:rgba(255,255,255,.95);
+        border:2px solid #0b84c7;
+        border-radius:50%;
+        width:28px !important; height:28px !important;
+        display:flex; align-items:center; justify-content:center;
+        font-family:Georgia,serif; font-style:italic; font-weight:700;
+        color:#0b84c7; font-size:18px; line-height:1;
+        box-shadow:0 1px 4px rgba(0,0,0,.3);
+        cursor:pointer;
+      }
+      .eb-wiki-popup { font-family:inherit; max-width:280px; }
+      .eb-wiki-popup .eb-wiki-title { font-size:15px; font-weight:600; margin-bottom:6px; color:#222; }
+      .eb-wiki-popup .eb-wiki-thumb {
+        max-width:100%; max-height:140px; border-radius:6px; margin-bottom:6px; display:block;
+      }
+      .eb-wiki-popup .eb-wiki-extract { font-size:12px; color:#444; line-height:1.35; margin-bottom:8px; }
+      .eb-wiki-popup .eb-wiki-link {
+        display:inline-block; padding:4px 10px;
+        background:#0b84c7; color:#fff; border-radius:6px;
+        text-decoration:none; font-size:12px; font-weight:500;
+      }
+      .eb-wiki-popup .eb-wiki-link:hover { background:#096ba3; }
+      .eb-wiki-popup .eb-wiki-loading { font-size:12px; color:#888; }
       .eb-map-wrap { position:relative; }
       .eb-map { width:100% !important; height:${h}px !important; min-height:${h}px; z-index:0; position:relative; }
       .eb-overlay-msg {
@@ -406,6 +441,7 @@ class BoschEBikeMapCard extends HTMLElement {
         <div id="eb-map" class="eb-map"></div>
         <div class="eb-map-tools">
           <button id="eb-style" class="eb-icon-btn eb-style-btn" title="Kartenstil wechseln" aria-label="Kartenstil wechseln">OSM</button>
+          <button id="eb-wiki" class="eb-icon-btn" title="Wikipedia-Artikel entlang der Route ein-/ausblenden" aria-label="Wikipedia-Artikel">📚</button>
           <button id="eb-gpx" class="eb-icon-btn" title="GPX herunterladen" aria-label="GPX herunterladen">GPX</button>
           <button id="eb-fullscreen" class="eb-icon-btn" title="Vollbild" aria-label="Vollbild">
             <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M7,14H5V19H10V17H7V14M5,10H7V7H10V5H5V10M17,17H14V19H19V14H17V17M14,5V7H17V10H19V5H14Z"/></svg>
@@ -427,6 +463,7 @@ class BoschEBikeMapCard extends HTMLElement {
               <span id="eb-full-ctr" class="eb-ctr">–</span>
             </div>
             <button id="eb-full-style" class="eb-icon-btn eb-style-btn" title="Kartenstil wechseln" aria-label="Kartenstil wechseln">OSM</button>
+            <button id="eb-full-wiki" class="eb-icon-btn" title="Wikipedia-Artikel entlang der Route ein-/ausblenden" aria-label="Wikipedia-Artikel">📚</button>
             <button id="eb-full-gpx" class="eb-icon-btn" title="GPX herunterladen" aria-label="GPX herunterladen">GPX</button>
             <button id="eb-fit" class="eb-icon-btn" title="Route einpassen" aria-label="Route einpassen">
               <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M4,4H10V6H6V10H4V4M14,4H20V10H18V6H14V4M4,14H6V18H10V20H4V14M18,14H20V20H14V18H18V14Z"/></svg>
@@ -456,6 +493,9 @@ class BoschEBikeMapCard extends HTMLElement {
     this._$("eb-full-style").addEventListener("click", () => this._cycleMapStyle());
     this._$("eb-full-gpx").addEventListener("click", () => this._downloadCurrentGpx());
     this._$("eb-full-close").addEventListener("click", () => this._closeFullscreen());
+    this._$("eb-wiki").addEventListener("click", () => this._toggleWikipedia());
+    const fullWiki = this._$("eb-full-wiki");
+    if (fullWiki) fullWiki.addEventListener("click", () => this._toggleWikipedia());
     this._$("eb-tab-map").addEventListener("click", () => this._setFullscreenTab("map"));
     this._$("eb-tab-elevation").addEventListener("click", () => this._setFullscreenTab("elevation"));
     this._$("eb-full-prev").addEventListener("click", () => this._go(-1));
@@ -507,6 +547,7 @@ class BoschEBikeMapCard extends HTMLElement {
     }
 
     this._updateStyleButtons();
+    this._updateWikiButtons();
   }
 
   _attachLifecycleHooks() {
@@ -848,6 +889,10 @@ class BoschEBikeMapCard extends HTMLElement {
         this._setTimer(() => this._activateMap("track loaded"), delay);
       });
       if (this._fullscreenOpen) this._scheduleFullscreenSync("track loaded");
+      if (this._wikiEnabled) {
+        // Slight delay so the map is initialized before placing markers
+        this._setTimer(() => this._loadAndRenderWiki(), 600);
+      }
     } catch (error) {
       if (loadSeq < this._loadSeq) return;
       console.error("[Bosch eBike Map] track load error", error);
@@ -1000,6 +1045,7 @@ class BoschEBikeMapCard extends HTMLElement {
 
     this._map = null;
     this._trackGroup = null;
+    this._wikiGroup = null;
     this._inlineBaseLayer = null;
 
     const mapEl = this._$("eb-map");
@@ -1022,10 +1068,247 @@ class BoschEBikeMapCard extends HTMLElement {
 
     this._fullscreenMap = null;
     this._fullscreenTrackGroup = null;
+    this._fullscreenWikiGroup = null;
     this._fullscreenBaseLayer = null;
 
     const mapEl = this._$("eb-fullscreen-map");
     if (mapEl) mapEl.innerHTML = "";
+  }
+
+  // -- Wikipedia overlay --
+
+  _updateWikiButtons() {
+    const inlineBtn = this._$("eb-wiki");
+    const fullBtn = this._$("eb-full-wiki");
+    if (inlineBtn) inlineBtn.classList.toggle("eb-active", this._wikiEnabled);
+    if (fullBtn) fullBtn.classList.toggle("eb-active", this._wikiEnabled);
+  }
+
+  _toggleWikipedia() {
+    this._wikiEnabled = !this._wikiEnabled;
+    try { localStorage.setItem("eb-wiki-enabled", this._wikiEnabled ? "1" : "0"); } catch (_) {}
+    this._updateWikiButtons();
+
+    if (this._wikiEnabled) {
+      this._loadAndRenderWiki();
+    } else {
+      this._clearWikiLayers();
+    }
+  }
+
+  _clearWikiLayers() {
+    if (this._wikiGroup) {
+      try { this._wikiGroup.clearLayers(); } catch (_) {}
+    }
+    if (this._fullscreenWikiGroup) {
+      try { this._fullscreenWikiGroup.clearLayers(); } catch (_) {}
+    }
+  }
+
+  /// Wikipedia language code based on HA locale, fallback en
+  _wikiLanguage() {
+    const locale = (this._hass && this._hass.locale && this._hass.locale.language) || "en";
+    return String(locale).slice(0, 2).toLowerCase() || "en";
+  }
+
+  /// Subsample the route every ~2 km along the actual driven distance.
+  _wikiSamplePoints(track) {
+    if (!Array.isArray(track) || track.length < 2) return [];
+    const pts = [];
+    let lastSampleDist = -Infinity;
+    let cumKm = 0;
+    pts.push({ lat: track[0].lat, lon: track[0].lon });
+    lastSampleDist = 0;
+    for (let i = 1; i < track.length; i += 1) {
+      cumKm += this._distanceMeters(track[i - 1], track[i]) / 1000;
+      if (cumKm - lastSampleDist >= 2) {
+        pts.push({ lat: track[i].lat, lon: track[i].lon });
+        lastSampleDist = cumKm;
+      }
+    }
+    // Always include the last point as well
+    const last = track[track.length - 1];
+    pts.push({ lat: last.lat, lon: last.lon });
+    return pts;
+  }
+
+  async _loadAndRenderWiki() {
+    if (!this._currentTrackActivityId || !this._currentTrack.length) return;
+    const aid = this._currentTrackActivityId;
+
+    // From cache?
+    let articles = this._wikiArticles.get(aid);
+    if (!articles) {
+      // localStorage cache
+      try {
+        const cached = localStorage.getItem(`eb-wiki-${aid}`);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed)) {
+            articles = parsed;
+            this._wikiArticles.set(aid, parsed);
+          }
+        }
+      } catch (_) {}
+    }
+
+    if (!articles) {
+      if (this._wikiLoading.has(aid)) return;
+      this._wikiLoading.add(aid);
+      try {
+        articles = await this._fetchWikiArticles(this._currentTrack);
+        this._wikiArticles.set(aid, articles);
+        try { localStorage.setItem(`eb-wiki-${aid}`, JSON.stringify(articles)); } catch (_) {}
+      } catch (err) {
+        console.warn("[Bosch eBike Wiki] fetch failed", err);
+        articles = [];
+      } finally {
+        this._wikiLoading.delete(aid);
+      }
+    }
+
+    this._renderWikiMarkers(articles);
+  }
+
+  async _fetchWikiArticles(track) {
+    const samples = this._wikiSamplePoints(track);
+    if (!samples.length) return [];
+    const lang = this._wikiLanguage();
+    const seen = new Map(); // pageId → article
+
+    // Process in batches of 5 with a small pause between batches
+    const BATCH_SIZE = 5;
+    for (let i = 0; i < samples.length; i += BATCH_SIZE) {
+      const batch = samples.slice(i, i + BATCH_SIZE);
+      const results = await Promise.all(
+        batch.map((p) => this._geosearchOnce(lang, p.lat, p.lon))
+      );
+      for (const list of results) {
+        for (const art of list) {
+          if (!seen.has(art.pageId)) seen.set(art.pageId, art);
+        }
+      }
+      if (i + BATCH_SIZE < samples.length) {
+        await new Promise((r) => setTimeout(r, 100));
+      }
+    }
+
+    let arr = Array.from(seen.values());
+    // Cap at 30 markers — keep the closest to any sample point
+    if (arr.length > 30) {
+      arr.sort((a, b) => (a.dist || 0) - (b.dist || 0));
+      arr = arr.slice(0, 30);
+    }
+    return arr;
+  }
+
+  async _geosearchOnce(lang, lat, lon) {
+    const url = new URL(`https://${lang}.wikipedia.org/w/api.php`);
+    url.searchParams.set("action", "query");
+    url.searchParams.set("list", "geosearch");
+    url.searchParams.set("gscoord", `${lat}|${lon}`);
+    url.searchParams.set("gsradius", "1000");
+    url.searchParams.set("gslimit", "5");
+    url.searchParams.set("format", "json");
+    url.searchParams.set("origin", "*");
+    try {
+      const resp = await fetch(url.toString());
+      if (!resp.ok) return [];
+      const data = await resp.json();
+      const list = (data && data.query && data.query.geosearch) || [];
+      return list.map((a) => ({
+        pageId: a.pageid,
+        title: a.title,
+        lat: a.lat,
+        lon: a.lon,
+        dist: a.dist,
+        lang,
+      }));
+    } catch (_) {
+      return [];
+    }
+  }
+
+  async _fetchWikiSummary(pageId, title, lang) {
+    if (this._wikiSummaries.has(pageId)) return this._wikiSummaries.get(pageId);
+    const url = `https://${lang}.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}?redirect=true`;
+    try {
+      const resp = await fetch(url, { headers: { Accept: "application/json" } });
+      if (!resp.ok) return null;
+      const data = await resp.json();
+      const summary = {
+        extract: data.extract || "",
+        thumbnail: data.thumbnail && data.thumbnail.source ? data.thumbnail.source : null,
+        link: (data.content_urls && data.content_urls.desktop && data.content_urls.desktop.page)
+          || `https://${lang}.wikipedia.org/wiki/${encodeURIComponent(title)}`,
+      };
+      this._wikiSummaries.set(pageId, summary);
+      return summary;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  _renderWikiMarkers(articles) {
+    if (!this._wikiEnabled) return;
+    const Leaflet = window.L;
+    if (!Leaflet) return;
+
+    const renderTo = (map, groupRefName) => {
+      if (!map) return;
+      let group = this[groupRefName];
+      if (!group) {
+        group = Leaflet.layerGroup().addTo(map);
+        this[groupRefName] = group;
+      }
+      group.clearLayers();
+      for (const art of articles) {
+        if (!Number.isFinite(art.lat) || !Number.isFinite(art.lon)) continue;
+        const icon = Leaflet.divIcon({
+          className: "",
+          html: '<div class="eb-wiki-marker">i</div>',
+          iconSize: [28, 28],
+          iconAnchor: [14, 14],
+        });
+        const marker = Leaflet.marker([art.lat, art.lon], { icon, title: art.title });
+        marker.bindPopup(this._wikiPopupHtml(art, true), { maxWidth: 300 });
+        marker.on("popupopen", async () => {
+          const summary = await this._fetchWikiSummary(art.pageId, art.title, art.lang);
+          marker.setPopupContent(this._wikiPopupHtml(art, false, summary));
+        });
+        marker.addTo(group);
+      }
+    };
+
+    renderTo(this._map, "_wikiGroup");
+    renderTo(this._fullscreenMap, "_fullscreenWikiGroup");
+  }
+
+  _wikiPopupHtml(article, loading, summary = null) {
+    const safeTitle = this._escapeHtml(article.title);
+    if (loading) {
+      return `<div class="eb-wiki-popup">
+        <div class="eb-wiki-title">${safeTitle}</div>
+        <div class="eb-wiki-loading">Lade Vorschau …</div>
+      </div>`;
+    }
+    if (!summary) {
+      const fallbackUrl = `https://${article.lang}.wikipedia.org/wiki/${encodeURIComponent(article.title)}`;
+      return `<div class="eb-wiki-popup">
+        <div class="eb-wiki-title">${safeTitle}</div>
+        <div class="eb-wiki-extract">Vorschau nicht verfügbar.</div>
+        <a class="eb-wiki-link" href="${fallbackUrl}" target="_blank" rel="noopener noreferrer">Auf Wikipedia öffnen</a>
+      </div>`;
+    }
+    const thumb = summary.thumbnail
+      ? `<img class="eb-wiki-thumb" src="${summary.thumbnail}" alt="">` : "";
+    const extract = this._escapeHtml(summary.extract || "");
+    return `<div class="eb-wiki-popup">
+      <div class="eb-wiki-title">${safeTitle}</div>
+      ${thumb}
+      <div class="eb-wiki-extract">${extract}</div>
+      <a class="eb-wiki-link" href="${summary.link}" target="_blank" rel="noopener noreferrer">Auf Wikipedia öffnen</a>
+    </div>`;
   }
 
   _clearTrackLayers() {
@@ -1045,6 +1328,12 @@ class BoschEBikeMapCard extends HTMLElement {
     });
     this._needsInlineFit = false;
     this._msg("");
+
+    // Restore Wikipedia markers from cache if active
+    if (this._wikiEnabled) {
+      const cached = this._wikiArticles.get(this._currentTrackActivityId);
+      if (cached) this._renderWikiMarkers(cached);
+    }
   }
 
   _renderTrackToMap(targetMap, targetGroup, { padding = [40, 40], legend = "inline", fit = false } = {}) {
@@ -1642,6 +1931,16 @@ ${trackPoints}
       fit: this._needsFullscreenFit && !this._fullscreenUserAdjustedView,
     });
     this._needsFullscreenFit = false;
+
+    // Re-render Wikipedia markers if enabled (covers cached articles instantly)
+    if (this._wikiEnabled) {
+      const cached = this._wikiArticles.get(this._currentTrackActivityId);
+      if (cached) {
+        this._renderWikiMarkers(cached);
+      } else {
+        this._loadAndRenderWiki();
+      }
+    }
 
     this._setTimer(() => {
       try { this._fullscreenMap?.invalidateSize({ pan: false, animate: false }); } catch (_) {}

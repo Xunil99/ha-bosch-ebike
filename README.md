@@ -179,6 +179,15 @@ Die Integration unterstützt sowohl mehrere Konten als auch mehrere Bikes pro Ko
 
 Die Auswahl filtert die angezeigten Touren live; das Sortieren funktioniert wie gewohnt innerhalb des gefilterten Ergebnisses.
 
+### Wikipedia-Artikel entlang der Route
+
+Auf der Lovelace-Karte gibt es einen 📚-Toggle in den Karten-Steuerelementen. Ist er aktiviert, sucht die Karte entlang der gefahrenen Route alle 2 km nach nahegelegenen Wikipedia-Artikeln und zeigt sie als (i)-Marker an. Ein Klick öffnet ein kleines Popup mit Titel, Vorschaubild, Kurzbeschreibung und einem Link auf den vollständigen Artikel.
+
+- **Sprache** richtet sich nach der HA-Spracheinstellung; bei leerem Treffer wird auf Englisch zurückgefallen
+- **Maximal 30 Marker** pro Tour, dichte Bereiche werden gebündelt
+- **Toggle-Status und Ergebnisse** werden im Browser gecacht (`localStorage`), beim Tour-Wechsel werden frische Daten geholt
+- **Datenschutz-Hinweis**: Beim Aktivieren des Layers werden Stützstellen-Koordinaten der Route an die Wikipedia-API gesendet; der Layer ist standardmäßig aus
+
 ### Fehlerbehebung
 
 | Problem | Lösung |
@@ -424,6 +433,15 @@ The integration supports both multiple accounts and multiple bikes per account.
 - **Bike** (visible only with multiple bikes)
 
 The selection filters the displayed activities live; sorting works as usual within the filtered result.
+
+### Wikipedia articles along the route
+
+The Lovelace card has a 📚 toggle in the map controls. When enabled, the card samples the ridden route every 2 km and queries Wikipedia for nearby articles, showing each one as a small (i) marker. Clicking a marker opens a popup with title, thumbnail, short summary and a link to the full article.
+
+- **Language** follows the Home Assistant locale; falls back to English if no results
+- **Up to 30 markers** per ride; dense areas are clustered
+- **Toggle state and results** are cached in the browser (`localStorage`); fresh queries run when switching rides
+- **Privacy note**: Enabling the layer sends sample coordinates of the route to the Wikipedia API. The layer is off by default
 
 ### Troubleshooting
 
