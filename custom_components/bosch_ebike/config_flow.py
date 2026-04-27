@@ -63,11 +63,12 @@ class BoschEBikeConfigFlow(ConfigFlow, domain=DOMAIN):
     async def async_step_auth_code(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Step 2: User opens login URL in browser, then pastes the auth code."""
+        """Step 2: User opens login URL in browser, then pastes the auth code or full callback URL."""
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            code = user_input.get("auth_code", "").strip()
+            raw = user_input.get("auth_code", "").strip()
+            code = self._extract_auth_code(raw)
             if not code:
                 errors["auth_code"] = "no_auth_code"
             else:
@@ -93,3 +94,33 @@ class BoschEBikeConfigFlow(ConfigFlow, domain=DOMAIN):
             description_placeholders={"authorize_url": self._authorize_url},
             errors=errors,
         )
+
+    @staticmethod
+    def _extract_auth_code(raw: str) -> str | None:
+        """Accept either a bare auth code or the full callback URL.
+
+        Detects URLs containing ``code=`` and extracts the parameter; otherwise
+        returns the input as-is. Removes trailing whitespace, surrounding quotes
+        and angle brackets (common when copying from terminals/emails).
+        """
+        if not raw:
+            return None
+        cleaned = raw.strip().strip("<>").strip("\"'").strip()
+        if not cleaned:
+            return None
+        if "code=" in cleaned:
+            from urllib.parse import urlparse, parse_qs
+            try:
+                parsed = urlparse(cleaned)
+                # Accept URLs with or without scheme (e.g. "localhost:8888/callback?code=...")
+                query = parsed.query or ""
+                if not query and "?" in cleaned:
+                    query = cleaned.split("?", 1)[1]
+                params = parse_qs(query)
+                code_values = params.get("code", [])
+                if code_values:
+                    return code_values[0].strip()
+            except Exception:  # noqa: BLE001
+                return None
+            return None
+        return cleaned

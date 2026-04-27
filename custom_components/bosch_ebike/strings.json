@@ -10,9 +10,9 @@
       },
       "auth_code": {
         "title": "Bosch Login",
-        "description": "1. Open this link in your browser: [{authorize_url}]({authorize_url})\n2. Log in with your Bosch SingleKey ID\n3. After login you will be redirected to a URL starting with `ebike-data://callback?code=...`\n4. Copy the value after `code=` and paste it below",
+        "description": "1. Open this link in your browser: [{authorize_url}]({authorize_url})\n2. Log in with your Bosch SingleKey ID\n3. After login the browser is redirected to `http://localhost:8888/callback?code=...`. The browser will show an error (no server is listening) — that's expected.\n4. Copy the **entire URL** from the address bar (or just the value after `code=`) and paste it below — both work.",
         "data": {
-          "auth_code": "Authorization Code"
+          "auth_code": "Authorization Code or Callback URL"
         }
       }
     },
