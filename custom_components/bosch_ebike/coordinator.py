@@ -43,6 +43,8 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._prev_activity_ids: set[str] = set()
         self._battery_capacity_wh: float = DEFAULT_BATTERY_CAPACITY_WH
         self._activity_consumption: dict[str, dict[str, Any]] = {}
+        # Per-activity bike attribution (activity_id -> bike_id) for multi-bike accounts
+        self._activity_bike: dict[str, str] = {}
         # Persistent storage for consumption state (survives HA restarts)
         self._store: Store = Store(
             hass, STORAGE_VERSION, f"{DOMAIN}_{STORAGE_KEY_SUFFIX}"
@@ -66,6 +68,12 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 self._activity_consumption = {
                     k: v for k, v in consumption.items() if isinstance(v, dict)
                 }
+            attribution = data.get("activity_bike")
+            if isinstance(attribution, dict):
+                self._activity_bike = {
+                    k: v for k, v in attribution.items()
+                    if isinstance(k, str) and isinstance(v, str)
+                }
             capacity = data.get("battery_capacity_wh")
             if isinstance(capacity, (int, float)) and capacity > 0:
                 self._battery_capacity_wh = float(capacity)
@@ -83,9 +91,79 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 "prev_delivered_wh": self._prev_delivered_wh,
                 "prev_activity_ids": sorted(self._prev_activity_ids),
                 "activity_consumption": self._activity_consumption,
+                "activity_bike": self._activity_bike,
                 "battery_capacity_wh": self._battery_capacity_wh,
             }
         )
+
+    @staticmethod
+    def attribute_activities_to_bikes(
+        bikes: list[dict[str, Any]],
+        activities: list[dict[str, Any]],
+        tolerance_m: float = 1500.0,
+    ) -> dict[str, str]:
+        """Attribute each activity to a bike via odometer matching.
+
+        Heuristic: bikes report their current ``driveUnit.odometer`` (in meters);
+        activities expose ``startOdometer`` and ``distance``. We process activities
+        from newest to oldest, find the bike whose current odometer is closest to
+        ``startOdometer + distance`` (within ``tolerance_m``), then "unwind" that
+        bike's odometer back to ``startOdometer`` to attribute the next-older
+        activity. Activities that cannot be matched within tolerance are skipped.
+
+        Returns a dict ``{activity_id: bike_id}``. Single-bike accounts always
+        attribute every activity to that one bike. Empty dict if no bikes have
+        ``odometer`` data.
+        """
+        bike_odos: dict[str, float] = {}
+        for bike in bikes:
+            bid = bike.get("id")
+            odo = (bike.get("driveUnit") or {}).get("odometer")
+            if bid and isinstance(odo, (int, float)):
+                bike_odos[bid] = float(odo)
+        if not bike_odos:
+            return {}
+
+        # Single bike → trivial attribution
+        if len(bike_odos) == 1:
+            only_bike = next(iter(bike_odos.keys()))
+            return {
+                a["id"]: only_bike
+                for a in activities
+                if a.get("id")
+            }
+
+        sorted_acts = sorted(
+            [a for a in activities if a.get("id") and a.get("startOdometer") is not None],
+            key=lambda a: a.get("startTime", ""),
+            reverse=True,
+        )
+
+        attribution: dict[str, str] = {}
+        for act in sorted_acts:
+            try:
+                start_odo = float(act["startOdometer"])
+                distance = float(act.get("distance", 0) or 0)
+            except (TypeError, ValueError):
+                continue
+            end_odo = start_odo + distance
+
+            best_bike: str | None = None
+            best_diff = float("inf")
+            for bid, odo in bike_odos.items():
+                diff = abs(odo - end_odo)
+                if diff < best_diff:
+                    best_diff = diff
+                    best_bike = bid
+
+            if best_bike is None or best_diff > tolerance_m:
+                continue
+
+            attribution[act["id"]] = best_bike
+            # "Unwind" bike's odometer back to before this activity
+            bike_odos[best_bike] = start_odo
+
+        return attribution
 
     def set_battery_capacity(self, capacity_wh: float) -> None:
         """Set the battery capacity (configurable by user)."""
@@ -226,6 +304,14 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         # Battery consumption tracking via Wh delta
         state_changed = self._track_battery_consumption(bikes)
+
+        # Bike attribution via odometer-matching (only meaningful for multi-bike accounts;
+        # for single-bike accounts every activity is attributed to that bike)
+        new_attribution = self.attribute_activities_to_bikes(bikes, self._all_activities)
+        if new_attribution != self._activity_bike:
+            self._activity_bike = new_attribution
+            state_changed = True
+
         if state_changed:
             await self._async_save_state()
 
@@ -235,5 +321,6 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "all_activities": self._all_activities,
             "latest_activity_details": self._latest_activity_details,
             "activity_consumption": self._activity_consumption,
+            "activity_bike": self._activity_bike,
             "battery_capacity_wh": self._battery_capacity_wh,
         }

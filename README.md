@@ -160,6 +160,25 @@ Die Integration enthält eine interaktive Lovelace-Karte zur Anzeige deiner GPS-
 
 ---
 
+### Mehrere Bikes oder Konten
+
+Die Integration unterstützt sowohl mehrere Konten als auch mehrere Bikes pro Konto.
+
+**Mehrere Bosch-Konten** (z. B. ein Bike pro Familienmitglied mit eigener SingleKey ID):
+1. Erstelle für jedes Konto im Bosch Data Act Portal eine eigene App-Registrierung mit eigener Client-ID
+2. Füge die Integration mehrfach hinzu (**Einstellungen → Geräte & Dienste → + Integration hinzufügen → Bosch eBike**) und gib dabei jeweils die andere Client-ID ein
+3. Jede Instanz hat ihre eigenen Sensoren und Touren
+
+**Mehrere Bikes unter einem Konto** (z. B. zwei Bikes mit derselben SingleKey ID):
+- Die Integration legt automatisch eigene Sensoren pro Bike an (Drive Unit, Akku, Service usw.).
+- Touren werden über eine Heuristik (Abgleich des bike-spezifischen `odometer`-Stands mit `startOdometer + distance` der jeweiligen Tour) automatisch dem richtigen Bike zugeordnet.
+
+**Filter in der Karte:** Sobald mehr als ein Konto und/oder mehr als ein Bike vorhanden ist, blendet die Lovelace-Karte automatisch zwei Auswahlfelder über der Liste ein:
+- **Konto** (nur sichtbar bei mehreren Konten)
+- **Bike** (nur sichtbar bei mehreren Bikes)
+
+Die Auswahl filtert die angezeigten Touren live; das Sortieren funktioniert wie gewohnt innerhalb des gefilterten Ergebnisses.
+
 ### Fehlerbehebung
 
 | Problem | Lösung |
@@ -386,6 +405,25 @@ The integration includes an interactive Lovelace card for displaying your GPS tr
 5. Install the integration and restart Home Assistant
 
 ---
+
+### Multiple bikes or accounts
+
+The integration supports both multiple accounts and multiple bikes per account.
+
+**Multiple Bosch accounts** (e.g. one bike per family member with their own SingleKey ID):
+1. Create a separate app registration with its own Client-ID for each account in the Bosch Data Act Portal
+2. Add the integration multiple times (**Settings → Devices & Services → + Add Integration → Bosch eBike**) using a different Client-ID each time
+3. Each instance has its own sensors and rides.
+
+**Multiple bikes under one account** (e.g. two bikes sharing the same SingleKey ID):
+- The integration automatically creates per-bike sensors (drive unit, battery, service, etc.).
+- Rides are attributed to the correct bike via a heuristic (matching each bike's reported `odometer` against the activity's `startOdometer + distance`).
+
+**Card filter:** Once more than one account and/or more than one bike is present, the Lovelace card automatically shows two extra dropdowns above the activity list:
+- **Account** (visible only with multiple accounts)
+- **Bike** (visible only with multiple bikes)
+
+The selection filters the displayed activities live; sorting works as usual within the filtered result.
 
 ### Troubleshooting
 

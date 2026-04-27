@@ -120,7 +120,11 @@ class BoschEBikeMapCard extends HTMLElement {
     super();
     this._hass = null;
     this._config = {};
-    this._activities = [];
+    this._allActivities = [];   // unfiltered, all accounts/bikes
+    this._activities = [];      // filtered view
+    this._instances = [];        // [{config_entry_id, label, bikes:[{id,label}]}]
+    this._filterAccount = "all"; // "all" | config_entry_id
+    this._filterBike = "all";    // "all" | bike_id
     this._idx = 0;
     this._currentTrack = [];
     this._currentTrackActivityId = null;
@@ -208,6 +212,7 @@ class BoschEBikeMapCard extends HTMLElement {
     try {
       await ensureLeaflet();
       this._leafletReady = true;
+      await this._fetchInstances();
       await this._fetchActivities();
       this._scheduleActivation("boot finished");
     } catch (error) {
@@ -369,6 +374,18 @@ class BoschEBikeMapCard extends HTMLElement {
         <button id="eb-next">▶</button>
         <span id="eb-ctr" class="eb-ctr">–</span>
       </div>
+      <div class="eb-sort" id="eb-filter-account-wrap" style="display:none;">
+        <span class="eb-sort-lbl">Konto:</span>
+        <select id="eb-filter-account">
+          <option value="all">Alle Konten</option>
+        </select>
+      </div>
+      <div class="eb-sort" id="eb-filter-bike-wrap" style="display:none;">
+        <span class="eb-sort-lbl">Bike:</span>
+        <select id="eb-filter-bike">
+          <option value="all">Alle Bikes</option>
+        </select>
+      </div>
       <div class="eb-sort">
         <span class="eb-sort-lbl">Sortierung:</span>
         <select id="eb-sort-key">
@@ -462,6 +479,32 @@ class BoschEBikeMapCard extends HTMLElement {
       this._$("eb-sort-dir").textContent = this._sortAsc ? "↑" : "↓";
       this._applySort();
     });
+
+    const accountSel = this._$("eb-filter-account");
+    if (accountSel) {
+      accountSel.addEventListener("change", (e) => {
+        this._filterAccount = e.target.value;
+        this._populateFilterUI(); // refresh bike dropdown to match account
+        this._applyFilter();
+        if (this._activities.length) {
+          this._show(0, true);
+        } else {
+          this._msg("Keine Fahrten für diesen Filter");
+        }
+      });
+    }
+    const bikeSel = this._$("eb-filter-bike");
+    if (bikeSel) {
+      bikeSel.addEventListener("change", (e) => {
+        this._filterBike = e.target.value;
+        this._applyFilter();
+        if (this._activities.length) {
+          this._show(0, true);
+        } else {
+          this._msg("Keine Fahrten für diesen Filter");
+        }
+      });
+    }
 
     this._updateStyleButtons();
   }
@@ -578,16 +621,94 @@ class BoschEBikeMapCard extends HTMLElement {
     return rect.width > 40 && rect.height > 40;
   }
 
+  async _fetchInstances() {
+    try {
+      const res = await this._hass.callWS({ type: "bosch_ebike/list_instances" });
+      this._instances = res.instances || [];
+    } catch (e) {
+      this._instances = [];
+    }
+    this._populateFilterUI();
+  }
+
   async _fetchActivities() {
     const res = await this._hass.callWS({ type: "bosch_ebike/list_activities" });
-    this._activities = (res.activities || []).sort((a, b) => new Date(b.startTime) - new Date(a.startTime));
+    this._allActivities = (res.activities || []).sort((a, b) => new Date(b.startTime) - new Date(a.startTime));
+    this._applyFilter();
 
     if (!this._activities.length) {
-      this._msg("Keine Fahrten gefunden");
+      this._msg(this._filtersActive() ? "Keine Fahrten für diesen Filter" : "Keine Fahrten gefunden");
       return;
     }
 
     await this._show(0, false);
+  }
+
+  _filtersActive() {
+    return this._filterAccount !== "all" || this._filterBike !== "all";
+  }
+
+  /// Apply current account/bike filter to _allActivities → _activities
+  _applyFilter() {
+    let list = [...this._allActivities];
+    if (this._filterAccount !== "all") {
+      list = list.filter((a) => a.accountId === this._filterAccount);
+    }
+    if (this._filterBike !== "all") {
+      list = list.filter((a) => a.bikeId === this._filterBike);
+    }
+    this._activities = list;
+  }
+
+  /// Build the dropdown options for accounts and bikes based on _instances
+  _populateFilterUI() {
+    const accountSel = this._$("eb-filter-account");
+    const bikeSel = this._$("eb-filter-bike");
+    const accountWrap = this._$("eb-filter-account-wrap");
+    if (!accountSel || !bikeSel) return;
+
+    // Account dropdown: only show if more than one instance
+    if (this._instances.length > 1) {
+      const opts = ['<option value="all">Alle Konten</option>'];
+      for (const inst of this._instances) {
+        opts.push(`<option value="${inst.config_entry_id}">${this._escapeHtml(inst.label)}</option>`);
+      }
+      accountSel.innerHTML = opts.join("");
+      accountSel.value = this._filterAccount;
+      if (accountWrap) accountWrap.style.display = "";
+    } else {
+      if (accountWrap) accountWrap.style.display = "none";
+    }
+
+    // Bike dropdown: union of all bikes (or filtered to selected account)
+    const bikes = [];
+    for (const inst of this._instances) {
+      if (this._filterAccount !== "all" && inst.config_entry_id !== this._filterAccount) continue;
+      for (const b of (inst.bikes || [])) {
+        const label = this._instances.length > 1 ? `${inst.label} — ${b.label}` : b.label;
+        bikes.push({ id: b.id, label });
+      }
+    }
+    const bikeOpts = ['<option value="all">Alle Bikes</option>'];
+    for (const b of bikes) {
+      bikeOpts.push(`<option value="${b.id}">${this._escapeHtml(b.label)}</option>`);
+    }
+    bikeSel.innerHTML = bikeOpts.join("");
+    // Reset bike filter if currently selected bike isn't in the new list
+    if (this._filterBike !== "all" && !bikes.some((b) => b.id === this._filterBike)) {
+      this._filterBike = "all";
+    }
+    bikeSel.value = this._filterBike;
+
+    // Hide bike picker entirely if there's at most one bike total
+    const bikeWrap = this._$("eb-filter-bike-wrap");
+    if (bikeWrap) bikeWrap.style.display = bikes.length > 1 ? "" : "none";
+  }
+
+  _escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, (c) => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+    })[c]);
   }
 
   _getSortValue(activity, key) {
@@ -686,18 +807,20 @@ class BoschEBikeMapCard extends HTMLElement {
     if (forceTrackReload || this._currentTrackActivityId !== activity.id || !this._currentTrack.length) {
       this._destroyMap(true);
       if (this._fullscreenOpen) this._destroyFullscreenMap();
-      await this._loadTrack(activity.id);
+      await this._loadTrack(activity.id, activity.accountId);
     } else {
       this._scheduleActivation("show cached track");
     }
   }
 
-  async _loadTrack(activityId) {
+  async _loadTrack(activityId, accountId) {
     const loadSeq = ++this._loadSeq;
     this._msg("Lade Route …");
 
     try {
-      const res = await this._hass.callWS({ type: "bosch_ebike/get_track", activity_id: activityId });
+      const params = { type: "bosch_ebike/get_track", activity_id: activityId };
+      if (accountId) params.config_entry_id = accountId;
+      const res = await this._hass.callWS(params);
       if (loadSeq < this._loadSeq) return;
 
       const pts = Array.isArray(res.track) ? res.track.filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lon)) : [];
