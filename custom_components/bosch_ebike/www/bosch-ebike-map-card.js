@@ -298,13 +298,13 @@ class BoschEBikeMapCard extends HTMLElement {
       }
       .eb-wiki-marker {
         background:rgba(255,255,255,.95);
-        border:2px solid #0b84c7;
+        border:1.5px solid #0b84c7;
         border-radius:50%;
-        width:28px !important; height:28px !important;
+        width:14px !important; height:14px !important;
         display:flex; align-items:center; justify-content:center;
         font-family:Georgia,serif; font-style:italic; font-weight:700;
-        color:#0b84c7; font-size:18px; line-height:1;
-        box-shadow:0 1px 4px rgba(0,0,0,.3);
+        color:#0b84c7; font-size:10px; line-height:1;
+        box-shadow:0 1px 3px rgba(0,0,0,.3);
         cursor:pointer;
       }
       .eb-wiki-popup { font-family:inherit; max-width:280px; }
@@ -1294,8 +1294,8 @@ class BoschEBikeMapCard extends HTMLElement {
         const icon = Leaflet.divIcon({
           className: "",
           html: '<div class="eb-wiki-marker">i</div>',
-          iconSize: [28, 28],
-          iconAnchor: [14, 14],
+          iconSize: [14, 14],
+          iconAnchor: [7, 7],
         });
         const marker = Leaflet.marker([art.lat, art.lon], { icon, title: art.title });
         marker.bindPopup(this._wikiPopupHtml(art, true), popupOpts);
