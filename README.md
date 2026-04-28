@@ -179,6 +179,27 @@ Die Integration unterstützt sowohl mehrere Konten als auch mehrere Bikes pro Ko
 
 Die Auswahl filtert die angezeigten Touren live; das Sortieren funktioniert wie gewohnt innerhalb des gefilterten Ergebnisses.
 
+#### Karte fest einem Konto oder Bike zuordnen
+
+Soll eine Karte dauerhaft genau ein Konto oder Bike zeigen (z. B. um zwei Karten nebeneinander für Vergleichsansichten zu haben), trägst Du in der Card-Konfiguration `account_id` und/oder `bike_id` ein. Das gewählte Dropdown wird dann ausgeblendet und der Filter ist gelockt.
+
+Die IDs kannst Du im Editor (oben rechts in der Karten-Bearbeitung) bequem aus Dropdowns auswählen — manuelles Heraussuchen ist nicht nötig. Optional kann `title` den Karten-Header überschreiben:
+
+```yaml
+type: horizontal-stack
+cards:
+  - type: custom:bosch-ebike-map-card
+    height: 400
+    title: "Mein Bike"
+    account_id: <config_entry_id_konto_a>
+  - type: custom:bosch-ebike-map-card
+    height: 400
+    title: "Partner-Bike"
+    account_id: <config_entry_id_konto_b>
+```
+
+Beide Karten zeigen dann immer Touren des jeweils gelockten Kontos und können mit der Datums-/Sortierauswahl unabhängig voneinander durch die Touren-Historie geblättert werden — ideal um z. B. zwei am selben Tag gefahrene Touren direkt zu vergleichen. Die gleichen Optionen funktionieren auch in der `bosch-ebike-heatmap-card`.
+
 ### POIs entlang der Route
 
 Auf der Karte gibt es einen 📍-Toggle in den Steuerelementen. Aktiviert er, wird im Hintergrund eine Overpass-API-Abfrage gestartet, die folgende Punkte entlang der Route findet (max. ~500 m vom befahrenen Pfad entfernt):
@@ -485,6 +506,25 @@ The integration supports both multiple accounts and multiple bikes per account.
 - **Bike** (visible only with multiple bikes)
 
 The selection filters the displayed activities live; sorting works as usual within the filtered result.
+
+#### Pinning a card to a specific account or bike
+
+To dedicate a card permanently to one account or bike (e.g. to place two cards side-by-side for comparison), add `account_id` and/or `bike_id` to the card configuration. The matching dropdown disappears and the filter is locked. The IDs can be picked from dropdowns directly in the card editor — no need to look them up manually. Optionally `title` overrides the card header:
+
+```yaml
+type: horizontal-stack
+cards:
+  - type: custom:bosch-ebike-map-card
+    height: 400
+    title: "My bike"
+    account_id: <config_entry_id_account_a>
+  - type: custom:bosch-ebike-map-card
+    height: 400
+    title: "Partner's bike"
+    account_id: <config_entry_id_account_b>
+```
+
+Both cards then always show rides of their locked account and can be navigated independently with the date/sort controls — ideal for comparing two rides taken on the same day. The same options work in `bosch-ebike-heatmap-card`.
 
 ### POIs along the route
 

@@ -195,6 +195,28 @@ class BoschEBikeMapCard extends HTMLElement {
 
   setConfig(config) {
     this._config = { height: config.height || 400, ...config };
+    // Allow pinning the card to a specific account / bike via Lovelace config.
+    // When set, the corresponding dropdown is hidden and the filter is locked.
+    if (config.account_id) {
+      this._filterAccount = config.account_id;
+      this._lockedAccount = true;
+    } else {
+      this._lockedAccount = false;
+    }
+    if (config.bike_id) {
+      this._filterBike = config.bike_id;
+      this._lockedBike = true;
+    } else {
+      this._lockedBike = false;
+    }
+    // If the card was already built once (re-config without re-creation),
+    // refresh UI and re-render
+    if (this._ready) {
+      this._applyConfigTitle();
+      this._populateFilterUI();
+      this._applyFilter();
+      if (this._activities.length) this._show(0, true);
+    }
   }
 
   set hass(hass) {
@@ -240,6 +262,7 @@ class BoschEBikeMapCard extends HTMLElement {
     try {
       await ensureLeaflet();
       this._leafletReady = true;
+      this._applyConfigTitle();
       await this._fetchInstances();
       await this._fetchActivities();
       this._scheduleActivation("boot finished");
@@ -757,15 +780,20 @@ class BoschEBikeMapCard extends HTMLElement {
     this._activities = list;
   }
 
-  /// Build the dropdown options for accounts and bikes based on _instances
+  /// Build the dropdown options for accounts and bikes based on _instances.
+  /// When `account_id`/`bike_id` is set in card config, the corresponding
+  /// dropdown is hidden entirely (the filter is locked to the configured value).
   _populateFilterUI() {
     const accountSel = this._$("eb-filter-account");
     const bikeSel = this._$("eb-filter-bike");
     const accountWrap = this._$("eb-filter-account-wrap");
+    const bikeWrap = this._$("eb-filter-bike-wrap");
     if (!accountSel || !bikeSel) return;
 
-    // Account dropdown: only show if more than one instance
-    if (this._instances.length > 1) {
+    // Account dropdown: hidden if locked via config OR if only one instance
+    if (this._lockedAccount) {
+      if (accountWrap) accountWrap.style.display = "none";
+    } else if (this._instances.length > 1) {
       const opts = ['<option value="all">Alle Konten</option>'];
       for (const inst of this._instances) {
         opts.push(`<option value="${inst.config_entry_id}">${this._escapeHtml(inst.label)}</option>`);
@@ -786,20 +814,31 @@ class BoschEBikeMapCard extends HTMLElement {
         bikes.push({ id: b.id, label });
       }
     }
-    const bikeOpts = ['<option value="all">Alle Bikes</option>'];
-    for (const b of bikes) {
-      bikeOpts.push(`<option value="${b.id}">${this._escapeHtml(b.label)}</option>`);
-    }
-    bikeSel.innerHTML = bikeOpts.join("");
-    // Reset bike filter if currently selected bike isn't in the new list
-    if (this._filterBike !== "all" && !bikes.some((b) => b.id === this._filterBike)) {
-      this._filterBike = "all";
-    }
-    bikeSel.value = this._filterBike;
 
-    // Hide bike picker entirely if there's at most one bike total
-    const bikeWrap = this._$("eb-filter-bike-wrap");
-    if (bikeWrap) bikeWrap.style.display = bikes.length > 1 ? "" : "none";
+    // Bike dropdown: hidden if locked via config OR <=1 bike total
+    if (this._lockedBike) {
+      if (bikeWrap) bikeWrap.style.display = "none";
+    } else {
+      const bikeOpts = ['<option value="all">Alle Bikes</option>'];
+      for (const b of bikes) {
+        bikeOpts.push(`<option value="${b.id}">${this._escapeHtml(b.label)}</option>`);
+      }
+      bikeSel.innerHTML = bikeOpts.join("");
+      // Reset bike filter if currently selected bike isn't in the new list
+      if (this._filterBike !== "all" && !bikes.some((b) => b.id === this._filterBike)) {
+        this._filterBike = "all";
+      }
+      bikeSel.value = this._filterBike;
+      if (bikeWrap) bikeWrap.style.display = bikes.length > 1 ? "" : "none";
+    }
+  }
+
+  /// Apply config.title to the card header if present
+  _applyConfigTitle() {
+    const head = this.querySelector(".eb-head span");
+    if (head && this._config && this._config.title) {
+      head.textContent = this._config.title;
+    }
   }
 
   _escapeHtml(s) {
@@ -2379,6 +2418,23 @@ class BoschEBikeHeatmapCard extends HTMLElement {
       height: config.height || 500,
       ...config,
     };
+    if (config.account_id) {
+      this._filterAccount = config.account_id;
+      this._lockedAccount = true;
+    } else {
+      this._lockedAccount = false;
+    }
+    if (config.bike_id) {
+      this._filterBike = config.bike_id;
+      this._lockedBike = true;
+    } else {
+      this._lockedBike = false;
+    }
+    if (this._ready) {
+      this._applyHeatTitle();
+      this._populateFilters();
+      this._renderTracks();
+    }
   }
 
   set hass(hass) {
@@ -2387,8 +2443,23 @@ class BoschEBikeHeatmapCard extends HTMLElement {
     if (first) this._boot();
   }
 
+  static getConfigElement() {
+    return document.createElement("bosch-ebike-heatmap-card-editor");
+  }
+
+  static getStubConfig() {
+    return { height: 500 };
+  }
+
   getCardSize() {
     return Math.ceil((this._config.height || 500) / 50) + 2;
+  }
+
+  _applyHeatTitle() {
+    const head = this.querySelector(".heat-head span");
+    if (head && this._config && this._config.title) {
+      head.textContent = this._config.title;
+    }
   }
 
   async _boot() {
@@ -2397,6 +2468,7 @@ class BoschEBikeHeatmapCard extends HTMLElement {
     try {
       this._buildDOM();
       this._ready = true;
+      this._applyHeatTitle();
       await ensureLeaflet();
       await this._fetchInstances();
       this._populateFilters();
@@ -2503,7 +2575,11 @@ class BoschEBikeHeatmapCard extends HTMLElement {
 
   _populateFilters() {
     const accountSel = this.querySelector("#heat-account");
-    if (this._instances.length > 1) {
+    const accLbl = this.querySelector("#heat-acc-lbl");
+    if (this._lockedAccount) {
+      if (accountSel) accountSel.style.display = "none";
+      if (accLbl) accLbl.style.display = "none";
+    } else if (this._instances.length > 1) {
       const opts = ['<option value="all">Alle Konten</option>'];
       for (const inst of this._instances) {
         opts.push(`<option value="${inst.config_entry_id}">${this._escapeHtml(inst.label)}</option>`);
@@ -2511,7 +2587,7 @@ class BoschEBikeHeatmapCard extends HTMLElement {
       accountSel.innerHTML = opts.join("");
       accountSel.value = this._filterAccount;
       accountSel.style.display = "";
-      this.querySelector("#heat-acc-lbl").style.display = "";
+      accLbl.style.display = "";
     }
     this._populateBikeFilter();
   }
@@ -2519,6 +2595,11 @@ class BoschEBikeHeatmapCard extends HTMLElement {
   _populateBikeFilter() {
     const bikeSel = this.querySelector("#heat-bike");
     const lbl = this.querySelector("#heat-bike-lbl");
+    if (this._lockedBike) {
+      if (bikeSel) bikeSel.style.display = "none";
+      if (lbl) lbl.style.display = "none";
+      return;
+    }
     const bikes = [];
     for (const inst of this._instances) {
       if (this._filterAccount !== "all" && inst.config_entry_id !== this._filterAccount) continue;
@@ -2643,16 +2724,176 @@ class BoschEBikeMapCardEditor extends HTMLElement {
     this._render();
   }
 
+  set hass(hass) {
+    const first = !this._hass;
+    this._hass = hass;
+    if (first) this._loadInstances();
+  }
+
+  async _loadInstances() {
+    if (!this._hass) return;
+    try {
+      const res = await this._hass.callWS({ type: "bosch_ebike/list_instances" });
+      this._instances = res.instances || [];
+    } catch (_) {
+      this._instances = [];
+    }
+    this._render();
+  }
+
+  _escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, (c) => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+    })[c]);
+  }
+
+  _emit() {
+    this.dispatchEvent(new CustomEvent("config-changed", { detail: { config: this._config } }));
+  }
+
+  _bikeOptionsForAccount(accountId) {
+    const out = [];
+    for (const inst of (this._instances || [])) {
+      if (accountId && accountId !== "all" && inst.config_entry_id !== accountId) continue;
+      for (const b of (inst.bikes || [])) {
+        const hasMultiInst = (this._instances || []).length > 1;
+        const label = hasMultiInst && !accountId ? `${inst.label} — ${b.label}` : b.label;
+        out.push({ id: b.id, label });
+      }
+    }
+    return out;
+  }
+
   _render() {
+    if (!this._config) return;
+    const cfg = this._config;
+    const inputStyle = "width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;background:var(--card-background-color,#fff);color:var(--primary-text-color,#222);";
+    const labelStyle = "display:block;margin-top:14px;margin-bottom:6px;font-weight:500";
+    const hintStyle = "display:block;margin-top:4px;font-size:12px;color:var(--secondary-text-color,#777)";
+
+    let accountOpts = '<option value="">Alle</option>';
+    for (const inst of (this._instances || [])) {
+      const selected = cfg.account_id === inst.config_entry_id ? " selected" : "";
+      accountOpts += `<option value="${this._escapeHtml(inst.config_entry_id)}"${selected}>${this._escapeHtml(inst.label)}</option>`;
+    }
+
+    let bikeOpts = '<option value="">Alle</option>';
+    for (const b of this._bikeOptionsForAccount(cfg.account_id)) {
+      const selected = cfg.bike_id === b.id ? " selected" : "";
+      bikeOpts += `<option value="${this._escapeHtml(b.id)}"${selected}>${this._escapeHtml(b.label)}</option>`;
+    }
+
     this.innerHTML = `<div style="padding:16px">
-      <label style="display:block;margin-bottom:8px;font-weight:500">Kartenhöhe (px)</label>
-      <input type="number" value="${this._config.height || 400}" min="200" max="1000" step="50"
-        style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px" id="h-in">
+      <label style="${labelStyle.replace('margin-top:14px;', '')}">Kartenhöhe (px)</label>
+      <input type="number" value="${cfg.height || 400}" min="200" max="1000" step="50" style="${inputStyle}" id="h-in">
+
+      <label style="${labelStyle}">Titel (optional)</label>
+      <input type="text" value="${this._escapeHtml(cfg.title || '')}" placeholder="Bosch eBike Rides" style="${inputStyle}" id="title-in">
+      <span style="${hintStyle}">Wird in der Kopfzeile der Karte angezeigt — nützlich, wenn Du mehrere fest verdrahtete Karten nebeneinander hast.</span>
+
+      <label style="${labelStyle}">Konto fest auswählen (optional)</label>
+      <select id="acc-in" style="${inputStyle}">${accountOpts}</select>
+      <span style="${hintStyle}">Wenn gesetzt, wird das Konto-Dropdown ausgeblendet und die Karte zeigt nur Touren dieses Kontos.</span>
+
+      <label style="${labelStyle}">Bike fest auswählen (optional)</label>
+      <select id="bike-in" style="${inputStyle}">${bikeOpts}</select>
+      <span style="${hintStyle}">Wenn gesetzt, wird das Bike-Dropdown ausgeblendet und die Karte zeigt nur Touren dieses Bikes.</span>
     </div>`;
 
     this.querySelector("#h-in").addEventListener("change", (e) => {
       this._config = { ...this._config, height: parseInt(e.target.value, 10) || 400 };
-      this.dispatchEvent(new CustomEvent("config-changed", { detail: { config: this._config } }));
+      this._emit();
+    });
+    this.querySelector("#title-in").addEventListener("change", (e) => {
+      const v = e.target.value.trim();
+      this._config = { ...this._config };
+      if (v) this._config.title = v;
+      else delete this._config.title;
+      this._emit();
+    });
+    this.querySelector("#acc-in").addEventListener("change", (e) => {
+      const v = e.target.value;
+      this._config = { ...this._config };
+      if (v) this._config.account_id = v;
+      else delete this._config.account_id;
+      // Reset bike when account changes
+      delete this._config.bike_id;
+      this._emit();
+      this._render();
+    });
+    this.querySelector("#bike-in").addEventListener("change", (e) => {
+      const v = e.target.value;
+      this._config = { ...this._config };
+      if (v) this._config.bike_id = v;
+      else delete this._config.bike_id;
+      this._emit();
+    });
+  }
+}
+
+// Heatmap card editor — same UX as the map card editor minus title customisation
+class BoschEBikeHeatmapCardEditor extends BoschEBikeMapCardEditor {
+  _render() {
+    if (!this._config) return;
+    const cfg = this._config;
+    const inputStyle = "width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;background:var(--card-background-color,#fff);color:var(--primary-text-color,#222);";
+    const labelStyle = "display:block;margin-top:14px;margin-bottom:6px;font-weight:500";
+    const hintStyle = "display:block;margin-top:4px;font-size:12px;color:var(--secondary-text-color,#777)";
+
+    let accountOpts = '<option value="">Alle</option>';
+    for (const inst of (this._instances || [])) {
+      const selected = cfg.account_id === inst.config_entry_id ? " selected" : "";
+      accountOpts += `<option value="${this._escapeHtml(inst.config_entry_id)}"${selected}>${this._escapeHtml(inst.label)}</option>`;
+    }
+
+    let bikeOpts = '<option value="">Alle</option>';
+    for (const b of this._bikeOptionsForAccount(cfg.account_id)) {
+      const selected = cfg.bike_id === b.id ? " selected" : "";
+      bikeOpts += `<option value="${this._escapeHtml(b.id)}"${selected}>${this._escapeHtml(b.label)}</option>`;
+    }
+
+    this.innerHTML = `<div style="padding:16px">
+      <label style="${labelStyle.replace('margin-top:14px;', '')}">Kartenhöhe (px)</label>
+      <input type="number" value="${cfg.height || 500}" min="200" max="1500" step="50" style="${inputStyle}" id="h-in">
+
+      <label style="${labelStyle}">Titel (optional)</label>
+      <input type="text" value="${this._escapeHtml(cfg.title || '')}" placeholder="Bosch eBike Heatmap" style="${inputStyle}" id="title-in">
+
+      <label style="${labelStyle}">Konto fest auswählen (optional)</label>
+      <select id="acc-in" style="${inputStyle}">${accountOpts}</select>
+      <span style="${hintStyle}">Wenn gesetzt, zeigt die Heatmap nur Touren dieses Kontos und das Konto-Dropdown wird ausgeblendet.</span>
+
+      <label style="${labelStyle}">Bike fest auswählen (optional)</label>
+      <select id="bike-in" style="${inputStyle}">${bikeOpts}</select>
+      <span style="${hintStyle}">Wenn gesetzt, zeigt die Heatmap nur Touren dieses Bikes und das Bike-Dropdown wird ausgeblendet.</span>
+    </div>`;
+
+    this.querySelector("#h-in").addEventListener("change", (e) => {
+      this._config = { ...this._config, height: parseInt(e.target.value, 10) || 500 };
+      this._emit();
+    });
+    this.querySelector("#title-in").addEventListener("change", (e) => {
+      const v = e.target.value.trim();
+      this._config = { ...this._config };
+      if (v) this._config.title = v;
+      else delete this._config.title;
+      this._emit();
+    });
+    this.querySelector("#acc-in").addEventListener("change", (e) => {
+      const v = e.target.value;
+      this._config = { ...this._config };
+      if (v) this._config.account_id = v;
+      else delete this._config.account_id;
+      delete this._config.bike_id;
+      this._emit();
+      this._render();
+    });
+    this.querySelector("#bike-in").addEventListener("change", (e) => {
+      const v = e.target.value;
+      this._config = { ...this._config };
+      if (v) this._config.bike_id = v;
+      else delete this._config.bike_id;
+      this._emit();
     });
   }
 }
@@ -2665,6 +2906,9 @@ if (!customElements.get("bosch-ebike-map-card-editor")) {
 }
 if (!customElements.get("bosch-ebike-heatmap-card")) {
   customElements.define("bosch-ebike-heatmap-card", BoschEBikeHeatmapCard);
+}
+if (!customElements.get("bosch-ebike-heatmap-card-editor")) {
+  customElements.define("bosch-ebike-heatmap-card-editor", BoschEBikeHeatmapCardEditor);
 }
 
 window.customCards = window.customCards || [];
