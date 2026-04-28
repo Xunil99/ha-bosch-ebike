@@ -501,6 +501,13 @@ async def async_setup_entry(
         for desc in BATTERY_CONSUMPTION_SENSORS:
             entities.append(BoschBatteryConsumptionSensor(coordinator, desc, bike_id, drive_name))
 
+        # Service-due derived sensors (days/km remaining)
+        entities.append(BoschServiceDueSensor(coordinator, bike_id, drive_name, kind="days"))
+        entities.append(BoschServiceDueSensor(coordinator, bike_id, drive_name, kind="km"))
+
+        # Maintenance overview (count of items due/overdue + full list as attributes)
+        entities.append(BoschMaintenanceOverviewSensor(coordinator, bike_id, drive_name))
+
     async_add_entities(entities)
 
 
@@ -716,4 +723,135 @@ class BoschBatteryConsumptionSensor(CoordinatorEntity[BoschEBikeCoordinator], Se
             "percentage": consumption.get("percentage"),
             "capacity_wh": consumption.get("capacity_wh"),
             "is_exact": consumption.get("is_exact"),
+        }
+
+
+class BoschServiceDueSensor(CoordinatorEntity[BoschEBikeCoordinator], SensorEntity):
+    """Days or kilometres remaining until the next Bosch service is due."""
+
+    _attr_has_entity_name = True
+
+    def __init__(
+        self,
+        coordinator: BoschEBikeCoordinator,
+        bike_id: str,
+        drive_name: str,
+        kind: str,
+    ) -> None:
+        super().__init__(coordinator)
+        self._bike_id = bike_id
+        self._kind = kind  # "days" or "km"
+        if kind == "days":
+            self._attr_translation_key = "service_due_in_days"
+            self._attr_name = "Service Due In Days"
+            self._attr_native_unit_of_measurement = "d"
+            self._attr_icon = "mdi:calendar-clock"
+        else:
+            self._attr_translation_key = "service_due_in_km"
+            self._attr_name = "Service Due In Kilometres"
+            self._attr_native_unit_of_measurement = "km"
+            self._attr_icon = "mdi:road"
+        self._attr_unique_id = f"{bike_id}_service_due_in_{kind}"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, bike_id)},
+            name=drive_name,
+            manufacturer="Bosch",
+            model=drive_name,
+        )
+
+    def _bike(self) -> dict | None:
+        for bike in (self.coordinator.data.get("bikes", []) if self.coordinator.data else []):
+            if bike.get("id") == self._bike_id:
+                return bike
+        return None
+
+    @property
+    def native_value(self):
+        bike = self._bike()
+        if not bike:
+            return None
+        service = bike.get("serviceDue") or {}
+        if self._kind == "days":
+            from datetime import timezone as _tz
+            from homeassistant.util import dt as _dt
+            date = service.get("date")
+            if not date:
+                return None
+            try:
+                due = _dt.parse_datetime(date) or _dt.parse_datetime(date + "T00:00:00")
+            except (TypeError, ValueError):
+                return None
+            if not due:
+                return None
+            if due.tzinfo is None:
+                due = due.replace(tzinfo=_tz.utc)
+            return round((due - _dt.utcnow()).total_seconds() / 86400, 1)
+        # km
+        service_odo = service.get("odometer")
+        if not isinstance(service_odo, (int, float)):
+            return None
+        current_odo = self.coordinator._bike_current_odometer(bike)
+        if current_odo is None:
+            return None
+        return round((float(service_odo) - current_odo) / 1000, 1)
+
+
+class BoschMaintenanceOverviewSensor(CoordinatorEntity[BoschEBikeCoordinator], SensorEntity):
+    """Aggregated overview of custom maintenance items for one bike.
+
+    State: number of items needing attention (due_soon or overdue).
+    Attributes: full list of items with their remaining km / days.
+    """
+
+    _attr_has_entity_name = True
+    _attr_name = "Maintenance Items Due"
+    _attr_translation_key = "maintenance_overview"
+    _attr_icon = "mdi:tools"
+
+    def __init__(
+        self,
+        coordinator: BoschEBikeCoordinator,
+        bike_id: str,
+        drive_name: str,
+    ) -> None:
+        super().__init__(coordinator)
+        self._bike_id = bike_id
+        self._attr_unique_id = f"{bike_id}_maintenance_overview"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, bike_id)},
+            name=drive_name,
+            manufacturer="Bosch",
+            model=drive_name,
+        )
+
+    def _items(self) -> list[dict]:
+        return (self.coordinator._maintenance.get(self._bike_id) or {}).get("items", [])
+
+    @property
+    def native_value(self) -> int:
+        from .const import SERVICE_WARN_DAYS, SERVICE_WARN_KM
+        count = 0
+        for item in self._items():
+            rk = item.get("_remaining_km")
+            rd = item.get("_remaining_days")
+            if (rk is not None and rk <= SERVICE_WARN_KM) or (rd is not None and rd <= SERVICE_WARN_DAYS):
+                count += 1
+        return count
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        return {
+            "items": [
+                {
+                    "id": item.get("id"),
+                    "name": item.get("name"),
+                    "interval_km": item.get("interval_km"),
+                    "interval_days": item.get("interval_days"),
+                    "remaining_km": item.get("_remaining_km"),
+                    "remaining_days": item.get("_remaining_days"),
+                    "last_done_at": item.get("last_done_at"),
+                }
+                for item in self._items()
+            ],
+            "bike_id": self._bike_id,
         }

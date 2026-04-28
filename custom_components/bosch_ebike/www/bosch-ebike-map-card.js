@@ -148,6 +148,14 @@ class BoschEBikeMapCard extends HTMLElement {
     // Which activityId is currently rendered on each map (avoid re-rendering and killing open popups)
     this._wikiRenderedInline = null;
     this._wikiRenderedFullscreen = null;
+    // POI overlay (Overpass)
+    this._poiEnabled = (typeof localStorage !== "undefined" && localStorage.getItem("eb-poi-enabled") === "1");
+    this._poiData = new Map();        // activityId → [{lat, lon, name, category, tags}]
+    this._poiLoading = new Set();
+    this._poiGroup = null;
+    this._fullscreenPoiGroup = null;
+    this._poiRenderedInline = null;
+    this._poiRenderedFullscreen = null;
 
     this._map = null;
     this._trackGroup = null;
@@ -320,6 +328,27 @@ class BoschEBikeMapCard extends HTMLElement {
       }
       .eb-wiki-popup .eb-wiki-link:hover { background:#096ba3; }
       .eb-wiki-popup .eb-wiki-loading { font-size:12px; color:#888; }
+      .eb-poi-marker {
+        background:rgba(255,255,255,.95);
+        border-radius:50%;
+        width:18px !important; height:18px !important;
+        display:flex; align-items:center; justify-content:center;
+        font-size:12px; line-height:1;
+        box-shadow:0 1px 3px rgba(0,0,0,.3);
+        cursor:pointer;
+      }
+      .eb-poi-marker.eb-poi-charging { border:1.5px solid #2e7d32; }
+      .eb-poi-marker.eb-poi-bicycle  { border:1.5px solid #c62828; }
+      .eb-poi-marker.eb-poi-water    { border:1.5px solid #1565c0; }
+      .eb-poi-marker.eb-poi-toilet   { border:1.5px solid #6a1b9a; }
+      .eb-poi-popup { font-family:inherit; max-width:240px; font-size:13px; }
+      .eb-poi-popup .eb-poi-title { font-weight:600; margin-bottom:4px; }
+      .eb-poi-popup .eb-poi-cat { font-size:11px; color:#666; margin-bottom:6px; }
+      .eb-poi-popup .eb-poi-link {
+        display:inline-block; padding:3px 8px;
+        background:#0b84c7; color:#fff; border-radius:6px;
+        text-decoration:none; font-size:11px; font-weight:500;
+      }
       .eb-map-wrap { position:relative; }
       .eb-map { width:100% !important; height:${h}px !important; min-height:${h}px; z-index:0; position:relative; }
       .eb-overlay-msg {
@@ -455,6 +484,7 @@ class BoschEBikeMapCard extends HTMLElement {
         <div class="eb-map-tools">
           <button id="eb-style" class="eb-icon-btn eb-style-btn" title="Kartenstil wechseln" aria-label="Kartenstil wechseln">OSM</button>
           <button id="eb-wiki" class="eb-icon-btn" title="Wikipedia-Artikel entlang der Route ein-/ausblenden" aria-label="Wikipedia-Artikel">📚</button>
+          <button id="eb-poi" class="eb-icon-btn" title="Ladestationen, Werkstätten, Trinkwasser, Toiletten ein-/ausblenden" aria-label="POIs">📍</button>
           <button id="eb-gpx" class="eb-icon-btn" title="GPX herunterladen" aria-label="GPX herunterladen">GPX</button>
           <button id="eb-fullscreen" class="eb-icon-btn" title="Vollbild" aria-label="Vollbild">
             <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M7,14H5V19H10V17H7V14M5,10H7V7H10V5H5V10M17,17H14V19H19V14H17V17M14,5V7H17V10H19V5H14Z"/></svg>
@@ -477,6 +507,7 @@ class BoschEBikeMapCard extends HTMLElement {
             </div>
             <button id="eb-full-style" class="eb-icon-btn eb-style-btn" title="Kartenstil wechseln" aria-label="Kartenstil wechseln">OSM</button>
             <button id="eb-full-wiki" class="eb-icon-btn" title="Wikipedia-Artikel entlang der Route ein-/ausblenden" aria-label="Wikipedia-Artikel">📚</button>
+            <button id="eb-full-poi" class="eb-icon-btn" title="Ladestationen, Werkstätten, Trinkwasser, Toiletten ein-/ausblenden" aria-label="POIs">📍</button>
             <button id="eb-full-gpx" class="eb-icon-btn" title="GPX herunterladen" aria-label="GPX herunterladen">GPX</button>
             <button id="eb-fit" class="eb-icon-btn" title="Route einpassen" aria-label="Route einpassen">
               <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M4,4H10V6H6V10H4V4M14,4H20V10H18V6H14V4M4,14H6V18H10V20H4V14M18,14H20V20H14V18H18V14Z"/></svg>
@@ -509,6 +540,9 @@ class BoschEBikeMapCard extends HTMLElement {
     this._$("eb-wiki").addEventListener("click", () => this._toggleWikipedia());
     const fullWiki = this._$("eb-full-wiki");
     if (fullWiki) fullWiki.addEventListener("click", () => this._toggleWikipedia());
+    this._$("eb-poi").addEventListener("click", () => this._togglePoi());
+    const fullPoi = this._$("eb-full-poi");
+    if (fullPoi) fullPoi.addEventListener("click", () => this._togglePoi());
     this._$("eb-tab-map").addEventListener("click", () => this._setFullscreenTab("map"));
     this._$("eb-tab-elevation").addEventListener("click", () => this._setFullscreenTab("elevation"));
     this._$("eb-full-prev").addEventListener("click", () => this._go(-1));
@@ -561,6 +595,7 @@ class BoschEBikeMapCard extends HTMLElement {
 
     this._updateStyleButtons();
     this._updateWikiButtons();
+    this._updatePoiButtons();
   }
 
   _attachLifecycleHooks() {
@@ -906,6 +941,9 @@ class BoschEBikeMapCard extends HTMLElement {
         // Slight delay so the map is initialized before placing markers
         this._setTimer(() => this._loadAndRenderWiki(), 600);
       }
+      if (this._poiEnabled) {
+        this._setTimer(() => this._loadAndRenderPoi(), 700);
+      }
     } catch (error) {
       if (loadSeq < this._loadSeq) return;
       console.error("[Bosch eBike Map] track load error", error);
@@ -1060,6 +1098,8 @@ class BoschEBikeMapCard extends HTMLElement {
     this._trackGroup = null;
     this._wikiGroup = null;
     this._wikiRenderedInline = null;
+    this._poiGroup = null;
+    this._poiRenderedInline = null;
     this._inlineBaseLayer = null;
 
     const mapEl = this._$("eb-map");
@@ -1084,6 +1124,8 @@ class BoschEBikeMapCard extends HTMLElement {
     this._fullscreenTrackGroup = null;
     this._fullscreenWikiGroup = null;
     this._wikiRenderedFullscreen = null;
+    this._fullscreenPoiGroup = null;
+    this._poiRenderedFullscreen = null;
     this._fullscreenBaseLayer = null;
 
     const mapEl = this._$("eb-fullscreen-map");
@@ -1312,6 +1354,261 @@ class BoschEBikeMapCard extends HTMLElement {
     renderTo(this._fullscreenMap, "_fullscreenWikiGroup", "_wikiRenderedFullscreen");
   }
 
+  // -- POI overlay (Overpass) --
+
+  _updatePoiButtons() {
+    const inlineBtn = this._$("eb-poi");
+    const fullBtn = this._$("eb-full-poi");
+    if (inlineBtn) inlineBtn.classList.toggle("eb-active", this._poiEnabled);
+    if (fullBtn) fullBtn.classList.toggle("eb-active", this._poiEnabled);
+  }
+
+  _togglePoi() {
+    this._poiEnabled = !this._poiEnabled;
+    try { localStorage.setItem("eb-poi-enabled", this._poiEnabled ? "1" : "0"); } catch (_) {}
+    this._updatePoiButtons();
+    if (this._poiEnabled) {
+      this._loadAndRenderPoi();
+    } else {
+      this._clearPoiLayers();
+    }
+  }
+
+  _clearPoiLayers() {
+    if (this._poiGroup) {
+      try { this._poiGroup.clearLayers(); } catch (_) {}
+    }
+    if (this._fullscreenPoiGroup) {
+      try { this._fullscreenPoiGroup.clearLayers(); } catch (_) {}
+    }
+    this._poiRenderedInline = null;
+    this._poiRenderedFullscreen = null;
+  }
+
+  /// Bounding box around the route; clamped to a sensible buffer.
+  _routeBoundingBox(track) {
+    let minLat = Infinity, maxLat = -Infinity, minLon = Infinity, maxLon = -Infinity;
+    for (const p of track) {
+      if (!Number.isFinite(p.lat) || !Number.isFinite(p.lon)) continue;
+      if (p.lat < minLat) minLat = p.lat;
+      if (p.lat > maxLat) maxLat = p.lat;
+      if (p.lon < minLon) minLon = p.lon;
+      if (p.lon > maxLon) maxLon = p.lon;
+    }
+    if (!Number.isFinite(minLat)) return null;
+    return { minLat, maxLat, minLon, maxLon };
+  }
+
+  async _loadAndRenderPoi() {
+    if (!this._currentTrackActivityId || !this._currentTrack.length) return;
+    const aid = this._currentTrackActivityId;
+
+    let pois = this._poiData.get(aid);
+    if (!pois) {
+      try {
+        const cached = localStorage.getItem(`eb-poi-${aid}`);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed)) {
+            pois = parsed;
+            this._poiData.set(aid, parsed);
+          }
+        }
+      } catch (_) {}
+    }
+
+    if (!pois) {
+      if (this._poiLoading.has(aid)) return;
+      this._poiLoading.add(aid);
+      try {
+        pois = await this._fetchPois(this._currentTrack);
+        this._poiData.set(aid, pois);
+        try { localStorage.setItem(`eb-poi-${aid}`, JSON.stringify(pois)); } catch (_) {}
+      } catch (err) {
+        console.warn("[Bosch eBike POI] fetch failed", err);
+        pois = [];
+      } finally {
+        this._poiLoading.delete(aid);
+      }
+    }
+
+    this._renderPoiMarkers(pois);
+  }
+
+  async _fetchPois(track) {
+    const bbox = this._routeBoundingBox(track);
+    if (!bbox) return [];
+    // Slight padding (≈ 200 m) in case of edge POIs
+    const pad = 0.002;
+    const south = bbox.minLat - pad;
+    const north = bbox.maxLat + pad;
+    const west = bbox.minLon - pad;
+    const east = bbox.maxLon + pad;
+
+    const query = `[out:json][timeout:25];
+(
+  node["amenity"="charging_station"](${south},${west},${north},${east});
+  node["shop"="bicycle"](${south},${west},${north},${east});
+  node["amenity"="bicycle_repair_station"](${south},${west},${north},${east});
+  node["amenity"="drinking_water"](${south},${west},${north},${east});
+  node["amenity"="toilets"](${south},${west},${north},${east});
+);
+out body;`;
+
+    const url = "https://overpass-api.de/api/interpreter";
+    let data;
+    try {
+      const resp = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: "data=" + encodeURIComponent(query),
+      });
+      if (!resp.ok) return [];
+      data = await resp.json();
+    } catch (_) {
+      return [];
+    }
+
+    const elements = (data && Array.isArray(data.elements)) ? data.elements : [];
+    // Sample track points every ~500 m for proximity check
+    const sampled = this._poiSamplePoints(track);
+    const MAX_DIST_M = 500;
+
+    const out = [];
+    for (const el of elements) {
+      if (typeof el.lat !== "number" || typeof el.lon !== "number") continue;
+      // Only keep POIs within MAX_DIST_M of any sampled track point
+      let near = false;
+      for (const sp of sampled) {
+        if (this._haversineMeters(el.lat, el.lon, sp.lat, sp.lon) <= MAX_DIST_M) {
+          near = true; break;
+        }
+      }
+      if (!near) continue;
+      const tags = el.tags || {};
+      const cat = this._poiCategory(tags);
+      if (!cat) continue;
+      out.push({
+        lat: el.lat,
+        lon: el.lon,
+        category: cat.key,
+        catLabel: cat.label,
+        catIcon: cat.icon,
+        name: tags.name || cat.label,
+        osmId: el.id,
+        tags,
+      });
+    }
+    // Cap at 100 markers to avoid clutter
+    return out.slice(0, 100);
+  }
+
+  _poiCategory(tags) {
+    if (tags.amenity === "charging_station") {
+      return { key: "charging", label: "Ladestation", icon: "🔌" };
+    }
+    if (tags.shop === "bicycle") {
+      return { key: "bicycle", label: "Fahrradgeschäft", icon: "🛠️" };
+    }
+    if (tags.amenity === "bicycle_repair_station") {
+      return { key: "bicycle", label: "Reparaturstation", icon: "🛠️" };
+    }
+    if (tags.amenity === "drinking_water") {
+      return { key: "water", label: "Trinkwasser", icon: "💧" };
+    }
+    if (tags.amenity === "toilets") {
+      return { key: "toilet", label: "Toilette", icon: "🚻" };
+    }
+    return null;
+  }
+
+  /// Sample points every ~500 m along the actual driven distance
+  _poiSamplePoints(track) {
+    if (!Array.isArray(track) || track.length < 2) return [];
+    const pts = [];
+    pts.push({ lat: track[0].lat, lon: track[0].lon });
+    let cumKm = 0;
+    let lastSampled = 0;
+    for (let i = 1; i < track.length; i += 1) {
+      cumKm += this._distanceMeters(track[i - 1], track[i]) / 1000;
+      if (cumKm - lastSampled >= 0.5) {
+        pts.push({ lat: track[i].lat, lon: track[i].lon });
+        lastSampled = cumKm;
+      }
+    }
+    const last = track[track.length - 1];
+    pts.push({ lat: last.lat, lon: last.lon });
+    return pts;
+  }
+
+  _haversineMeters(lat1, lon1, lat2, lon2) {
+    const R = 6371000;
+    const toRad = (d) => d * Math.PI / 180;
+    const dLat = toRad(lat2 - lat1);
+    const dLon = toRad(lon2 - lon1);
+    const a = Math.sin(dLat / 2) ** 2
+      + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+    return 2 * R * Math.asin(Math.sqrt(a));
+  }
+
+  _renderPoiMarkers(pois) {
+    if (!this._poiEnabled) return;
+    const Leaflet = window.L;
+    if (!Leaflet) return;
+    const aid = this._currentTrackActivityId;
+
+    const popupOpts = { maxWidth: 260, closeOnClick: false, autoClose: false };
+
+    const renderTo = (map, groupRefName, renderedRefName) => {
+      if (!map) return;
+      if (this[renderedRefName] === aid && this[groupRefName]) return;
+      let group = this[groupRefName];
+      if (!group) {
+        group = Leaflet.layerGroup().addTo(map);
+        this[groupRefName] = group;
+      }
+      group.clearLayers();
+      for (const poi of pois) {
+        const icon = Leaflet.divIcon({
+          className: "",
+          html: `<div class="eb-poi-marker eb-poi-${poi.category}">${poi.catIcon}</div>`,
+          iconSize: [18, 18],
+          iconAnchor: [9, 9],
+        });
+        const marker = Leaflet.marker([poi.lat, poi.lon], { icon, title: `${poi.catIcon} ${poi.name}` });
+        marker.bindPopup(this._poiPopupHtml(poi), popupOpts);
+        marker.addTo(group);
+      }
+      this[renderedRefName] = aid;
+    };
+
+    renderTo(this._map, "_poiGroup", "_poiRenderedInline");
+    renderTo(this._fullscreenMap, "_fullscreenPoiGroup", "_poiRenderedFullscreen");
+  }
+
+  _poiPopupHtml(poi) {
+    const safeName = this._escapeHtml(poi.name);
+    const osmUrl = `https://www.openstreetmap.org/node/${poi.osmId}`;
+    let extra = "";
+    if (poi.tags.opening_hours) {
+      extra += `<div>🕒 ${this._escapeHtml(poi.tags.opening_hours)}</div>`;
+    }
+    if (poi.tags["addr:street"]) {
+      const addr = [poi.tags["addr:street"], poi.tags["addr:housenumber"]].filter(Boolean).join(" ");
+      extra += `<div>📍 ${this._escapeHtml(addr)}</div>`;
+    }
+    if (poi.tags.website) {
+      const url = poi.tags.website.startsWith("http") ? poi.tags.website : "https://" + poi.tags.website;
+      extra += `<div>🌐 <a href="${this._escapeHtml(url)}" target="_blank" rel="noopener">Website</a></div>`;
+    }
+    return `<div class="eb-poi-popup">
+      <div class="eb-poi-title">${poi.catIcon} ${safeName}</div>
+      <div class="eb-poi-cat">${this._escapeHtml(poi.catLabel)}</div>
+      ${extra}
+      <a class="eb-poi-link" href="${osmUrl}" target="_blank" rel="noopener noreferrer">Auf OpenStreetMap</a>
+    </div>`;
+  }
+
   _wikiPopupHtml(article, loading, summary = null) {
     const safeTitle = this._escapeHtml(article.title);
     if (loading) {
@@ -1361,6 +1658,11 @@ class BoschEBikeMapCard extends HTMLElement {
     if (this._wikiEnabled) {
       const cached = this._wikiArticles.get(this._currentTrackActivityId);
       if (cached) this._renderWikiMarkers(cached);
+    }
+    // Restore POI markers from cache if active
+    if (this._poiEnabled) {
+      const cached = this._poiData.get(this._currentTrackActivityId);
+      if (cached) this._renderPoiMarkers(cached);
     }
   }
 
@@ -1969,6 +2271,15 @@ ${trackPoints}
         this._loadAndRenderWiki();
       }
     }
+    // Re-render POI markers
+    if (this._poiEnabled) {
+      const cached = this._poiData.get(this._currentTrackActivityId);
+      if (cached) {
+        this._renderPoiMarkers(cached);
+      } else {
+        this._loadAndRenderPoi();
+      }
+    }
 
     this._setTimer(() => {
       try { this._fullscreenMap?.invalidateSize({ pan: false, animate: false }); } catch (_) {}
@@ -1998,6 +2309,292 @@ ${trackPoints}
   }
 }
 
+// ============================================================================
+// Heatmap card — overlays all rides on one map
+// ============================================================================
+
+class BoschEBikeHeatmapCard extends HTMLElement {
+  constructor() {
+    super();
+    this._hass = null;
+    this._config = {};
+    this._tracks = [];
+    this._instances = [];
+    this._filterAccount = "all";
+    this._filterBike = "all";
+    this._filterRange = "365"; // days; "all" for everything
+    this._map = null;
+    this._tracksGroup = null;
+    this._baseLayer = null;
+    this._mapStyle = "osm";
+    this._ready = false;
+    this._booting = false;
+    this._loaded = false;
+  }
+
+  setConfig(config) {
+    this._config = {
+      height: config.height || 500,
+      ...config,
+    };
+  }
+
+  set hass(hass) {
+    const first = !this._hass;
+    this._hass = hass;
+    if (first) this._boot();
+  }
+
+  getCardSize() {
+    return Math.ceil((this._config.height || 500) / 50) + 2;
+  }
+
+  async _boot() {
+    if (this._booting || this._ready) return;
+    this._booting = true;
+    try {
+      this._buildDOM();
+      this._ready = true;
+      await ensureLeaflet();
+      await this._fetchInstances();
+      this._populateFilters();
+      this._createMap();
+      await this._loadTracks();
+      this._renderTracks();
+    } catch (err) {
+      console.error("[Bosch eBike Heatmap] boot error", err);
+      const msg = this.querySelector("#heat-msg");
+      if (msg) msg.textContent = "Fehler: " + (err?.message || err);
+    } finally {
+      this._booting = false;
+    }
+  }
+
+  _buildDOM() {
+    const h = this._config.height || 500;
+    this.innerHTML = "";
+    const card = document.createElement("ha-card");
+    this.appendChild(card);
+    const style = document.createElement("style");
+    style.textContent = LEAFLET_INLINE_CSS + `
+      .heat-head {
+        display:flex; align-items:center; gap:8px; padding:12px 16px;
+        background:var(--primary-color,#03a9f4); color:#fff; font-size:16px; font-weight:500;
+      }
+      .heat-filters {
+        display:flex; flex-wrap:wrap; gap:8px; padding:8px 12px;
+        background:var(--secondary-background-color,#f5f5f5);
+        border-bottom:1px solid var(--divider-color,#e0e0e0);
+      }
+      .heat-filters select {
+        padding:5px 8px; border:1px solid var(--divider-color,#ccc);
+        border-radius:6px; font-size:13px;
+        background:var(--card-background-color,#fff); color:var(--primary-text-color,#333);
+      }
+      .heat-filter-lbl { font-size:12px; color:var(--secondary-text-color,#666); align-self:center; }
+      .heat-map-wrap { position:relative; }
+      .heat-map { width:100% !important; height:${h}px !important; min-height:${h}px; z-index:0; position:relative; }
+      .heat-overlay {
+        position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+        color:var(--secondary-text-color,#999); font-size:14px; pointer-events:none;
+      }
+      .heat-stats { padding:8px 16px 12px; font-size:13px; color:var(--secondary-text-color,#666); display:flex; gap:16px; flex-wrap:wrap; }
+      .heat-stats b { color:var(--primary-text-color,#333); }
+    `;
+    card.appendChild(style);
+
+    const wrap = document.createElement("div");
+    wrap.innerHTML = `
+      <div class="heat-head">
+        <svg viewBox="0 0 24 24" width="22" height="22"><path fill="white" d="M3,3H21V5H3V3M3,7H21V9H3V7M3,11H21V13H3V11M3,15H21V17H3V15M3,19H21V21H3V19Z"/></svg>
+        <span>Bosch eBike Heatmap</span>
+      </div>
+      <div class="heat-filters">
+        <span class="heat-filter-lbl">Zeitraum:</span>
+        <select id="heat-range">
+          <option value="30">30 Tage</option>
+          <option value="90">3 Monate</option>
+          <option value="365" selected>12 Monate</option>
+          <option value="all">Alle</option>
+        </select>
+        <span class="heat-filter-lbl" id="heat-acc-lbl" style="display:none;">Konto:</span>
+        <select id="heat-account" style="display:none;">
+          <option value="all">Alle Konten</option>
+        </select>
+        <span class="heat-filter-lbl" id="heat-bike-lbl" style="display:none;">Bike:</span>
+        <select id="heat-bike" style="display:none;">
+          <option value="all">Alle Bikes</option>
+        </select>
+      </div>
+      <div class="heat-map-wrap">
+        <div id="heat-map" class="heat-map"></div>
+        <div class="heat-overlay" id="heat-msg">Lade Touren …</div>
+      </div>
+      <div class="heat-stats" id="heat-stats"></div>
+    `;
+    while (wrap.firstChild) card.appendChild(wrap.firstChild);
+
+    this.querySelector("#heat-range").addEventListener("change", async (e) => {
+      this._filterRange = e.target.value;
+      await this._loadTracks();
+      this._renderTracks();
+    });
+    this.querySelector("#heat-account").addEventListener("change", (e) => {
+      this._filterAccount = e.target.value;
+      this._populateBikeFilter();
+      this._renderTracks();
+    });
+    this.querySelector("#heat-bike").addEventListener("change", (e) => {
+      this._filterBike = e.target.value;
+      this._renderTracks();
+    });
+  }
+
+  async _fetchInstances() {
+    try {
+      const res = await this._hass.callWS({ type: "bosch_ebike/list_instances" });
+      this._instances = res.instances || [];
+    } catch (_) {
+      this._instances = [];
+    }
+  }
+
+  _populateFilters() {
+    const accountSel = this.querySelector("#heat-account");
+    if (this._instances.length > 1) {
+      const opts = ['<option value="all">Alle Konten</option>'];
+      for (const inst of this._instances) {
+        opts.push(`<option value="${inst.config_entry_id}">${this._escapeHtml(inst.label)}</option>`);
+      }
+      accountSel.innerHTML = opts.join("");
+      accountSel.value = this._filterAccount;
+      accountSel.style.display = "";
+      this.querySelector("#heat-acc-lbl").style.display = "";
+    }
+    this._populateBikeFilter();
+  }
+
+  _populateBikeFilter() {
+    const bikeSel = this.querySelector("#heat-bike");
+    const lbl = this.querySelector("#heat-bike-lbl");
+    const bikes = [];
+    for (const inst of this._instances) {
+      if (this._filterAccount !== "all" && inst.config_entry_id !== this._filterAccount) continue;
+      for (const b of (inst.bikes || [])) {
+        const label = this._instances.length > 1 ? `${inst.label} — ${b.label}` : b.label;
+        bikes.push({ id: b.id, label });
+      }
+    }
+    if (bikes.length > 1) {
+      const opts = ['<option value="all">Alle Bikes</option>'];
+      for (const b of bikes) {
+        opts.push(`<option value="${b.id}">${this._escapeHtml(b.label)}</option>`);
+      }
+      bikeSel.innerHTML = opts.join("");
+      if (this._filterBike !== "all" && !bikes.some((x) => x.id === this._filterBike)) {
+        this._filterBike = "all";
+      }
+      bikeSel.value = this._filterBike;
+      bikeSel.style.display = "";
+      lbl.style.display = "";
+    } else {
+      bikeSel.style.display = "none";
+      lbl.style.display = "none";
+    }
+  }
+
+  _escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, (c) => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+    })[c]);
+  }
+
+  _createMap() {
+    const Leaflet = window.L;
+    const mapEl = this.querySelector("#heat-map");
+    if (!Leaflet || !mapEl) return;
+    this._map = Leaflet.map(mapEl, {
+      zoomControl: true,
+      attributionControl: false,
+      preferCanvas: true,
+    }).setView([48.7, 12.4], 6);
+    const def = MAP_STYLES.osm;
+    this._baseLayer = Leaflet.tileLayer(def.url, def.options).addTo(this._map);
+    this._tracksGroup = Leaflet.layerGroup().addTo(this._map);
+  }
+
+  async _loadTracks() {
+    const msg = this.querySelector("#heat-msg");
+    if (msg) { msg.textContent = "Lade Touren …"; msg.style.display = ""; }
+    const params = { type: "bosch_ebike/get_all_tracks" };
+    if (this._filterRange !== "all") {
+      params.max_age_days = parseInt(this._filterRange, 10);
+    }
+    try {
+      const res = await this._hass.callWS(params);
+      this._tracks = res.tracks || [];
+      this._loaded = true;
+    } catch (err) {
+      console.error("[Bosch eBike Heatmap] load failed", err);
+      this._tracks = [];
+      if (msg) msg.textContent = "Fehler beim Laden der Touren";
+      return;
+    }
+    if (msg) msg.style.display = "none";
+  }
+
+  _renderTracks() {
+    if (!this._map || !this._tracksGroup) return;
+    const Leaflet = window.L;
+    this._tracksGroup.clearLayers();
+
+    const filtered = this._tracks.filter((t) => {
+      if (this._filterAccount !== "all" && t.account_id !== this._filterAccount) return false;
+      if (this._filterBike !== "all" && t.bike_id !== this._filterBike) return false;
+      return true;
+    });
+
+    let totalDist = 0;
+    let allLatLngs = [];
+    for (const t of filtered) {
+      if (!t.points || t.points.length < 2) continue;
+      const latlngs = t.points.map((p) => [p.lat, p.lon]);
+      Leaflet.polyline(latlngs, {
+        color: "#d32f2f",
+        weight: 2.5,
+        opacity: 0.35,
+        smoothFactor: 1.5,
+      }).addTo(this._tracksGroup);
+      allLatLngs = allLatLngs.concat(latlngs);
+      totalDist += t.distance || 0;
+    }
+
+    if (allLatLngs.length) {
+      try {
+        const bounds = Leaflet.latLngBounds(allLatLngs);
+        this._map.fitBounds(bounds, { padding: [40, 40], animate: false });
+      } catch (_) {}
+    }
+
+    const stats = this.querySelector("#heat-stats");
+    if (stats) {
+      stats.innerHTML = `
+        <div>Touren: <b>${filtered.length}</b></div>
+        <div>Distanz: <b>${(totalDist / 1000).toFixed(0)} km</b></div>
+      `;
+    }
+    const msg = this.querySelector("#heat-msg");
+    if (msg) {
+      if (!filtered.length) {
+        msg.textContent = "Keine Touren in diesem Filter";
+        msg.style.display = "";
+      } else {
+        msg.style.display = "none";
+      }
+    }
+  }
+}
+
 class BoschEBikeMapCardEditor extends HTMLElement {
   setConfig(config) {
     this._config = config;
@@ -2024,6 +2621,9 @@ if (!customElements.get("bosch-ebike-map-card")) {
 if (!customElements.get("bosch-ebike-map-card-editor")) {
   customElements.define("bosch-ebike-map-card-editor", BoschEBikeMapCardEditor);
 }
+if (!customElements.get("bosch-ebike-heatmap-card")) {
+  customElements.define("bosch-ebike-heatmap-card", BoschEBikeHeatmapCard);
+}
 
 window.customCards = window.customCards || [];
 if (!window.customCards.find((c) => c.type === "bosch-ebike-map-card")) {
@@ -2032,5 +2632,13 @@ if (!window.customCards.find((c) => c.type === "bosch-ebike-map-card")) {
     name: "Bosch eBike Map",
     description: "Interaktive Karte mit GPS-Tracks deiner Bosch eBike-Fahrten",
     preview: true,
+  });
+}
+if (!window.customCards.find((c) => c.type === "bosch-ebike-heatmap-card")) {
+  window.customCards.push({
+    type: "bosch-ebike-heatmap-card",
+    name: "Bosch eBike Heatmap",
+    description: "Alle Touren einer Auswahl auf einer Karte überlagert",
+    preview: false,
   });
 }

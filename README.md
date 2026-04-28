@@ -179,6 +179,47 @@ Die Integration unterstützt sowohl mehrere Konten als auch mehrere Bikes pro Ko
 
 Die Auswahl filtert die angezeigten Touren live; das Sortieren funktioniert wie gewohnt innerhalb des gefilterten Ergebnisses.
 
+### POIs entlang der Route
+
+Auf der Karte gibt es einen 📍-Toggle in den Steuerelementen. Aktiviert er, wird im Hintergrund eine Overpass-API-Abfrage gestartet, die folgende Punkte entlang der Route findet (max. ~500 m vom befahrenen Pfad entfernt):
+
+- 🔌 **Ladestationen** (`amenity=charging_station`)
+- 🛠️ **Fahrradgeschäfte** und Reparaturstationen (`shop=bicycle`, `amenity=bicycle_repair_station`)
+- 💧 **Trinkwasser** (`amenity=drinking_water`)
+- 🚻 **Toiletten** (`amenity=toilets`)
+
+Klick auf einen Marker → Popup mit Name, Öffnungszeiten/Adresse/Website (sofern bei OSM hinterlegt) und Link zu OpenStreetMap. Pro Tour werden bis zu 100 Marker dargestellt; Ergebnisse werden im Browser-localStorage gecacht.
+
+### Wartungs-Erinnerungen
+
+Neben dem von Bosch gelieferten Service-Termin (`Next Service Date`/`Next Service Odometer`) kannst Du beliebige eigene Wartungsposten anlegen — z. B. Kettenwechsel alle 3000 km, Inspektion alle 365 Tage. Pro Bike wird ein Sensor `Maintenance Items Due` angelegt; sein Wert ist die Anzahl bald fälliger oder überfälliger Posten, das Attribut `items` listet alle Details (Restkilometer, Resttage).
+
+**Posten anlegen:** **Entwicklerwerkzeuge → Dienste**, Dienst `bosch_ebike.add_maintenance` aufrufen mit:
+- `bike_id` (aus dem Sensor-Attribut)
+- `name` (z. B. "Kettenwechsel")
+- `interval_km` und/oder `interval_days`
+
+**Posten als erledigt markieren:** Dienst `bosch_ebike.complete_maintenance` mit `bike_id` und `item_id` (aus dem Sensor-Attribut). Setzt Datum und Kilometerstand auf jetzt zurück.
+
+**Posten löschen:** Dienst `bosch_ebike.remove_maintenance`.
+
+**Events für Automationen:** Bei Erreichen der Schwelle (Standard: 30 Tage / 200 km vor Fälligkeit) werden HA-Events ausgelöst:
+- `ha_bosch_ebike_service_due_soon` / `ha_bosch_ebike_service_overdue` (für den Bosch-Service)
+- `ha_bosch_ebike_maintenance_due_soon` / `ha_bosch_ebike_maintenance_overdue` (für eigene Posten)
+
+Damit kann man z. B. eine Push-Mitteilung oder eine Beleuchtungs-Erinnerung bauen.
+
+### Heatmap-Card — alle Touren auf einer Karte
+
+Eine zweite Card-Variante `bosch-ebike-heatmap-card` legt alle Touren einer Auswahl als halbtransparente Linien übereinander. Filter-Dropdowns für Zeitraum (30 Tage / 3 Monate / 12 Monate / Alle), Konto und Bike. Darunter eine Statuszeile mit Tour- und Kilometeranzahl der Auswahl.
+
+```yaml
+type: custom:bosch-ebike-heatmap-card
+height: 600
+```
+
+Die erste Anzeige kann etwas dauern — bei jeder bisher nicht abgerufenen Tour wird ein zusätzlicher API-Call gemacht (mit Concurrency-Limit). Die Tracks werden serverseitig im Speicher gecacht, weitere Aufrufe sind sofort.
+
 ### Wikipedia-Artikel entlang der Route
 
 Auf der Lovelace-Karte gibt es einen 📚-Toggle in den Karten-Steuerelementen. Ist er aktiviert, sucht die Karte entlang der gefahrenen Route alle 2 km nach nahegelegenen Wikipedia-Artikeln und zeigt sie als (i)-Marker an. Ein Klick öffnet ein kleines Popup mit Titel, Vorschaubild, Kurzbeschreibung und einem Link auf den vollständigen Artikel.
@@ -433,6 +474,47 @@ The integration supports both multiple accounts and multiple bikes per account.
 - **Bike** (visible only with multiple bikes)
 
 The selection filters the displayed activities live; sorting works as usual within the filtered result.
+
+### POIs along the route
+
+Click the 📍 toggle in the map controls to overlay points of interest sourced live from OpenStreetMap (Overpass API), filtered to within ~500 m of the route:
+
+- 🔌 **Charging stations** (`amenity=charging_station`)
+- 🛠️ **Bike shops** and repair stations (`shop=bicycle`, `amenity=bicycle_repair_station`)
+- 💧 **Drinking water** (`amenity=drinking_water`)
+- 🚻 **Toilets** (`amenity=toilets`)
+
+Clicking a marker opens a popup with name, opening hours / address / website (if tagged in OSM) and a link to the OpenStreetMap node. Up to 100 markers per ride; results are cached in the browser's localStorage.
+
+### Maintenance reminders
+
+Beyond the official Bosch service info (`Next Service Date` / `Next Service Odometer`) you can add arbitrary maintenance items per bike — e.g. chain swap every 3000 km, inspection every 365 days. Each bike gets a `Maintenance Items Due` sensor whose state is the count of items currently due-soon or overdue, with the full list available as the `items` attribute (remaining km, remaining days).
+
+**Add an item:** **Developer tools → Services**, call `bosch_ebike.add_maintenance` with:
+- `bike_id` (from the sensor attribute)
+- `name` (e.g. "Chain swap")
+- `interval_km` and/or `interval_days`
+
+**Mark as done:** Call `bosch_ebike.complete_maintenance` with `bike_id` and `item_id` (from the sensor attribute). Resets date and odometer to "now".
+
+**Delete:** Call `bosch_ebike.remove_maintenance`.
+
+**Events for automations:** When a threshold is crossed (default: 30 days / 200 km before due), HA events fire:
+- `ha_bosch_ebike_service_due_soon` / `ha_bosch_ebike_service_overdue` (Bosch service)
+- `ha_bosch_ebike_maintenance_due_soon` / `ha_bosch_ebike_maintenance_overdue` (custom items)
+
+You can wire these up to push notifications, light reminders, etc.
+
+### Heatmap card — all rides overlaid
+
+A second card type, `bosch-ebike-heatmap-card`, draws all rides in a selection as semi-transparent overlays on a single map. Filter dropdowns for time range (30 days / 3 months / 12 months / All), account and bike. A status line below shows ride count and total distance for the current selection.
+
+```yaml
+type: custom:bosch-ebike-heatmap-card
+height: 600
+```
+
+First render can take a moment — every ride whose detail hasn't been fetched yet triggers an API call (rate-limited via concurrency limit). Tracks are then cached server-side in memory; subsequent renders are instant.
 
 ### Wikipedia articles along the route
 
