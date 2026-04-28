@@ -22,7 +22,7 @@ from .coordinator import BoschEBikeCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS = [Platform.SENSOR, Platform.BUTTON, Platform.NUMBER]
+PLATFORMS = [Platform.SENSOR, Platform.BUTTON, Platform.NUMBER, Platform.DATE]
 
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:

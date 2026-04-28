@@ -192,6 +192,17 @@ Klick auf einen Marker → Popup mit Name, Öffnungszeiten/Adresse/Website (sofe
 
 ### Wartungs-Erinnerungen
 
+#### Service-Termin selbst setzen
+
+Pro Bike gibt es zwei editierbare Entitäten:
+
+- **`date.<bike>_service_due_date`** — Datum, an dem der nächste Kundendienst fällig ist
+- **`number.<bike>_service_due_odometer`** — Kilometerstand, bei dem der nächste Kundendienst fällig ist
+
+Beim ersten Datenabruf werden diese Werte automatisch aus der Bosch-API vorbelegt (sofern dort hinterlegt). Änderungen an den Entitäten überschreiben die Bosch-Werte und werden für die Service-Erinnerungen herangezogen. Setzt Du den Kilometerstand auf `0`, fällt die Anzeige auf den Bosch-Wert zurück.
+
+#### Eigene Wartungsposten
+
 Neben dem von Bosch gelieferten Service-Termin (`Next Service Date`/`Next Service Odometer`) kannst Du beliebige eigene Wartungsposten anlegen — z. B. Kettenwechsel alle 3000 km, Inspektion alle 365 Tage. Pro Bike wird ein Sensor `Maintenance Items Due` angelegt; sein Wert ist die Anzahl bald fälliger oder überfälliger Posten, das Attribut `items` listet alle Details (Restkilometer, Resttage).
 
 **Posten anlegen:** **Entwicklerwerkzeuge → Dienste**, Dienst `bosch_ebike.add_maintenance` aufrufen mit:
@@ -487,6 +498,17 @@ Click the 📍 toggle in the map controls to overlay points of interest sourced 
 Clicking a marker opens a popup with name, opening hours / address / website (if tagged in OSM) and a link to the OpenStreetMap node. Up to 100 markers per ride; results are cached in the browser's localStorage.
 
 ### Maintenance reminders
+
+#### Override the next service appointment
+
+Each bike exposes two user-editable entities:
+
+- **`date.<bike>_service_due_date`** — date the next service is due
+- **`number.<bike>_service_due_odometer`** — odometer reading at which the next service is due
+
+On first data fetch these are seeded from the Bosch API (when present). Changes you make take precedence over Bosch's values and feed into the service-due sensors and events. Setting the odometer to `0` clears the override and falls back to the Bosch value.
+
+#### Custom maintenance items
 
 Beyond the official Bosch service info (`Next Service Date` / `Next Service Odometer`) you can add arbitrary maintenance items per bike — e.g. chain swap every 3000 km, inspection every 365 days. Each bike gets a `Maintenance Items Due` sensor whose state is the count of items currently due-soon or overdue, with the full list available as the `items` attribute (remaining km, remaining days).
 

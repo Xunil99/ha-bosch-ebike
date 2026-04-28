@@ -62,6 +62,9 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # Maintenance state per bike
         # bike_id -> {"items": [{id,name,interval_km,interval_days,last_done_at,last_done_odometer,warned}], "service_warned": {...}}
         self._maintenance: dict[str, dict[str, Any]] = {}
+        # User-editable service-due overrides per bike
+        # bike_id -> {"date": "YYYY-MM-DD" | None, "odometer_km": float | None}
+        self._service_overrides: dict[str, dict[str, Any]] = {}
         # Persistent storage for consumption state (survives HA restarts)
         self._store: Store = Store(
             hass, STORAGE_VERSION, f"{DOMAIN}_{STORAGE_KEY_SUFFIX}"
@@ -97,6 +100,12 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     bid: bike_data for bid, bike_data in maintenance.items()
                     if isinstance(bid, str) and isinstance(bike_data, dict)
                 }
+            overrides = data.get("service_overrides")
+            if isinstance(overrides, dict):
+                self._service_overrides = {
+                    bid: ov for bid, ov in overrides.items()
+                    if isinstance(bid, str) and isinstance(ov, dict)
+                }
             capacity = data.get("battery_capacity_wh")
             if isinstance(capacity, (int, float)) and capacity > 0:
                 self._battery_capacity_wh = float(capacity)
@@ -116,9 +125,59 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 "activity_consumption": self._activity_consumption,
                 "activity_bike": self._activity_bike,
                 "maintenance": self._maintenance,
+                "service_overrides": self._service_overrides,
                 "battery_capacity_wh": self._battery_capacity_wh,
             }
         )
+
+    # -- Service-due override accessors --
+
+    def _bike_override(self, bike_id: str) -> dict[str, Any]:
+        if bike_id not in self._service_overrides:
+            self._service_overrides[bike_id] = {"date": None, "odometer_km": None}
+        ov = self._service_overrides[bike_id]
+        ov.setdefault("date", None)
+        ov.setdefault("odometer_km", None)
+        return ov
+
+    def get_service_due_date(self, bike_id: str) -> str | None:
+        """Return the effective service-due date as ISO string (YYYY-MM-DD), or None."""
+        return self._bike_override(bike_id)["date"]
+
+    def get_service_due_km(self, bike_id: str) -> float | None:
+        """Return the effective service-due odometer in km, or None."""
+        return self._bike_override(bike_id)["odometer_km"]
+
+    def set_service_due_date(self, bike_id: str, value: str | None) -> None:
+        ov = self._bike_override(bike_id)
+        if ov["date"] != value:
+            ov["date"] = value
+            self.hass.async_create_task(self._async_save_state())
+
+    def set_service_due_km(self, bike_id: str, value_km: float | None) -> None:
+        ov = self._bike_override(bike_id)
+        if ov["odometer_km"] != value_km:
+            ov["odometer_km"] = value_km
+            self.hass.async_create_task(self._async_save_state())
+
+    def _seed_service_overrides(self, bikes: list[dict[str, Any]]) -> bool:
+        """Initialise per-bike overrides from the Bosch values when not yet set."""
+        changed = False
+        for bike in bikes:
+            bike_id = bike.get("id")
+            if not bike_id:
+                continue
+            ov = self._bike_override(bike_id)
+            service = bike.get("serviceDue") or {}
+            if ov["date"] is None and service.get("date"):
+                # serviceDue.date is e.g. "2026-09-15" or full ISO timestamp; trim to date
+                raw = str(service["date"])
+                ov["date"] = raw[:10] if len(raw) >= 10 else raw
+                changed = True
+            if ov["odometer_km"] is None and isinstance(service.get("odometer"), (int, float)):
+                ov["odometer_km"] = float(service["odometer"]) / 1000.0
+                changed = True
+        return changed
 
     @staticmethod
     def attribute_activities_to_bikes(
@@ -336,6 +395,10 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self._activity_bike = new_attribution
             state_changed = True
 
+        # Seed service-due overrides from Bosch on first sight of a bike
+        if self._seed_service_overrides(bikes):
+            state_changed = True
+
         # Service & maintenance reminders
         if self._check_service_and_maintenance(bikes):
             state_changed = True
@@ -351,6 +414,7 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "activity_consumption": self._activity_consumption,
             "activity_bike": self._activity_bike,
             "maintenance": self._maintenance,
+            "service_overrides": self._service_overrides,
             "battery_capacity_wh": self._battery_capacity_wh,
         }
 
@@ -401,11 +465,12 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             bs = self._bike_state(bike_id)
             current_odo = self._bike_current_odometer(bike)
 
-            # Built-in Bosch service info
-            service = bike.get("serviceDue") or {}
+            # Effective service-due values: user override first, Bosch as fallback
+            ov = self._bike_override(bike_id)
+            bosch_service = bike.get("serviceDue") or {}
             service_warned = bs["service_warned"]
 
-            service_date = service.get("date")
+            service_date = ov["date"] or bosch_service.get("date")
             if service_date:
                 try:
                     due = dt_util.parse_datetime(service_date) or dt_util.parse_datetime(service_date + "T00:00:00")
@@ -440,7 +505,12 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                             service_warned["date_overdue"] = False
                             changed = True
 
-            service_odo = service.get("odometer")
+            # Override odometer in km → metres for the comparison; Bosch fallback in metres
+            ov_km = ov["odometer_km"]
+            if ov_km is not None:
+                service_odo = float(ov_km) * 1000.0
+            else:
+                service_odo = bosch_service.get("odometer")
             if isinstance(service_odo, (int, float)) and current_odo is not None:
                 remaining_m = float(service_odo) - current_odo
                 remaining_km = remaining_m / 1000.0

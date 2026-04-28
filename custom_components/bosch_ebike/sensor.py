@@ -770,11 +770,12 @@ class BoschServiceDueSensor(CoordinatorEntity[BoschEBikeCoordinator], SensorEnti
         bike = self._bike()
         if not bike:
             return None
-        service = bike.get("serviceDue") or {}
+        bosch_service = bike.get("serviceDue") or {}
         if self._kind == "days":
             from datetime import timezone as _tz
             from homeassistant.util import dt as _dt
-            date = service.get("date")
+            # Override first, Bosch as fallback
+            date = self.coordinator.get_service_due_date(self._bike_id) or bosch_service.get("date")
             if not date:
                 return None
             try:
@@ -787,9 +788,13 @@ class BoschServiceDueSensor(CoordinatorEntity[BoschEBikeCoordinator], SensorEnti
                 due = due.replace(tzinfo=_tz.utc)
             return round((due - _dt.utcnow()).total_seconds() / 86400, 1)
         # km
-        service_odo = service.get("odometer")
-        if not isinstance(service_odo, (int, float)):
-            return None
+        ov_km = self.coordinator.get_service_due_km(self._bike_id)
+        if ov_km is not None:
+            service_odo = float(ov_km) * 1000.0
+        else:
+            service_odo = bosch_service.get("odometer")
+            if not isinstance(service_odo, (int, float)):
+                return None
         current_odo = self.coordinator._bike_current_odometer(bike)
         if current_odo is None:
             return None
