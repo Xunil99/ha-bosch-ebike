@@ -304,6 +304,14 @@ class BoschEBikeMapCard extends HTMLElement {
         background:rgba(11,132,199,.95) !important;
         outline:2px solid rgba(255,255,255,.6);
       }
+      .eb-icon-btn.eb-loading {
+        opacity:.6;
+        animation:eb-pulse 1.2s ease-in-out infinite;
+      }
+      @keyframes eb-pulse {
+        0%,100% { opacity:.55; }
+        50%     { opacity:.95; }
+      }
       .eb-wiki-marker {
         background:rgba(255,255,255,.95);
         border:1.5px solid #0b84c7;
@@ -1399,17 +1407,28 @@ class BoschEBikeMapCard extends HTMLElement {
     return { minLat, maxLat, minLon, maxLon };
   }
 
+  _setPoiLoadingUI(loading) {
+    for (const id of ["eb-poi", "eb-full-poi"]) {
+      const btn = this._$(id);
+      if (btn) {
+        btn.classList.toggle("eb-loading", !!loading);
+        btn.disabled = !!loading;
+      }
+    }
+  }
+
   async _loadAndRenderPoi() {
     if (!this._currentTrackActivityId || !this._currentTrack.length) return;
     const aid = this._currentTrackActivityId;
 
     let pois = this._poiData.get(aid);
-    if (!pois) {
+    if (!pois || pois.length === 0) {
+      // In-memory cache empty → check localStorage but only honour non-empty cached results
       try {
         const cached = localStorage.getItem(`eb-poi-${aid}`);
         if (cached) {
           const parsed = JSON.parse(cached);
-          if (Array.isArray(parsed)) {
+          if (Array.isArray(parsed) && parsed.length > 0) {
             pois = parsed;
             this._poiData.set(aid, parsed);
           }
@@ -1417,18 +1436,24 @@ class BoschEBikeMapCard extends HTMLElement {
       } catch (_) {}
     }
 
-    if (!pois) {
+    if (!pois || pois.length === 0) {
       if (this._poiLoading.has(aid)) return;
       this._poiLoading.add(aid);
+      this._setPoiLoadingUI(true);
       try {
         pois = await this._fetchPois(this._currentTrack);
         this._poiData.set(aid, pois);
-        try { localStorage.setItem(`eb-poi-${aid}`, JSON.stringify(pois)); } catch (_) {}
+        // Only persist NON-EMPTY results — otherwise a transient Overpass
+        // error would poison the cache and hide POIs forever.
+        if (pois.length > 0) {
+          try { localStorage.setItem(`eb-poi-${aid}`, JSON.stringify(pois)); } catch (_) {}
+        }
       } catch (err) {
         console.warn("[Bosch eBike POI] fetch failed", err);
         pois = [];
       } finally {
         this._poiLoading.delete(aid);
+        this._setPoiLoadingUI(false);
       }
     }
 
@@ -1438,14 +1463,14 @@ class BoschEBikeMapCard extends HTMLElement {
   async _fetchPois(track) {
     const bbox = this._routeBoundingBox(track);
     if (!bbox) return [];
-    // Slight padding (≈ 200 m) in case of edge POIs
-    const pad = 0.002;
+    // Padding ≈ 500 m so the proximity filter (also 500 m) doesn't reject edge POIs
+    const pad = 0.005;
     const south = bbox.minLat - pad;
     const north = bbox.maxLat + pad;
     const west = bbox.minLon - pad;
     const east = bbox.maxLon + pad;
 
-    const query = `[out:json][timeout:25];
+    const query = `[out:json][timeout:30];
 (
   node["amenity"="charging_station"](${south},${west},${north},${east});
   node["shop"="bicycle"](${south},${west},${north},${east});
@@ -1463,14 +1488,29 @@ out body;`;
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: "data=" + encodeURIComponent(query),
       });
-      if (!resp.ok) return [];
+      if (!resp.ok) {
+        const body = await resp.text().catch(() => "");
+        console.warn(
+          `[Bosch eBike POI] Overpass HTTP ${resp.status} ${resp.statusText}: ${body.slice(0, 200)}`
+        );
+        return [];
+      }
       data = await resp.json();
-    } catch (_) {
+    } catch (err) {
+      console.warn("[Bosch eBike POI] Overpass fetch error:", err);
       return [];
     }
 
+    if (data && data.remark) {
+      // Overpass signals errors and rate-limits via a "remark" field with HTTP 200
+      console.warn("[Bosch eBike POI] Overpass remark:", data.remark);
+    }
+
     const elements = (data && Array.isArray(data.elements)) ? data.elements : [];
-    // Sample track points every ~500 m for proximity check
+    if (!elements.length) {
+      console.info("[Bosch eBike POI] Overpass returned no POIs in route bbox", bbox);
+    }
+    // Sample track points every ~250 m so the 500 m proximity filter catches everything
     const sampled = this._poiSamplePoints(track);
     const MAX_DIST_M = 500;
 
@@ -1522,7 +1562,9 @@ out body;`;
     return null;
   }
 
-  /// Sample points every ~500 m along the actual driven distance
+  /// Sample points every ~250 m along the actual driven distance.
+  /// With a 500 m proximity filter this covers all POIs along the route
+  /// without gaps even when the route makes sharp turns.
   _poiSamplePoints(track) {
     if (!Array.isArray(track) || track.length < 2) return [];
     const pts = [];
@@ -1531,7 +1573,7 @@ out body;`;
     let lastSampled = 0;
     for (let i = 1; i < track.length; i += 1) {
       cumKm += this._distanceMeters(track[i - 1], track[i]) / 1000;
-      if (cumKm - lastSampled >= 0.5) {
+      if (cumKm - lastSampled >= 0.25) {
         pts.push({ lat: track[i].lat, lon: track[i].lon });
         lastSampled = cumKm;
       }
