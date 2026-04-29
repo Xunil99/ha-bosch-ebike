@@ -1555,24 +1555,38 @@ class BoschEBikeMapCard extends HTMLElement {
 );
 out body;`;
 
-    const url = "https://overpass-api.de/api/interpreter";
-    let data;
-    try {
-      const resp = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: "data=" + encodeURIComponent(query),
-      });
-      if (!resp.ok) {
-        const body = await resp.text().catch(() => "");
-        console.warn(
-          `[Bosch eBike POI] Overpass HTTP ${resp.status} ${resp.statusText}: ${body.slice(0, 200)}`
-        );
-        return [];
+    // Multiple Overpass endpoints for redundancy. The main overpass-api.de
+    // instance has tightened its CORS policy and blocks POST preflights from
+    // browsers; GET-only requests sidestep that. Mirror endpoints are tried in
+    // order if the previous one fails or returns empty.
+    const endpoints = [
+      "https://overpass-api.de/api/interpreter",
+      "https://overpass.kumi.systems/api/interpreter",
+      "https://overpass.private.coffee/api/interpreter",
+    ];
+
+    let data = null;
+    for (const endpoint of endpoints) {
+      const url = endpoint + "?data=" + encodeURIComponent(query);
+      try {
+        const resp = await fetch(url, { method: "GET" });
+        if (!resp.ok) {
+          const body = await resp.text().catch(() => "");
+          console.warn(
+            `[Bosch eBike POI] Overpass HTTP ${resp.status} ${resp.statusText} from ${endpoint}: ${body.slice(0, 200)}`
+          );
+          continue;
+        }
+        data = await resp.json();
+        break;
+      } catch (err) {
+        console.warn(`[Bosch eBike POI] Overpass fetch error on ${endpoint}:`, err);
+        // try next mirror
       }
-      data = await resp.json();
-    } catch (err) {
-      console.warn("[Bosch eBike POI] Overpass fetch error:", err);
+    }
+
+    if (!data) {
+      console.warn("[Bosch eBike POI] All Overpass endpoints failed");
       return [];
     }
 
