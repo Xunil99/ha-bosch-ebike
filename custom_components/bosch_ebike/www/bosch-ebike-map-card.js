@@ -214,6 +214,11 @@ class BoschEBikeMapCard extends HTMLElement {
     const allowed = [500, 1000, 2000, 5000, 10000];
     const requested = parseInt(config.wiki_radius_m, 10);
     this._wikiRadius = allowed.includes(requested) ? requested : 1000;
+    // POI proximity radius (m) — how far from the route a POI may be. Default 1000.
+    const prevPoiRadius = this._poiRadius;
+    const poiAllowed = [500, 1000, 2000, 5000, 10000];
+    const poiRequested = parseInt(config.poi_radius_m, 10);
+    this._poiRadius = poiAllowed.includes(poiRequested) ? poiRequested : 1000;
 
     // If the card was already built once (re-config without re-creation),
     // refresh UI and re-render
@@ -229,6 +234,15 @@ class BoschEBikeMapCard extends HTMLElement {
         if (this._wikiGroup) try { this._wikiGroup.clearLayers(); } catch (_) {}
         if (this._fullscreenWikiGroup) try { this._fullscreenWikiGroup.clearLayers(); } catch (_) {}
         if (this._wikiEnabled && this._currentTrackActivityId) this._loadAndRenderWiki();
+      }
+      // POI radius changed → invalidate cached POIs, re-fetch if layer active
+      if (prevPoiRadius !== undefined && prevPoiRadius !== this._poiRadius) {
+        this._poiData.clear();
+        this._poiRenderedInline = null;
+        this._poiRenderedFullscreen = null;
+        if (this._poiGroup) try { this._poiGroup.clearLayers(); } catch (_) {}
+        if (this._fullscreenPoiGroup) try { this._fullscreenPoiGroup.clearLayers(); } catch (_) {}
+        if (this._poiEnabled && this._currentTrackActivityId) this._loadAndRenderPoi();
       }
       if (this._activities.length) this._show(0, true);
     }
@@ -1478,12 +1492,14 @@ class BoschEBikeMapCard extends HTMLElement {
   async _loadAndRenderPoi() {
     if (!this._currentTrackActivityId || !this._currentTrack.length) return;
     const aid = this._currentTrackActivityId;
+    // Cache key includes the radius so different radii don't collide
+    const cacheKey = `eb-poi-${aid}-${this._poiRadius || 1000}`;
 
     let pois = this._poiData.get(aid);
     if (!pois || pois.length === 0) {
       // In-memory cache empty → check localStorage but only honour non-empty cached results
       try {
-        const cached = localStorage.getItem(`eb-poi-${aid}`);
+        const cached = localStorage.getItem(cacheKey);
         if (cached) {
           const parsed = JSON.parse(cached);
           if (Array.isArray(parsed) && parsed.length > 0) {
@@ -1504,7 +1520,7 @@ class BoschEBikeMapCard extends HTMLElement {
         // Only persist NON-EMPTY results — otherwise a transient Overpass
         // error would poison the cache and hide POIs forever.
         if (pois.length > 0) {
-          try { localStorage.setItem(`eb-poi-${aid}`, JSON.stringify(pois)); } catch (_) {}
+          try { localStorage.setItem(cacheKey, JSON.stringify(pois)); } catch (_) {}
         }
       } catch (err) {
         console.warn("[Bosch eBike POI] fetch failed", err);
@@ -1521,8 +1537,9 @@ class BoschEBikeMapCard extends HTMLElement {
   async _fetchPois(track) {
     const bbox = this._routeBoundingBox(track);
     if (!bbox) return [];
-    // Padding ≈ 500 m so the proximity filter (also 500 m) doesn't reject edge POIs
-    const pad = 0.005;
+    // Bbox padding scales with the configured proximity radius (in degrees, ~111 km/°)
+    const radiusM = this._poiRadius || 1000;
+    const pad = radiusM / 111000 + 0.001;
     const south = bbox.minLat - pad;
     const north = bbox.maxLat + pad;
     const west = bbox.minLon - pad;
@@ -1568,9 +1585,9 @@ out body;`;
     if (!elements.length) {
       console.info("[Bosch eBike POI] Overpass returned no POIs in route bbox", bbox);
     }
-    // Sample track points every ~250 m so the 500 m proximity filter catches everything
-    const sampled = this._poiSamplePoints(track);
-    const MAX_DIST_M = 500;
+    // Sample track points every ~radius/2 so the proximity filter has no gaps
+    const MAX_DIST_M = radiusM;
+    const sampled = this._poiSamplePoints(track, MAX_DIST_M / 2);
 
     const out = [];
     for (const el of elements) {
@@ -1620,18 +1637,19 @@ out body;`;
     return null;
   }
 
-  /// Sample points every ~250 m along the actual driven distance.
-  /// With a 500 m proximity filter this covers all POIs along the route
-  /// without gaps even when the route makes sharp turns.
-  _poiSamplePoints(track) {
+  /// Sample points every `intervalM` metres along the actual driven distance.
+  /// Default 250 m; caller passes radius/2 so the proximity filter has no gaps
+  /// even when the route makes sharp turns.
+  _poiSamplePoints(track, intervalM = 250) {
     if (!Array.isArray(track) || track.length < 2) return [];
+    const intervalKm = Math.max(0.05, intervalM / 1000);
     const pts = [];
     pts.push({ lat: track[0].lat, lon: track[0].lon });
     let cumKm = 0;
     let lastSampled = 0;
     for (let i = 1; i < track.length; i += 1) {
       cumKm += this._distanceMeters(track[i - 1], track[i]) / 1000;
-      if (cumKm - lastSampled >= 0.25) {
+      if (cumKm - lastSampled >= intervalKm) {
         pts.push({ lat: track[i].lat, lon: track[i].lon });
         lastSampled = cumKm;
       }
@@ -2804,15 +2822,23 @@ class BoschEBikeMapCardEditor extends HTMLElement {
 
     const radii = [
       { v: 500, l: "500 m" },
-      { v: 1000, l: "1 km (Standard)" },
+      { v: 1000, l: "1 km" },
       { v: 2000, l: "2 km" },
       { v: 5000, l: "5 km" },
       { v: 10000, l: "10 km" },
     ];
-    const selectedRadius = parseInt(cfg.wiki_radius_m, 10) || 1000;
-    const radiusOpts = radii.map((r) => {
-      const sel = r.v === selectedRadius ? " selected" : "";
-      return `<option value="${r.v}"${sel}>${r.l}</option>`;
+    const selectedWikiRadius = parseInt(cfg.wiki_radius_m, 10) || 1000;
+    const wikiRadiusOpts = radii.map((r) => {
+      const sel = r.v === selectedWikiRadius ? " selected" : "";
+      const label = r.v === 1000 ? `${r.l} (Standard)` : r.l;
+      return `<option value="${r.v}"${sel}>${label}</option>`;
+    }).join("");
+
+    const selectedPoiRadius = parseInt(cfg.poi_radius_m, 10) || 1000;
+    const poiRadiusOpts = radii.map((r) => {
+      const sel = r.v === selectedPoiRadius ? " selected" : "";
+      const label = r.v === 1000 ? `${r.l} (Standard)` : r.l;
+      return `<option value="${r.v}"${sel}>${label}</option>`;
     }).join("");
 
     this.innerHTML = `<div style="padding:16px">
@@ -2832,8 +2858,12 @@ class BoschEBikeMapCardEditor extends HTMLElement {
       <span style="${hintStyle}">Wenn gesetzt, wird das Bike-Dropdown ausgeblendet und die Karte zeigt nur Touren dieses Bikes.</span>
 
       <label style="${labelStyle}">Wikipedia-Suchradius</label>
-      <select id="wiki-radius-in" style="${inputStyle}">${radiusOpts}</select>
+      <select id="wiki-radius-in" style="${inputStyle}">${wikiRadiusOpts}</select>
       <span style="${hintStyle}">Wie weit um jeden Stützpunkt der Route Wikipedia-Artikel gesucht werden. Größerer Radius = mehr Treffer, mehr Daten.</span>
+
+      <label style="${labelStyle}">POI-Suchradius</label>
+      <select id="poi-radius-in" style="${inputStyle}">${poiRadiusOpts}</select>
+      <span style="${hintStyle}">Wie weit um die Route Ladestationen, Werkstätten, Trinkwasser und Toiletten gesucht werden.</span>
     </div>`;
 
     this.querySelector("#h-in").addEventListener("change", (e) => {
@@ -2869,6 +2899,13 @@ class BoschEBikeMapCardEditor extends HTMLElement {
       this._config = { ...this._config };
       if (v && v !== 1000) this._config.wiki_radius_m = v;
       else delete this._config.wiki_radius_m;
+      this._emit();
+    });
+    this.querySelector("#poi-radius-in").addEventListener("change", (e) => {
+      const v = parseInt(e.target.value, 10);
+      this._config = { ...this._config };
+      if (v && v !== 1000) this._config.poi_radius_m = v;
+      else delete this._config.poi_radius_m;
       this._emit();
     });
   }
