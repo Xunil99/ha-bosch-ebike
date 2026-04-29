@@ -194,6 +194,7 @@ class BoschEBikeMapCard extends HTMLElement {
   }
 
   setConfig(config) {
+    const prevRadius = this._wikiRadius;
     this._config = { height: config.height || 400, ...config };
     // Allow pinning the card to a specific account / bike via Lovelace config.
     // When set, the corresponding dropdown is hidden and the filter is locked.
@@ -209,12 +210,26 @@ class BoschEBikeMapCard extends HTMLElement {
     } else {
       this._lockedBike = false;
     }
+    // Wikipedia search radius (m). Default 1000. Allowed: 500, 1000, 2000, 5000, 10000.
+    const allowed = [500, 1000, 2000, 5000, 10000];
+    const requested = parseInt(config.wiki_radius_m, 10);
+    this._wikiRadius = allowed.includes(requested) ? requested : 1000;
+
     // If the card was already built once (re-config without re-creation),
     // refresh UI and re-render
     if (this._ready) {
       this._applyConfigTitle();
       this._populateFilterUI();
       this._applyFilter();
+      // Wikipedia radius changed → invalidate cached articles, re-fetch if layer active
+      if (prevRadius !== undefined && prevRadius !== this._wikiRadius) {
+        this._wikiArticles.clear();
+        this._wikiRenderedInline = null;
+        this._wikiRenderedFullscreen = null;
+        if (this._wikiGroup) try { this._wikiGroup.clearLayers(); } catch (_) {}
+        if (this._fullscreenWikiGroup) try { this._fullscreenWikiGroup.clearLayers(); } catch (_) {}
+        if (this._wikiEnabled && this._currentTrackActivityId) this._loadAndRenderWiki();
+      }
       if (this._activities.length) this._show(0, true);
     }
   }
@@ -1241,13 +1256,15 @@ class BoschEBikeMapCard extends HTMLElement {
   async _loadAndRenderWiki() {
     if (!this._currentTrackActivityId || !this._currentTrack.length) return;
     const aid = this._currentTrackActivityId;
+    // Cache is keyed by activity AND radius so different radii don't collide
+    const cacheKey = `eb-wiki-${aid}-${this._wikiRadius}`;
 
     // From cache?
     let articles = this._wikiArticles.get(aid);
     if (!articles) {
       // localStorage cache
       try {
-        const cached = localStorage.getItem(`eb-wiki-${aid}`);
+        const cached = localStorage.getItem(cacheKey);
         if (cached) {
           const parsed = JSON.parse(cached);
           if (Array.isArray(parsed)) {
@@ -1264,7 +1281,9 @@ class BoschEBikeMapCard extends HTMLElement {
       try {
         articles = await this._fetchWikiArticles(this._currentTrack);
         this._wikiArticles.set(aid, articles);
-        try { localStorage.setItem(`eb-wiki-${aid}`, JSON.stringify(articles)); } catch (_) {}
+        if (articles.length > 0) {
+          try { localStorage.setItem(cacheKey, JSON.stringify(articles)); } catch (_) {}
+        }
       } catch (err) {
         console.warn("[Bosch eBike Wiki] fetch failed", err);
         articles = [];
@@ -1313,8 +1332,8 @@ class BoschEBikeMapCard extends HTMLElement {
     url.searchParams.set("action", "query");
     url.searchParams.set("list", "geosearch");
     url.searchParams.set("gscoord", `${lat}|${lon}`);
-    url.searchParams.set("gsradius", "1000");
-    url.searchParams.set("gslimit", "5");
+    url.searchParams.set("gsradius", String(this._wikiRadius || 1000));
+    url.searchParams.set("gslimit", "10");
     url.searchParams.set("format", "json");
     url.searchParams.set("origin", "*");
     try {
@@ -2783,6 +2802,19 @@ class BoschEBikeMapCardEditor extends HTMLElement {
       bikeOpts += `<option value="${this._escapeHtml(b.id)}"${selected}>${this._escapeHtml(b.label)}</option>`;
     }
 
+    const radii = [
+      { v: 500, l: "500 m" },
+      { v: 1000, l: "1 km (Standard)" },
+      { v: 2000, l: "2 km" },
+      { v: 5000, l: "5 km" },
+      { v: 10000, l: "10 km" },
+    ];
+    const selectedRadius = parseInt(cfg.wiki_radius_m, 10) || 1000;
+    const radiusOpts = radii.map((r) => {
+      const sel = r.v === selectedRadius ? " selected" : "";
+      return `<option value="${r.v}"${sel}>${r.l}</option>`;
+    }).join("");
+
     this.innerHTML = `<div style="padding:16px">
       <label style="${labelStyle.replace('margin-top:14px;', '')}">Kartenhöhe (px)</label>
       <input type="number" value="${cfg.height || 400}" min="200" max="1000" step="50" style="${inputStyle}" id="h-in">
@@ -2798,6 +2830,10 @@ class BoschEBikeMapCardEditor extends HTMLElement {
       <label style="${labelStyle}">Bike fest auswählen (optional)</label>
       <select id="bike-in" style="${inputStyle}">${bikeOpts}</select>
       <span style="${hintStyle}">Wenn gesetzt, wird das Bike-Dropdown ausgeblendet und die Karte zeigt nur Touren dieses Bikes.</span>
+
+      <label style="${labelStyle}">Wikipedia-Suchradius</label>
+      <select id="wiki-radius-in" style="${inputStyle}">${radiusOpts}</select>
+      <span style="${hintStyle}">Wie weit um jeden Stützpunkt der Route Wikipedia-Artikel gesucht werden. Größerer Radius = mehr Treffer, mehr Daten.</span>
     </div>`;
 
     this.querySelector("#h-in").addEventListener("change", (e) => {
@@ -2826,6 +2862,13 @@ class BoschEBikeMapCardEditor extends HTMLElement {
       this._config = { ...this._config };
       if (v) this._config.bike_id = v;
       else delete this._config.bike_id;
+      this._emit();
+    });
+    this.querySelector("#wiki-radius-in").addEventListener("change", (e) => {
+      const v = parseInt(e.target.value, 10);
+      this._config = { ...this._config };
+      if (v && v !== 1000) this._config.wiki_radius_m = v;
+      else delete this._config.wiki_radius_m;
       this._emit();
     });
   }
