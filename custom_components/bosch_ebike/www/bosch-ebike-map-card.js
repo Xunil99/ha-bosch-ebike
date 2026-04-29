@@ -1545,57 +1545,20 @@ class BoschEBikeMapCard extends HTMLElement {
     const west = bbox.minLon - pad;
     const east = bbox.maxLon + pad;
 
-    const query = `[out:json][timeout:30];
-(
-  node["amenity"="charging_station"](${south},${west},${north},${east});
-  node["shop"="bicycle"](${south},${west},${north},${east});
-  node["amenity"="bicycle_repair_station"](${south},${west},${north},${east});
-  node["amenity"="drinking_water"](${south},${west},${north},${east});
-  node["amenity"="toilets"](${south},${west},${north},${east});
-);
-out body;`;
-
-    // Multiple Overpass endpoints for redundancy. The main overpass-api.de
-    // instance has tightened its CORS policy and blocks POST preflights from
-    // browsers; GET-only requests sidestep that. Mirror endpoints are tried in
-    // order if the previous one fails or returns empty.
-    const endpoints = [
-      "https://overpass-api.de/api/interpreter",
-      "https://overpass.kumi.systems/api/interpreter",
-      "https://overpass.private.coffee/api/interpreter",
-    ];
-
-    let data = null;
-    for (const endpoint of endpoints) {
-      const url = endpoint + "?data=" + encodeURIComponent(query);
-      try {
-        const resp = await fetch(url, { method: "GET" });
-        if (!resp.ok) {
-          const body = await resp.text().catch(() => "");
-          console.warn(
-            `[Bosch eBike POI] Overpass HTTP ${resp.status} ${resp.statusText} from ${endpoint}: ${body.slice(0, 200)}`
-          );
-          continue;
-        }
-        data = await resp.json();
-        break;
-      } catch (err) {
-        console.warn(`[Bosch eBike POI] Overpass fetch error on ${endpoint}:`, err);
-        // try next mirror
-      }
-    }
-
-    if (!data) {
-      console.warn("[Bosch eBike POI] All Overpass endpoints failed");
+    // Route the Overpass query through the HA backend (avoids CORS issues
+    // that overpass-api.de's tightened policy causes for browser requests).
+    let elements = [];
+    try {
+      const res = await this._hass.callWS({
+        type: "bosch_ebike/get_pois",
+        south, west, north, east,
+      });
+      elements = (res && Array.isArray(res.elements)) ? res.elements : [];
+    } catch (err) {
+      console.warn("[Bosch eBike POI] backend Overpass call failed:", err);
       return [];
     }
 
-    if (data && data.remark) {
-      // Overpass signals errors and rate-limits via a "remark" field with HTTP 200
-      console.warn("[Bosch eBike POI] Overpass remark:", data.remark);
-    }
-
-    const elements = (data && Array.isArray(data.elements)) ? data.elements : [];
     if (!elements.length) {
       console.info("[Bosch eBike POI] Overpass returned no POIs in route bbox", bbox);
     }

@@ -33,6 +33,7 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     websocket_api.async_register_command(hass, ws_get_track)
     websocket_api.async_register_command(hass, ws_get_all_tracks)
     websocket_api.async_register_command(hass, ws_list_maintenance)
+    websocket_api.async_register_command(hass, ws_overpass_pois)
 
     _register_services(hass)
 
@@ -495,3 +496,98 @@ def _coordinator_for_bike(hass: HomeAssistant, bike_id: str) -> BoschEBikeCoordi
             if bike.get("id") == bike_id:
                 return coord
     return None
+
+
+# -- Overpass POI proxy --
+# overpass-api.de tightened its CORS policy and now rejects browser requests
+# from non-whitelisted origins. We fetch POIs server-side instead, where CORS
+# does not apply, and pass the result back over the websocket. Multiple
+# Overpass mirrors are tried in order with a per-request timeout.
+
+OVERPASS_ENDPOINTS = [
+    "https://overpass-api.de/api/interpreter",
+    "https://overpass.kumi.systems/api/interpreter",
+    "https://overpass.private.coffee/api/interpreter",
+]
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "bosch_ebike/get_pois",
+        vol.Required("south"): vol.Coerce(float),
+        vol.Required("west"): vol.Coerce(float),
+        vol.Required("north"): vol.Coerce(float),
+        vol.Required("east"): vol.Coerce(float),
+    }
+)
+@websocket_api.async_response
+async def ws_overpass_pois(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict
+) -> None:
+    """Proxy Overpass POI queries through the backend (no CORS).
+
+    Looks up charging stations, bike shops/repair stations, drinking water and
+    toilets within the supplied bounding box. Each Overpass mirror is tried in
+    turn; the first that responds with valid JSON wins. The full element list
+    is passed back to the card; client-side proximity filtering keeps the
+    radius user-tunable.
+    """
+    import asyncio
+    from homeassistant.helpers.aiohttp_client import async_get_clientsession
+
+    south = float(msg["south"])
+    west = float(msg["west"])
+    north = float(msg["north"])
+    east = float(msg["east"])
+    bbox = f"({south},{west},{north},{east})"
+
+    query = (
+        "[out:json][timeout:30];"
+        "("
+        f'node["amenity"="charging_station"]{bbox};'
+        f'node["shop"="bicycle"]{bbox};'
+        f'node["amenity"="bicycle_repair_station"]{bbox};'
+        f'node["amenity"="drinking_water"]{bbox};'
+        f'node["amenity"="toilets"]{bbox};'
+        ");"
+        "out body;"
+    )
+
+    session = async_get_clientsession(hass)
+    elements = None
+    last_error: str | None = None
+
+    for endpoint in OVERPASS_ENDPOINTS:
+        try:
+            async with asyncio.timeout(35):
+                async with session.get(
+                    endpoint,
+                    params={"data": query},
+                    headers={"User-Agent": "ha-bosch-ebike-poi/1.0"},
+                ) as resp:
+                    if resp.status != 200:
+                        body = await resp.text()
+                        last_error = f"{endpoint} HTTP {resp.status}: {body[:200]}"
+                        _LOGGER.warning("Overpass %s", last_error)
+                        continue
+                    data = await resp.json(content_type=None)
+                    if isinstance(data, dict) and data.get("remark"):
+                        _LOGGER.warning("Overpass remark from %s: %s", endpoint, data["remark"])
+                    elements = data.get("elements", []) if isinstance(data, dict) else []
+                    break
+        except asyncio.TimeoutError:
+            last_error = f"{endpoint} timed out"
+            _LOGGER.warning("Overpass %s", last_error)
+        except Exception as err:  # noqa: BLE001
+            last_error = f"{endpoint}: {err}"
+            _LOGGER.warning("Overpass error on %s: %s", endpoint, err)
+
+    if elements is None:
+        connection.send_error(
+            msg["id"],
+            "overpass_failed",
+            last_error or "All Overpass endpoints failed",
+        )
+        return
+
+    connection.send_result(msg["id"], {"elements": elements})
