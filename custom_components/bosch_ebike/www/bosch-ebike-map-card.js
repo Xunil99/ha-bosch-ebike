@@ -1273,15 +1273,16 @@ class BoschEBikeMapCard extends HTMLElement {
     // Cache is keyed by activity AND radius so different radii don't collide
     const cacheKey = `eb-wiki-${aid}-${this._wikiRadius}`;
 
-    // From cache?
+    // From cache? Empty arrays from older versions or transient failures are
+    // ignored so navigating between tours always re-tries when nothing was
+    // found before — matches the POI handling in _loadAndRenderPoi.
     let articles = this._wikiArticles.get(aid);
-    if (!articles) {
-      // localStorage cache
+    if (!articles || articles.length === 0) {
       try {
         const cached = localStorage.getItem(cacheKey);
         if (cached) {
           const parsed = JSON.parse(cached);
-          if (Array.isArray(parsed)) {
+          if (Array.isArray(parsed) && parsed.length > 0) {
             articles = parsed;
             this._wikiArticles.set(aid, parsed);
           }
@@ -1289,7 +1290,7 @@ class BoschEBikeMapCard extends HTMLElement {
       } catch (_) {}
     }
 
-    if (!articles) {
+    if (!articles || articles.length === 0) {
       if (this._wikiLoading.has(aid)) return;
       this._wikiLoading.add(aid);
       try {
