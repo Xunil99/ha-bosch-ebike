@@ -1,0 +1,121 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Bosch eBike instellen",
+        "description": "Voer de Client-ID in uit je app-registratie in het Bosch eBike-portaal op portal.bosch-ebike.com/data-act/app",
+        "data": {
+          "client_id": "Client-ID"
+        }
+      },
+      "auth_code": {
+        "title": "Bosch login",
+        "description": "1. Open deze link in je browser: [{authorize_url}]({authorize_url})\n2. Log in met je Bosch SingleKey ID\n3. Na de login wordt de browser doorgestuurd naar `http://localhost:8888/callback?code=...`. De browser toont een foutpagina (er luistert geen server) — dat is normaal.\n4. Kopieer de **volledige URL** uit de adresbalk (of alleen de waarde achter `code=`) en plak deze hieronder — beide werken.",
+        "data": {
+          "auth_code": "Autorisatiecode of callback-URL"
+        }
+      }
+    },
+    "error": {
+      "no_auth_code": "Voer de autorisatiecode in.",
+      "token_error": "Tokenuitwisseling mislukt. Probeer het opnieuw."
+    },
+    "abort": {
+      "no_callback": "Geen callback ontvangen van Bosch login.",
+      "no_auth_code": "Geen autorisatiecode ontvangen.",
+      "token_error": "Tokenuitwisseling mislukt. Probeer het opnieuw."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "odometer": { "name": "Kilometerstand" },
+      "motor_total_hours": { "name": "Motor-bedrijfsuren" },
+      "motor_assist_hours": { "name": "Motor-ondersteuningsuren" },
+      "max_assist_speed": { "name": "Max. ondersteuningssnelheid" },
+      "active_assist_modes": { "name": "Actieve ondersteuningsmodi" },
+      "walk_assist_speed": { "name": "Loophulp-snelheid" },
+      "next_service_odometer": { "name": "Volgende service (km)" },
+      "service_due_in_days": { "name": "Service over (dagen)" },
+      "service_due_in_km": { "name": "Service over (km)" },
+      "maintenance_overview": { "name": "Onderhoudsoverzicht" },
+      "last_ride_distance": { "name": "Laatste rit: afstand" },
+      "last_ride_duration": { "name": "Laatste rit: duur" },
+      "last_ride_avg_speed": { "name": "Laatste rit: gem. snelheid" },
+      "last_ride_max_speed": { "name": "Laatste rit: max. snelheid" },
+      "last_ride_calories": { "name": "Laatste rit: calorieën" },
+      "last_ride_elevation_gain": { "name": "Laatste rit: hoogtemeters ↑" },
+      "last_ride_elevation_loss": { "name": "Laatste rit: hoogtemeters ↓" },
+      "last_ride_date": { "name": "Laatste rit: datum" },
+      "last_ride_title": { "name": "Laatste rit: titel" },
+      "last_ride_avg_cadence": { "name": "Laatste rit: gem. trapfrequentie" },
+      "last_ride_max_cadence": { "name": "Laatste rit: max. trapfrequentie" },
+      "last_ride_avg_power": { "name": "Laatste rit: gem. vermogen" },
+      "last_ride_max_power": { "name": "Laatste rit: max. vermogen" },
+      "last_ride_battery_wh": { "name": "Laatste rit: accuverbruik (Wh)" },
+      "last_ride_battery_percent": { "name": "Laatste rit: accuverbruik (%)" },
+      "last_ride_difficulty": { "name": "Laatste rit: moeilijkheid" },
+      "last_ride_start_location": { "name": "Laatste rit: vertrekpunt" },
+      "last_ride_end_location": { "name": "Laatste rit: eindpunt" },
+      "last_ride_start_time": { "name": "Laatste rit: starttijd" },
+      "last_ride_end_time": { "name": "Laatste rit: eindtijd" },
+      "days_since_last_ride": { "name": "Dagen sinds laatste rit" },
+      "total_rides": { "name": "Aantal ritten totaal" },
+      "total_distance_activities": { "name": "Totale afstand (ritten)" },
+      "total_duration": { "name": "Totale rijtijd" },
+      "total_calories": { "name": "Calorieën totaal" },
+      "total_elevation_gain": { "name": "Hoogtemeters totaal" },
+      "avg_speed_all_rides": { "name": "Gem. snelheid (alle ritten)" },
+      "avg_power_all_rides": { "name": "Gem. vermogen (alle ritten)" },
+      "avg_cadence_all_rides": { "name": "Gem. trapfrequentie (alle ritten)" }
+    },
+    "number": {
+      "battery_capacity": { "name": "Accucapaciteit" },
+      "service_due_odometer": { "name": "Service vervalt bij (km)" }
+    },
+    "date": {
+      "service_due_date": { "name": "Service-vervaldatum" }
+    }
+  },
+  "services": {
+    "add_maintenance": {
+      "name": "Onderhoudsitem toevoegen",
+      "description": "Voegt een nieuw, aangepast onderhoudsitem toe voor een fiets (bijv. ketting wisselen elke 3000 km, inspectie elke 365 dagen). Minimaal interval_km of interval_days moet worden opgegeven.",
+      "fields": {
+        "bike_id": {
+          "name": "Fiets-ID",
+          "description": "ID van de fiets (zie attribuut van fiets-sensoren)"
+        },
+        "name": {
+          "name": "Naam",
+          "description": "Vrije tekst, bijv. \"Ketting wisselen\""
+        },
+        "interval_km": {
+          "name": "Interval (km)",
+          "description": "Na hoeveel km moet er een herinnering komen"
+        },
+        "interval_days": {
+          "name": "Interval (dagen)",
+          "description": "Na hoeveel dagen moet er een herinnering komen"
+        }
+      }
+    },
+    "complete_maintenance": {
+      "name": "Onderhoudsitem als gedaan markeren",
+      "description": "Reset de teller van een item (datum + kilometerstand).",
+      "fields": {
+        "bike_id": { "name": "Fiets-ID" },
+        "item_id": {
+          "name": "Item-ID",
+          "description": "Uit het sensor-attribuut \"items\""
+        }
+      }
+    },
+    "remove_maintenance": {
+      "name": "Onderhoudsitem verwijderen",
+      "fields": {
+        "bike_id": { "name": "Fiets-ID" },
+        "item_id": { "name": "Item-ID" }
+      }
+    }
+  }
+}

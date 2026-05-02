@@ -1,0 +1,121 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Bosch eBike Setup",
+        "description": "Enter the Client-ID from your Bosch eBike Portal app registration at portal.bosch-ebike.com/data-act/app",
+        "data": {
+          "client_id": "Client-ID"
+        }
+      },
+      "auth_code": {
+        "title": "Bosch Login",
+        "description": "1. Open this link in your browser: [{authorize_url}]({authorize_url})\n2. Log in with your Bosch SingleKey ID\n3. After login the browser is redirected to `http://localhost:8888/callback?code=...`. The browser will show an error (no server is listening) — that's expected.\n4. Copy the **entire URL** from the address bar (or just the value after `code=`) and paste it below — both work.",
+        "data": {
+          "auth_code": "Authorization Code or Callback URL"
+        }
+      }
+    },
+    "error": {
+      "no_auth_code": "Please enter the authorization code.",
+      "token_error": "Token exchange failed. Please try again."
+    },
+    "abort": {
+      "no_callback": "No callback received from Bosch login.",
+      "no_auth_code": "No authorization code received.",
+      "token_error": "Token exchange failed. Please try again."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "odometer": { "name": "Odometer" },
+      "motor_total_hours": { "name": "Motor Total Hours" },
+      "motor_assist_hours": { "name": "Motor Assist Hours" },
+      "max_assist_speed": { "name": "Max Assist Speed" },
+      "active_assist_modes": { "name": "Active Assist Modes" },
+      "walk_assist_speed": { "name": "Walk Assist Speed" },
+      "next_service_odometer": { "name": "Next Service Odometer" },
+      "service_due_in_days": { "name": "Service Due In Days" },
+      "service_due_in_km": { "name": "Service Due In Kilometers" },
+      "maintenance_overview": { "name": "Maintenance Overview" },
+      "last_ride_distance": { "name": "Last Ride Distance" },
+      "last_ride_duration": { "name": "Last Ride Duration" },
+      "last_ride_avg_speed": { "name": "Last Ride Avg Speed" },
+      "last_ride_max_speed": { "name": "Last Ride Max Speed" },
+      "last_ride_calories": { "name": "Last Ride Calories" },
+      "last_ride_elevation_gain": { "name": "Last Ride Elevation Gain" },
+      "last_ride_elevation_loss": { "name": "Last Ride Elevation Loss" },
+      "last_ride_date": { "name": "Last Ride Date" },
+      "last_ride_title": { "name": "Last Ride Title" },
+      "last_ride_avg_cadence": { "name": "Last Ride Avg Cadence" },
+      "last_ride_max_cadence": { "name": "Last Ride Max Cadence" },
+      "last_ride_avg_power": { "name": "Last Ride Avg Power" },
+      "last_ride_max_power": { "name": "Last Ride Max Power" },
+      "last_ride_battery_wh": { "name": "Last Ride Battery (Wh)" },
+      "last_ride_battery_percent": { "name": "Last Ride Battery (%)" },
+      "last_ride_difficulty": { "name": "Last Ride Difficulty" },
+      "last_ride_start_location": { "name": "Last Ride Start Location" },
+      "last_ride_end_location": { "name": "Last Ride End Location" },
+      "last_ride_start_time": { "name": "Last Ride Start Time" },
+      "last_ride_end_time": { "name": "Last Ride End Time" },
+      "days_since_last_ride": { "name": "Days Since Last Ride" },
+      "total_rides": { "name": "Total Rides" },
+      "total_distance_activities": { "name": "Total Distance (Activities)" },
+      "total_duration": { "name": "Total Ride Duration" },
+      "total_calories": { "name": "Total Calories" },
+      "total_elevation_gain": { "name": "Total Elevation Gain" },
+      "avg_speed_all_rides": { "name": "Avg Speed (All Rides)" },
+      "avg_power_all_rides": { "name": "Avg Rider Power (All Rides)" },
+      "avg_cadence_all_rides": { "name": "Avg Cadence (All Rides)" }
+    },
+    "number": {
+      "battery_capacity": { "name": "Battery Capacity" },
+      "service_due_odometer": { "name": "Service Due Odometer" }
+    },
+    "date": {
+      "service_due_date": { "name": "Service Due Date" }
+    }
+  },
+  "services": {
+    "add_maintenance": {
+      "name": "Add maintenance item",
+      "description": "Adds a new custom maintenance item for a bike (e.g. chain swap every 3000 km, inspection every 365 days). At least interval_km or interval_days must be provided.",
+      "fields": {
+        "bike_id": {
+          "name": "Bike ID",
+          "description": "ID of the bike (see attribute on bike sensors)"
+        },
+        "name": {
+          "name": "Name",
+          "description": "Free text, e.g. \"Chain swap\""
+        },
+        "interval_km": {
+          "name": "Interval (km)",
+          "description": "After how many km to remind"
+        },
+        "interval_days": {
+          "name": "Interval (days)",
+          "description": "After how many days to remind"
+        }
+      }
+    },
+    "complete_maintenance": {
+      "name": "Mark maintenance item as done",
+      "description": "Resets the counter for a maintenance item (date + odometer).",
+      "fields": {
+        "bike_id": { "name": "Bike ID" },
+        "item_id": {
+          "name": "Item ID",
+          "description": "From the sensor's \"items\" attribute"
+        }
+      }
+    },
+    "remove_maintenance": {
+      "name": "Delete maintenance item",
+      "fields": {
+        "bike_id": { "name": "Bike ID" },
+        "item_id": { "name": "Item ID" }
+      }
+    }
+  }
+}

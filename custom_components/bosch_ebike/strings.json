@@ -25,5 +25,47 @@
       "no_auth_code": "No authorization code received.",
       "token_error": "Token exchange failed. Please try again."
     }
+  },
+  "services": {
+    "add_maintenance": {
+      "name": "Add maintenance item",
+      "description": "Adds a new custom maintenance item for a bike (e.g. chain swap every 3000 km, inspection every 365 days). At least interval_km or interval_days must be provided.",
+      "fields": {
+        "bike_id": {
+          "name": "Bike ID",
+          "description": "ID of the bike (see attribute on bike sensors)"
+        },
+        "name": {
+          "name": "Name",
+          "description": "Free text, e.g. \"Chain swap\""
+        },
+        "interval_km": {
+          "name": "Interval (km)",
+          "description": "After how many km to remind"
+        },
+        "interval_days": {
+          "name": "Interval (days)",
+          "description": "After how many days to remind"
+        }
+      }
+    },
+    "complete_maintenance": {
+      "name": "Mark maintenance item as done",
+      "description": "Resets the counter for a maintenance item (date + odometer).",
+      "fields": {
+        "bike_id": { "name": "Bike ID" },
+        "item_id": {
+          "name": "Item ID",
+          "description": "From the sensor's \"items\" attribute"
+        }
+      }
+    },
+    "remove_maintenance": {
+      "name": "Delete maintenance item",
+      "fields": {
+        "bike_id": { "name": "Bike ID" },
+        "item_id": { "name": "Item ID" }
+      }
+    }
   }
 }

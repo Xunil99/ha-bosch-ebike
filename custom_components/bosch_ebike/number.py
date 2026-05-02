@@ -42,6 +42,7 @@ class BatteryCapacityNumber(NumberEntity):
 
     _attr_has_entity_name = True
     _attr_name = "Battery Capacity"
+    _attr_translation_key = "battery_capacity"
     _attr_icon = "mdi:battery-charging"
     _attr_native_unit_of_measurement = "Wh"
     _attr_native_min_value = 100

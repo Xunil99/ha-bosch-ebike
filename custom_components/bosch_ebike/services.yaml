@@ -1,27 +1,16 @@
 add_maintenance:
-  name: Wartungsposten anlegen
-  description: >-
-    Legt einen neuen, benutzerdefinierten Wartungsposten für ein Bike an
-    (z. B. Kettenwechsel alle 3000 km, Inspektion alle 365 Tage). Mindestens
-    `interval_km` oder `interval_days` muss angegeben werden.
   fields:
     bike_id:
-      name: Bike-ID
-      description: ID des Bikes (siehe Attribut der Bike-Sensoren)
       required: true
       example: "abcdef-1234"
       selector:
         text:
     name:
-      name: Bezeichnung
-      description: Frei wählbar, z. B. "Kettenwechsel"
       required: true
-      example: "Kettenwechsel"
+      example: "Chain swap"
       selector:
         text:
     interval_km:
-      name: Intervall in km
-      description: Nach wie vielen km soll erinnert werden
       required: false
       example: 3000
       selector:
@@ -31,8 +20,6 @@ add_maintenance:
           step: 0.1
           unit_of_measurement: km
     interval_days:
-      name: Intervall in Tagen
-      description: Nach wie vielen Tagen soll erinnert werden
       required: false
       example: 365
       selector:
@@ -43,31 +30,23 @@ add_maintenance:
           unit_of_measurement: d
 
 complete_maintenance:
-  name: Wartungsposten als erledigt markieren
-  description: Setzt den Zähler eines Postens zurück (Datum + Kilometerstand).
   fields:
     bike_id:
-      name: Bike-ID
       required: true
       selector:
         text:
     item_id:
-      name: Posten-ID
-      description: Aus dem Sensor-Attribut "items"
       required: true
       selector:
         text:
 
 remove_maintenance:
-  name: Wartungsposten löschen
   fields:
     bike_id:
-      name: Bike-ID
       required: true
       selector:
         text:
     item_id:
-      name: Posten-ID
       required: true
       selector:
         text:

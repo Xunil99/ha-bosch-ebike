@@ -3,6 +3,331 @@
  * Robust rewrite focused on view switches, iOS WebView quirks, and hidden-container recovery.
  */
 
+// ---------------------------------------------------------------------------
+// i18n — strings localized for English, German, Dutch.
+// Selection follows hass.locale.language with fallback to English.
+// ---------------------------------------------------------------------------
+const I18N = {
+  en: {
+    // Main card
+    rides_title: "Bosch eBike Rides",
+    sort_label: "Sort by:",
+    sort_dir_title: "Reverse sort direction",
+    account_label: "Account:",
+    bike_label: "Bike:",
+    all_accounts: "All accounts",
+    all_bikes: "All bikes",
+    sort_date: "Date",
+    sort_distance: "Distance",
+    sort_duration: "Duration",
+    sort_avg_speed: "Avg speed",
+    sort_max_speed: "Max speed",
+    sort_elevation: "Elevation",
+    sort_calories: "Calories",
+    sort_difficulty: "Difficulty",
+    sort_battery_wh: "Battery Wh",
+    sort_battery_pct: "Battery %",
+    // Map controls
+    btn_change_style: "Change map style",
+    btn_wiki: "Wikipedia articles",
+    btn_poi: "Charging stations, repair shops, drinking water, toilets",
+    btn_gpx: "Download GPX",
+    btn_fullscreen: "Fullscreen",
+    btn_prev: "Previous ride",
+    btn_next: "Next ride",
+    btn_fit: "Fit route",
+    btn_close: "Close",
+    btn_view_label: "Fullscreen view",
+    tab_map: "Map",
+    tab_elevation: "Elevation",
+    // Stats labels
+    stat_distance: "Distance",
+    stat_duration: "Duration",
+    stat_avg_kmh: "Ø km/h",
+    stat_max_kmh: "Max km/h",
+    stat_elevation_up: "Elevation ↑",
+    stat_calories: "Calories",
+    stat_difficulty: "Difficulty",
+    stat_battery: "Battery",
+    stat_battery_pct: "Battery %",
+    // Speed legend
+    speed_legend: "Speed",
+    // Status / messages
+    msg_loading_route: "Loading route …",
+    msg_no_gps: "No GPS points found",
+    msg_no_rides: "No rides found",
+    msg_no_filter_match: "No rides match this filter",
+    msg_unnamed_ride: "Unnamed ride",
+    msg_error_prefix: "Error: ",
+    err_leaflet_load: "Leaflet could not be loaded",
+    err_create_map: "Could not create the map",
+    // Profile chart
+    profile_title: "Elevation profile",
+    profile_no_data: "No elevation data available",
+    profile_min_max: (min, max) => `Min ${min} m · Max ${max} m`,
+    profile_ascent: "Ascent",
+    profile_descent: "Descent",
+    profile_avg_speed: "Avg speed",
+    profile_max_speed: "Max speed",
+    profile_cadence: "Cadence",
+    profile_power: "Power",
+    profile_avg_max_rpm: (avg, max) => `Ø ${avg} rpm · Max ${max} rpm`,
+    profile_avg_max_w: (avg, max) => `Ø ${avg} W · Max ${max} W`,
+    // Wikipedia popup
+    wiki_loading_preview: "Loading preview …",
+    wiki_no_preview: "Preview not available.",
+    wiki_open_link: "Open on Wikipedia",
+    // POI popups
+    poi_charging: "Charging station",
+    poi_bicycle_shop: "Bike shop",
+    poi_repair: "Repair station",
+    poi_water: "Drinking water",
+    poi_toilet: "Toilet",
+    poi_open_osm: "Open on OpenStreetMap",
+    // Editor
+    editor_height: "Card height (px)",
+    editor_title: "Title (optional)",
+    editor_title_hint: "Shown in the card header — useful when you have multiple pinned cards side by side.",
+    editor_account_label: "Pin to account (optional)",
+    editor_account_hint: "When set, the account dropdown is hidden and the card only shows rides from this account.",
+    editor_bike_label: "Pin to bike (optional)",
+    editor_bike_hint: "When set, the bike dropdown is hidden and the card only shows rides from this bike.",
+    editor_wiki_radius: "Wikipedia search radius",
+    editor_wiki_radius_hint: "How far around each route sample point Wikipedia articles are searched. Larger radius = more results, more data.",
+    editor_poi_radius: "POI search radius",
+    editor_poi_radius_hint: "How far around the route charging stations, repair shops, drinking water and toilets are searched.",
+    editor_select_all: "All",
+    radius_default_suffix: "(default)",
+    // Heatmap card
+    heatmap_title: "Bosch eBike Heatmap",
+    heat_range_label: "Period:",
+    heat_account_label: "Account:",
+    heat_bike_label: "Bike:",
+    heat_range_30: "30 days",
+    heat_range_90: "3 months",
+    heat_range_365: "12 months",
+    heat_range_all: "All",
+    heat_loading: "Loading rides …",
+    heat_load_failed: "Error loading rides",
+    heat_no_match: "No rides match this filter",
+    heat_stat_rides: "Rides",
+    heat_stat_distance: "Distance",
+    // Map style names
+    style_standard: "Standard",
+    style_topo: "Topo",
+    style_sat: "Satellite",
+  },
+  de: {
+    rides_title: "Bosch eBike Rides",
+    sort_label: "Sortierung:",
+    sort_dir_title: "Sortierrichtung umkehren",
+    account_label: "Konto:",
+    bike_label: "Bike:",
+    all_accounts: "Alle Konten",
+    all_bikes: "Alle Bikes",
+    sort_date: "Datum",
+    sort_distance: "Distanz",
+    sort_duration: "Dauer",
+    sort_avg_speed: "Ø Geschw.",
+    sort_max_speed: "Max Geschw.",
+    sort_elevation: "Höhenmeter",
+    sort_calories: "Kalorien",
+    sort_difficulty: "Schwierigkeit",
+    sort_battery_wh: "Akku Wh",
+    sort_battery_pct: "Akku %",
+    btn_change_style: "Kartenstil wechseln",
+    btn_wiki: "Wikipedia-Artikel",
+    btn_poi: "Ladestationen, Werkstätten, Trinkwasser, Toiletten",
+    btn_gpx: "GPX herunterladen",
+    btn_fullscreen: "Vollbild",
+    btn_prev: "Vorherige Fahrt",
+    btn_next: "Nächste Fahrt",
+    btn_fit: "Route einpassen",
+    btn_close: "Schließen",
+    btn_view_label: "Vollbildansicht",
+    tab_map: "Karte",
+    tab_elevation: "Höhenmeter",
+    stat_distance: "Distanz",
+    stat_duration: "Dauer",
+    stat_avg_kmh: "Ø km/h",
+    stat_max_kmh: "Max km/h",
+    stat_elevation_up: "Höhenmeter ↑",
+    stat_calories: "Kalorien",
+    stat_difficulty: "Schwierigkeit",
+    stat_battery: "Akku",
+    stat_battery_pct: "Akku %",
+    speed_legend: "Geschwindigkeit",
+    msg_loading_route: "Lade Route …",
+    msg_no_gps: "Keine GPS-Punkte gefunden",
+    msg_no_rides: "Keine Fahrten gefunden",
+    msg_no_filter_match: "Keine Fahrten für diesen Filter",
+    msg_unnamed_ride: "Unbenannte Fahrt",
+    msg_error_prefix: "Fehler: ",
+    err_leaflet_load: "Leaflet konnte nicht geladen werden",
+    err_create_map: "Fehler beim Erzeugen der Karte",
+    profile_title: "Höhenprofil",
+    profile_no_data: "Keine Höhendaten verfügbar",
+    profile_min_max: (min, max) => `Min ${min} m · Max ${max} m`,
+    profile_ascent: "Aufstieg",
+    profile_descent: "Abstieg",
+    profile_avg_speed: "Ø Geschwindigkeit",
+    profile_max_speed: "Max Geschwindigkeit",
+    profile_cadence: "Trittfrequenz",
+    profile_power: "Leistung",
+    profile_avg_max_rpm: (avg, max) => `Ø ${avg} rpm · Max ${max} rpm`,
+    profile_avg_max_w: (avg, max) => `Ø ${avg} W · Max ${max} W`,
+    wiki_loading_preview: "Lade Vorschau …",
+    wiki_no_preview: "Vorschau nicht verfügbar.",
+    wiki_open_link: "Auf Wikipedia öffnen",
+    poi_charging: "Ladestation",
+    poi_bicycle_shop: "Fahrradgeschäft",
+    poi_repair: "Reparaturstation",
+    poi_water: "Trinkwasser",
+    poi_toilet: "Toilette",
+    poi_open_osm: "Auf OpenStreetMap",
+    editor_height: "Kartenhöhe (px)",
+    editor_title: "Titel (optional)",
+    editor_title_hint: "Wird in der Kopfzeile der Karte angezeigt — nützlich, wenn Du mehrere fest verdrahtete Karten nebeneinander hast.",
+    editor_account_label: "Konto fest auswählen (optional)",
+    editor_account_hint: "Wenn gesetzt, wird das Konto-Dropdown ausgeblendet und die Karte zeigt nur Touren dieses Kontos.",
+    editor_bike_label: "Bike fest auswählen (optional)",
+    editor_bike_hint: "Wenn gesetzt, wird das Bike-Dropdown ausgeblendet und die Karte zeigt nur Touren dieses Bikes.",
+    editor_wiki_radius: "Wikipedia-Suchradius",
+    editor_wiki_radius_hint: "Wie weit um jeden Stützpunkt der Route Wikipedia-Artikel gesucht werden. Größerer Radius = mehr Treffer, mehr Daten.",
+    editor_poi_radius: "POI-Suchradius",
+    editor_poi_radius_hint: "Wie weit um die Route Ladestationen, Werkstätten, Trinkwasser und Toiletten gesucht werden.",
+    editor_select_all: "Alle",
+    radius_default_suffix: "(Standard)",
+    heatmap_title: "Bosch eBike Heatmap",
+    heat_range_label: "Zeitraum:",
+    heat_account_label: "Konto:",
+    heat_bike_label: "Bike:",
+    heat_range_30: "30 Tage",
+    heat_range_90: "3 Monate",
+    heat_range_365: "12 Monate",
+    heat_range_all: "Alle",
+    heat_loading: "Lade Touren …",
+    heat_load_failed: "Fehler beim Laden der Touren",
+    heat_no_match: "Keine Touren in diesem Filter",
+    heat_stat_rides: "Touren",
+    heat_stat_distance: "Distanz",
+    style_standard: "Standard",
+    style_topo: "Topo",
+    style_sat: "Satellit",
+  },
+  nl: {
+    rides_title: "Bosch eBike Ritten",
+    sort_label: "Sortering:",
+    sort_dir_title: "Sorteervolgorde omkeren",
+    account_label: "Account:",
+    bike_label: "Fiets:",
+    all_accounts: "Alle accounts",
+    all_bikes: "Alle fietsen",
+    sort_date: "Datum",
+    sort_distance: "Afstand",
+    sort_duration: "Duur",
+    sort_avg_speed: "Gem. snelheid",
+    sort_max_speed: "Max. snelheid",
+    sort_elevation: "Hoogtemeters",
+    sort_calories: "Calorieën",
+    sort_difficulty: "Moeilijkheid",
+    sort_battery_wh: "Accu Wh",
+    sort_battery_pct: "Accu %",
+    btn_change_style: "Kaartstijl wisselen",
+    btn_wiki: "Wikipedia-artikelen",
+    btn_poi: "Laadstations, werkplaatsen, drinkwater, toiletten",
+    btn_gpx: "GPX downloaden",
+    btn_fullscreen: "Volledig scherm",
+    btn_prev: "Vorige rit",
+    btn_next: "Volgende rit",
+    btn_fit: "Route inpassen",
+    btn_close: "Sluiten",
+    btn_view_label: "Volledig schermweergave",
+    tab_map: "Kaart",
+    tab_elevation: "Hoogteprofiel",
+    stat_distance: "Afstand",
+    stat_duration: "Duur",
+    stat_avg_kmh: "Ø km/u",
+    stat_max_kmh: "Max km/u",
+    stat_elevation_up: "Hoogtemeters ↑",
+    stat_calories: "Calorieën",
+    stat_difficulty: "Moeilijkheid",
+    stat_battery: "Accu",
+    stat_battery_pct: "Accu %",
+    speed_legend: "Snelheid",
+    msg_loading_route: "Route laden …",
+    msg_no_gps: "Geen GPS-punten gevonden",
+    msg_no_rides: "Geen ritten gevonden",
+    msg_no_filter_match: "Geen ritten voldoen aan dit filter",
+    msg_unnamed_ride: "Naamloze rit",
+    msg_error_prefix: "Fout: ",
+    err_leaflet_load: "Leaflet kon niet worden geladen",
+    err_create_map: "Kan kaart niet maken",
+    profile_title: "Hoogteprofiel",
+    profile_no_data: "Geen hoogtegegevens beschikbaar",
+    profile_min_max: (min, max) => `Min ${min} m · Max ${max} m`,
+    profile_ascent: "Stijging",
+    profile_descent: "Daling",
+    profile_avg_speed: "Gem. snelheid",
+    profile_max_speed: "Max. snelheid",
+    profile_cadence: "Trapfrequentie",
+    profile_power: "Vermogen",
+    profile_avg_max_rpm: (avg, max) => `Ø ${avg} rpm · Max ${max} rpm`,
+    profile_avg_max_w: (avg, max) => `Ø ${avg} W · Max ${max} W`,
+    wiki_loading_preview: "Voorbeeld laden …",
+    wiki_no_preview: "Voorbeeld niet beschikbaar.",
+    wiki_open_link: "Op Wikipedia openen",
+    poi_charging: "Laadstation",
+    poi_bicycle_shop: "Fietsenwinkel",
+    poi_repair: "Reparatiestation",
+    poi_water: "Drinkwater",
+    poi_toilet: "Toilet",
+    poi_open_osm: "Op OpenStreetMap openen",
+    editor_height: "Kaarthoogte (px)",
+    editor_title: "Titel (optioneel)",
+    editor_title_hint: "Wordt in de koptekst van de kaart getoond — handig als je meerdere vastgezette kaarten naast elkaar hebt.",
+    editor_account_label: "Vastzetten op account (optioneel)",
+    editor_account_hint: "Indien ingesteld wordt het account-dropdown verborgen en toont de kaart alleen ritten van dit account.",
+    editor_bike_label: "Vastzetten op fiets (optioneel)",
+    editor_bike_hint: "Indien ingesteld wordt het fiets-dropdown verborgen en toont de kaart alleen ritten van deze fiets.",
+    editor_wiki_radius: "Wikipedia-zoekstraal",
+    editor_wiki_radius_hint: "Hoe ver er rond elk steunpunt van de route naar Wikipedia-artikelen wordt gezocht. Grotere straal = meer treffers, meer data.",
+    editor_poi_radius: "POI-zoekstraal",
+    editor_poi_radius_hint: "Hoe ver er rond de route naar laadstations, werkplaatsen, drinkwater en toiletten wordt gezocht.",
+    editor_select_all: "Alle",
+    radius_default_suffix: "(standaard)",
+    heatmap_title: "Bosch eBike Heatmap",
+    heat_range_label: "Periode:",
+    heat_account_label: "Account:",
+    heat_bike_label: "Fiets:",
+    heat_range_30: "30 dagen",
+    heat_range_90: "3 maanden",
+    heat_range_365: "12 maanden",
+    heat_range_all: "Alle",
+    heat_loading: "Ritten laden …",
+    heat_load_failed: "Fout bij laden van ritten",
+    heat_no_match: "Geen ritten voldoen aan dit filter",
+    heat_stat_rides: "Ritten",
+    heat_stat_distance: "Afstand",
+    style_standard: "Standaard",
+    style_topo: "Topo",
+    style_sat: "Satelliet",
+  },
+};
+
+/**
+ * Look up a localized string. `hass` may be null during early init.
+ * Falls back to English when the requested key is missing.
+ */
+function ebT(hass, key, ...args) {
+  const lang = ((hass && hass.locale && hass.locale.language) || "en")
+    .slice(0, 2).toLowerCase();
+  const dict = I18N[lang] || I18N.en;
+  const value = dict[key] !== undefined ? dict[key] : I18N.en[key];
+  if (value === undefined) return key;
+  return typeof value === "function" ? value(...args) : value;
+}
+
 const LEAFLET_JS = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
 const LEAFLET_CSS = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
 
@@ -17,19 +342,19 @@ function ensureLeafletCss() {
 const MAP_STYLES = {
   osm: {
     label: "OSM",
-    name: "Standard",
+    nameKey: "style_standard",
     url: "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
     options: { maxZoom: 19, updateWhenIdle: true, keepBuffer: 2, attribution: '&copy; OpenStreetMap contributors &copy; CARTO' }
   },
   topo: {
     label: "Topo",
-    name: "Topo",
+    nameKey: "style_topo",
     url: "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",
     options: { maxZoom: 17, updateWhenIdle: true, keepBuffer: 2 }
   },
   sat: {
     label: "Sat",
-    name: "Satellit",
+    nameKey: "style_sat",
     url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
     options: { maxZoom: 19, updateWhenIdle: true, keepBuffer: 2 }
   }
@@ -297,7 +622,7 @@ class BoschEBikeMapCard extends HTMLElement {
       this._scheduleActivation("boot finished");
     } catch (error) {
       console.error("[Bosch eBike Map] boot error", error);
-      this._msg("Fehler: " + (error?.message || error));
+      this._msg(this._t("msg_error_prefix") + (error?.message || error));
     } finally {
       this._booting = false;
     }
@@ -500,10 +825,11 @@ class BoschEBikeMapCard extends HTMLElement {
     card.appendChild(style);
 
     const wrap = document.createElement("div");
+    const t = (k) => this._t(k);
     wrap.innerHTML = `
       <div class="eb-head">
         <svg viewBox="0 0 24 24" width="22" height="22"><path fill="white" d="M15.5,5.5C16.9,5.5 18,6.6 18,8C18,9.4 16.9,10.5 15.5,10.5C14.1,10.5 13,9.4 13,8C13,6.6 14.1,5.5 15.5,5.5M5,12C2.2,12 0,14.2 0,17C0,19.8 2.2,22 5,22C7.8,22 10,19.8 10,17C10,14.2 7.8,12 5,12M5,20.5C3.1,20.5 1.5,18.9 1.5,17C1.5,15.1 3.1,13.5 5,13.5C6.9,13.5 8.5,15.1 8.5,17C8.5,18.9 6.9,20.5 5,20.5M19,12C16.2,12 14,14.2 14,17C14,19.8 16.2,22 19,22C21.8,22 24,19.8 24,17C24,14.2 21.8,12 19,12M19,20.5C17.1,20.5 15.5,18.9 15.5,17C15.5,15.1 17.1,13.5 19,13.5C20.9,13.5 22.5,15.1 22.5,17C22.5,18.9 20.9,20.5 19,20.5M12.5,11.5L10.1,8.8C10.6,7.8 11.4,7.3 12.3,7.3H14.2L12.9,6H10.3C9.1,6 8,6.7 7.5,7.8L6.1,10.8L5,12.1L7.2,13.5L8.3,11.5H12.5Z"/></svg>
-        <span>Bosch eBike Rides</span>
+        <span>${t("rides_title")}</span>
       </div>
       <div class="eb-nav">
         <button id="eb-prev">◀</button>
@@ -512,41 +838,41 @@ class BoschEBikeMapCard extends HTMLElement {
         <span id="eb-ctr" class="eb-ctr">–</span>
       </div>
       <div class="eb-sort" id="eb-filter-account-wrap" style="display:none;">
-        <span class="eb-sort-lbl">Konto:</span>
+        <span class="eb-sort-lbl">${t("account_label")}</span>
         <select id="eb-filter-account">
-          <option value="all">Alle Konten</option>
+          <option value="all">${t("all_accounts")}</option>
         </select>
       </div>
       <div class="eb-sort" id="eb-filter-bike-wrap" style="display:none;">
-        <span class="eb-sort-lbl">Bike:</span>
+        <span class="eb-sort-lbl">${t("bike_label")}</span>
         <select id="eb-filter-bike">
-          <option value="all">Alle Bikes</option>
+          <option value="all">${t("all_bikes")}</option>
         </select>
       </div>
       <div class="eb-sort">
-        <span class="eb-sort-lbl">Sortierung:</span>
+        <span class="eb-sort-lbl">${t("sort_label")}</span>
         <select id="eb-sort-key">
-          <option value="date">Datum</option>
-          <option value="distance">Distanz</option>
-          <option value="duration">Dauer</option>
-          <option value="avgSpeed">Ø Geschw.</option>
-          <option value="maxSpeed">Max Geschw.</option>
-          <option value="elevation">Höhenmeter</option>
-          <option value="calories">Kalorien</option>
-          <option value="difficulty">Schwierigkeit</option>
-          <option value="batteryWh">Akku Wh</option>
-          <option value="batteryPct">Akku %</option>
+          <option value="date">${t("sort_date")}</option>
+          <option value="distance">${t("sort_distance")}</option>
+          <option value="duration">${t("sort_duration")}</option>
+          <option value="avgSpeed">${t("sort_avg_speed")}</option>
+          <option value="maxSpeed">${t("sort_max_speed")}</option>
+          <option value="elevation">${t("sort_elevation")}</option>
+          <option value="calories">${t("sort_calories")}</option>
+          <option value="difficulty">${t("sort_difficulty")}</option>
+          <option value="batteryWh">${t("sort_battery_wh")}</option>
+          <option value="batteryPct">${t("sort_battery_pct")}</option>
         </select>
-        <button id="eb-sort-dir" title="Sortierrichtung umkehren">↓</button>
+        <button id="eb-sort-dir" title="${t("sort_dir_title")}">↓</button>
       </div>
       <div class="eb-map-wrap">
         <div id="eb-map" class="eb-map"></div>
         <div class="eb-map-tools">
-          <button id="eb-style" class="eb-icon-btn eb-style-btn" title="Kartenstil wechseln" aria-label="Kartenstil wechseln">OSM</button>
-          <button id="eb-wiki" class="eb-icon-btn" title="Wikipedia-Artikel entlang der Route ein-/ausblenden" aria-label="Wikipedia-Artikel">📚</button>
-          <button id="eb-poi" class="eb-icon-btn" title="Ladestationen, Werkstätten, Trinkwasser, Toiletten ein-/ausblenden" aria-label="POIs">📍</button>
-          <button id="eb-gpx" class="eb-icon-btn" title="GPX herunterladen" aria-label="GPX herunterladen">GPX</button>
-          <button id="eb-fullscreen" class="eb-icon-btn" title="Vollbild" aria-label="Vollbild">
+          <button id="eb-style" class="eb-icon-btn eb-style-btn" title="${t("btn_change_style")}" aria-label="${t("btn_change_style")}">OSM</button>
+          <button id="eb-wiki" class="eb-icon-btn" title="${t("btn_wiki")}" aria-label="${t("btn_wiki")}">📚</button>
+          <button id="eb-poi" class="eb-icon-btn" title="${t("btn_poi")}" aria-label="${t("btn_poi")}">📍</button>
+          <button id="eb-gpx" class="eb-icon-btn" title="${t("btn_gpx")}" aria-label="${t("btn_gpx")}">GPX</button>
+          <button id="eb-fullscreen" class="eb-icon-btn" title="${t("btn_fullscreen")}" aria-label="${t("btn_fullscreen")}">
             <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M7,14H5V19H10V17H7V14M5,10H7V7H10V5H5V10M17,17H14V19H19V14H17V17M14,5V7H17V10H19V5H14Z"/></svg>
           </button>
         </div>
@@ -558,27 +884,27 @@ class BoschEBikeMapCard extends HTMLElement {
       <div id="eb-fullscreen-overlay" class="eb-fullscreen" aria-hidden="true">
         <div class="eb-fullscreen-card">
           <div class="eb-fullscreen-head">
-            <div id="eb-fullscreen-title" class="eb-fullscreen-title">Bosch eBike Ride</div>
+            <div id="eb-fullscreen-title" class="eb-fullscreen-title">${t("rides_title")}</div>
             <div class="eb-fullscreen-nav">
-              <button id="eb-full-prev" class="eb-icon-btn" title="Vorherige Fahrt" aria-label="Vorherige Fahrt">◀</button>
+              <button id="eb-full-prev" class="eb-icon-btn" title="${t("btn_prev")}" aria-label="${t("btn_prev")}">◀</button>
               <input type="date" id="eb-full-date">
-              <button id="eb-full-next" class="eb-icon-btn" title="Nächste Fahrt" aria-label="Nächste Fahrt">▶</button>
+              <button id="eb-full-next" class="eb-icon-btn" title="${t("btn_next")}" aria-label="${t("btn_next")}">▶</button>
               <span id="eb-full-ctr" class="eb-ctr">–</span>
             </div>
-            <button id="eb-full-style" class="eb-icon-btn eb-style-btn" title="Kartenstil wechseln" aria-label="Kartenstil wechseln">OSM</button>
-            <button id="eb-full-wiki" class="eb-icon-btn" title="Wikipedia-Artikel entlang der Route ein-/ausblenden" aria-label="Wikipedia-Artikel">📚</button>
-            <button id="eb-full-poi" class="eb-icon-btn" title="Ladestationen, Werkstätten, Trinkwasser, Toiletten ein-/ausblenden" aria-label="POIs">📍</button>
-            <button id="eb-full-gpx" class="eb-icon-btn" title="GPX herunterladen" aria-label="GPX herunterladen">GPX</button>
-            <button id="eb-fit" class="eb-icon-btn" title="Route einpassen" aria-label="Route einpassen">
+            <button id="eb-full-style" class="eb-icon-btn eb-style-btn" title="${t("btn_change_style")}" aria-label="${t("btn_change_style")}">OSM</button>
+            <button id="eb-full-wiki" class="eb-icon-btn" title="${t("btn_wiki")}" aria-label="${t("btn_wiki")}">📚</button>
+            <button id="eb-full-poi" class="eb-icon-btn" title="${t("btn_poi")}" aria-label="${t("btn_poi")}">📍</button>
+            <button id="eb-full-gpx" class="eb-icon-btn" title="${t("btn_gpx")}" aria-label="${t("btn_gpx")}">GPX</button>
+            <button id="eb-fit" class="eb-icon-btn" title="${t("btn_fit")}" aria-label="${t("btn_fit")}">
               <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M4,4H10V6H6V10H4V4M14,4H20V10H18V6H14V4M4,14H6V18H10V20H4V14M18,14H20V20H14V18H18V14Z"/></svg>
             </button>
-            <button id="eb-full-close" class="eb-icon-btn" title="Schließen" aria-label="Schließen">
+            <button id="eb-full-close" class="eb-icon-btn" title="${t("btn_close")}" aria-label="${t("btn_close")}">
               <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z"/></svg>
             </button>
           </div>
-          <div class="eb-fullscreen-tabs" role="tablist" aria-label="Vollbildansicht">
-            <button id="eb-tab-map" class="eb-fullscreen-tab active" role="tab" aria-selected="true">Karte</button>
-            <button id="eb-tab-elevation" class="eb-fullscreen-tab" role="tab" aria-selected="false">Höhenmeter</button>
+          <div class="eb-fullscreen-tabs" role="tablist" aria-label="${t("btn_view_label")}">
+            <button id="eb-tab-map" class="eb-fullscreen-tab active" role="tab" aria-selected="true">${t("tab_map")}</button>
+            <button id="eb-tab-elevation" class="eb-fullscreen-tab" role="tab" aria-selected="false">${t("tab_elevation")}</button>
           </div>
           <div id="eb-fullscreen-map" class="eb-fullscreen-map"></div>
           <div id="eb-fullscreen-profile" class="eb-profile eb-hidden"></div>
@@ -636,7 +962,7 @@ class BoschEBikeMapCard extends HTMLElement {
         if (this._activities.length) {
           this._show(0, true);
         } else {
-          this._msg("Keine Fahrten für diesen Filter");
+          this._msg(this._t("msg_no_filter_match"));
         }
       });
     }
@@ -648,7 +974,7 @@ class BoschEBikeMapCard extends HTMLElement {
         if (this._activities.length) {
           this._show(0, true);
         } else {
-          this._msg("Keine Fahrten für diesen Filter");
+          this._msg(this._t("msg_no_filter_match"));
         }
       });
     }
@@ -786,7 +1112,7 @@ class BoschEBikeMapCard extends HTMLElement {
     this._applyFilter();
 
     if (!this._activities.length) {
-      this._msg(this._filtersActive() ? "Keine Fahrten für diesen Filter" : "Keine Fahrten gefunden");
+      this._msg(this._filtersActive() ? this._t("msg_no_filter_match") : this._t("msg_no_rides"));
       return;
     }
 
@@ -848,7 +1174,7 @@ class BoschEBikeMapCard extends HTMLElement {
     if (this._lockedBike) {
       if (bikeWrap) bikeWrap.style.display = "none";
     } else {
-      const bikeOpts = ['<option value="all">Alle Bikes</option>'];
+      const bikeOpts = [`<option value="all">${this._t("all_bikes")}</option>`];
       for (const b of bikes) {
         bikeOpts.push(`<option value="${b.id}">${this._escapeHtml(b.label)}</option>`);
       }
@@ -874,6 +1200,10 @@ class BoschEBikeMapCard extends HTMLElement {
     return String(s).replace(/[&<>"']/g, (c) => ({
       "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
     })[c]);
+  }
+
+  _t(key, ...args) {
+    return ebT(this._hass, key, ...args);
   }
 
   _getSortValue(activity, key) {
@@ -926,7 +1256,7 @@ class BoschEBikeMapCard extends HTMLElement {
     const fullNext = this._$("eb-full-next");
     if (fullPrev) fullPrev.disabled = index <= 0;
     if (fullNext) fullNext.disabled = index >= this._activities.length - 1;
-    this._$("eb-title").textContent = activity.title || "Unbenannte Fahrt";
+    this._$("eb-title").textContent = activity.title || this._t("msg_unnamed_ride");
 
     if (activity.startTime) {
       this._$("eb-date-lbl").textContent = new Date(activity.startTime).toLocaleDateString("de-DE", {
@@ -954,18 +1284,18 @@ class BoschEBikeMapCard extends HTMLElement {
     const battPct = cons?.percentage != null ? cons.percentage.toFixed(1) : "–";
 
     const statsHtml = `
-      <div class="eb-stat"><div class="eb-val">${dist} km</div><div class="eb-lbl">Distanz</div></div>
-      <div class="eb-stat"><div class="eb-val">${dur} min</div><div class="eb-lbl">Dauer</div></div>
-      <div class="eb-stat"><div class="eb-val">${avgS}</div><div class="eb-lbl">Ø km/h</div></div>
-      <div class="eb-stat"><div class="eb-val">${maxS}</div><div class="eb-lbl">Max km/h</div></div>
-      <div class="eb-stat"><div class="eb-val">${ele} m</div><div class="eb-lbl">Höhenmeter ↑</div></div>
-      <div class="eb-stat"><div class="eb-val">${cal} kcal</div><div class="eb-lbl">Kalorien</div></div>
-      <div class="eb-stat"><div class="eb-val">${difficulty} m/km</div><div class="eb-lbl">Schwierigkeit</div></div>
-      <div class="eb-stat"><div class="eb-val">${battWh} Wh</div><div class="eb-lbl">Akku</div></div>
-      <div class="eb-stat"><div class="eb-val">${battPct} %</div><div class="eb-lbl">Akku %</div></div>
+      <div class="eb-stat"><div class="eb-val">${dist} km</div><div class="eb-lbl">${this._t("stat_distance")}</div></div>
+      <div class="eb-stat"><div class="eb-val">${dur} min</div><div class="eb-lbl">${this._t("stat_duration")}</div></div>
+      <div class="eb-stat"><div class="eb-val">${avgS}</div><div class="eb-lbl">${this._t("stat_avg_kmh")}</div></div>
+      <div class="eb-stat"><div class="eb-val">${maxS}</div><div class="eb-lbl">${this._t("stat_max_kmh")}</div></div>
+      <div class="eb-stat"><div class="eb-val">${ele} m</div><div class="eb-lbl">${this._t("stat_elevation_up")}</div></div>
+      <div class="eb-stat"><div class="eb-val">${cal} kcal</div><div class="eb-lbl">${this._t("stat_calories")}</div></div>
+      <div class="eb-stat"><div class="eb-val">${difficulty} m/km</div><div class="eb-lbl">${this._t("stat_difficulty")}</div></div>
+      <div class="eb-stat"><div class="eb-val">${battWh} Wh</div><div class="eb-lbl">${this._t("stat_battery")}</div></div>
+      <div class="eb-stat"><div class="eb-val">${battPct} %</div><div class="eb-lbl">${this._t("stat_battery_pct")}</div></div>
     `;
     this._$("eb-stats").innerHTML = statsHtml;
-    this._$("eb-fullscreen-title").textContent = activity.title || "Unbenannte Fahrt";
+    this._$("eb-fullscreen-title").textContent = activity.title || this._t("msg_unnamed_ride");
     this._$("eb-fullscreen-meta").innerHTML = statsHtml;
     this._renderFullscreenProfile();
 
@@ -980,7 +1310,7 @@ class BoschEBikeMapCard extends HTMLElement {
 
   async _loadTrack(activityId, accountId) {
     const loadSeq = ++this._loadSeq;
-    this._msg("Lade Route …");
+    this._msg(this._t("msg_loading_route"));
 
     try {
       const params = { type: "bosch_ebike/get_track", activity_id: activityId };
@@ -1001,7 +1331,7 @@ class BoschEBikeMapCard extends HTMLElement {
       if (this._fullscreenOpen) this._destroyFullscreenMap();
 
       if (!pts.length) {
-        this._msg("Keine GPS-Punkte gefunden");
+        this._msg(this._t("msg_no_gps"));
         this._clearTrackLayers();
         this._renderFullscreenProfile();
         return;
@@ -1023,7 +1353,7 @@ class BoschEBikeMapCard extends HTMLElement {
     } catch (error) {
       if (loadSeq < this._loadSeq) return;
       console.error("[Bosch eBike Map] track load error", error);
-      this._msg("Fehler beim Laden der Route");
+      this._msg(this._t("msg_error_prefix") + (error?.message || error));
     }
   }
 
@@ -1052,7 +1382,7 @@ class BoschEBikeMapCard extends HTMLElement {
     const mapEl = this._$("eb-map");
     const Leaflet = window.L;
     if (!mapEl || !Leaflet || typeof Leaflet.map !== "function") {
-      this._msg("Fehler: Leaflet ist nicht verfügbar");
+      this._msg(this._t("msg_error_prefix") + this._t("err_leaflet_load"));
       return;
     }
 
@@ -1075,7 +1405,7 @@ class BoschEBikeMapCard extends HTMLElement {
     } catch (error) {
       console.error("[Bosch eBike Map] map create error", error);
       this._destroyMap(true);
-      this._msg("Fehler beim Erzeugen der Karte");
+      this._msg(this._t("err_create_map"));
     }
   }
 
@@ -1598,19 +1928,19 @@ class BoschEBikeMapCard extends HTMLElement {
 
   _poiCategory(tags) {
     if (tags.amenity === "charging_station") {
-      return { key: "charging", label: "Ladestation", icon: "🔌" };
+      return { key: "charging", label: this._t("poi_charging"), icon: "🔌" };
     }
     if (tags.shop === "bicycle") {
-      return { key: "bicycle", label: "Fahrradgeschäft", icon: "🛠️" };
+      return { key: "bicycle", label: this._t("poi_bicycle_shop"), icon: "🛠️" };
     }
     if (tags.amenity === "bicycle_repair_station") {
-      return { key: "bicycle", label: "Reparaturstation", icon: "🛠️" };
+      return { key: "bicycle", label: this._t("poi_repair"), icon: "🛠️" };
     }
     if (tags.amenity === "drinking_water") {
-      return { key: "water", label: "Trinkwasser", icon: "💧" };
+      return { key: "water", label: this._t("poi_water"), icon: "💧" };
     }
     if (tags.amenity === "toilets") {
-      return { key: "toilet", label: "Toilette", icon: "🚻" };
+      return { key: "toilet", label: this._t("poi_toilet"), icon: "🚻" };
     }
     return null;
   }
@@ -1701,7 +2031,7 @@ class BoschEBikeMapCard extends HTMLElement {
       <div class="eb-poi-title">${poi.catIcon} ${safeName}</div>
       <div class="eb-poi-cat">${this._escapeHtml(poi.catLabel)}</div>
       ${extra}
-      <a class="eb-poi-link" href="${osmUrl}" target="_blank" rel="noopener noreferrer">Auf OpenStreetMap</a>
+      <a class="eb-poi-link" href="${osmUrl}" target="_blank" rel="noopener noreferrer">${this._t("poi_open_osm")}</a>
     </div>`;
   }
 
@@ -1710,15 +2040,15 @@ class BoschEBikeMapCard extends HTMLElement {
     if (loading) {
       return `<div class="eb-wiki-popup">
         <div class="eb-wiki-title">${safeTitle}</div>
-        <div class="eb-wiki-loading">Lade Vorschau …</div>
+        <div class="eb-wiki-loading">${this._t("wiki_loading_preview")}</div>
       </div>`;
     }
     if (!summary) {
       const fallbackUrl = `https://${article.lang}.wikipedia.org/wiki/${encodeURIComponent(article.title)}`;
       return `<div class="eb-wiki-popup">
         <div class="eb-wiki-title">${safeTitle}</div>
-        <div class="eb-wiki-extract">Vorschau nicht verfügbar.</div>
-        <a class="eb-wiki-link" href="${fallbackUrl}" target="_blank" rel="noopener noreferrer">Auf Wikipedia öffnen</a>
+        <div class="eb-wiki-extract">${this._t("wiki_no_preview")}</div>
+        <a class="eb-wiki-link" href="${fallbackUrl}" target="_blank" rel="noopener noreferrer">${this._t("wiki_open_link")}</a>
       </div>`;
     }
     const thumb = summary.thumbnail
@@ -1728,7 +2058,7 @@ class BoschEBikeMapCard extends HTMLElement {
       <div class="eb-wiki-title">${safeTitle}</div>
       ${thumb}
       <div class="eb-wiki-extract">${extract}</div>
-      <a class="eb-wiki-link" href="${summary.link}" target="_blank" rel="noopener noreferrer">Auf Wikipedia öffnen</a>
+      <a class="eb-wiki-link" href="${summary.link}" target="_blank" rel="noopener noreferrer">${this._t("wiki_open_link")}</a>
     </div>`;
   }
 
@@ -1827,13 +2157,14 @@ class BoschEBikeMapCard extends HTMLElement {
       try { this._map.removeControl(this._legend); } catch (_) {}
     }
 
+    const speedLabel = this._t("speed_legend");
     const Legend = Leaflet.Control.extend({
       options: { position: "bottomright" },
       onAdd() {
         const div = Leaflet.DomUtil.create("div");
         div.style.cssText = "background:rgba(255,255,255,.92);padding:6px 10px;border-radius:6px;font-size:11px;box-shadow:0 1px 5px rgba(0,0,0,.25);line-height:1.6";
         div.innerHTML =
-          "<b>Speed</b><br>" +
+          `<b>${speedLabel}</b><br>` +
           '<i style="background:#2196F3;width:14px;height:3px;display:inline-block;border-radius:2px;vertical-align:middle"></i> 0 ' +
           '<i style="background:#4CAF50;width:14px;height:3px;display:inline-block;border-radius:2px;vertical-align:middle"></i> 12 ' +
           '<i style="background:#FFC107;width:14px;height:3px;display:inline-block;border-radius:2px;vertical-align:middle"></i> 25 ' +
@@ -2065,7 +2396,7 @@ class BoschEBikeMapCard extends HTMLElement {
 
     const profile = this._buildElevationProfileData();
     if (!profile) {
-      el.innerHTML = '<div class="eb-profile-title">Höhenprofil</div><div class="eb-profile-range">Keine Höhendaten verfügbar</div>';
+      el.innerHTML = `<div class="eb-profile-title">${this._t("profile_title")}</div><div class="eb-profile-range">${this._t("profile_no_data")}</div>`;
       return;
     }
 
@@ -2082,8 +2413,8 @@ class BoschEBikeMapCard extends HTMLElement {
 
     // Höhe
     const eleChart = this._renderMiniChart(
-      "Höhenprofil",
-      `Min ${Math.round(minEle)} m · Max ${Math.round(maxEle)} m`,
+      this._t("profile_title"),
+      this._t("profile_min_max", Math.round(minEle), Math.round(maxEle)),
       sampleElevations,
       "m",
       "#89b52b",
@@ -2098,8 +2429,10 @@ class BoschEBikeMapCard extends HTMLElement {
       const cadMin = 0;
       const cadMax = Math.max(20, Math.ceil((maxCadence || 0) / 10) * 10);
       cadChart = this._renderMiniChart(
-        "Trittfrequenz",
-        `Ø ${avgCadence != null ? Math.round(avgCadence) : '–'} rpm · Max ${maxCadence != null ? Math.round(maxCadence) : '–'} rpm`,
+        this._t("profile_cadence"),
+        this._t("profile_avg_max_rpm",
+          avgCadence != null ? Math.round(avgCadence) : '–',
+          maxCadence != null ? Math.round(maxCadence) : '–'),
         sampleCadences,
         "rpm",
         "#f39c12",
@@ -2115,8 +2448,10 @@ class BoschEBikeMapCard extends HTMLElement {
       const powMin = 0;
       const powMax = Math.max(50, Math.ceil((maxPower || 0) / 50) * 50);
       powChart = this._renderMiniChart(
-        "Leistung",
-        `Ø ${avgPower != null ? Math.round(avgPower) : '–'} W · Max ${maxPower != null ? Math.round(maxPower) : '–'} W`,
+        this._t("profile_power"),
+        this._t("profile_avg_max_w",
+          avgPower != null ? Math.round(avgPower) : '–',
+          maxPower != null ? Math.round(maxPower) : '–'),
         samplePowers,
         "W",
         "#e74c3c",
@@ -2134,10 +2469,10 @@ class BoschEBikeMapCard extends HTMLElement {
         ${axisLabels.map((label) => `<span>${label}</span>`).join('')}
       </div>
       <div class="eb-profile-stats">
-        <div class="eb-profile-stat"><div class="eb-pv">${Math.round(ascent)} m</div><div class="eb-pl">Aufstieg</div></div>
-        <div class="eb-profile-stat"><div class="eb-pv">${Math.round(descent)} m</div><div class="eb-pl">Abstieg</div></div>
-        <div class="eb-profile-stat"><div class="eb-pv">${avgSpeed != null ? avgSpeed.toFixed(1).replace('.', ',') : '–'} km/h</div><div class="eb-pl">Ø Geschwindigkeit</div></div>
-        <div class="eb-profile-stat"><div class="eb-pv">${maxSpeed != null ? maxSpeed.toFixed(1).replace('.', ',') : '–'} km/h</div><div class="eb-pl">Max Geschwindigkeit</div></div>
+        <div class="eb-profile-stat"><div class="eb-pv">${Math.round(ascent)} m</div><div class="eb-pl">${this._t("profile_ascent")}</div></div>
+        <div class="eb-profile-stat"><div class="eb-pv">${Math.round(descent)} m</div><div class="eb-pl">${this._t("profile_descent")}</div></div>
+        <div class="eb-profile-stat"><div class="eb-pv">${avgSpeed != null ? avgSpeed.toFixed(1).replace('.', ',') : '–'} km/h</div><div class="eb-pl">${this._t("profile_avg_speed")}</div></div>
+        <div class="eb-profile-stat"><div class="eb-pv">${maxSpeed != null ? maxSpeed.toFixed(1).replace('.', ',') : '–'} km/h</div><div class="eb-pl">${this._t("profile_max_speed")}</div></div>
       </div>
     `;
   }
@@ -2532,32 +2867,33 @@ class BoschEBikeHeatmapCard extends HTMLElement {
     `;
     card.appendChild(style);
 
+    const t = (k, ...a) => ebT(this._hass, k, ...a);
     const wrap = document.createElement("div");
     wrap.innerHTML = `
       <div class="heat-head">
         <svg viewBox="0 0 24 24" width="22" height="22"><path fill="white" d="M3,3H21V5H3V3M3,7H21V9H3V7M3,11H21V13H3V11M3,15H21V17H3V15M3,19H21V21H3V19Z"/></svg>
-        <span>Bosch eBike Heatmap</span>
+        <span>${t("heatmap_title")}</span>
       </div>
       <div class="heat-filters">
-        <span class="heat-filter-lbl">Zeitraum:</span>
+        <span class="heat-filter-lbl">${t("heat_range_label")}</span>
         <select id="heat-range">
-          <option value="30">30 Tage</option>
-          <option value="90">3 Monate</option>
-          <option value="365" selected>12 Monate</option>
-          <option value="all">Alle</option>
+          <option value="30">${t("heat_range_30")}</option>
+          <option value="90">${t("heat_range_90")}</option>
+          <option value="365" selected>${t("heat_range_365")}</option>
+          <option value="all">${t("heat_range_all")}</option>
         </select>
-        <span class="heat-filter-lbl" id="heat-acc-lbl" style="display:none;">Konto:</span>
+        <span class="heat-filter-lbl" id="heat-acc-lbl" style="display:none;">${t("heat_account_label")}</span>
         <select id="heat-account" style="display:none;">
-          <option value="all">Alle Konten</option>
+          <option value="all">${t("all_accounts")}</option>
         </select>
-        <span class="heat-filter-lbl" id="heat-bike-lbl" style="display:none;">Bike:</span>
+        <span class="heat-filter-lbl" id="heat-bike-lbl" style="display:none;">${t("heat_bike_label")}</span>
         <select id="heat-bike" style="display:none;">
-          <option value="all">Alle Bikes</option>
+          <option value="all">${t("all_bikes")}</option>
         </select>
       </div>
       <div class="heat-map-wrap">
         <div id="heat-map" class="heat-map"></div>
-        <div class="heat-overlay" id="heat-msg">Lade Touren …</div>
+        <div class="heat-overlay" id="heat-msg">${t("heat_loading")}</div>
       </div>
       <div class="heat-stats" id="heat-stats"></div>
     `;
@@ -2663,7 +2999,7 @@ class BoschEBikeHeatmapCard extends HTMLElement {
 
   async _loadTracks() {
     const msg = this.querySelector("#heat-msg");
-    if (msg) { msg.textContent = "Lade Touren …"; msg.style.display = ""; }
+    if (msg) { msg.textContent = ebT(this._hass, "heat_loading"); msg.style.display = ""; }
     const params = { type: "bosch_ebike/get_all_tracks" };
     if (this._filterRange !== "all") {
       params.max_age_days = parseInt(this._filterRange, 10);
@@ -2675,7 +3011,7 @@ class BoschEBikeHeatmapCard extends HTMLElement {
     } catch (err) {
       console.error("[Bosch eBike Heatmap] load failed", err);
       this._tracks = [];
-      if (msg) msg.textContent = "Fehler beim Laden der Touren";
+      if (msg) msg.textContent = ebT(this._hass, "heat_load_failed");
       return;
     }
     if (msg) msg.style.display = "none";
@@ -2717,14 +3053,14 @@ class BoschEBikeHeatmapCard extends HTMLElement {
     const stats = this.querySelector("#heat-stats");
     if (stats) {
       stats.innerHTML = `
-        <div>Touren: <b>${filtered.length}</b></div>
-        <div>Distanz: <b>${(totalDist / 1000).toFixed(0)} km</b></div>
+        <div>${ebT(this._hass, "heat_stat_rides")}: <b>${filtered.length}</b></div>
+        <div>${ebT(this._hass, "heat_stat_distance")}: <b>${(totalDist / 1000).toFixed(0)} km</b></div>
       `;
     }
     const msg = this.querySelector("#heat-msg");
     if (msg) {
       if (!filtered.length) {
-        msg.textContent = "Keine Touren in diesem Filter";
+        msg.textContent = ebT(this._hass, "heat_no_match");
         msg.style.display = "";
       } else {
         msg.style.display = "none";
@@ -2786,13 +3122,13 @@ class BoschEBikeMapCardEditor extends HTMLElement {
     const labelStyle = "display:block;margin-top:14px;margin-bottom:6px;font-weight:500";
     const hintStyle = "display:block;margin-top:4px;font-size:12px;color:var(--secondary-text-color,#777)";
 
-    let accountOpts = '<option value="">Alle</option>';
+    let accountOpts = `<option value="">${ebT(this._hass, "editor_select_all")}</option>`;
     for (const inst of (this._instances || [])) {
       const selected = cfg.account_id === inst.config_entry_id ? " selected" : "";
       accountOpts += `<option value="${this._escapeHtml(inst.config_entry_id)}"${selected}>${this._escapeHtml(inst.label)}</option>`;
     }
 
-    let bikeOpts = '<option value="">Alle</option>';
+    let bikeOpts = `<option value="">${ebT(this._hass, "editor_select_all")}</option>`;
     for (const b of this._bikeOptionsForAccount(cfg.account_id)) {
       const selected = cfg.bike_id === b.id ? " selected" : "";
       bikeOpts += `<option value="${this._escapeHtml(b.id)}"${selected}>${this._escapeHtml(b.label)}</option>`;
@@ -2805,43 +3141,45 @@ class BoschEBikeMapCardEditor extends HTMLElement {
       { v: 5000, l: "5 km" },
       { v: 10000, l: "10 km" },
     ];
+    const t = (k, ...a) => ebT(this._hass, k, ...a);
+    const defaultSuffix = " " + t("radius_default_suffix");
     const selectedWikiRadius = parseInt(cfg.wiki_radius_m, 10) || 1000;
     const wikiRadiusOpts = radii.map((r) => {
       const sel = r.v === selectedWikiRadius ? " selected" : "";
-      const label = r.v === 1000 ? `${r.l} (Standard)` : r.l;
+      const label = r.v === 1000 ? `${r.l}${defaultSuffix}` : r.l;
       return `<option value="${r.v}"${sel}>${label}</option>`;
     }).join("");
 
     const selectedPoiRadius = parseInt(cfg.poi_radius_m, 10) || 1000;
     const poiRadiusOpts = radii.map((r) => {
       const sel = r.v === selectedPoiRadius ? " selected" : "";
-      const label = r.v === 1000 ? `${r.l} (Standard)` : r.l;
+      const label = r.v === 1000 ? `${r.l}${defaultSuffix}` : r.l;
       return `<option value="${r.v}"${sel}>${label}</option>`;
     }).join("");
 
     this.innerHTML = `<div style="padding:16px">
-      <label style="${labelStyle.replace('margin-top:14px;', '')}">Kartenhöhe (px)</label>
+      <label style="${labelStyle.replace('margin-top:14px;', '')}">${t("editor_height")}</label>
       <input type="number" value="${cfg.height || 400}" min="200" max="1000" step="50" style="${inputStyle}" id="h-in">
 
-      <label style="${labelStyle}">Titel (optional)</label>
-      <input type="text" value="${this._escapeHtml(cfg.title || '')}" placeholder="Bosch eBike Rides" style="${inputStyle}" id="title-in">
-      <span style="${hintStyle}">Wird in der Kopfzeile der Karte angezeigt — nützlich, wenn Du mehrere fest verdrahtete Karten nebeneinander hast.</span>
+      <label style="${labelStyle}">${t("editor_title")}</label>
+      <input type="text" value="${this._escapeHtml(cfg.title || '')}" placeholder="${t("rides_title")}" style="${inputStyle}" id="title-in">
+      <span style="${hintStyle}">${t("editor_title_hint")}</span>
 
-      <label style="${labelStyle}">Konto fest auswählen (optional)</label>
+      <label style="${labelStyle}">${t("editor_account_label")}</label>
       <select id="acc-in" style="${inputStyle}">${accountOpts}</select>
-      <span style="${hintStyle}">Wenn gesetzt, wird das Konto-Dropdown ausgeblendet und die Karte zeigt nur Touren dieses Kontos.</span>
+      <span style="${hintStyle}">${t("editor_account_hint")}</span>
 
-      <label style="${labelStyle}">Bike fest auswählen (optional)</label>
+      <label style="${labelStyle}">${t("editor_bike_label")}</label>
       <select id="bike-in" style="${inputStyle}">${bikeOpts}</select>
-      <span style="${hintStyle}">Wenn gesetzt, wird das Bike-Dropdown ausgeblendet und die Karte zeigt nur Touren dieses Bikes.</span>
+      <span style="${hintStyle}">${t("editor_bike_hint")}</span>
 
-      <label style="${labelStyle}">Wikipedia-Suchradius</label>
+      <label style="${labelStyle}">${t("editor_wiki_radius")}</label>
       <select id="wiki-radius-in" style="${inputStyle}">${wikiRadiusOpts}</select>
-      <span style="${hintStyle}">Wie weit um jeden Stützpunkt der Route Wikipedia-Artikel gesucht werden. Größerer Radius = mehr Treffer, mehr Daten.</span>
+      <span style="${hintStyle}">${t("editor_wiki_radius_hint")}</span>
 
-      <label style="${labelStyle}">POI-Suchradius</label>
+      <label style="${labelStyle}">${t("editor_poi_radius")}</label>
       <select id="poi-radius-in" style="${inputStyle}">${poiRadiusOpts}</select>
-      <span style="${hintStyle}">Wie weit um die Route Ladestationen, Werkstätten, Trinkwasser und Toiletten gesucht werden.</span>
+      <span style="${hintStyle}">${t("editor_poi_radius_hint")}</span>
     </div>`;
 
     this.querySelector("#h-in").addEventListener("change", (e) => {
@@ -2898,32 +3236,33 @@ class BoschEBikeHeatmapCardEditor extends BoschEBikeMapCardEditor {
     const labelStyle = "display:block;margin-top:14px;margin-bottom:6px;font-weight:500";
     const hintStyle = "display:block;margin-top:4px;font-size:12px;color:var(--secondary-text-color,#777)";
 
-    let accountOpts = '<option value="">Alle</option>';
+    let accountOpts = `<option value="">${ebT(this._hass, "editor_select_all")}</option>`;
     for (const inst of (this._instances || [])) {
       const selected = cfg.account_id === inst.config_entry_id ? " selected" : "";
       accountOpts += `<option value="${this._escapeHtml(inst.config_entry_id)}"${selected}>${this._escapeHtml(inst.label)}</option>`;
     }
 
-    let bikeOpts = '<option value="">Alle</option>';
+    let bikeOpts = `<option value="">${ebT(this._hass, "editor_select_all")}</option>`;
     for (const b of this._bikeOptionsForAccount(cfg.account_id)) {
       const selected = cfg.bike_id === b.id ? " selected" : "";
       bikeOpts += `<option value="${this._escapeHtml(b.id)}"${selected}>${this._escapeHtml(b.label)}</option>`;
     }
 
+    const t = (k, ...a) => ebT(this._hass, k, ...a);
     this.innerHTML = `<div style="padding:16px">
-      <label style="${labelStyle.replace('margin-top:14px;', '')}">Kartenhöhe (px)</label>
+      <label style="${labelStyle.replace('margin-top:14px;', '')}">${t("editor_height")}</label>
       <input type="number" value="${cfg.height || 500}" min="200" max="1500" step="50" style="${inputStyle}" id="h-in">
 
-      <label style="${labelStyle}">Titel (optional)</label>
-      <input type="text" value="${this._escapeHtml(cfg.title || '')}" placeholder="Bosch eBike Heatmap" style="${inputStyle}" id="title-in">
+      <label style="${labelStyle}">${t("editor_title")}</label>
+      <input type="text" value="${this._escapeHtml(cfg.title || '')}" placeholder="${t("heatmap_title")}" style="${inputStyle}" id="title-in">
 
-      <label style="${labelStyle}">Konto fest auswählen (optional)</label>
+      <label style="${labelStyle}">${t("editor_account_label")}</label>
       <select id="acc-in" style="${inputStyle}">${accountOpts}</select>
-      <span style="${hintStyle}">Wenn gesetzt, zeigt die Heatmap nur Touren dieses Kontos und das Konto-Dropdown wird ausgeblendet.</span>
+      <span style="${hintStyle}">${t("editor_account_hint")}</span>
 
-      <label style="${labelStyle}">Bike fest auswählen (optional)</label>
+      <label style="${labelStyle}">${t("editor_bike_label")}</label>
       <select id="bike-in" style="${inputStyle}">${bikeOpts}</select>
-      <span style="${hintStyle}">Wenn gesetzt, zeigt die Heatmap nur Touren dieses Bikes und das Bike-Dropdown wird ausgeblendet.</span>
+      <span style="${hintStyle}">${t("editor_bike_hint")}</span>
     </div>`;
 
     this.querySelector("#h-in").addEventListener("change", (e) => {

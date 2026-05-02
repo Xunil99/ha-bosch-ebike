@@ -25,5 +25,97 @@
       "no_auth_code": "Kein Autorisierungscode erhalten.",
       "token_error": "Token-Austausch fehlgeschlagen. Bitte versuche es erneut."
     }
+  },
+  "entity": {
+    "sensor": {
+      "odometer": { "name": "Kilometerstand" },
+      "motor_total_hours": { "name": "Motor-Betriebsstunden" },
+      "motor_assist_hours": { "name": "Motor-Unterstützungsstunden" },
+      "max_assist_speed": { "name": "Max. Unterstützungsgeschwindigkeit" },
+      "active_assist_modes": { "name": "Aktive Unterstützungsstufen" },
+      "walk_assist_speed": { "name": "Schiebehilfe-Geschwindigkeit" },
+      "next_service_odometer": { "name": "Nächster Service (km)" },
+      "service_due_in_days": { "name": "Service fällig in Tagen" },
+      "service_due_in_km": { "name": "Service fällig in Kilometern" },
+      "maintenance_overview": { "name": "Wartungs-Übersicht" },
+      "last_ride_distance": { "name": "Letzte Fahrt: Distanz" },
+      "last_ride_duration": { "name": "Letzte Fahrt: Dauer" },
+      "last_ride_avg_speed": { "name": "Letzte Fahrt: Ø Geschwindigkeit" },
+      "last_ride_max_speed": { "name": "Letzte Fahrt: Max. Geschwindigkeit" },
+      "last_ride_calories": { "name": "Letzte Fahrt: Kalorien" },
+      "last_ride_elevation_gain": { "name": "Letzte Fahrt: Höhenmeter ↑" },
+      "last_ride_elevation_loss": { "name": "Letzte Fahrt: Höhenmeter ↓" },
+      "last_ride_date": { "name": "Letzte Fahrt: Datum" },
+      "last_ride_title": { "name": "Letzte Fahrt: Titel" },
+      "last_ride_avg_cadence": { "name": "Letzte Fahrt: Ø Trittfrequenz" },
+      "last_ride_max_cadence": { "name": "Letzte Fahrt: Max. Trittfrequenz" },
+      "last_ride_avg_power": { "name": "Letzte Fahrt: Ø Leistung" },
+      "last_ride_max_power": { "name": "Letzte Fahrt: Max. Leistung" },
+      "last_ride_battery_wh": { "name": "Letzte Fahrt: Akku-Verbrauch (Wh)" },
+      "last_ride_battery_percent": { "name": "Letzte Fahrt: Akku-Verbrauch (%)" },
+      "last_ride_difficulty": { "name": "Letzte Fahrt: Schwierigkeit" },
+      "last_ride_start_location": { "name": "Letzte Fahrt: Startort" },
+      "last_ride_end_location": { "name": "Letzte Fahrt: Zielort" },
+      "last_ride_start_time": { "name": "Letzte Fahrt: Startzeit" },
+      "last_ride_end_time": { "name": "Letzte Fahrt: Endzeit" },
+      "days_since_last_ride": { "name": "Tage seit letzter Fahrt" },
+      "total_rides": { "name": "Touren gesamt" },
+      "total_distance_activities": { "name": "Distanz gesamt (Touren)" },
+      "total_duration": { "name": "Fahrzeit gesamt" },
+      "total_calories": { "name": "Kalorien gesamt" },
+      "total_elevation_gain": { "name": "Höhenmeter gesamt" },
+      "avg_speed_all_rides": { "name": "Ø Geschwindigkeit (alle Touren)" },
+      "avg_power_all_rides": { "name": "Ø Leistung (alle Touren)" },
+      "avg_cadence_all_rides": { "name": "Ø Trittfrequenz (alle Touren)" }
+    },
+    "number": {
+      "battery_capacity": { "name": "Akkukapazität" },
+      "service_due_odometer": { "name": "Service-Fälligkeit (km)" }
+    },
+    "date": {
+      "service_due_date": { "name": "Service-Fälligkeitsdatum" }
+    }
+  },
+  "services": {
+    "add_maintenance": {
+      "name": "Wartungsposten anlegen",
+      "description": "Legt einen neuen, benutzerdefinierten Wartungsposten für ein Bike an (z. B. Kettenwechsel alle 3000 km, Inspektion alle 365 Tage). Mindestens interval_km oder interval_days muss angegeben werden.",
+      "fields": {
+        "bike_id": {
+          "name": "Bike-ID",
+          "description": "ID des Bikes (siehe Attribut der Bike-Sensoren)"
+        },
+        "name": {
+          "name": "Bezeichnung",
+          "description": "Frei wählbar, z. B. \"Kettenwechsel\""
+        },
+        "interval_km": {
+          "name": "Intervall in km",
+          "description": "Nach wie vielen km soll erinnert werden"
+        },
+        "interval_days": {
+          "name": "Intervall in Tagen",
+          "description": "Nach wie vielen Tagen soll erinnert werden"
+        }
+      }
+    },
+    "complete_maintenance": {
+      "name": "Wartungsposten als erledigt markieren",
+      "description": "Setzt den Zähler eines Postens zurück (Datum + Kilometerstand).",
+      "fields": {
+        "bike_id": { "name": "Bike-ID" },
+        "item_id": {
+          "name": "Posten-ID",
+          "description": "Aus dem Sensor-Attribut \"items\""
+        }
+      }
+    },
+    "remove_maintenance": {
+      "name": "Wartungsposten löschen",
+      "fields": {
+        "bike_id": { "name": "Bike-ID" },
+        "item_id": { "name": "Posten-ID" }
+      }
+    }
   }
 }

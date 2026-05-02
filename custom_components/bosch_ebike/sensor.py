@@ -369,6 +369,7 @@ def _avg_activities(activities: list[dict], key: str, *subkeys: str) -> float | 
 AGGREGATE_SENSORS: tuple[BoschBikeSensorDescription, ...] = (
     BoschBikeSensorDescription(
         key="total_rides",
+        translation_key="total_rides",
         name="Total Rides",
         icon="mdi:counter",
         state_class=SensorStateClass.TOTAL_INCREASING,
@@ -377,6 +378,7 @@ AGGREGATE_SENSORS: tuple[BoschBikeSensorDescription, ...] = (
     ),
     BoschBikeSensorDescription(
         key="total_distance_activities",
+        translation_key="total_distance_activities",
         name="Total Distance (Activities)",
         native_unit_of_measurement=UnitOfLength.KILOMETERS,
         device_class=SensorDeviceClass.DISTANCE,
@@ -387,6 +389,7 @@ AGGREGATE_SENSORS: tuple[BoschBikeSensorDescription, ...] = (
     ),
     BoschBikeSensorDescription(
         key="total_duration",
+        translation_key="total_duration",
         name="Total Ride Duration",
         native_unit_of_measurement=UnitOfTime.HOURS,
         device_class=SensorDeviceClass.DURATION,
@@ -396,6 +399,7 @@ AGGREGATE_SENSORS: tuple[BoschBikeSensorDescription, ...] = (
     ),
     BoschBikeSensorDescription(
         key="total_calories",
+        translation_key="total_calories",
         name="Total Calories",
         native_unit_of_measurement="kcal",
         state_class=SensorStateClass.TOTAL_INCREASING,
@@ -405,6 +409,7 @@ AGGREGATE_SENSORS: tuple[BoschBikeSensorDescription, ...] = (
     ),
     BoschBikeSensorDescription(
         key="total_elevation_gain",
+        translation_key="total_elevation_gain",
         name="Total Elevation Gain",
         native_unit_of_measurement=UnitOfLength.METERS,
         state_class=SensorStateClass.TOTAL_INCREASING,
@@ -414,6 +419,7 @@ AGGREGATE_SENSORS: tuple[BoschBikeSensorDescription, ...] = (
     ),
     BoschBikeSensorDescription(
         key="avg_speed_all_rides",
+        translation_key="avg_speed_all_rides",
         name="Avg Speed (All Rides)",
         native_unit_of_measurement=UnitOfSpeed.KILOMETERS_PER_HOUR,
         icon="mdi:speedometer-medium",
@@ -422,6 +428,7 @@ AGGREGATE_SENSORS: tuple[BoschBikeSensorDescription, ...] = (
     ),
     BoschBikeSensorDescription(
         key="avg_power_all_rides",
+        translation_key="avg_power_all_rides",
         name="Avg Rider Power (All Rides)",
         native_unit_of_measurement=UnitOfPower.WATT,
         device_class=SensorDeviceClass.POWER,
@@ -431,6 +438,7 @@ AGGREGATE_SENSORS: tuple[BoschBikeSensorDescription, ...] = (
     ),
     BoschBikeSensorDescription(
         key="avg_cadence_all_rides",
+        translation_key="avg_cadence_all_rides",
         name="Avg Cadence (All Rides)",
         native_unit_of_measurement="rpm",
         icon="mdi:rotate-right",
