@@ -249,9 +249,30 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         return attribution
 
     def set_battery_capacity(self, capacity_wh: float) -> None:
-        """Set the battery capacity (configurable by user)."""
+        """Set the battery capacity and refresh all dependent consumption entries.
+
+        Older consumption records still hold the previous capacity_wh and the
+        derived percentage in their dict. We rewrite both in place so existing
+        rides immediately reflect the new capacity. The raw consumed_wh value
+        stays as recorded.
+        """
+        if capacity_wh == self._battery_capacity_wh:
+            return
         self._battery_capacity_wh = capacity_wh
+        for entry in self._activity_consumption.values():
+            entry["capacity_wh"] = capacity_wh
+            try:
+                consumed = float(entry.get("consumed_wh", 0) or 0)
+                entry["percentage"] = round((consumed / capacity_wh) * 100, 1) if capacity_wh > 0 else 0
+            except (TypeError, ValueError):
+                entry["percentage"] = 0
         self.hass.async_create_task(self._async_save_state())
+        # Push the refreshed data to all subscribers (sensors + websocket clients)
+        if self.data is not None:
+            new_data = dict(self.data)
+            new_data["activity_consumption"] = self._activity_consumption
+            new_data["battery_capacity_wh"] = capacity_wh
+            self.async_set_updated_data(new_data)
 
     def _track_battery_consumption(self, bikes: list[dict[str, Any]]) -> bool:
         """Track deliveredWhOverLifetime changes and allocate to activities.

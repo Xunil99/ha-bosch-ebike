@@ -196,6 +196,11 @@ async def ws_list_activities(
         all_activities = coordinator.data.get("all_activities", []) if coordinator.data else []
         activity_consumption = coordinator.data.get("activity_consumption", {}) if coordinator.data else {}
         activity_bike = coordinator.data.get("activity_bike", {}) if coordinator.data else {}
+        # Current capacity acts as the source of truth — older persisted
+        # consumption entries may carry a stale capacity_wh / percentage.
+        current_capacity = float(
+            coordinator.data.get("battery_capacity_wh", 0) or 0
+        ) if coordinator.data else 0
         account_label = _account_label(coordinator)
         for a in all_activities:
             aid = a.get("id")
@@ -215,7 +220,14 @@ async def ws_list_activities(
             if aid and aid in activity_bike:
                 entry["bikeId"] = activity_bike[aid]
             if aid and aid in activity_consumption:
-                entry["consumption"] = activity_consumption[aid]
+                cons = dict(activity_consumption[aid])
+                # Always recompute against the current capacity so a later
+                # capacity change doesn't leave stale percentages on the card
+                if current_capacity > 0:
+                    consumed = float(cons.get("consumed_wh", 0) or 0)
+                    cons["capacity_wh"] = current_capacity
+                    cons["percentage"] = round(consumed / current_capacity * 100, 1)
+                entry["consumption"] = cons
             result.append(entry)
 
     connection.send_result(msg["id"], {"activities": result})
