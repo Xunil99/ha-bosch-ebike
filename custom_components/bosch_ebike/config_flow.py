@@ -157,10 +157,12 @@ class BoschEBikeOptionsFlowHandler(OptionsFlow):
     coordinator queries the HA recorder for these sensors at every tour's
     start and end and uses the deltas as ground truth for distance and
     consumption.
-    """
 
-    def __init__(self, config_entry: ConfigEntry) -> None:
-        self.config_entry = config_entry
+    Note: we deliberately do NOT override ``__init__`` here — the framework
+    sets ``self.config_entry`` automatically since HA 2024.11, and from
+    2025.12 onwards manually assigning it raises an AttributeError that
+    surfaces as an HTTP 500 when the user opens the options dialog.
+    """
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
