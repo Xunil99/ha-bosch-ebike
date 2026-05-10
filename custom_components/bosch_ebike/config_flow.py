@@ -41,8 +41,14 @@ class BoschEBikeConfigFlow(ConfigFlow, domain=DOMAIN):
     @staticmethod
     @callback
     def async_get_options_flow(config_entry: ConfigEntry) -> OptionsFlow:
-        """Return the options flow handler (live BLE sensor wiring)."""
-        return BoschEBikeOptionsFlowHandler(config_entry)
+        """Return the options flow handler (live BLE sensor wiring).
+
+        Since HA 2024.11 the framework auto-populates ``self.config_entry`` on
+        the OptionsFlow instance, so we MUST NOT pass it in. Doing so raises
+        TypeError because the parent OptionsFlow no longer accepts an
+        argument in its default __init__.
+        """
+        return BoschEBikeOptionsFlowHandler()
 
     def __init__(self) -> None:
         self._client_id: str | None = None
