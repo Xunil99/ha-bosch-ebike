@@ -54,14 +54,38 @@ If you do not already run ESPHome, install the official add-on from the Home
 Assistant add-on store. Open the ESPHome dashboard once so that the
 configuration directory `/config/esphome/` exists.
 
-### 2. Drop the files in place
+### 2. Drop the YAML in place
 
-Copy the contents of this `esphome/` folder into your ESPHome configuration
-directory so the result looks like this:
+Only one file is strictly required: `example-bridge.yaml`. Copy it into your
+ESPHome configuration directory and rename it (e.g. `ebike-bridge.yaml`):
 
 ```
 /config/esphome/
-├── ebike-bridge.yaml          (renamed from example-bridge.yaml)
+└── ebike-bridge.yaml
+```
+
+By default the YAML pulls the bridge component **directly from this GitHub
+repository** on every compile via:
+
+```yaml
+external_components:
+  - source: github://Xunil99/ha-bosch-ebike@main
+    components: [bosch_ebike_ldi]
+    refresh: 1d
+```
+
+That way the bridge updates in lockstep with the HA integration whenever you
+recompile — no manual file copies, no version drift. Pin to a tag
+(e.g. `@v1.10.0`) instead of `@main` if you want reproducible builds.
+
+#### Offline / air-gapped alternative
+
+If your ESPHome host has no internet during compile, copy the
+`esphome/components/bosch_ebike_ldi/` folder from the repo next to your YAML:
+
+```
+/config/esphome/
+├── ebike-bridge.yaml
 └── components/
     └── bosch_ebike_ldi/
         ├── __init__.py
@@ -73,10 +97,8 @@ directory so the result looks like this:
         └── livedata_decoder.cpp
 ```
 
-You can use the ESPHome dashboard's file editor, the Samba add-on, the Studio
-Code Server add-on, or `scp` — whichever you are comfortable with. The
-`components/` directory **must** live next to the YAML file because the YAML
-references it via `external_components: source: type: local, path: components`.
+…and switch the YAML to the local source variant (the comment block in
+`example-bridge.yaml` shows exactly how).
 
 ### 3. Adjust the YAML
 
@@ -211,14 +233,39 @@ Falls noch nicht vorhanden, das offizielle ESPHome-Addon aus dem Home-Assistant-
 Addon-Store installieren. Einmal das ESPHome-Dashboard öffnen, damit das
 Konfigurationsverzeichnis `/config/esphome/` angelegt wird.
 
-### 2. Dateien einsortieren
+### 2. YAML einsortieren
 
-Den Inhalt dieses `esphome/`-Ordners ins ESPHome-Konfigurationsverzeichnis
-kopieren, sodass folgende Struktur entsteht:
+Strenggenommen reicht eine einzige Datei: `example-bridge.yaml`. Diese ins
+ESPHome-Konfigurationsverzeichnis kopieren und umbenennen
+(z. B. `ebike-bridge.yaml`):
 
 ```
 /config/esphome/
-├── ebike-bridge.yaml          (umbenannt aus example-bridge.yaml)
+└── ebike-bridge.yaml
+```
+
+Standardmäßig zieht die YAML die Bridge-Komponente **direkt aus diesem
+GitHub-Repo** bei jedem Compile:
+
+```yaml
+external_components:
+  - source: github://Xunil99/ha-bosch-ebike@main
+    components: [bosch_ebike_ldi]
+    refresh: 1d
+```
+
+So bewegt sich die Bridge automatisch im Gleichschritt mit der HA-Integration
+— kein manuelles Datei-Kopieren, keine Versions-Diskrepanz. Wer reproduzierbare
+Builds will, ersetzt `@main` durch ein konkretes Tag (z. B. `@v1.10.0`).
+
+#### Offline-Variante / Air-Gapped
+
+Falls dein ESPHome-Host beim Compile keine Internetverbindung hat, kopiere den
+Ordner `esphome/components/bosch_ebike_ldi/` aus dem Repo neben deine YAML:
+
+```
+/config/esphome/
+├── ebike-bridge.yaml
 └── components/
     └── bosch_ebike_ldi/
         ├── __init__.py
@@ -230,10 +277,8 @@ kopieren, sodass folgende Struktur entsteht:
         └── livedata_decoder.cpp
 ```
 
-Zum Kopieren funktioniert der Dateieditor des ESPHome-Dashboards, das Samba-
-Addon, das Studio-Code-Server-Addon oder `scp` — egal womit. **Wichtig**: Der
-`components/`-Ordner muss neben der YAML-Datei liegen, weil die YAML ihn per
-`external_components: source: type: local, path: components` referenziert.
+…und stelle den `external_components:`-Block auf den lokalen Modus um (der
+Kommentarblock in `example-bridge.yaml` zeigt genau, wie).
 
 ### 3. YAML anpassen
 

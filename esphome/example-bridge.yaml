@@ -54,10 +54,22 @@ web_server:
   port: 80
   version: 3
 
+# Pull the bridge component straight from GitHub on every compile.
+# This way you always get the latest fixes without copying files around.
+# Pin to a tag (e.g. @v1.10.0) instead of @main if you want reproducible builds.
 external_components:
-  - source:
-      type: local
-      path: components
+  - source: github://Xunil99/ha-bosch-ebike@main
+    components: [bosch_ebike_ldi]
+    refresh: 1d
+
+# Alternative for offline / air-gapped setups: copy the
+# `esphome/components/bosch_ebike_ldi/` folder from the repo next to this YAML
+# and replace the block above with:
+#
+# external_components:
+#   - source:
+#       type: local
+#       path: components
 
 bosch_ebike_ldi:
   id: ebike_bridge
