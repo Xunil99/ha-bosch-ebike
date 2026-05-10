@@ -26,3 +26,10 @@ EVENT_MAINTENANCE_OVERDUE = f"{DOMAIN}_maintenance_overdue"
 REDIRECT_URI = "http://localhost:8888/callback"
 
 CONF_CLIENT_ID = "client_id"
+
+# Optional links to live BLE sensors (provided by the ESPHome bridge in
+# `esphome/components/bosch_ebike_ldi/`). When configured, the integration
+# uses recorder history of these sensors at tour start/end to compute exact
+# distance and consumption — overriding the cloud-derived values.
+CONF_LIVE_ODOMETER_ENTITY = "live_odometer_entity"
+CONF_LIVE_SOC_ENTITY = "live_soc_entity"

@@ -7,10 +7,27 @@ from typing import Any
 
 import voluptuous as vol
 
-from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
+from homeassistant.config_entries import (
+    ConfigEntry,
+    ConfigFlow,
+    ConfigFlowResult,
+    OptionsFlow,
+)
+from homeassistant.core import callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.selector import (
+    EntitySelector,
+    EntitySelectorConfig,
+)
 
-from .const import DOMAIN, CONF_CLIENT_ID, REDIRECT_URI, AUTH_URL
+from .const import (
+    DOMAIN,
+    CONF_CLIENT_ID,
+    CONF_LIVE_ODOMETER_ENTITY,
+    CONF_LIVE_SOC_ENTITY,
+    REDIRECT_URI,
+    AUTH_URL,
+)
 from .api import BoschEBikeAPI
 
 _LOGGER = logging.getLogger(__name__)
@@ -20,6 +37,12 @@ class BoschEBikeConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Bosch eBike."""
 
     VERSION = 1
+
+    @staticmethod
+    @callback
+    def async_get_options_flow(config_entry: ConfigEntry) -> OptionsFlow:
+        """Return the options flow handler (live BLE sensor wiring)."""
+        return BoschEBikeOptionsFlowHandler(config_entry)
 
     def __init__(self) -> None:
         self._client_id: str | None = None
@@ -124,3 +147,53 @@ class BoschEBikeConfigFlow(ConfigFlow, domain=DOMAIN):
                 return None
             return None
         return cleaned
+
+
+class BoschEBikeOptionsFlowHandler(OptionsFlow):
+    """Options flow: optional wiring of live BLE sensors for tour enrichment.
+
+    If both ``live_odometer_entity`` and ``live_soc_entity`` are left empty,
+    the integration keeps the existing cloud-derived behavior. When set, the
+    coordinator queries the HA recorder for these sensors at every tour's
+    start and end and uses the deltas as ground truth for distance and
+    consumption.
+    """
+
+    def __init__(self, config_entry: ConfigEntry) -> None:
+        self.config_entry = config_entry
+
+    async def async_step_init(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        if user_input is not None:
+            # Normalize empty strings to "not set" so users can clear values.
+            cleaned: dict[str, Any] = {}
+            for key in (CONF_LIVE_ODOMETER_ENTITY, CONF_LIVE_SOC_ENTITY):
+                value = user_input.get(key)
+                if isinstance(value, str) and value.strip():
+                    cleaned[key] = value.strip()
+            return self.async_create_entry(title="", data=cleaned)
+
+        current = self.config_entry.options or {}
+
+        sensor_selector = EntitySelector(
+            EntitySelectorConfig(domain="sensor", multiple=False)
+        )
+
+        schema = vol.Schema(
+            {
+                vol.Optional(
+                    CONF_LIVE_ODOMETER_ENTITY,
+                    description={
+                        "suggested_value": current.get(CONF_LIVE_ODOMETER_ENTITY)
+                    },
+                ): sensor_selector,
+                vol.Optional(
+                    CONF_LIVE_SOC_ENTITY,
+                    description={
+                        "suggested_value": current.get(CONF_LIVE_SOC_ENTITY)
+                    },
+                ): sensor_selector,
+            }
+        )
+        return self.async_show_form(step_id="init", data_schema=schema)

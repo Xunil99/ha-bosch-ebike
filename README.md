@@ -32,6 +32,20 @@ Zusätzlich zur Cloud-Integration findest du im Unterordner [`esphome/`](esphome
 
 Komplette Anleitung: **[esphome/README.md](esphome/README.md)**
 
+#### Live-Werte für exakte Tour-Berechnung verwenden (optional, ab v1.10.0)
+
+Wenn die Bridge läuft, kannst du in den **Integrations-Einstellungen** (HA → *Einstellungen → Geräte & Dienste → Bosch eBike → Konfigurieren*) zwei Sensoren hinterlegen:
+
+- **Live-Tachostand-Sensor** (z. B. `sensor.ebike_odometer_live`)
+- **Live-Akkustand-Sensor** (z. B. `sensor.ebike_battery_soc_live`)
+
+Sind diese gesetzt, fragt die Integration bei jedem Tour-Update den HA-Recorder nach dem Wert dieser Sensoren bei Tour-Start und Tour-Ende ab. Aus den Differenzen ergibt sich:
+
+- **Exakte Tour-Distanz** (Tachostand-Differenz statt Cloud-GPS-Berechnung).
+- **Exakter Akkuverbrauch in Wh** ((SoC-Start − SoC-Ende) × Akkukapazität / 100).
+
+Die Werte ersetzen die bisherige Snapshot-Schätzung in den Sensoren *Last Ride Distance*, *Battery Consumption Wh*, *Verbrauch %* etc. Wenn beim Tour-Start oder -Ende kein BLE-Sample im Toleranzfenster (±5 min) verfügbar war (Bike außer Reichweite), fällt die Integration transparent auf die alte Cloud-Logik zurück. Beide Felder sind optional und unabhängig — du kannst auch nur einen der beiden setzen.
+
 ### Voraussetzungen
 
 1. Ein eBike mit **Bosch Smart System** (z. B. Performance Line CX, SX, etc.)
@@ -365,6 +379,20 @@ This custom integration connects your **Bosch eBike Smart System** to Home Assis
 In addition to the cloud integration, the [`esphome/`](esphome/) subfolder contains an **ESPHome external component** that turns an ESP32 into a bridge for the **Bosch eBike Live Data Interface (LDI)** (BLE, smart system v19+). Real-time values (speed, battery SoC, cadence, rider power, odometer, light state, lock state, …) become ESPHome sensors in HA — complementing the cloud-based tour history.
 
 Full guide: **[esphome/README.md](esphome/README.md)**
+
+#### Use live values for exact tour math (optional, from v1.10.0)
+
+Once the bridge is running, you can wire two sensors in the **integration options** (HA → *Settings → Devices & services → Bosch eBike → Configure*):
+
+- **Live odometer sensor** (e.g. `sensor.ebike_odometer_live`)
+- **Live battery state-of-charge sensor** (e.g. `sensor.ebike_battery_soc_live`)
+
+When set, the integration queries the HA recorder for these sensors at every tour's start and end timestamps. The deltas yield:
+
+- **Exact tour distance** (odometer difference instead of cloud-derived GPS sum).
+- **Exact battery consumption in Wh** ((SoC start − SoC end) × battery capacity / 100).
+
+These replace the snapshot-based estimates in *Last Ride Distance*, *Battery Consumption Wh*, *consumption %* etc. If no fresh BLE sample exists at tour start/end within ±5 min (bike out of range), the integration transparently falls back to the previous cloud logic. Both fields are optional and independent — you can wire just one of them.
 
 ### Prerequisites
 

@@ -26,6 +26,22 @@
       "token_error": "Token exchange failed. Please try again."
     }
   },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Live data sources (optional)",
+        "description": "Optionally link the live odometer and battery state-of-charge sensors exposed by the ESPHome Bosch eBike LDI bridge. When set, the integration uses these sensors to compute exact tour distance and battery consumption instead of cloud-derived estimates. Leave empty to keep the existing behavior.",
+        "data": {
+          "live_odometer_entity": "Live odometer sensor (km)",
+          "live_soc_entity": "Live battery state-of-charge sensor (%)"
+        },
+        "data_description": {
+          "live_odometer_entity": "Sensor that exposes the bike's odometer in kilometers (e.g. sensor.ebike_odometer_live).",
+          "live_soc_entity": "Sensor that exposes the bike's battery state of charge in percent (e.g. sensor.ebike_battery_soc_live)."
+        }
+      }
+    }
+  },
   "entity": {
     "sensor": {
       "odometer": { "name": "Odometer" },

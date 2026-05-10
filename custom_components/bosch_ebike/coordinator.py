@@ -25,7 +25,10 @@ from .const import (
     EVENT_SERVICE_OVERDUE,
     EVENT_MAINTENANCE_DUE_SOON,
     EVENT_MAINTENANCE_OVERDUE,
+    CONF_LIVE_ODOMETER_ENTITY,
+    CONF_LIVE_SOC_ENTITY,
 )
+from .live_enrichment import get_state_at, parse_iso_utc
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -70,6 +73,11 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             hass, STORAGE_VERSION, f"{DOMAIN}_{STORAGE_KEY_SUFFIX}"
         )
         self._state_loaded = False
+        # Per-activity flag: which fields have already been overridden with
+        # live BLE values. activity_id -> {"odo": True, "soc": True}. Failed
+        # attempts (no recorder data fresh enough) are NOT cached so they
+        # retry on the next poll — useful when the recorder catches up.
+        self._live_enrichment_cache: dict[str, dict[str, bool]] = {}
 
     async def async_load_persisted_state(self) -> None:
         """Restore battery consumption state from disk (once at startup)."""
@@ -256,6 +264,10 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         rides immediately reflect the new capacity. The raw consumed_wh value
         stays as recorded.
         """
+        # Live-enrichment cache holds consumed_wh derived from the previous
+        # capacity. Wipe it so the next poll recomputes from live SoC deltas.
+        self.invalidate_live_enrichment_cache()
+
         if capacity_wh == self._battery_capacity_wh:
             return
         self._battery_capacity_wh = capacity_wh
@@ -346,6 +358,114 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         return state_changed
 
+    # -- Live BLE enrichment (optional) --
+
+    def _live_odometer_entity(self) -> str | None:
+        """Configured live odometer sensor entity_id, or None."""
+        if not self.config_entry:
+            return None
+        value = self.config_entry.options.get(CONF_LIVE_ODOMETER_ENTITY)
+        return value or None
+
+    def _live_soc_entity(self) -> str | None:
+        """Configured live battery SoC sensor entity_id, or None."""
+        if not self.config_entry:
+            return None
+        value = self.config_entry.options.get(CONF_LIVE_SOC_ENTITY)
+        return value or None
+
+    def invalidate_live_enrichment_cache(self) -> None:
+        """Clear the per-activity enrichment cache.
+
+        Called when the user changes the live-sensor options or when the
+        battery capacity changes (live consumption depends on it).
+        """
+        self._live_enrichment_cache.clear()
+
+    async def _enrich_activities_with_live_data(self) -> bool:
+        """Override distance / consumption from live BLE sensors where possible.
+
+        For each activity that has not yet been enriched, query the HA
+        recorder for the configured sensors at startTime and endTime. If a
+        fresh sample exists at both points, derive the exact value and
+        replace the cloud-derived one. Falls back transparently when no
+        live data is available.
+
+        Returns True if persistent state changed (consumption entries).
+        """
+        odo_entity = self._live_odometer_entity()
+        soc_entity = self._live_soc_entity()
+        if not odo_entity and not soc_entity:
+            return False
+
+        state_changed = False
+        for activity in self._all_activities:
+            aid = activity.get("id")
+            if not aid:
+                continue
+            cache = self._live_enrichment_cache.setdefault(aid, {})
+
+            start_time = parse_iso_utc(activity.get("startTime"))
+            end_time = parse_iso_utc(activity.get("endTime"))
+            if start_time is None or end_time is None:
+                continue
+            if end_time <= start_time:
+                continue
+
+            # ---- Distance (live odometer is in km) ----
+            if odo_entity and not cache.get("odo"):
+                start_odo = await get_state_at(self.hass, odo_entity, start_time)
+                end_odo = await get_state_at(self.hass, odo_entity, end_time)
+                if (
+                    start_odo is not None
+                    and end_odo is not None
+                    and end_odo >= start_odo
+                ):
+                    live_distance_m = (end_odo - start_odo) * 1000.0
+                    # Sanity guard: ignore obviously bogus values (sensor
+                    # rollover, zero-length tour). 50 m .. 500 km per tour.
+                    if 50.0 <= live_distance_m <= 500_000.0:
+                        old = activity.get("distance")
+                        activity["distance"] = round(live_distance_m, 1)
+                        activity["_distance_source"] = "ble_live"
+                        cache["odo"] = True
+                        _LOGGER.info(
+                            "Live distance for activity %s: %.0f m (was %s)",
+                            aid, live_distance_m, old,
+                        )
+
+            # ---- Consumption (live SoC in %) ----
+            if soc_entity and not cache.get("soc"):
+                start_soc = await get_state_at(self.hass, soc_entity, start_time)
+                end_soc = await get_state_at(self.hass, soc_entity, end_time)
+                if (
+                    start_soc is not None
+                    and end_soc is not None
+                    and self._battery_capacity_wh > 0
+                ):
+                    delta_pct = start_soc - end_soc
+                    # Allow tiny negative drifts (regen, sensor noise).
+                    if -2.0 <= delta_pct <= 100.0:
+                        consumed_pct = max(0.0, delta_pct)
+                        consumed_wh = (
+                            consumed_pct * self._battery_capacity_wh / 100.0
+                        )
+                        self._activity_consumption[aid] = {
+                            "consumed_wh": round(consumed_wh, 1),
+                            "capacity_wh": self._battery_capacity_wh,
+                            "is_exact": True,
+                            "percentage": round(consumed_pct, 1),
+                            "source": "ble_live",
+                        }
+                        cache["soc"] = True
+                        state_changed = True
+                        _LOGGER.info(
+                            "Live consumption for activity %s: %.1f Wh (%.1f %%)",
+                            aid, consumed_wh, consumed_pct,
+                        )
+
+        return state_changed
+
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch bikes and activities from Bosch API."""
         try:
@@ -408,6 +528,13 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         # Battery consumption tracking via Wh delta
         state_changed = self._track_battery_consumption(bikes)
+
+        # Optional: override distance / consumption with live BLE values
+        # from the user-configured sensors. Replaces cloud-derived numbers
+        # for any activity where a fresh recorder sample exists at both
+        # tour start and end.
+        if await self._enrich_activities_with_live_data():
+            state_changed = True
 
         # Bike attribution via odometer-matching (only meaningful for multi-bike accounts;
         # for single-bike accounts every activity is attributed to that bike)
