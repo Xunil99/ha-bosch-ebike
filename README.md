@@ -26,6 +26,12 @@ Diese Custom Integration verbindet dein **Bosch eBike Smart System** mit Home As
 - **Automatische Token-Aktualisierung** über Refresh-Token
 - **30-Minuten-Polling-Intervall** (beim ersten Start werden alle Fahrten importiert)
 
+### 🆕 Live-Daten über Bluetooth (ESPHome-Bridge)
+
+Zusätzlich zur Cloud-Integration findest du im Unterordner [`esphome/`](esphome/) eine **ESPHome-External-Component**, die einen ESP32 als Brücke zum **Bosch eBike Live Data Interface (LDI)** (BLE, smart system v19+) macht. Damit fließen Echtzeit-Werte (Speed, Akku-SoC, Tritt­frequenz, Fahrer­leistung, Tachostand, Lichtstatus, Lock-Status, …) als ESPHome-Sensoren in HA — ergänzend zur Cloud-basierten Tour-History.
+
+Komplette Anleitung: **[esphome/README.md](esphome/README.md)**
+
 ### Voraussetzungen
 
 1. Ein eBike mit **Bosch Smart System** (z. B. Performance Line CX, SX, etc.)
@@ -353,6 +359,12 @@ This custom integration connects your **Bosch eBike Smart System** to Home Assis
 - **Interactive map card:** Custom Lovelace card with GPS tracks, speed-based color coding, date picker and prev/next navigation
 - **Automatic token refresh** via refresh token
 - **30-minute polling interval** (all rides are imported on first startup)
+
+### 🆕 Live data over Bluetooth (ESPHome bridge)
+
+In addition to the cloud integration, the [`esphome/`](esphome/) subfolder contains an **ESPHome external component** that turns an ESP32 into a bridge for the **Bosch eBike Live Data Interface (LDI)** (BLE, smart system v19+). Real-time values (speed, battery SoC, cadence, rider power, odometer, light state, lock state, …) become ESPHome sensors in HA — complementing the cloud-based tour history.
+
+Full guide: **[esphome/README.md](esphome/README.md)**
 
 ### Prerequisites
 

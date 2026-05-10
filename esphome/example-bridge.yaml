@@ -1,0 +1,108 @@
+# Example ESPHome configuration for the Bosch eBike Live Data Interface bridge.
+# Copy this file to your ESPHome config directory (e.g. /config/esphome/) and
+# adjust the device name / friendly name to your liking. Make sure the
+# `components/bosch_ebike_ldi/` folder lives next to this file.
+
+esphome:
+  name: ebike-bridge
+  friendly_name: eBike Bridge
+  min_version: 2025.11.0
+  name_add_mac_suffix: false
+
+esp32:
+  variant: esp32
+  framework:
+    type: esp-idf
+    sdkconfig_options:
+      # NimBLE host stack with peripheral + GATT-client roles.
+      # Bluedroid is disabled because the two stacks are mutually exclusive.
+      CONFIG_BT_ENABLED: y
+      CONFIG_BT_NIMBLE_ENABLED: y
+      CONFIG_BT_BLUEDROID_ENABLED: n
+      CONFIG_BT_CONTROLLER_ENABLED: y
+      CONFIG_BTDM_CTRL_MODE_BLE_ONLY: y
+      CONFIG_BTDM_CTRL_MODE_BR_EDR_ONLY: n
+      CONFIG_BTDM_CTRL_MODE_BTDM: n
+      CONFIG_BT_NIMBLE_MAX_CONNECTIONS: "1"
+      CONFIG_BT_NIMBLE_ROLE_PERIPHERAL: y
+      CONFIG_BT_NIMBLE_ROLE_BROADCASTER: y
+      # Central role enables the GATT client API (ble_gattc_*).
+      # The eBike connects to us as Central, but on that connection we act as
+      # GATT *client* against the eBike's GATT *server* on the Live Data Service.
+      CONFIG_BT_NIMBLE_ROLE_CENTRAL: y
+      CONFIG_BT_NIMBLE_ROLE_OBSERVER: y
+      CONFIG_BT_NIMBLE_SM_LEGACY: n
+      CONFIG_BT_NIMBLE_SM_SC: y
+      CONFIG_BT_NIMBLE_NVS_PERSIST: y
+      CONFIG_BT_NIMBLE_ATT_PREFERRED_MTU: "247"
+
+logger:
+  level: DEBUG
+  logs:
+    bosch_ebike_ldi: DEBUG
+
+api:
+
+ota:
+  - platform: esphome
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+web_server:
+  port: 80
+  version: 3
+
+external_components:
+  - source:
+      type: local
+      path: components
+
+bosch_ebike_ldi:
+  id: ebike_bridge
+  device_name: "HA eBike Bridge"
+
+sensor:
+  - platform: bosch_ebike_ldi
+    bosch_ebike_ldi_id: ebike_bridge
+    speed:
+      name: "eBike Speed"
+    cadence:
+      name: "eBike Cadence"
+    rider_power:
+      name: "eBike Rider Power"
+    ambient_brightness:
+      name: "eBike Ambient Brightness"
+    battery_soc:
+      name: "eBike Battery SoC (Live)"
+    odometer:
+      name: "eBike Odometer (Live)"
+
+binary_sensor:
+  - platform: bosch_ebike_ldi
+    bosch_ebike_ldi_id: ebike_bridge
+    connected:
+      name: "eBike Connected"
+    light:
+      name: "eBike Light"
+    system_locked:
+      name: "eBike System Locked"
+    charger_connected:
+      name: "eBike Charger Connected"
+    light_reserve:
+      name: "eBike Light Reserve"
+    diagnosis_active:
+      name: "eBike Diagnosis Active"
+    in_motion:
+      name: "eBike In Motion"
+
+# Optional: button to wipe the BLE bond from NVS. Useful if pairing breaks
+# (for example after removing the accessory in the Flow app). Re-pair afterwards.
+button:
+  - platform: template
+    name: "eBike Clear Bonding"
+    on_press:
+      then:
+        - lambda: |-
+            id(ebike_bridge).clear_bonding();
