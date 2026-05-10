@@ -213,13 +213,21 @@ static int gap_event_handler(struct ble_gap_event *event, void *arg) {
       return 0;
     }
     case BLE_GAP_EVENT_ENC_CHANGE: {
-      ESP_LOGI(TAG, "Encryption changed status=%d", event->enc_change.status);
+      ESP_LOGI(TAG, "Encryption changed status=%d conn_handle=%u",
+               event->enc_change.status, event->enc_change.conn_handle);
       if (event->enc_change.status == 0) {
+        // IMPORTANT: use the conn_handle from the event itself, NOT
+        // g_conn.conn_handle. On bond-resume reconnects NimBLE delivers
+        // ENC_CHANGE before BLE_GAP_EVENT_CONNECT to user-space, so our
+        // global state may still hold the previous (NONE) handle. The
+        // event handle is always valid.
+        uint16_t handle = event->enc_change.conn_handle;
+        g_conn.conn_handle = handle;
         g_conn.encrypted = true;
         // Workaround for LDI-001/003: initiate MTU ourselves.
-        int rc = ble_gattc_exchange_mtu(g_conn.conn_handle, on_mtu_exchange, nullptr);
+        int rc = ble_gattc_exchange_mtu(handle, on_mtu_exchange, nullptr);
         if (rc != 0) {
-          ESP_LOGE(TAG, "exchange_mtu start failed: %d", rc);
+          ESP_LOGE(TAG, "exchange_mtu start failed: %d (handle=%u)", rc, handle);
         }
       } else {
         ESP_LOGE(TAG, "Pairing failed; consider clearing bonding on both sides.");
@@ -525,7 +533,7 @@ void BoschEbikeLdi::dump_config() {
   ESP_LOGCONFIG(TAG, "  Service UUID: 0000eb20-eaa2-11e9-81b4-2a2ae2dbcce4");
   ESP_LOGCONFIG(TAG, "  Live Data Char: 0000eb21-eaa2-11e9-81b4-2a2ae2dbcce4");
   ESP_LOGCONFIG(TAG, "  Appearance: 0x0480 (Cycling)");
-  ESP_LOGCONFIG(TAG, "  Status: v0.3 – initial read on subscribe + lock polarity fixed");
+  ESP_LOGCONFIG(TAG, "  Status: v0.4 – race-fix for bond-resume reconnects");
 }
 
 float BoschEbikeLdi::get_setup_priority() const {
