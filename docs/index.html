@@ -5,10 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Bosch eBike LDI Bridge - Web Installer</title>
   <meta name="description" content="Flash a Bosch eBike Live Data Interface bridge onto your ESP32 directly from the browser. No ESPHome installation required." />
-  <script
-    type="module"
-    src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"
-  ></script>
   <style>
     :root {
       color-scheme: light dark;
@@ -129,9 +125,30 @@
       color: var(--accent-fg);
       border-color: var(--accent);
     }
-    .lang-en { display: none; }
-    body.lang-en .lang-de { display: none; }
-    body.lang-en .lang-en { display: block; }
+    /* Default language = German. Explicit display values so Safari does
+       not hide the page if it bails on parsing later rules. */
+    span.lang-de { display: inline; }
+    span.lang-en { display: none; }
+    section.lang-de { display: block; }
+    section.lang-en { display: none; }
+    body.lang-en span.lang-de { display: none; }
+    body.lang-en span.lang-en { display: inline; }
+    body.lang-en section.lang-de { display: none; }
+    body.lang-en section.lang-en { display: block; }
+    .fallback-link {
+      display: block;
+      margin-top: 1rem;
+      font-size: .92rem;
+      color: var(--muted);
+    }
+    .noscript-warn {
+      background: rgba(204, 153, 0, .12);
+      border: 1px solid rgba(204, 153, 0, .4);
+      color: #8a6d00;
+      padding: .85rem 1rem;
+      border-radius: 10px;
+      margin-bottom: 1.25rem;
+    }
     footer {
       text-align: center;
       color: var(--muted);
@@ -166,6 +183,13 @@
       <button id="btn-en" type="button">English</button>
     </div>
 
+    <noscript>
+      <div class="noscript-warn">
+        <span class="lang-de">Der Web-Installer braucht JavaScript. Aktiviere es in deinem Browser oder lade die Firmware unten manuell.</span>
+        <span class="lang-en">The web installer needs JavaScript. Enable it in your browser or download the firmware manually below.</span>
+      </div>
+    </noscript>
+
     <div class="install-card">
       <esp-web-install-button manifest="manifest.json">
         <button slot="activate" type="button">
@@ -181,6 +205,11 @@
           <span class="lang-en">This page must be opened over HTTPS.</span>
         </span>
       </esp-web-install-button>
+      <a class="fallback-link"
+         href="https://github.com/Xunil99/ha-bosch-ebike/releases/latest/download/ebike-bridge.factory.bin">
+        <span class="lang-de">Alternativ: factory.bin manuell herunterladen und mit esptool flashen</span>
+        <span class="lang-en">Alternatively: download factory.bin and flash it manually with esptool</span>
+      </a>
     </div>
 
     <section class="lang-de">
@@ -283,6 +312,18 @@
       </p>
     </footer>
   </main>
+
+  <!--
+    The esp-web-tools module is loaded at the end of body (deferred by
+    default for type=module) so the static page content renders first
+    regardless of CDN or content-blocker outcomes. If the import fails
+    Safari and friends should still display the page; only the install
+    button stays as a plain inline button without flashing capability.
+  -->
+  <script
+    type="module"
+    src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"
+  ></script>
 
   <script>
     (function () {
