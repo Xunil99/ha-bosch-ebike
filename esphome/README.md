@@ -13,6 +13,16 @@ fields are exposed as Home Assistant entities through ESPHome's native API.
 
 ---
 
+## Quick install (no ESPHome required)
+
+If you just want to get the bridge running, the easiest path is the **web installer**: plug an ESP32 into your computer via USB, open the page below in Chrome or Edge and click *Install*. Firmware and WiFi setup happen entirely in the browser, no ESPHome installation needed on your side.
+
+➡️ **https://xunil99.github.io/ha-bosch-ebike/**
+
+The page is bilingual (DE/EN) and walks through the full flow including the Flow App pairing step. Everything below this section is for users who want to customize the YAML themselves or build from source.
+
+---
+
 ## English
 
 ### What you get

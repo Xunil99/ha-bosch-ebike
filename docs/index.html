@@ -1,0 +1,312 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Bosch eBike LDI Bridge - Web Installer</title>
+  <meta name="description" content="Flash a Bosch eBike Live Data Interface bridge onto your ESP32 directly from the browser. No ESPHome installation required." />
+  <script
+    type="module"
+    src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"
+  ></script>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --fg: #1a1a1a;
+      --bg: #f7f7f8;
+      --card: #ffffff;
+      --muted: #555;
+      --accent: #1e6fdb;
+      --accent-fg: #ffffff;
+      --border: #e3e3e5;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --fg: #ececec;
+        --bg: #181818;
+        --card: #232323;
+        --muted: #b0b0b0;
+        --accent: #5fa0ff;
+        --accent-fg: #0c1a2e;
+        --border: #343434;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+        "Helvetica Neue", Arial, sans-serif;
+      color: var(--fg);
+      background: var(--bg);
+      line-height: 1.55;
+    }
+    main {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 2rem 1.25rem 3rem;
+    }
+    header {
+      text-align: center;
+      margin-bottom: 2rem;
+    }
+    h1 {
+      font-size: 1.85rem;
+      margin: 0 0 .35rem;
+    }
+    .subtitle {
+      color: var(--muted);
+      font-size: 1.05rem;
+    }
+    .install-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 1.5rem;
+      text-align: center;
+      margin-bottom: 2rem;
+    }
+    esp-web-install-button[install-supported] button[slot="activate"] {
+      background: var(--accent);
+      color: var(--accent-fg);
+      border: 0;
+      border-radius: 10px;
+      padding: .85rem 1.6rem;
+      font-size: 1.05rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    esp-web-install-button button[slot="activate"]:hover {
+      filter: brightness(1.05);
+    }
+    .unsupported,
+    .not-allowed {
+      color: #c33;
+      padding: .85rem 1rem;
+      background: rgba(204, 51, 51, .08);
+      border-radius: 10px;
+      display: inline-block;
+    }
+    section {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 1.25rem 1.5rem;
+      margin-bottom: 1.25rem;
+    }
+    section h2 {
+      margin-top: 0;
+      font-size: 1.25rem;
+    }
+    ol {
+      padding-left: 1.4rem;
+    }
+    ol li {
+      margin-bottom: .35rem;
+    }
+    code {
+      background: rgba(127, 127, 127, .14);
+      padding: .1rem .35rem;
+      border-radius: 4px;
+      font-size: .92em;
+    }
+    .lang-switch {
+      display: flex;
+      gap: .5rem;
+      justify-content: center;
+      margin-bottom: 1.5rem;
+    }
+    .lang-switch button {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--fg);
+      padding: .35rem .85rem;
+      border-radius: 8px;
+      cursor: pointer;
+      font: inherit;
+    }
+    .lang-switch button.active {
+      background: var(--accent);
+      color: var(--accent-fg);
+      border-color: var(--accent);
+    }
+    .lang-en { display: none; }
+    body.lang-en .lang-de { display: none; }
+    body.lang-en .lang-en { display: block; }
+    footer {
+      text-align: center;
+      color: var(--muted);
+      font-size: .9rem;
+      margin-top: 2rem;
+    }
+    footer a {
+      color: var(--accent);
+    }
+    .hw-list {
+      list-style: none;
+      padding: 0;
+      margin: .5rem 0 0;
+    }
+    .hw-list li {
+      padding: .25rem 0;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>Bosch eBike LDI Bridge</h1>
+      <p class="subtitle">
+        <span class="lang-de">Live-Daten deines Bosch smart system eBikes per Bluetooth in Home Assistant</span>
+        <span class="lang-en">Bosch smart system eBike live data in Home Assistant via Bluetooth</span>
+      </p>
+    </header>
+
+    <div class="lang-switch" role="tablist">
+      <button id="btn-de" class="active" type="button">Deutsch</button>
+      <button id="btn-en" type="button">English</button>
+    </div>
+
+    <div class="install-card">
+      <esp-web-install-button manifest="manifest.json">
+        <button slot="activate" type="button">
+          <span class="lang-de">Bridge auf ESP32 flashen</span>
+          <span class="lang-en">Install bridge onto ESP32</span>
+        </button>
+        <span slot="unsupported" class="unsupported">
+          <span class="lang-de">Dein Browser unterstützt kein Web Serial. Bitte Chrome oder Edge auf einem Desktop verwenden.</span>
+          <span class="lang-en">Your browser does not support Web Serial. Please use Chrome or Edge on a desktop computer.</span>
+        </span>
+        <span slot="not-allowed" class="not-allowed">
+          <span class="lang-de">Diese Seite muss über HTTPS aufgerufen werden.</span>
+          <span class="lang-en">This page must be opened over HTTPS.</span>
+        </span>
+      </esp-web-install-button>
+    </div>
+
+    <section class="lang-de">
+      <h2>Voraussetzungen</h2>
+      <ul class="hw-list">
+        <li>Ein <strong>ESP32-Devboard</strong> (z. B. ESP32-DevKitC, ESP32-WROOM-32). Andere Varianten (S3 / C3 / C6) sind noch nicht getestet.</li>
+        <li>Ein <strong>USB-Kabel</strong> mit Daten-Adern.</li>
+        <li><strong>Chrome oder Edge</strong> auf Desktop / Laptop. Safari, Firefox und Mobil-Browser unterstützen Web Serial nicht.</li>
+        <li>Ein Bosch eBike mit <strong>smart system Drive Unit v19 oder neuer</strong>. Software-Version in der Bosch Flow App unter <em>Bike → Einstellungen → Systeminformation</em> prüfen.</li>
+      </ul>
+    </section>
+
+    <section class="lang-de">
+      <h2>So funktioniert es</h2>
+      <ol>
+        <li>ESP32 per USB anstecken.</li>
+        <li>Oben auf <strong>"Bridge auf ESP32 flashen"</strong> klicken.</li>
+        <li>Den seriellen Port des ESP32 im Browser-Dialog auswählen.</li>
+        <li>Auf <strong>"Install"</strong> klicken und warten, bis die Firmware geschrieben ist (ca. 1 Min).</li>
+        <li>Nach dem Reboot fragt der Browser nach deinem WLAN. Netzwerk und Passwort eingeben.</li>
+        <li>Die Bridge erscheint automatisch in Home Assistant unter <em>Einstellungen → Geräte &amp; Dienste</em>. Auf "Konfigurieren" klicken, um sie zu übernehmen.</li>
+        <li>In der Bosch Flow App das eBike öffnen, oben rechts auf das <strong>Zahnrad ⚙</strong> tippen → <strong>Komponenten</strong> → <strong>Neues Gerät hinzufügen</strong>. Das eBike sucht jetzt nach der Bridge.</li>
+        <li><strong>HA eBike Bridge</strong> in der Liste auswählen und Pairing am Bike-Display bestätigen.</li>
+      </ol>
+      <p>Sobald gepairt, verbindet sich das eBike bei jedem Einschalten automatisch mit der Bridge. Die Live-Werte (Akku-SoC, Speed, Tachostand, Lichtstatus, Lock-Status, ...) tauchen in HA als Sensoren auf.</p>
+    </section>
+
+    <section class="lang-de">
+      <h2>Mit der ha-bosch-ebike-Cloud-Integration koppeln</h2>
+      <p>
+        Wenn du bereits die
+        <a href="https://github.com/Xunil99/ha-bosch-ebike">ha-bosch-ebike</a>
+        Cloud-Integration nutzt: In den Integrations-Einstellungen kannst du den
+        <strong>Live-Tachostand-Sensor</strong> und den
+        <strong>Live-Akkustand-Sensor</strong> verlinken. Tour-Distanz und Akku-Verbrauch werden dann exakt aus diesen Live-Werten berechnet statt aus den Cloud-Snapshots.
+      </p>
+    </section>
+
+    <section class="lang-de">
+      <h2>Falls etwas nicht klappt</h2>
+      <ul>
+        <li><strong>Web-Installer findet den ESP32 nicht:</strong> anderes USB-Kabel (Datenkabel, nicht reines Ladekabel), Treiber installieren (CP210x / CH340 je nach Board).</li>
+        <li><strong>Bike findet die Bridge nicht:</strong> Bike-Firmware in der Flow App prüfen, mindestens v19. Reichweite zwischen Bike und ESP32 maximal ca. 10 m.</li>
+        <li><strong>Pairing schlägt fehl:</strong> In HA den Button <strong>"eBike Clear Bonding"</strong> drücken, im Bike alte Komponente entfernen, dann frisch koppeln.</li>
+        <li>Weitere Probleme: <a href="https://github.com/Xunil99/ha-bosch-ebike/issues">Issue im Repo</a> öffnen.</li>
+      </ul>
+    </section>
+
+    <section class="lang-en">
+      <h2>Requirements</h2>
+      <ul class="hw-list">
+        <li>An <strong>ESP32 dev board</strong> (e.g. ESP32-DevKitC, ESP32-WROOM-32). Other variants (S3 / C3 / C6) are not yet tested.</li>
+        <li>A <strong>USB cable with data lines</strong> (not just a charging cable).</li>
+        <li><strong>Chrome or Edge</strong> on a desktop / laptop. Safari, Firefox, and mobile browsers do not support Web Serial.</li>
+        <li>A Bosch eBike with <strong>smart system drive unit v19 or newer</strong>. Verify in the Bosch Flow App under <em>Bike → Settings → System information</em>.</li>
+      </ul>
+    </section>
+
+    <section class="lang-en">
+      <h2>How it works</h2>
+      <ol>
+        <li>Plug the ESP32 into your computer via USB.</li>
+        <li>Click <strong>"Install bridge onto ESP32"</strong> above.</li>
+        <li>Select the ESP32's serial port in the browser dialog.</li>
+        <li>Click <strong>"Install"</strong> and wait until the firmware is written (about 1 min).</li>
+        <li>After reboot the browser prompts for your WiFi. Pick your network and enter the password.</li>
+        <li>The bridge shows up automatically in Home Assistant under <em>Settings → Devices &amp; services</em>. Click "Configure" to adopt it.</li>
+        <li>In the Bosch Flow App, open your bike, tap the <strong>gear icon ⚙</strong> top right → <strong>Components</strong> → <strong>Add new device</strong>. The bike now scans for the bridge.</li>
+        <li>Select <strong>HA eBike Bridge</strong> from the list and confirm pairing on the bike's display.</li>
+      </ol>
+      <p>Once paired, the bike reconnects to the bridge automatically every time it powers on. Live values (battery SoC, speed, odometer, light state, lock state, ...) appear as HA sensors.</p>
+    </section>
+
+    <section class="lang-en">
+      <h2>Pair with the ha-bosch-ebike cloud integration</h2>
+      <p>
+        If you already use the
+        <a href="https://github.com/Xunil99/ha-bosch-ebike">ha-bosch-ebike</a>
+        cloud integration: in the integration's options you can wire the
+        <strong>live odometer sensor</strong> and the
+        <strong>live SoC sensor</strong>. Tour distance and battery consumption are then computed exactly from these live values instead of the cloud snapshots.
+      </p>
+    </section>
+
+    <section class="lang-en">
+      <h2>Troubleshooting</h2>
+      <ul>
+        <li><strong>Web installer cannot find the ESP32:</strong> try a different USB cable (data, not charge-only), install drivers (CP210x / CH340 depending on the board).</li>
+        <li><strong>Bike does not find the bridge:</strong> check firmware in the Flow App, must be v19+. BLE range between bike and ESP32 is about 10 m max.</li>
+        <li><strong>Pairing fails:</strong> press the <strong>"eBike Clear Bonding"</strong> button in HA, remove the old component on the bike, then re-pair.</li>
+        <li>Other problems: <a href="https://github.com/Xunil99/ha-bosch-ebike/issues">open an issue on GitHub</a>.</li>
+      </ul>
+    </section>
+
+    <footer>
+      <p>
+        <a href="https://github.com/Xunil99/ha-bosch-ebike">GitHub repo</a> ·
+        <a href="https://github.com/Xunil99/ha-bosch-ebike/tree/main/esphome">DIY YAML</a> ·
+        Apache-2.0
+      </p>
+    </footer>
+  </main>
+
+  <script>
+    (function () {
+      const btnDe = document.getElementById("btn-de");
+      const btnEn = document.getElementById("btn-en");
+      const stored = localStorage.getItem("ebike-bridge-lang");
+      if (stored === "en") setLang("en");
+      function setLang(lang) {
+        if (lang === "en") {
+          document.body.classList.add("lang-en");
+          document.documentElement.lang = "en";
+          btnEn.classList.add("active");
+          btnDe.classList.remove("active");
+        } else {
+          document.body.classList.remove("lang-en");
+          document.documentElement.lang = "de";
+          btnDe.classList.add("active");
+          btnEn.classList.remove("active");
+        }
+        localStorage.setItem("ebike-bridge-lang", lang);
+      }
+      btnDe.addEventListener("click", () => setLang("de"));
+      btnEn.addEventListener("click", () => setLang("en"));
+    })();
+  </script>
+</body>
+</html>

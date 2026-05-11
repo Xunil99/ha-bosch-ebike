@@ -1,0 +1,81 @@
+name: Build ESPHome firmware
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build factory firmware for ESP32
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build ESP32 firmware
+        id: esphome-build
+        uses: esphome/build-action@v6
+        with:
+          yaml-file: esphome/factory.yaml
+          version: latest
+
+      - name: Collect firmware artifacts
+        run: |
+          set -euo pipefail
+          OUT="${{ steps.esphome-build.outputs.name }}"
+          echo "ESPHome build output dir: $OUT"
+          ls -la "$OUT"
+          mkdir -p firmware-output
+          # Pick up the factory bin (single-shot, includes bootloader+partitions+app)
+          cp "$OUT"/*.factory.bin firmware-output/ebike-bridge.factory.bin
+          # Also include the OTA bin for users who already have ESPHome dashboard
+          cp "$OUT"/*.ota.bin firmware-output/ebike-bridge.ota.bin || true
+          ls -la firmware-output/
+
+      - name: Generate manifest.json for ESP Web Tools
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          if [ -z "$VERSION" ] || [ "$VERSION" = "$GITHUB_REF_NAME" ]; then
+            VERSION="dev"
+          fi
+          cat > firmware-output/manifest.json <<EOF
+          {
+            "name": "Bosch eBike LDI Bridge",
+            "version": "${VERSION}",
+            "home_assistant_domain": "esphome",
+            "funding_url": "https://github.com/Xunil99/ha-bosch-ebike",
+            "new_install_prompt_erase": true,
+            "builds": [
+              {
+                "chipFamily": "ESP32",
+                "improv": true,
+                "parts": [
+                  { "path": "ebike-bridge.factory.bin", "offset": 0 }
+                ]
+              }
+            ]
+          }
+          EOF
+          cat firmware-output/manifest.json
+
+      - name: Upload firmware to release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            firmware-output/ebike-bridge.factory.bin
+            firmware-output/ebike-bridge.ota.bin
+            firmware-output/manifest.json
+
+      - name: Upload firmware as workflow artifact
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware
+          path: firmware-output/
+          retention-days: 14

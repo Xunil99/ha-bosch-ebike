@@ -30,6 +30,8 @@ Diese Custom Integration verbindet dein **Bosch eBike Smart System** mit Home As
 
 Zusätzlich zur Cloud-Integration findest du im Unterordner [`esphome/`](esphome/) eine **ESPHome-External-Component**, die einen ESP32 als Brücke zum **Bosch eBike Live Data Interface (LDI)** (BLE, smart system v19+) macht. Damit fließen Echtzeit-Werte (Speed, Akku-SoC, Tritt­frequenz, Fahrer­leistung, Tachostand, Lichtstatus, Lock-Status, …) als ESPHome-Sensoren in HA — ergänzend zur Cloud-basierten Tour-History.
 
+🚀 **Schnellster Weg ohne ESPHome-Kenntnisse**: ESP32 anstecken, in Chrome / Edge auf **https://xunil99.github.io/ha-bosch-ebike/** klicken und auf *Install* tippen. Firmware-Flash und WLAN-Setup laufen komplett im Browser — keine ESPHome-Installation nötig.
+
 Komplette Anleitung: **[esphome/README.md](esphome/README.md)**
 
 #### Live-Werte für exakte Tour-Berechnung verwenden (optional, ab v1.10.0)
@@ -377,6 +379,8 @@ This custom integration connects your **Bosch eBike Smart System** to Home Assis
 ### 🆕 Live data over Bluetooth (ESPHome bridge)
 
 In addition to the cloud integration, the [`esphome/`](esphome/) subfolder contains an **ESPHome external component** that turns an ESP32 into a bridge for the **Bosch eBike Live Data Interface (LDI)** (BLE, smart system v19+). Real-time values (speed, battery SoC, cadence, rider power, odometer, light state, lock state, …) become ESPHome sensors in HA — complementing the cloud-based tour history.
+
+🚀 **Fastest path without ESPHome experience**: plug an ESP32 into your computer, open **https://xunil99.github.io/ha-bosch-ebike/** in Chrome / Edge and click *Install*. Firmware flash and WiFi setup run entirely in the browser, no ESPHome installation required on your side.
 
 Full guide: **[esphome/README.md](esphome/README.md)**
 
