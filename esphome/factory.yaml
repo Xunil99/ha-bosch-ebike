@@ -41,7 +41,10 @@ esp32:
       CONFIG_BT_NIMBLE_ATT_PREFERRED_MTU: "247"
 
 logger:
-  level: INFO
+  # Component-level log levels must not be more verbose than the global
+  # level. We want DEBUG output from the bridge component so users can
+  # debug pairing or BLE link issues, hence the global level is DEBUG too.
+  level: DEBUG
   logs:
     bosch_ebike_ldi: DEBUG
 
