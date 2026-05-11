@@ -5,6 +5,13 @@
 
 > **Deutsch** | [English](#english)
 
+> ### 🔌 Echte Live-Daten per Bluetooth (smart system v19+)
+> Dieses Repo enthält neben der HACS-Integration auch eine **ESPHome-BLE-Bridge**, die einen ESP32 zur Brücke zum **Bosch eBike Live Data Interface** macht. Damit fließen Akku-SoC, Speed, Tachostand & Co. in Echtzeit nach Home Assistant.
+>
+> 🚀 **Flashen ohne ESPHome-Setup**: ESP32 per USB anstecken und in Chrome / Edge **[https://xunil99.github.io/ha-bosch-ebike/](https://xunil99.github.io/ha-bosch-ebike/)** öffnen, *Install* klicken. WLAN-Setup läuft im selben Browser-Schritt. Vollständige Anleitung (DE/EN) inkl. Pairing über die Flow App: [`esphome/`](esphome/).
+>
+> *Real live data via Bluetooth: ESP32 firmware can be flashed directly from your browser at the link above, no ESPHome installation required. Bilingual guide in [`esphome/`](esphome/).*
+
 ---
 
 ## Deutsch
