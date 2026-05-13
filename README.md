@@ -5,6 +5,11 @@
 
 > **Deutsch** | [English](#english)
 
+> ### ⚠️ Regionale Voraussetzung / Regional requirement
+> Diese Integration funktioniert **ausschließlich mit einem Bosch SingleKey-ID-Konto, das innerhalb der EU registriert ist**. Sie nutzt die offizielle Bosch Data Act API, deren Verfügbarkeit auf EU-Konten beschränkt ist. Konten aus anderen Regionen werden vom API-Endpoint abgelehnt und die Integration kann sich nicht anmelden.
+>
+> *This integration only works with a Bosch SingleKey-ID account registered inside the EU. It uses the official Bosch Data Act API, whose availability is limited to EU accounts. Accounts from other regions are rejected by the API endpoint and the integration cannot authenticate.*
+
 > ### 🔌 Echte Live-Daten per Bluetooth (smart system v19+)
 > Dieses Repo enthält neben der HACS-Integration auch eine **ESPHome-BLE-Bridge**, die einen ESP32 zur Brücke zum **Bosch eBike Live Data Interface** macht. Damit fließen Akku-SoC, Speed, Tachostand & Co. in Echtzeit nach Home Assistant.
 >
