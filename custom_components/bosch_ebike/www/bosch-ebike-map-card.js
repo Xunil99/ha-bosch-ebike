@@ -112,6 +112,26 @@ const I18N = {
     heat_no_match: "No rides match this filter",
     heat_stat_rides: "Rides",
     heat_stat_distance: "Distance",
+    // Calendar card
+    calendar_title: "Bosch eBike Calendar",
+    cal_range_label: "Period:",
+    cal_account_label: "Account:",
+    cal_bike_label: "Bike:",
+    cal_range_1y: "12 months",
+    cal_range_2y: "24 months",
+    cal_range_5y: "5 years",
+    cal_range_all: "All time",
+    cal_loading: "Loading rides …",
+    cal_load_failed: "Error loading rides",
+    cal_no_match: "No rides match this filter",
+    cal_stat_rides: "Rides",
+    cal_stat_distance: "Distance",
+    cal_stat_active_days: "Active days",
+    cal_legend_less: "Less",
+    cal_legend_more: "More",
+    cal_day_summary: (date, rides, km) =>
+      `${date}: ${rides} ride${rides === 1 ? "" : "s"}, ${km.toFixed(1)} km`,
+    cal_no_rides_day: (date) => `${date}: no rides`,
     // Map style names
     style_standard: "Standard",
     style_topo: "Topo",
@@ -211,6 +231,25 @@ const I18N = {
     heat_no_match: "Keine Touren in diesem Filter",
     heat_stat_rides: "Touren",
     heat_stat_distance: "Distanz",
+    calendar_title: "Bosch eBike Kalender",
+    cal_range_label: "Zeitraum:",
+    cal_account_label: "Konto:",
+    cal_bike_label: "Bike:",
+    cal_range_1y: "12 Monate",
+    cal_range_2y: "24 Monate",
+    cal_range_5y: "5 Jahre",
+    cal_range_all: "Alle",
+    cal_loading: "Lade Touren …",
+    cal_load_failed: "Fehler beim Laden der Touren",
+    cal_no_match: "Keine Touren in diesem Filter",
+    cal_stat_rides: "Touren",
+    cal_stat_distance: "Distanz",
+    cal_stat_active_days: "Aktive Tage",
+    cal_legend_less: "Weniger",
+    cal_legend_more: "Mehr",
+    cal_day_summary: (date, rides, km) =>
+      `${date}: ${rides} Tour${rides === 1 ? "" : "en"}, ${km.toFixed(1)} km`,
+    cal_no_rides_day: (date) => `${date}: keine Touren`,
     style_standard: "Standard",
     style_topo: "Topo",
     style_sat: "Satellit",
@@ -309,6 +348,25 @@ const I18N = {
     heat_no_match: "Geen ritten voldoen aan dit filter",
     heat_stat_rides: "Ritten",
     heat_stat_distance: "Afstand",
+    calendar_title: "Bosch eBike Kalender",
+    cal_range_label: "Periode:",
+    cal_account_label: "Account:",
+    cal_bike_label: "Fiets:",
+    cal_range_1y: "12 maanden",
+    cal_range_2y: "24 maanden",
+    cal_range_5y: "5 jaar",
+    cal_range_all: "Alles",
+    cal_loading: "Ritten laden …",
+    cal_load_failed: "Fout bij het laden van ritten",
+    cal_no_match: "Geen ritten voldoen aan dit filter",
+    cal_stat_rides: "Ritten",
+    cal_stat_distance: "Afstand",
+    cal_stat_active_days: "Actieve dagen",
+    cal_legend_less: "Minder",
+    cal_legend_more: "Meer",
+    cal_day_summary: (date, rides, km) =>
+      `${date}: ${rides} rit${rides === 1 ? "" : "ten"}, ${km.toFixed(1)} km`,
+    cal_no_rides_day: (date) => `${date}: geen ritten`,
     style_standard: "Standaard",
     style_topo: "Topo",
     style_sat: "Satelliet",
@@ -3295,6 +3353,506 @@ class BoschEBikeHeatmapCardEditor extends BoschEBikeMapCardEditor {
   }
 }
 
+/* ===========================================================================
+ * Calendar Card - GitHub-contributions-style per-day distance heatmap
+ * ===========================================================================
+ *
+ * Reads all activities from the existing bosch_ebike/list_activities WS,
+ * aggregates them per local-time day, and renders a 7-row grid of weeks.
+ * Each cell is colored by total km on that day. Hover shows a tooltip.
+ *
+ * Lockable to a single account / bike (same pattern as the other cards).
+ * No backend changes required.
+ */
+
+class BoschEBikeCalendarCard extends HTMLElement {
+  constructor() {
+    super();
+    this._hass = null;
+    this._config = {};
+    this._activities = [];
+    this._instances = [];
+    this._filterAccount = "all";
+    this._filterBike = "all";
+    this._filterRange = "365";   // days, or "all"
+    this._lockedAccount = false;
+    this._lockedBike = false;
+    this._ready = false;
+    this._booting = false;
+  }
+
+  setConfig(config) {
+    this._config = { ...config };
+    if (config.account_id) { this._filterAccount = config.account_id; this._lockedAccount = true; }
+    else { this._lockedAccount = false; }
+    if (config.bike_id) { this._filterBike = config.bike_id; this._lockedBike = true; }
+    else { this._lockedBike = false; }
+    if (this._ready) {
+      this._applyTitle();
+      this._populateFilters();
+      this._render();
+    }
+  }
+
+  set hass(hass) {
+    const first = !this._hass;
+    this._hass = hass;
+    if (first) this._boot();
+  }
+
+  static getConfigElement() { return document.createElement("bosch-ebike-calendar-card-editor"); }
+  static getStubConfig() { return {}; }
+  getCardSize() { return 5; }
+
+  async _boot() {
+    if (this._booting || this._ready) return;
+    this._booting = true;
+    try {
+      this._buildDOM();
+      this._ready = true;
+      this._applyTitle();
+      await this._fetchInstances();
+      this._populateFilters();
+      await this._loadActivities();
+      this._render();
+    } catch (err) {
+      console.error("[Bosch eBike Calendar] boot error", err);
+      const msg = this.querySelector("#cal-msg");
+      if (msg) msg.textContent = "Fehler: " + (err?.message || err);
+    } finally {
+      this._booting = false;
+    }
+  }
+
+  _applyTitle() {
+    const head = this.querySelector(".cal-head span");
+    if (head && this._config && this._config.title) head.textContent = this._config.title;
+  }
+
+  _buildDOM() {
+    this.innerHTML = "";
+    const card = document.createElement("ha-card");
+    this.appendChild(card);
+    const style = document.createElement("style");
+    style.textContent = `
+      .cal-head {
+        display:flex; align-items:center; gap:8px; padding:12px 16px;
+        background:var(--primary-color,#03a9f4); color:#fff; font-size:16px; font-weight:500;
+      }
+      .cal-filters {
+        display:flex; flex-wrap:wrap; gap:8px; padding:8px 12px;
+        background:var(--secondary-background-color,#f5f5f5);
+        border-bottom:1px solid var(--divider-color,#e0e0e0);
+      }
+      .cal-filters select {
+        padding:5px 8px; border:1px solid var(--divider-color,#ccc);
+        border-radius:6px; font-size:13px;
+        background:var(--card-background-color,#fff); color:var(--primary-text-color,#333);
+      }
+      .cal-filter-lbl { font-size:12px; color:var(--secondary-text-color,#666); align-self:center; }
+      .cal-body { padding:14px 16px; overflow-x:auto; }
+      .cal-grid {
+        display:inline-grid;
+        grid-template-rows: 14px repeat(7, 12px);
+        gap:3px;
+        font-size:10px;
+      }
+      .cal-month-label {
+        font-size:10px; color:var(--secondary-text-color,#666);
+        white-space:nowrap;
+        text-align:left;
+      }
+      .cal-cell {
+        width:12px; height:12px; border-radius:2px;
+        background:var(--cal-bucket-0,#ebedf0);
+        cursor:default;
+      }
+      .cal-cell.b1 { background:var(--cal-bucket-1,#9be9a8); }
+      .cal-cell.b2 { background:var(--cal-bucket-2,#40c463); }
+      .cal-cell.b3 { background:var(--cal-bucket-3,#30a14e); }
+      .cal-cell.b4 { background:var(--cal-bucket-4,#216e39); }
+      .cal-cell.spacer { background:transparent; pointer-events:none; }
+      .cal-legend { display:flex; align-items:center; gap:6px; padding:0 16px 8px; font-size:11px; color:var(--secondary-text-color,#666); }
+      .cal-legend .cal-cell { width:10px; height:10px; }
+      .cal-stats { padding:8px 16px 14px; font-size:13px; color:var(--secondary-text-color,#666); display:flex; gap:18px; flex-wrap:wrap; }
+      .cal-stats b { color:var(--primary-text-color,#333); }
+      .cal-overlay {
+        padding:18px 16px; color:var(--secondary-text-color,#999); font-size:13px; text-align:center;
+      }
+      @media (prefers-color-scheme: dark) {
+        .cal-cell { background:var(--cal-bucket-0-dark,#1b1f23); }
+        .cal-cell.b1 { background:var(--cal-bucket-1-dark,#0e4429); }
+        .cal-cell.b2 { background:var(--cal-bucket-2-dark,#006d32); }
+        .cal-cell.b3 { background:var(--cal-bucket-3-dark,#26a641); }
+        .cal-cell.b4 { background:var(--cal-bucket-4-dark,#39d353); }
+      }
+    `;
+    card.appendChild(style);
+
+    const t = (k, ...a) => ebT(this._hass, k, ...a);
+    const wrap = document.createElement("div");
+    wrap.innerHTML = `
+      <div class="cal-head">
+        <svg viewBox="0 0 24 24" width="22" height="22"><path fill="white" d="M19,3H18V1H16V3H8V1H6V3H5C3.89,3 3,3.9 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V5C21,3.9 20.1,3 19,3M19,19H5V8H19V19M7,10H12V15H7V10Z"/></svg>
+        <span>${t("calendar_title")}</span>
+      </div>
+      <div class="cal-filters">
+        <span class="cal-filter-lbl">${t("cal_range_label")}</span>
+        <select id="cal-range">
+          <option value="365" selected>${t("cal_range_1y")}</option>
+          <option value="730">${t("cal_range_2y")}</option>
+          <option value="1825">${t("cal_range_5y")}</option>
+          <option value="all">${t("cal_range_all")}</option>
+        </select>
+        <span class="cal-filter-lbl" id="cal-acc-lbl" style="display:none;">${t("cal_account_label")}</span>
+        <select id="cal-account" style="display:none;">
+          <option value="all">${t("cal_account_label")}</option>
+        </select>
+        <span class="cal-filter-lbl" id="cal-bike-lbl" style="display:none;">${t("cal_bike_label")}</span>
+        <select id="cal-bike" style="display:none;">
+          <option value="all">${t("cal_bike_label")}</option>
+        </select>
+      </div>
+      <div class="cal-body" id="cal-body">
+        <div class="cal-overlay" id="cal-msg">${t("cal_loading")}</div>
+      </div>
+      <div class="cal-legend" id="cal-legend"></div>
+      <div class="cal-stats" id="cal-stats"></div>
+    `;
+    while (wrap.firstChild) card.appendChild(wrap.firstChild);
+
+    this.querySelector("#cal-range").addEventListener("change", (e) => {
+      this._filterRange = e.target.value;
+      this._render();
+    });
+    this.querySelector("#cal-account").addEventListener("change", (e) => {
+      this._filterAccount = e.target.value;
+      this._filterBike = "all";
+      this._populateBikeFilter();
+      this._render();
+    });
+    this.querySelector("#cal-bike").addEventListener("change", (e) => {
+      this._filterBike = e.target.value;
+      this._render();
+    });
+  }
+
+  async _fetchInstances() {
+    try {
+      const res = await this._hass.callWS({ type: "bosch_ebike/list_instances" });
+      this._instances = res.instances || [];
+    } catch (_) { this._instances = []; }
+  }
+
+  async _loadActivities() {
+    try {
+      const res = await this._hass.callWS({ type: "bosch_ebike/list_activities" });
+      this._activities = res.activities || [];
+    } catch (err) {
+      console.error("[Bosch eBike Calendar] load_activities failed", err);
+      this._activities = [];
+    }
+  }
+
+  _populateFilters() {
+    const accSel = this.querySelector("#cal-account");
+    const accLbl = this.querySelector("#cal-acc-lbl");
+    if (this._lockedAccount) {
+      if (accSel) accSel.style.display = "none";
+      if (accLbl) accLbl.style.display = "none";
+    } else if (this._instances.length > 1) {
+      const t = (k) => ebT(this._hass, k);
+      const opts = [`<option value="all">${t("cal_account_label").replace(":", "")}</option>`];
+      for (const inst of this._instances) {
+        opts.push(`<option value="${this._escapeHtml(inst.config_entry_id)}">${this._escapeHtml(inst.label)}</option>`);
+      }
+      accSel.innerHTML = opts.join("");
+      accSel.value = this._filterAccount;
+      accSel.style.display = "";
+      accLbl.style.display = "";
+    }
+    this._populateBikeFilter();
+  }
+
+  _populateBikeFilter() {
+    const bikeSel = this.querySelector("#cal-bike");
+    const bikeLbl = this.querySelector("#cal-bike-lbl");
+    if (this._lockedBike) {
+      if (bikeSel) bikeSel.style.display = "none";
+      if (bikeLbl) bikeLbl.style.display = "none";
+      return;
+    }
+    const bikes = [];
+    for (const inst of this._instances) {
+      if (this._filterAccount !== "all" && inst.config_entry_id !== this._filterAccount) continue;
+      for (const b of (inst.bikes || [])) bikes.push(b);
+    }
+    if (bikes.length <= 1) {
+      bikeSel.style.display = "none";
+      bikeLbl.style.display = "none";
+      return;
+    }
+    const t = (k) => ebT(this._hass, k);
+    const opts = [`<option value="all">${t("cal_bike_label").replace(":", "")}</option>`];
+    for (const b of bikes) {
+      opts.push(`<option value="${this._escapeHtml(b.id)}">${this._escapeHtml(b.label)}</option>`);
+    }
+    bikeSel.innerHTML = opts.join("");
+    bikeSel.value = this._filterBike;
+    bikeSel.style.display = "";
+    bikeLbl.style.display = "";
+  }
+
+  _escapeHtml(s) {
+    return String(s || "").replace(/[&<>"']/g, (c) => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+    })[c]);
+  }
+
+  _filteredActivities() {
+    return (this._activities || []).filter((a) => {
+      if (this._filterAccount !== "all" && a.accountId !== this._filterAccount) return false;
+      if (this._filterBike !== "all" && a.bikeId !== this._filterBike) return false;
+      return true;
+    });
+  }
+
+  _aggregateByDay(acts) {
+    // Returns Map<YYYY-MM-DD, { rides, distanceMeters }>
+    const byDay = new Map();
+    for (const a of acts) {
+      const ts = a.startTime;
+      if (!ts) continue;
+      let d;
+      try { d = new Date(ts); } catch (_) { continue; }
+      if (isNaN(d.getTime())) continue;
+      const key = this._localDateKey(d);
+      const entry = byDay.get(key) || { rides: 0, distanceMeters: 0 };
+      entry.rides += 1;
+      entry.distanceMeters += a.distance || 0;
+      byDay.set(key, entry);
+    }
+    return byDay;
+  }
+
+  _localDateKey(d) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${dd}`;
+  }
+
+  _bucketForKm(km) {
+    if (km <= 0) return 0;
+    if (km < 10) return 1;
+    if (km < 25) return 2;
+    if (km < 50) return 3;
+    return 4;
+  }
+
+  _render() {
+    if (!this._ready) return;
+    const body = this.querySelector("#cal-body");
+    const stats = this.querySelector("#cal-stats");
+    const legend = this.querySelector("#cal-legend");
+    if (!body) return;
+
+    const acts = this._filteredActivities();
+    const byDay = this._aggregateByDay(acts);
+
+    // Range: pick start/end
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    let startDate;
+    if (this._filterRange === "all") {
+      if (acts.length === 0) {
+        body.innerHTML = `<div class="cal-overlay">${ebT(this._hass, "cal_no_match")}</div>`;
+        stats.innerHTML = "";
+        legend.innerHTML = "";
+        return;
+      }
+      let earliest = Infinity;
+      for (const a of acts) {
+        const t = Date.parse(a.startTime);
+        if (!isNaN(t) && t < earliest) earliest = t;
+      }
+      startDate = new Date(earliest);
+      startDate.setHours(0, 0, 0, 0);
+    } else {
+      const days = parseInt(this._filterRange, 10);
+      startDate = new Date(today.getTime() - (days - 1) * 86400000);
+    }
+
+    // Align start to Monday (so the column-based grid is week-aligned).
+    // Monday = 1, Sunday = 0 in JS; we want column 0 to be Monday.
+    const dow = (startDate.getDay() + 6) % 7; // Mon=0, Sun=6
+    const gridStart = new Date(startDate.getTime() - dow * 86400000);
+    const totalDays = Math.floor((today.getTime() - gridStart.getTime()) / 86400000) + 1;
+    const totalWeeks = Math.ceil(totalDays / 7);
+
+    // Build grid: row 0 = month labels, rows 1..7 = day cells
+    const cells = [];
+    let activeDays = 0;
+    let totalRides = 0;
+    let totalDistance = 0;
+    let lastMonthLabel = -1;
+    const monthFmt = new Intl.DateTimeFormat(this._hassLocale(), { month: "short" });
+    const dateFmt = new Intl.DateTimeFormat(this._hassLocale(), { year: "numeric", month: "short", day: "numeric" });
+
+    // Row 0: month labels (one per week column at row 0).
+    for (let w = 0; w < totalWeeks; w++) {
+      const firstDayOfWeek = new Date(gridStart.getTime() + w * 7 * 86400000);
+      const m = firstDayOfWeek.getMonth();
+      let label = "";
+      if (m !== lastMonthLabel && firstDayOfWeek.getDate() <= 14) {
+        label = monthFmt.format(firstDayOfWeek);
+        lastMonthLabel = m;
+      }
+      cells.push({ row: 1, col: w + 1, type: "month", text: label });
+    }
+
+    // Rows 1..7 (Mon..Sun) for each week column
+    for (let w = 0; w < totalWeeks; w++) {
+      for (let d = 0; d < 7; d++) {
+        const day = new Date(gridStart.getTime() + (w * 7 + d) * 86400000);
+        if (day > today) {
+          cells.push({ row: d + 2, col: w + 1, type: "spacer" });
+          continue;
+        }
+        if (day < startDate) {
+          cells.push({ row: d + 2, col: w + 1, type: "spacer" });
+          continue;
+        }
+        const key = this._localDateKey(day);
+        const info = byDay.get(key);
+        const rides = info ? info.rides : 0;
+        const km = info ? info.distanceMeters / 1000 : 0;
+        if (rides > 0) {
+          activeDays += 1;
+          totalRides += rides;
+          totalDistance += info.distanceMeters;
+        }
+        const bucket = this._bucketForKm(km);
+        const dateStr = dateFmt.format(day);
+        let title;
+        if (rides > 0) {
+          title = ebT(this._hass, "cal_day_summary", dateStr, rides, km);
+        } else {
+          title = ebT(this._hass, "cal_no_rides_day", dateStr);
+        }
+        cells.push({ row: d + 2, col: w + 1, type: "cell", bucket, title });
+      }
+    }
+
+    // Build the DOM
+    body.innerHTML = "";
+    const grid = document.createElement("div");
+    grid.className = "cal-grid";
+    grid.style.gridTemplateColumns = `repeat(${totalWeeks}, 12px)`;
+    for (const c of cells) {
+      const el = document.createElement("div");
+      el.style.gridRow = String(c.row);
+      el.style.gridColumn = String(c.col);
+      if (c.type === "month") {
+        el.className = "cal-month-label";
+        el.textContent = c.text || "";
+      } else if (c.type === "spacer") {
+        el.className = "cal-cell spacer";
+      } else {
+        el.className = "cal-cell" + (c.bucket > 0 ? " b" + c.bucket : "");
+        el.title = c.title;
+      }
+      grid.appendChild(el);
+    }
+    body.appendChild(grid);
+
+    // Stats row
+    const t = (k) => ebT(this._hass, k);
+    stats.innerHTML = `
+      <div>${t("cal_stat_active_days")}: <b>${activeDays}</b></div>
+      <div>${t("cal_stat_rides")}: <b>${totalRides}</b></div>
+      <div>${t("cal_stat_distance")}: <b>${(totalDistance / 1000).toFixed(0)} km</b></div>
+    `;
+
+    // Legend row
+    legend.innerHTML = `
+      <span>${t("cal_legend_less")}</span>
+      <div class="cal-cell"></div>
+      <div class="cal-cell b1"></div>
+      <div class="cal-cell b2"></div>
+      <div class="cal-cell b3"></div>
+      <div class="cal-cell b4"></div>
+      <span>${t("cal_legend_more")}</span>
+    `;
+  }
+
+  _hassLocale() {
+    // Try to honor HA's configured locale; fall back to browser default.
+    if (this._hass && this._hass.locale && this._hass.locale.language) {
+      return this._hass.locale.language;
+    }
+    return (this._hass && this._hass.language) || navigator.language || "en-GB";
+  }
+}
+
+// Calendar card editor - reuses the heatmap editor pattern (same fields).
+class BoschEBikeCalendarCardEditor extends BoschEBikeMapCardEditor {
+  _render() {
+    if (!this._config) return;
+    const cfg = this._config;
+    const inputStyle = "width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;background:var(--card-background-color,#fff);color:var(--primary-text-color,#222);";
+    const labelStyle = "display:block;margin-top:14px;margin-bottom:6px;font-weight:500";
+    const hintStyle = "display:block;margin-top:4px;font-size:12px;color:var(--secondary-text-color,#777)";
+
+    let accountOpts = `<option value="">${ebT(this._hass, "editor_select_all")}</option>`;
+    for (const inst of (this._instances || [])) {
+      const selected = cfg.account_id === inst.config_entry_id ? " selected" : "";
+      accountOpts += `<option value="${this._escapeHtml(inst.config_entry_id)}"${selected}>${this._escapeHtml(inst.label)}</option>`;
+    }
+
+    let bikeOpts = `<option value="">${ebT(this._hass, "editor_select_all")}</option>`;
+    for (const b of this._bikeOptionsForAccount(cfg.account_id)) {
+      const selected = cfg.bike_id === b.id ? " selected" : "";
+      bikeOpts += `<option value="${this._escapeHtml(b.id)}"${selected}>${this._escapeHtml(b.label)}</option>`;
+    }
+
+    const t = (k, ...a) => ebT(this._hass, k, ...a);
+    this.innerHTML = `<div style="padding:16px">
+      <label style="${labelStyle.replace('margin-top:14px;', '')}">${t("editor_title")}</label>
+      <input type="text" value="${this._escapeHtml(cfg.title || '')}" placeholder="${t("calendar_title")}" style="${inputStyle}" id="title-in">
+
+      <label style="${labelStyle}">${t("editor_account_label")}</label>
+      <select id="acc-in" style="${inputStyle}">${accountOpts}</select>
+      <span style="${hintStyle}">${t("editor_account_hint")}</span>
+
+      <label style="${labelStyle}">${t("editor_bike_label")}</label>
+      <select id="bike-in" style="${inputStyle}">${bikeOpts}</select>
+      <span style="${hintStyle}">${t("editor_bike_hint")}</span>
+    </div>`;
+
+    this.querySelector("#title-in").addEventListener("change", (e) => {
+      const v = e.target.value.trim();
+      this._config = { ...this._config };
+      if (v) this._config.title = v; else delete this._config.title;
+      this._emit();
+    });
+    this.querySelector("#acc-in").addEventListener("change", (e) => {
+      const v = e.target.value;
+      this._config = { ...this._config };
+      if (v) this._config.account_id = v; else delete this._config.account_id;
+      delete this._config.bike_id;
+      this._emit();
+      this._render();
+    });
+    this.querySelector("#bike-in").addEventListener("change", (e) => {
+      const v = e.target.value;
+      this._config = { ...this._config };
+      if (v) this._config.bike_id = v; else delete this._config.bike_id;
+      this._emit();
+    });
+  }
+}
+
 if (!customElements.get("bosch-ebike-map-card")) {
   customElements.define("bosch-ebike-map-card", BoschEBikeMapCard);
 }
@@ -3306,6 +3864,12 @@ if (!customElements.get("bosch-ebike-heatmap-card")) {
 }
 if (!customElements.get("bosch-ebike-heatmap-card-editor")) {
   customElements.define("bosch-ebike-heatmap-card-editor", BoschEBikeHeatmapCardEditor);
+}
+if (!customElements.get("bosch-ebike-calendar-card")) {
+  customElements.define("bosch-ebike-calendar-card", BoschEBikeCalendarCard);
+}
+if (!customElements.get("bosch-ebike-calendar-card-editor")) {
+  customElements.define("bosch-ebike-calendar-card-editor", BoschEBikeCalendarCardEditor);
 }
 
 window.customCards = window.customCards || [];
@@ -3322,6 +3886,14 @@ if (!window.customCards.find((c) => c.type === "bosch-ebike-heatmap-card")) {
     type: "bosch-ebike-heatmap-card",
     name: "Bosch eBike Heatmap",
     description: "Alle Touren einer Auswahl auf einer Karte überlagert",
+    preview: false,
+  });
+}
+if (!window.customCards.find((c) => c.type === "bosch-ebike-calendar-card")) {
+  window.customCards.push({
+    type: "bosch-ebike-calendar-card",
+    name: "Bosch eBike Calendar",
+    description: "Kalender-Heatmap der Fahrtage (GitHub-Contributions-Stil)",
     preview: false,
   });
 }

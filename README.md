@@ -286,6 +286,25 @@ height: 600
 
 Die erste Anzeige kann etwas dauern - bei jeder bisher nicht abgerufenen Tour wird ein zusätzlicher API-Call gemacht (mit Concurrency-Limit). Die Tracks werden serverseitig im Speicher gecacht, weitere Aufrufe sind sofort.
 
+### Kalender-Card - GitHub-Style-Heatmap der Fahrtage
+
+Die Card `bosch-ebike-calendar-card` zeigt eine Jahres-Heatmap im Stil der GitHub-Contributions-Übersicht: 7 Zeilen für die Wochentage, eine Spalte pro Kalenderwoche, jede Zelle eingefärbt nach gefahrenen Kilometern an dem Tag. Beim Hovern erscheint ein Tooltip mit Datum, Tour-Anzahl und Distanz. Statistik-Zeile darunter zeigt Aktive Tage, Touren und Gesamt-Distanz im gewählten Zeitraum.
+
+```yaml
+type: custom:bosch-ebike-calendar-card
+```
+
+Filter-Dropdowns oben für Zeitraum (12 Monate / 24 Monate / 5 Jahre / Alle), Konto und Bike. Auf einen festen Konto- oder Bike-Filter kann per YAML gelockt werden (gleiche Optionen wie bei der Map- und Heatmap-Card):
+
+```yaml
+type: custom:bosch-ebike-calendar-card
+title: Volkers Fahrjahr
+account_id: 01HXYZ...
+bike_id: bike-uuid-1
+```
+
+Farb-Buckets pro Tag: leer, 1-10 km, 10-25 km, 25-50 km, 50+ km. Die Farben kommen aus den HA-Theme-Variablen, hellen Designs sehen wie GitHub-Light aus, im dunklen Modus wird automatisch das passende dunkle Palette geladen.
+
 ### Wikipedia-Artikel entlang der Route
 
 Auf der Lovelace-Karte gibt es einen 📚-Toggle in den Karten-Steuerelementen. Ist er aktiviert, sucht die Karte entlang der gefahrenen Route alle 2 km nach nahegelegenen Wikipedia-Artikeln und zeigt sie als (i)-Marker an. Ein Klick öffnet ein kleines Popup mit Titel, Vorschaubild, Kurzbeschreibung und einem Link auf den vollständigen Artikel.
@@ -633,6 +652,25 @@ height: 600
 ```
 
 First render can take a moment - every ride whose detail hasn't been fetched yet triggers an API call (rate-limited via concurrency limit). Tracks are then cached server-side in memory; subsequent renders are instant.
+
+### Calendar card - GitHub-style heatmap of riding days
+
+The card `bosch-ebike-calendar-card` renders a yearly heatmap in the GitHub-contributions style: 7 rows for the days of the week, one column per calendar week, each cell colored by the kilometers ridden on that day. Hover for a tooltip with date, ride count and distance. A stats row below shows active days, rides and total distance for the selected period.
+
+```yaml
+type: custom:bosch-ebike-calendar-card
+```
+
+Filter dropdowns at the top for period (12 months / 24 months / 5 years / all), account and bike. You can lock the card to a specific account or bike via YAML (same options as the map and heatmap cards):
+
+```yaml
+type: custom:bosch-ebike-calendar-card
+title: Volker's riding year
+account_id: 01HXYZ...
+bike_id: bike-uuid-1
+```
+
+Color buckets per day: empty, 1-10 km, 10-25 km, 25-50 km, 50+ km. Colors are pulled from HA theme variables, light themes look like GitHub-Light; in dark mode the matching dark palette is applied automatically.
 
 ### Wikipedia articles along the route
 
