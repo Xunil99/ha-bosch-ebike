@@ -175,7 +175,7 @@ history and the live BLE data when the bike is at home.
 | Battery SoC / Speed stay "Unknown" after first connect | Bike firmware regression — initial read returned empty | Disconnect / reconnect (toggle bike power); upgrade to v0.3 of this component if you are on an older snapshot |
 | `Advertising started` never appears in the log | NimBLE init failed | Re-flash via USB; check that no other BT-using components (`esp32_ble_tracker`, `bluetooth_proxy`) are in the YAML |
 | Compile error `undefined reference to ble_gattc_*` | `CONFIG_BT_NIMBLE_ROLE_CENTRAL: y` missing | Make sure you copied the example YAML verbatim |
-| **"API connection issues" in Home Assistant after a successful flash** (device boots, OLED is fine, but HA cannot reach the ESPHome API stably) | Board defaults are wrong (typically wrong crystal frequency or partition table). Symptom is flaky WiFi rather than no WiFi. | Add `board: esp32dev` next to `variant: esp32` in the `esp32:` block. The current example YAML already includes both; older copies need updating. |
+| **"API connection issues" in Home Assistant after a successful flash** (firmware compiles and uploads, but HA cannot add the device or the ESPHome API drops) | Board defaults are wrong (typically wrong crystal frequency or partition table). Symptom is flaky WiFi rather than no WiFi. | Add `board: esp32dev` next to `variant: esp32` in the `esp32:` block. The current example YAML already includes both; older copies need updating. |
 
 ### Logs to share when filing an issue
 
@@ -356,7 +356,7 @@ Cloud plus die Live-BLE-Daten, sobald das Bike zu Hause ist.
 | Akku-SoC / Speed bleiben „Unbekannt" nach erstem Connect | Bike-Firmware-Eigenheit — initialer Read kam leer zurück | Bike aus / einschalten; sicherstellen, dass v0.3 (oder neuer) der Komponente läuft |
 | `Advertising started` taucht im Log nie auf | NimBLE-Init fehlgeschlagen | Per USB neu flashen; sicherstellen, dass keine anderen BT-Komponenten (`esp32_ble_tracker`, `bluetooth_proxy`) in der YAML stehen |
 | Compile-Fehler `undefined reference to ble_gattc_*` | `CONFIG_BT_NIMBLE_ROLE_CENTRAL: y` fehlt | Prüfen, ob die Beispiel-YAML 1:1 übernommen wurde |
-| **„API connection issues" in Home Assistant nach erfolgreichem Flash** (Gerät bootet, OLED ist ok, aber HA erreicht die ESPHome-API nicht stabil) | Falsche Board-Defaults (meist falsche Quarz-Frequenz oder Partitions-Tabelle). Symptom ist instabiles WLAN, nicht „kein WLAN". | `board: esp32dev` neben `variant: esp32` im `esp32:`-Block ergänzen. Die aktuelle Beispiel-YAML enthält beides schon; ältere Kopien müssen aktualisiert werden. |
+| **„API connection issues" in Home Assistant nach erfolgreichem Flash** (Firmware compilt und uploaded sauber, aber HA kann das Gerät nicht hinzufügen bzw. die ESPHome-API bricht ständig ab) | Falsche Board-Defaults (meist falsche Quarz-Frequenz oder Partitions-Tabelle). Symptom ist instabiles WLAN, nicht „kein WLAN". | `board: esp32dev` neben `variant: esp32` im `esp32:`-Block ergänzen. Die aktuelle Beispiel-YAML enthält beides schon; ältere Kopien müssen aktualisiert werden. |
 
 ### Logs für Issues
 
