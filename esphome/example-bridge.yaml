@@ -11,6 +11,12 @@ esphome:
 
 esp32:
   variant: esp32
+  # board: esp32dev is set explicitly so PlatformIO uses the standard
+  # ESP32-DevKitC board defaults (40 MHz crystal, DIO flash mode, standard
+  # partition table). Without it, some ESPHome + ESP-IDF combinations fall
+  # back to defaults that cause subtle WiFi RF instability and the symptom
+  # "API connection issues" after a successful flash.
+  board: esp32dev
   framework:
     type: esp-idf
     sdkconfig_options:
