@@ -1,7 +1,7 @@
 # Bosch eBike Live Data Interface – ESPHome Bridge
 
 ESPHome external component that turns an ESP32 into a Bluetooth bridge for the
-**Bosch eBike Live Data Interface (LDI)** — the BLE GATT service introduced with
+**Bosch eBike Live Data Interface (LDI)** - the BLE GATT service introduced with
 smart system control unit release **v19** (May 2026).
 
 The bridge advertises itself as a Cycling-class accessory, lets the eBike pair
@@ -85,7 +85,7 @@ external_components:
 ```
 
 That way the bridge updates in lockstep with the HA integration whenever you
-recompile — no manual file copies, no version drift. Pin to a tag
+recompile - no manual file copies, no version drift. Pin to a tag
 (e.g. `@v1.10.0`) instead of `@main` if you want reproducible builds.
 
 #### Offline / air-gapped alternative
@@ -114,8 +114,8 @@ If your ESPHome host has no internet during compile, copy the
 
 Open `ebike-bridge.yaml` and change at minimum:
 
-- `name:` and `friendly_name:` — anything you like.
-- The list of sensors / binary sensors — you can drop the ones you do not need.
+- `name:` and `friendly_name:` - anything you like.
+- The list of sensors / binary sensors - you can drop the ones you do not need.
 
 The `wifi:` block uses `!secret wifi_ssid` / `wifi_password`. If you do not yet
 have a `secrets.yaml`, create one in `/config/esphome/` with your Wi-Fi
@@ -126,15 +126,15 @@ credentials. ESPHome's add-on UI offers a "Secrets" editor for this.
 In the ESPHome dashboard: pick the bridge entry → "Install".
 
 - **First flash**: choose "Plug into the computer running ESPHome" (USB-C
-  cable) — OTA does not work yet because no firmware is on the ESP32.
-- **Subsequent flashes**: pick "Wirelessly" — OTA over Wi-Fi.
+  cable) - OTA does not work yet because no firmware is on the ESP32.
+- **Subsequent flashes**: pick "Wirelessly" - OTA over Wi-Fi.
 
 The first compile takes ~5 minutes (PlatformIO downloads NimBLE and the
 toolchain). Later compiles are quick.
 
 ### 5. Pair the bridge with the eBike
 
-This is the only step you really have to be careful about — the rest is set
+This is the only step you really have to be careful about - the rest is set
 and forget.
 
 1. Power the eBike on, make sure the bridge has booted (you should see it in
@@ -147,9 +147,9 @@ and forget.
 5. The Flow App now triggers the eBike's "scan-for-accessory" mode. Within
    ~30 seconds the bike should discover **"HA eBike Bridge"** in the list.
 6. Confirm the pairing on the bike's display when prompted (Just Works
-   pairing — no PIN needed, the bike handles bonding automatically).
+   pairing - no PIN needed, the bike handles bonding automatically).
 
-That's it — the bridge is now permanently bonded to the eBike. From now on,
+That's it - the bridge is now permanently bonded to the eBike. From now on,
 the bike will reconnect automatically every time it powers on while in range
 of the bridge. The bond is stored in the ESP32's flash and survives reboots
 and OTA updates.
@@ -172,7 +172,7 @@ history and the live BLE data when the bike is at home.
 |---|---|---|
 | `ebike connected` never goes on | Out of range, or eBike firmware < v19 | Move bridge closer; verify firmware version in Flow App |
 | Pairing fails (encryption status ≠ 0 in log) | Stale bond on the bridge or in the eBike | Press the **eBike Clear Bonding** button in HA, remove the accessory in Flow App, repeat the pairing flow |
-| Battery SoC / Speed stay "Unknown" after first connect | Bike firmware regression — initial read returned empty | Disconnect / reconnect (toggle bike power); upgrade to v0.3 of this component if you are on an older snapshot |
+| Battery SoC / Speed stay "Unknown" after first connect | Bike firmware regression - initial read returned empty | Disconnect / reconnect (toggle bike power); upgrade to v0.3 of this component if you are on an older snapshot |
 | `Advertising started` never appears in the log | NimBLE init failed | Re-flash via USB; check that no other BT-using components (`esp32_ble_tracker`, `bluetooth_proxy`) are in the YAML |
 | Compile error `undefined reference to ble_gattc_*` | `CONFIG_BT_NIMBLE_ROLE_CENTRAL: y` missing | Make sure you copied the example YAML verbatim |
 | **"API connection issues" in Home Assistant after a successful flash** (firmware compiles and uploads, but HA cannot add the device or the ESPHome API drops) | Board defaults are wrong (typically wrong crystal frequency or partition table). Symptom is flaky WiFi rather than no WiFi. | Add `board: esp32dev` next to `variant: esp32` in the `esp32:` block. The current example YAML already includes both; older copies need updating. |
@@ -266,7 +266,7 @@ external_components:
 ```
 
 So bewegt sich die Bridge automatisch im Gleichschritt mit der HA-Integration
-— kein manuelles Datei-Kopieren, keine Versions-Diskrepanz. Wer reproduzierbare
+- kein manuelles Datei-Kopieren, keine Versions-Diskrepanz. Wer reproduzierbare
 Builds will, ersetzt `@main` durch ein konkretes Tag (z. B. `@v1.10.0`).
 
 #### Offline-Variante / Air-Gapped
@@ -295,8 +295,8 @@ Kommentarblock in `example-bridge.yaml` zeigt genau, wie).
 
 `ebike-bridge.yaml` öffnen und mindestens das hier anpassen:
 
-- `name:` und `friendly_name:` — beliebig.
-- Sensor- / Binary-Sensor-Liste — wer einzelne nicht braucht, kann sie
+- `name:` und `friendly_name:` - beliebig.
+- Sensor- / Binary-Sensor-Liste - wer einzelne nicht braucht, kann sie
   rauswerfen.
 
 Der `wifi:`-Block verwendet `!secret wifi_ssid` / `wifi_password`. Falls noch
@@ -309,7 +309,7 @@ Im ESPHome-Dashboard: Bridge auswählen → "Install".
 
 - **Erster Flash**: "Plug into the computer running ESPHome" wählen (USB-C-
   Kabel). OTA klappt noch nicht, weil noch keine Firmware auf dem ESP32 ist.
-- **Spätere Flashes**: "Wirelessly" — OTA über WLAN.
+- **Spätere Flashes**: "Wirelessly" - OTA über WLAN.
 
 Der erste Compile dauert ~5 Minuten (PlatformIO lädt NimBLE und die Toolchain).
 Folgende sind schnell.
@@ -328,9 +328,9 @@ Der einzige Schritt, bei dem man kurz aufpassen muss. Danach ist Ruhe.
    Innerhalb von ~30 Sekunden sollte das Bike **„HA eBike Bridge"** in der
    Liste anzeigen.
 6. Auf Aufforderung das Pairing am Bike-Display bestätigen (Just-Works-
-   Pairing — keine PIN nötig, das Bonding macht das Bike automatisch).
+   Pairing - keine PIN nötig, das Bonding macht das Bike automatisch).
 
-Fertig — die Bridge ist jetzt dauerhaft mit dem eBike gekoppelt. Ab sofort
+Fertig - die Bridge ist jetzt dauerhaft mit dem eBike gekoppelt. Ab sofort
 verbindet sich das Bike bei jedem Einschalten automatisch, sobald es in
 Reichweite der Bridge ist. Der Bond liegt im Flash des ESP32 und überlebt
 Neustarts und OTA-Updates.
@@ -353,7 +353,7 @@ Cloud plus die Live-BLE-Daten, sobald das Bike zu Hause ist.
 |---|---|---|
 | `ebike connected` wird nie aktiv | Außer Reichweite oder Bike-Firmware < v19 | Bridge näher stellen; Firmware in der Flow App prüfen |
 | Pairing schlägt fehl (Encryption status ≠ 0 im Log) | Alter Bond auf Bridge oder Bike | In HA den Button **„eBike Clear Bonding"** drücken, in der Flow App das Zubehör entfernen, Pairing neu durchlaufen |
-| Akku-SoC / Speed bleiben „Unbekannt" nach erstem Connect | Bike-Firmware-Eigenheit — initialer Read kam leer zurück | Bike aus / einschalten; sicherstellen, dass v0.3 (oder neuer) der Komponente läuft |
+| Akku-SoC / Speed bleiben „Unbekannt" nach erstem Connect | Bike-Firmware-Eigenheit - initialer Read kam leer zurück | Bike aus / einschalten; sicherstellen, dass v0.3 (oder neuer) der Komponente läuft |
 | `Advertising started` taucht im Log nie auf | NimBLE-Init fehlgeschlagen | Per USB neu flashen; sicherstellen, dass keine anderen BT-Komponenten (`esp32_ble_tracker`, `bluetooth_proxy`) in der YAML stehen |
 | Compile-Fehler `undefined reference to ble_gattc_*` | `CONFIG_BT_NIMBLE_ROLE_CENTRAL: y` fehlt | Prüfen, ob die Beispiel-YAML 1:1 übernommen wurde |
 | **„API connection issues" in Home Assistant nach erfolgreichem Flash** (Firmware compilt und uploaded sauber, aber HA kann das Gerät nicht hinzufügen bzw. die ESPHome-API bricht ständig ab) | Falsche Board-Defaults (meist falsche Quarz-Frequenz oder Partitions-Tabelle). Symptom ist instabiles WLAN, nicht „kein WLAN". | `board: esp32dev` neben `variant: esp32` im `esp32:`-Block ergänzen. Die aktuelle Beispiel-YAML enthält beides schon; ältere Kopien müssen aktualisiert werden. |

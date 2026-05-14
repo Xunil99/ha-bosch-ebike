@@ -40,9 +40,9 @@ Diese Custom Integration verbindet dein **Bosch eBike Smart System** mit Home As
 
 ### 🆕 Live-Daten über Bluetooth (ESPHome-Bridge)
 
-Zusätzlich zur Cloud-Integration findest du im Unterordner [`esphome/`](esphome/) eine **ESPHome-External-Component**, die einen ESP32 als Brücke zum **Bosch eBike Live Data Interface (LDI)** (BLE, smart system v19+) macht. Damit fließen Echtzeit-Werte (Speed, Akku-SoC, Tritt­frequenz, Fahrer­leistung, Tachostand, Lichtstatus, Lock-Status, …) als ESPHome-Sensoren in HA — ergänzend zur Cloud-basierten Tour-History.
+Zusätzlich zur Cloud-Integration findest du im Unterordner [`esphome/`](esphome/) eine **ESPHome-External-Component**, die einen ESP32 als Brücke zum **Bosch eBike Live Data Interface (LDI)** (BLE, smart system v19+) macht. Damit fließen Echtzeit-Werte (Speed, Akku-SoC, Tritt­frequenz, Fahrer­leistung, Tachostand, Lichtstatus, Lock-Status, …) als ESPHome-Sensoren in HA - ergänzend zur Cloud-basierten Tour-History.
 
-🚀 **Schnellster Weg ohne ESPHome-Kenntnisse**: ESP32 anstecken, in Chrome / Edge auf **https://xunil99.github.io/ha-bosch-ebike/** klicken und auf *Install* tippen. Firmware-Flash und WLAN-Setup laufen komplett im Browser — keine ESPHome-Installation nötig.
+🚀 **Schnellster Weg ohne ESPHome-Kenntnisse**: ESP32 anstecken, in Chrome / Edge auf **https://xunil99.github.io/ha-bosch-ebike/** klicken und auf *Install* tippen. Firmware-Flash und WLAN-Setup laufen komplett im Browser - keine ESPHome-Installation nötig.
 
 Komplette Anleitung: **[esphome/README.md](esphome/README.md)**
 
@@ -58,7 +58,7 @@ Sind diese gesetzt, fragt die Integration bei jedem Tour-Update den HA-Recorder 
 - **Exakte Tour-Distanz** (Tachostand-Differenz statt Cloud-GPS-Berechnung).
 - **Exakter Akkuverbrauch in Wh** ((SoC-Start − SoC-Ende) × Akkukapazität / 100).
 
-Die Werte ersetzen die bisherige Snapshot-Schätzung in den Sensoren *Last Ride Distance*, *Battery Consumption Wh*, *Verbrauch %* etc. Wenn beim Tour-Start oder -Ende kein BLE-Sample im Toleranzfenster (±5 min) verfügbar war (Bike außer Reichweite), fällt die Integration transparent auf die alte Cloud-Logik zurück. Beide Felder sind optional und unabhängig — du kannst auch nur einen der beiden setzen.
+Die Werte ersetzen die bisherige Snapshot-Schätzung in den Sensoren *Last Ride Distance*, *Battery Consumption Wh*, *Verbrauch %* etc. Wenn beim Tour-Start oder -Ende kein BLE-Sample im Toleranzfenster (±5 min) verfügbar war (Bike außer Reichweite), fällt die Integration transparent auf die alte Cloud-Logik zurück. Beide Felder sind optional und unabhängig - du kannst auch nur einen der beiden setzen.
 
 ### Voraussetzungen
 
@@ -72,7 +72,7 @@ Die Werte ersetzen die bisherige Snapshot-Schätzung in den Sensoren *Last Ride 
 
 #### Voraussetzungen
 
-1. Ein **Bosch SingleKey ID** Account — falls noch nicht vorhanden, erstelle einen unter [singlekey-id.com](https://singlekey-id.com)
+1. Ein **Bosch SingleKey ID** Account - falls noch nicht vorhanden, erstelle einen unter [singlekey-id.com](https://singlekey-id.com)
 2. Dein eBike muss mit der **Bosch eBike Flow App** ([iOS](https://apps.apple.com/app/bosch-ebike-flow/id1504451498) / [Android](https://play.google.com/store/apps/details?id=com.bosch.ebike)) verknüpft sein
 
 ---
@@ -95,7 +95,7 @@ Dies ist der wichtigste Schritt. Du musst eine "App" im Bosch-Portal anlegen, um
 
 #### Schritt 2: Client-ID sichern
 
-Kopiere die gerade erstellte **Client-ID** in ein Text-File oder einen Notizzettel — du brauchst sie später zum Einfügen per Copy & Paste.
+Kopiere die gerade erstellte **Client-ID** in ein Text-File oder einen Notizzettel - du brauchst sie später zum Einfügen per Copy & Paste.
 
 ---
 
@@ -115,14 +115,14 @@ Kopiere die gerade erstellte **Client-ID** in ein Text-File oder einen Notizzett
 7. Kopiere diese URL und öffne sie **in einem neuen Browser-Tab**
 8. Melde dich mit deiner **SingleKey ID** an
 9. Nach dem Login wirst du zu `http://localhost:8888/callback?code=XXXX...` weitergeleitet
-   - Dein Browser wird "Seite nicht erreichbar" anzeigen — **das ist normal!**
+   - Dein Browser wird "Seite nicht erreichbar" anzeigen - **das ist normal!**
    - Kopiere den Wert nach `code=` aus der Adressleiste (alles bis zum `&` oder bis zum Ende der URL)
-   - ⏱️ **Wichtig: Dies ist zeitkritisch!** Der Code ist nur ca. 45–60 Sekunden gültig — kopiere und füge ihn schnell ein!
-10. Füge den Code in Home Assistant ein und klicke **Absenden** — ebenfalls innerhalb von 45–60 Sekunden!
+   - ⏱️ **Wichtig: Dies ist zeitkritisch!** Der Code ist nur ca. 45–60 Sekunden gültig - kopiere und füge ihn schnell ein!
+10. Füge den Code in Home Assistant ein und klicke **Absenden** - ebenfalls innerhalb von 45–60 Sekunden!
 
 #### Schritt 4: Ergebnis prüfen
 
-Die Integration sollte jetzt eingerichtet sein — aber **noch ohne Entities!** Das ist normal. Weiter mit Schritt 5.
+Die Integration sollte jetzt eingerichtet sein - aber **noch ohne Entities!** Das ist normal. Weiter mit Schritt 5.
 
 ---
 
@@ -217,7 +217,7 @@ Die Auswahl filtert die angezeigten Touren live; das Sortieren funktioniert wie 
 
 Soll eine Karte dauerhaft genau ein Konto oder Bike zeigen (z. B. um zwei Karten nebeneinander für Vergleichsansichten zu haben), trägst Du in der Card-Konfiguration `account_id` und/oder `bike_id` ein. Das gewählte Dropdown wird dann ausgeblendet und der Filter ist gelockt.
 
-Die IDs kannst Du im Editor (oben rechts in der Karten-Bearbeitung) bequem aus Dropdowns auswählen — manuelles Heraussuchen ist nicht nötig. Optional kann `title` den Karten-Header überschreiben:
+Die IDs kannst Du im Editor (oben rechts in der Karten-Bearbeitung) bequem aus Dropdowns auswählen - manuelles Heraussuchen ist nicht nötig. Optional kann `title` den Karten-Header überschreiben:
 
 ```yaml
 type: horizontal-stack
@@ -232,7 +232,7 @@ cards:
     account_id: <config_entry_id_konto_b>
 ```
 
-Beide Karten zeigen dann immer Touren des jeweils gelockten Kontos und können mit der Datums-/Sortierauswahl unabhängig voneinander durch die Touren-Historie geblättert werden — ideal um z. B. zwei am selben Tag gefahrene Touren direkt zu vergleichen. Die gleichen Optionen funktionieren auch in der `bosch-ebike-heatmap-card`.
+Beide Karten zeigen dann immer Touren des jeweils gelockten Kontos und können mit der Datums-/Sortierauswahl unabhängig voneinander durch die Touren-Historie geblättert werden - ideal um z. B. zwei am selben Tag gefahrene Touren direkt zu vergleichen. Die gleichen Optionen funktionieren auch in der `bosch-ebike-heatmap-card`.
 
 ### POIs entlang der Route
 
@@ -251,14 +251,14 @@ Klick auf einen Marker → Popup mit Name, Öffnungszeiten/Adresse/Website (sofe
 
 Pro Bike gibt es zwei editierbare Entitäten:
 
-- **`date.<bike>_service_due_date`** — Datum, an dem der nächste Kundendienst fällig ist
-- **`number.<bike>_service_due_odometer`** — Kilometerstand, bei dem der nächste Kundendienst fällig ist
+- **`date.<bike>_service_due_date`** - Datum, an dem der nächste Kundendienst fällig ist
+- **`number.<bike>_service_due_odometer`** - Kilometerstand, bei dem der nächste Kundendienst fällig ist
 
 Beim ersten Datenabruf werden diese Werte automatisch aus der Bosch-API vorbelegt (sofern dort hinterlegt). Änderungen an den Entitäten überschreiben die Bosch-Werte und werden für die Service-Erinnerungen herangezogen. Setzt Du den Kilometerstand auf `0`, fällt die Anzeige auf den Bosch-Wert zurück.
 
 #### Eigene Wartungsposten
 
-Neben dem von Bosch gelieferten Service-Termin (`Next Service Date`/`Next Service Odometer`) kannst Du beliebige eigene Wartungsposten anlegen — z. B. Kettenwechsel alle 3000 km, Inspektion alle 365 Tage. Pro Bike wird ein Sensor `Maintenance Items Due` angelegt; sein Wert ist die Anzahl bald fälliger oder überfälliger Posten, das Attribut `items` listet alle Details (Restkilometer, Resttage).
+Neben dem von Bosch gelieferten Service-Termin (`Next Service Date`/`Next Service Odometer`) kannst Du beliebige eigene Wartungsposten anlegen - z. B. Kettenwechsel alle 3000 km, Inspektion alle 365 Tage. Pro Bike wird ein Sensor `Maintenance Items Due` angelegt; sein Wert ist die Anzahl bald fälliger oder überfälliger Posten, das Attribut `items` listet alle Details (Restkilometer, Resttage).
 
 **Posten anlegen:** **Entwicklerwerkzeuge → Dienste**, Dienst `bosch_ebike.add_maintenance` aufrufen mit:
 - `bike_id` (aus dem Sensor-Attribut)
@@ -275,7 +275,7 @@ Neben dem von Bosch gelieferten Service-Termin (`Next Service Date`/`Next Servic
 
 Damit kann man z. B. eine Push-Mitteilung oder eine Beleuchtungs-Erinnerung bauen.
 
-### Heatmap-Card — alle Touren auf einer Karte
+### Heatmap-Card - alle Touren auf einer Karte
 
 Eine zweite Card-Variante `bosch-ebike-heatmap-card` legt alle Touren einer Auswahl als halbtransparente Linien übereinander. Filter-Dropdowns für Zeitraum (30 Tage / 3 Monate / 12 Monate / Alle), Konto und Bike. Darunter eine Statuszeile mit Tour- und Kilometeranzahl der Auswahl.
 
@@ -284,7 +284,7 @@ type: custom:bosch-ebike-heatmap-card
 height: 600
 ```
 
-Die erste Anzeige kann etwas dauern — bei jeder bisher nicht abgerufenen Tour wird ein zusätzlicher API-Call gemacht (mit Concurrency-Limit). Die Tracks werden serverseitig im Speicher gecacht, weitere Aufrufe sind sofort.
+Die erste Anzeige kann etwas dauern - bei jeder bisher nicht abgerufenen Tour wird ein zusätzlicher API-Call gemacht (mit Concurrency-Limit). Die Tracks werden serverseitig im Speicher gecacht, weitere Aufrufe sind sofort.
 
 ### Wikipedia-Artikel entlang der Route
 
@@ -317,7 +317,7 @@ Auf der Lovelace-Karte gibt es einen 📚-Toggle in den Karten-Steuerelementen. 
 | Motor Total Hours | h | Gesamte Motorlaufzeit |
 | Motor Assist Hours | h | Motorlaufzeit mit Unterstützung |
 | Max Assist Speed | km/h | Maximale Unterstützungsgeschwindigkeit |
-| Active Assist Modes | — | Liste der aktiven Unterstützungsmodi |
+| Active Assist Modes | - | Liste der aktiven Unterstützungsmodi |
 | Walk Assist Speed | km/h | Schiebehilfe-Geschwindigkeit |
 | Next Service Odometer | km | Nächster Service-Kilometerstand |
 
@@ -325,15 +325,15 @@ Auf der Lovelace-Karte gibt es einen 📚-Toggle in den Karten-Steuerelementen. 
 | Sensor | Einheit | Beschreibung |
 |--------|---------|--------------|
 | Wh Lifetime | Wh | Gelieferte Wattstunden über Lebensdauer |
-| Charge Cycles | — | Gesamte Ladezyklen |
-| Cycles On Bike | — | Ladezyklen am Rad |
-| Cycles Off Bike | — | Ladezyklen extern |
+| Charge Cycles | - | Gesamte Ladezyklen |
+| Cycles On Bike | - | Ladezyklen am Rad |
+| Cycles Off Bike | - | Ladezyklen extern |
 
 #### Aktivitäts-Sensoren (letzte Fahrt)
 | Sensor | Einheit | Beschreibung |
 |--------|---------|--------------|
-| Last Ride Title | — | Name der Fahrt |
-| Last Ride Date | — | Datum/Uhrzeit |
+| Last Ride Title | - | Name der Fahrt |
+| Last Ride Date | - | Datum/Uhrzeit |
 | Last Ride Distance | km | Distanz |
 | Last Ride Duration | min | Fahrtdauer (ohne Stopps) |
 | Last Ride Avg/Max Speed | km/h | Durchschnitts-/Maximalgeschwindigkeit |
@@ -345,7 +345,7 @@ Auf der Lovelace-Karte gibt es einen 📚-Toggle in den Karten-Steuerelementen. 
 #### Gesamtstatistiken (über alle Fahrten)
 | Sensor | Einheit | Beschreibung |
 |--------|---------|--------------|
-| Total Rides | — | Anzahl aller Fahrten |
+| Total Rides | - | Anzahl aller Fahrten |
 | Total Distance (Activities) | km | Gesamtdistanz aller Fahrten |
 | Total Ride Duration | h | Gesamtfahrzeit |
 | Total Calories | kcal | Gesamt-Kalorienverbrauch |
@@ -390,7 +390,7 @@ This custom integration connects your **Bosch eBike Smart System** to Home Assis
 
 ### 🆕 Live data over Bluetooth (ESPHome bridge)
 
-In addition to the cloud integration, the [`esphome/`](esphome/) subfolder contains an **ESPHome external component** that turns an ESP32 into a bridge for the **Bosch eBike Live Data Interface (LDI)** (BLE, smart system v19+). Real-time values (speed, battery SoC, cadence, rider power, odometer, light state, lock state, …) become ESPHome sensors in HA — complementing the cloud-based tour history.
+In addition to the cloud integration, the [`esphome/`](esphome/) subfolder contains an **ESPHome external component** that turns an ESP32 into a bridge for the **Bosch eBike Live Data Interface (LDI)** (BLE, smart system v19+). Real-time values (speed, battery SoC, cadence, rider power, odometer, light state, lock state, …) become ESPHome sensors in HA - complementing the cloud-based tour history.
 
 🚀 **Fastest path without ESPHome experience**: plug an ESP32 into your computer, open **https://xunil99.github.io/ha-bosch-ebike/** in Chrome / Edge and click *Install*. Firmware flash and WiFi setup run entirely in the browser, no ESPHome installation required on your side.
 
@@ -408,7 +408,7 @@ When set, the integration queries the HA recorder for these sensors at every tou
 - **Exact tour distance** (odometer difference instead of cloud-derived GPS sum).
 - **Exact battery consumption in Wh** ((SoC start − SoC end) × battery capacity / 100).
 
-These replace the snapshot-based estimates in *Last Ride Distance*, *Battery Consumption Wh*, *consumption %* etc. If no fresh BLE sample exists at tour start/end within ±5 min (bike out of range), the integration transparently falls back to the previous cloud logic. Both fields are optional and independent — you can wire just one of them.
+These replace the snapshot-based estimates in *Last Ride Distance*, *Battery Consumption Wh*, *consumption %* etc. If no fresh BLE sample exists at tour start/end within ±5 min (bike out of range), the integration transparently falls back to the previous cloud logic. Both fields are optional and independent - you can wire just one of them.
 
 ### Prerequisites
 
@@ -422,7 +422,7 @@ These replace the snapshot-based estimates in *Last Ride Distance*, *Battery Con
 
 #### Prerequisites
 
-1. A **Bosch SingleKey ID** account — if you don't have one, create it at [singlekey-id.com](https://singlekey-id.com)
+1. A **Bosch SingleKey ID** account - if you don't have one, create it at [singlekey-id.com](https://singlekey-id.com)
 2. Your eBike must be linked to the **Bosch eBike Flow App** ([iOS](https://apps.apple.com/app/bosch-ebike-flow/id1504451498) / [Android](https://play.google.com/store/apps/details?id=com.bosch.ebike))
 
 ---
@@ -445,7 +445,7 @@ This is the most important step. You need to create an "App" in the Bosch portal
 
 #### Step 2: Save your Client-ID
 
-Copy the **Client-ID** you just created into a text file or note — you will need it later for copy & paste.
+Copy the **Client-ID** you just created into a text file or note - you will need it later for copy & paste.
 
 ---
 
@@ -465,14 +465,14 @@ Copy the **Client-ID** you just created into a text file or note — you will ne
 7. Copy this URL and open it **in a new browser tab**
 8. Sign in with your **SingleKey ID**
 9. After login, you'll be redirected to `http://localhost:8888/callback?code=XXXX...`
-   - Your browser will show "This site can't be reached" — **this is expected!**
+   - Your browser will show "This site can't be reached" - **this is expected!**
    - Copy the value after `code=` from the address bar (everything up to the `&` or the end of the URL)
-   - ⏱️ **Important: This is time-critical!** The code is only valid for about 45–60 seconds — copy and paste it quickly!
-10. Paste the code into Home Assistant and click **Submit** — also within 45–60 seconds!
+   - ⏱️ **Important: This is time-critical!** The code is only valid for about 45–60 seconds - copy and paste it quickly!
+10. Paste the code into Home Assistant and click **Submit** - also within 45–60 seconds!
 
 #### Step 4: Check the result
 
-The integration should now be set up — but **still without entities!** This is normal. Continue with step 5.
+The integration should now be set up - but **still without entities!** This is normal. Continue with step 5.
 
 ---
 
@@ -565,7 +565,7 @@ The selection filters the displayed activities live; sorting works as usual with
 
 #### Pinning a card to a specific account or bike
 
-To dedicate a card permanently to one account or bike (e.g. to place two cards side-by-side for comparison), add `account_id` and/or `bike_id` to the card configuration. The matching dropdown disappears and the filter is locked. The IDs can be picked from dropdowns directly in the card editor — no need to look them up manually. Optionally `title` overrides the card header:
+To dedicate a card permanently to one account or bike (e.g. to place two cards side-by-side for comparison), add `account_id` and/or `bike_id` to the card configuration. The matching dropdown disappears and the filter is locked. The IDs can be picked from dropdowns directly in the card editor - no need to look them up manually. Optionally `title` overrides the card header:
 
 ```yaml
 type: horizontal-stack
@@ -580,7 +580,7 @@ cards:
     account_id: <config_entry_id_account_b>
 ```
 
-Both cards then always show rides of their locked account and can be navigated independently with the date/sort controls — ideal for comparing two rides taken on the same day. The same options work in `bosch-ebike-heatmap-card`.
+Both cards then always show rides of their locked account and can be navigated independently with the date/sort controls - ideal for comparing two rides taken on the same day. The same options work in `bosch-ebike-heatmap-card`.
 
 ### POIs along the route
 
@@ -599,14 +599,14 @@ Clicking a marker opens a popup with name, opening hours / address / website (if
 
 Each bike exposes two user-editable entities:
 
-- **`date.<bike>_service_due_date`** — date the next service is due
-- **`number.<bike>_service_due_odometer`** — odometer reading at which the next service is due
+- **`date.<bike>_service_due_date`** - date the next service is due
+- **`number.<bike>_service_due_odometer`** - odometer reading at which the next service is due
 
 On first data fetch these are seeded from the Bosch API (when present). Changes you make take precedence over Bosch's values and feed into the service-due sensors and events. Setting the odometer to `0` clears the override and falls back to the Bosch value.
 
 #### Custom maintenance items
 
-Beyond the official Bosch service info (`Next Service Date` / `Next Service Odometer`) you can add arbitrary maintenance items per bike — e.g. chain swap every 3000 km, inspection every 365 days. Each bike gets a `Maintenance Items Due` sensor whose state is the count of items currently due-soon or overdue, with the full list available as the `items` attribute (remaining km, remaining days).
+Beyond the official Bosch service info (`Next Service Date` / `Next Service Odometer`) you can add arbitrary maintenance items per bike - e.g. chain swap every 3000 km, inspection every 365 days. Each bike gets a `Maintenance Items Due` sensor whose state is the count of items currently due-soon or overdue, with the full list available as the `items` attribute (remaining km, remaining days).
 
 **Add an item:** **Developer tools → Services**, call `bosch_ebike.add_maintenance` with:
 - `bike_id` (from the sensor attribute)
@@ -623,7 +623,7 @@ Beyond the official Bosch service info (`Next Service Date` / `Next Service Odom
 
 You can wire these up to push notifications, light reminders, etc.
 
-### Heatmap card — all rides overlaid
+### Heatmap card - all rides overlaid
 
 A second card type, `bosch-ebike-heatmap-card`, draws all rides in a selection as semi-transparent overlays on a single map. Filter dropdowns for time range (30 days / 3 months / 12 months / All), account and bike. A status line below shows ride count and total distance for the current selection.
 
@@ -632,7 +632,7 @@ type: custom:bosch-ebike-heatmap-card
 height: 600
 ```
 
-First render can take a moment — every ride whose detail hasn't been fetched yet triggers an API call (rate-limited via concurrency limit). Tracks are then cached server-side in memory; subsequent renders are instant.
+First render can take a moment - every ride whose detail hasn't been fetched yet triggers an API call (rate-limited via concurrency limit). Tracks are then cached server-side in memory; subsequent renders are instant.
 
 ### Wikipedia articles along the route
 
@@ -665,7 +665,7 @@ The Lovelace card has a 📚 toggle in the map controls. When enabled, the card 
 | Motor Total Hours | h | Total motor running time |
 | Motor Assist Hours | h | Motor running time with assist |
 | Max Assist Speed | km/h | Maximum assistance speed |
-| Active Assist Modes | — | List of active assist modes |
+| Active Assist Modes | - | List of active assist modes |
 | Walk Assist Speed | km/h | Walk assist speed |
 | Next Service Odometer | km | Next service due at odometer reading |
 
@@ -673,15 +673,15 @@ The Lovelace card has a 📚 toggle in the map controls. When enabled, the card 
 | Sensor | Unit | Description |
 |--------|------|-------------|
 | Wh Lifetime | Wh | Delivered watt-hours over lifetime |
-| Charge Cycles | — | Total charge cycles |
-| Cycles On Bike | — | Charge cycles while on bike |
-| Cycles Off Bike | — | Charge cycles off bike |
+| Charge Cycles | - | Total charge cycles |
+| Cycles On Bike | - | Charge cycles while on bike |
+| Cycles Off Bike | - | Charge cycles off bike |
 
 #### Activity Sensors (last ride)
 | Sensor | Unit | Description |
 |--------|------|-------------|
-| Last Ride Title | — | Ride name |
-| Last Ride Date | — | Date/time |
+| Last Ride Title | - | Ride name |
+| Last Ride Date | - | Date/time |
 | Last Ride Distance | km | Distance |
 | Last Ride Duration | min | Ride duration (without stops) |
 | Last Ride Avg/Max Speed | km/h | Average/maximum speed |
@@ -693,7 +693,7 @@ The Lovelace card has a 📚 toggle in the map controls. When enabled, the card 
 #### Aggregate Statistics (all rides)
 | Sensor | Unit | Description |
 |--------|------|-------------|
-| Total Rides | — | Number of all rides |
+| Total Rides | - | Number of all rides |
 | Total Distance (Activities) | km | Total distance across all rides |
 | Total Ride Duration | h | Total ride time |
 | Total Calories | kcal | Total calories burned |
@@ -717,7 +717,7 @@ The Lovelace card has a 📚 toggle in the map controls. When enabled, the card 
 
 ### License
 
-MIT License — see [LICENSE](LICENSE) for details.
+MIT License - see [LICENSE](LICENSE) for details.
 
 ### Credits
 
