@@ -10,7 +10,7 @@
       "improv": true,
       "parts": [
         {
-          "path": "https://github.com/Xunil99/ha-bosch-ebike/releases/latest/download/ebike-bridge.factory.bin",
+          "path": "./firmware/ebike-bridge.factory.bin",
           "offset": 0
         }
       ]

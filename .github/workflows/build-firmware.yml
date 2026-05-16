@@ -16,6 +16,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # Need full history + ability to push back to main for Pages-hosted firmware
+          fetch-depth: 0
+          ref: main
 
       - name: Build ESP32 firmware
         id: esphome-build
@@ -37,7 +41,7 @@ jobs:
           cp "$OUT"/*.ota.bin firmware-output/ebike-bridge.ota.bin || true
           ls -la firmware-output/
 
-      - name: Generate manifest.json for ESP Web Tools
+      - name: Generate manifest.json for ESP Web Tools (release-asset variant)
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           if [ -z "$VERSION" ] || [ "$VERSION" = "$GITHUB_REF_NAME" ]; then
@@ -71,6 +75,25 @@ jobs:
             firmware-output/ebike-bridge.factory.bin
             firmware-output/ebike-bridge.ota.bin
             firmware-output/manifest.json
+
+      - name: Publish firmware to GitHub Pages (same-origin, CORS-safe)
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          mkdir -p docs/firmware
+          cp firmware-output/ebike-bridge.factory.bin docs/firmware/ebike-bridge.factory.bin
+          cp firmware-output/ebike-bridge.ota.bin docs/firmware/ebike-bridge.ota.bin || true
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/firmware/ebike-bridge.factory.bin docs/firmware/ebike-bridge.ota.bin
+          if git diff --cached --quiet; then
+            echo "No firmware changes to commit."
+          else
+            git commit -m "ci: publish firmware ${TAG} to docs/firmware for web installer"
+            git push origin HEAD:main
+          fi
 
       - name: Upload firmware as workflow artifact
         if: github.event_name == 'workflow_dispatch'
