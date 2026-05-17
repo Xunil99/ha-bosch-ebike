@@ -17,6 +17,11 @@
 >
 > *Real live data via Bluetooth: ESP32 firmware can be flashed directly from your browser at the link above, no ESPHome installation required. Bilingual guide in [`esphome/`](esphome/).*
 
+> ### 🖥️ Optional: 4,3"-Display für Datum, Wetter und Live-Daten
+> Zusätzlich zur Bridge gibt es jetzt eine zweite Firmware für das **Guition/Sunton JC4827W543** (ESP32-S3 mit 4,3" IPS-Touch). Sie liest die Bridge-Sensoren aus Home Assistant, zeigt Datum, Uhrzeit, Wetter und bis zu zwei eBikes parallel an. Bestehende Bridge-Nutzer müssen nichts ändern, das Display ist rein additiv. Setup-Anleitung: [`esphome/DISPLAY.md`](esphome/DISPLAY.md).
+>
+> *Optional 4.3" companion display (JC4827W543) renders date, time, weather, and up to two bikes from your HA data. Read-only, no impact on existing bridge users. Setup: [esphome/DISPLAY.md](esphome/DISPLAY.md).*
+
 ---
 
 ## Deutsch

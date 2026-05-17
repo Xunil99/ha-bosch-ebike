@@ -1,0 +1,684 @@
+# Companion display firmware for the Bosch eBike LDI bridge.
+#
+# Target hardware: Guition / Sunton JC4827W543
+#   - ESP32-S3-WROOM-1, N16R8 (16 MB flash, 8 MB octal PSRAM)
+#   - 4.3" IPS QSPI LCD, NV3041A controller, 480 x 272
+#   - GT911 capacitive touchscreen (I2C)
+#   - USB-C, microSD slot, on-board RGB-LED, small speaker (unused here)
+#
+# Role: read-only HA dashboard. Pulls eBike telemetry and weather from
+# Home Assistant via the ESPHome native API and renders a two-bike layout
+# with date, time, and weather forecast. Does NOT talk to the eBike via
+# BLE itself - the existing bosch_ebike_ldi bridge keeps that role.
+#
+# The bridge firmware (factory.yaml) is unaffected by this file. You can
+# run zero, one, or many display devices alongside one or more bridges.
+#
+# Verify the pin assignments below against your exact board revision.
+# The JC4827W543 has shipped with at least three slightly different
+# pinouts in 2024-2026. The values used here match the most common
+# revision documented in the ESPHome community configs.
+
+substitutions:
+  device_name: ebike-display
+  friendly_name: "eBike Display"
+
+  # ----- Weather --------------------------------------------------------
+  # A weather entity already configured in Home Assistant (Met.no, DWD,
+  # OpenWeatherMap, ...). Leave the temp_entity empty to derive the
+  # current temperature from the weather entity attribute.
+  weather_entity: weather.home
+  weather_temp_entity: sensor.outside_temperature
+  weather_today_high_entity: sensor.weather_today_high
+  weather_today_low_entity: sensor.weather_today_low
+  weather_tomorrow_high_entity: sensor.weather_tomorrow_high
+  weather_tomorrow_low_entity: sensor.weather_tomorrow_low
+  weather_tomorrow_condition_entity: sensor.weather_tomorrow_condition
+
+  # ----- Bike A (always shown) -----------------------------------------
+  bike_a_name: "eBike A"
+  bike_a_soc_entity: sensor.ebike_battery_soc_live
+  bike_a_odo_entity: sensor.ebike_odometer_live
+  bike_a_charging_entity: binary_sensor.ebike_charger_connected
+  bike_a_connected_entity: binary_sensor.ebike_connected
+  bike_a_last_seen_entity: sensor.ebike_last_seen
+
+  # ----- Bike B (optional, leave empty for single-bike mode) -----------
+  bike_b_name: ""
+  bike_b_soc_entity: ""
+  bike_b_odo_entity: ""
+  bike_b_charging_entity: ""
+  bike_b_connected_entity: ""
+  bike_b_last_seen_entity: ""
+
+esphome:
+  name: ${device_name}
+  friendly_name: ${friendly_name}
+  min_version: 2025.11.0
+  name_add_mac_suffix: true
+  project:
+    name: "xunil99.bosch_ebike_display"
+    version: "0.1.0"
+  on_boot:
+    priority: -100
+    then:
+      - logger.log: "eBike display booting, waiting for HA connection..."
+
+esp32:
+  board: esp32-s3-devkitc-1
+  variant: esp32s3
+  flash_size: 16MB
+  framework:
+    type: esp-idf
+    sdkconfig_options:
+      CONFIG_ESPTOOLPY_FLASHSIZE_16MB: y
+      CONFIG_PARTITION_TABLE_CUSTOM: y
+      CONFIG_ESP32S3_DEFAULT_CPU_FREQ_240: y
+      CONFIG_FREERTOS_HZ: "1000"
+      # Octal PSRAM (8 MB) for LVGL frame buffers
+      CONFIG_SPIRAM_MODE_OCT: y
+      CONFIG_SPIRAM_SPEED_80M: y
+
+psram:
+  mode: octal
+  speed: 80MHz
+
+logger:
+  level: INFO
+  logs:
+    sensor: WARN
+
+wifi:
+  ap:
+    ssid: "eBike Display Setup"
+
+captive_portal:
+
+improv_serial:
+
+api:
+  reboot_timeout: 15min
+
+ota:
+  - platform: esphome
+
+# ---------------------------------------------------------------------------
+# Time source: prefer Home Assistant (already correct timezone), SNTP fallback
+# ---------------------------------------------------------------------------
+time:
+  - platform: homeassistant
+    id: ha_time
+  - platform: sntp
+    id: sntp_time
+    servers:
+      - 0.pool.ntp.org
+      - 1.pool.ntp.org
+
+# ---------------------------------------------------------------------------
+# I2C bus for the GT911 touchscreen
+# ---------------------------------------------------------------------------
+i2c:
+  - id: bus_a
+    sda: GPIO8
+    scl: GPIO4
+    frequency: 400kHz
+    scan: false
+
+# ---------------------------------------------------------------------------
+# QSPI bus for the NV3041A display
+# ---------------------------------------------------------------------------
+spi:
+  - id: qspi_bus
+    type: quad
+    clk_pin: GPIO47
+    data_pins:
+      - GPIO21
+      - GPIO48
+      - GPIO40
+      - GPIO39
+
+# ---------------------------------------------------------------------------
+# Backlight (PWM)
+# ---------------------------------------------------------------------------
+output:
+  - platform: ledc
+    pin: GPIO1
+    id: backlight_pwm
+    frequency: 20000Hz
+
+light:
+  - platform: monochromatic
+    output: backlight_pwm
+    id: backlight
+    name: "Display Backlight"
+    restore_mode: ALWAYS_ON
+    default_transition_length: 250ms
+
+# ---------------------------------------------------------------------------
+# Display
+# ---------------------------------------------------------------------------
+display:
+  - platform: qspi_dbi
+    model: NV3041A
+    id: main_display
+    spi_id: qspi_bus
+    cs_pin: GPIO45
+    reset_pin: GPIO -1  # tied high on most JC4827W543 revisions; set to a GPIO if your variant exposes it
+    dimensions:
+      width: 480
+      height: 272
+    color_order: rgb
+    invert_colors: false
+    transform:
+      mirror_x: true
+      mirror_y: false
+    update_interval: never
+    auto_clear_enabled: false
+
+# ---------------------------------------------------------------------------
+# Touch
+# ---------------------------------------------------------------------------
+touchscreen:
+  - platform: gt911
+    id: gt911_touch
+    display: main_display
+    transform:
+      mirror_x: true
+      mirror_y: false
+    interrupt_pin: GPIO3
+    reset_pin: GPIO38
+
+# ---------------------------------------------------------------------------
+# Fonts
+# ---------------------------------------------------------------------------
+font:
+  - file: "gfonts://Inter@500"
+    id: font_small
+    size: 14
+  - file: "gfonts://Inter@500"
+    id: font_med
+    size: 18
+  - file: "gfonts://Inter@600"
+    id: font_big
+    size: 28
+  - file: "gfonts://Inter@700"
+    id: font_huge
+    size: 36
+  - file: "gfonts://Material+Symbols+Outlined"
+    id: font_icons
+    size: 32
+    glyphs:
+      - "\U0000E81A"  # wb_sunny
+      - "\U0000E2BD"  # cloud
+      - "\U0000F176"  # partly_cloudy_day
+      - "\U0000F67F"  # rainy
+      - "\U0000E80F"  # ac_unit (snow)
+      - "\U0000E818"  # foggy
+      - "\U0000E1FF"  # bolt (thunderstorm)
+      - "\U0000E1B7"  # battery_full
+      - "\U0000EF74"  # ev_station (charging)
+      - "\U0000E531"  # directions_bike
+      - "\U0000E88E"  # info
+      - "\U0000E000"  # error
+
+# ---------------------------------------------------------------------------
+# Pulled-in HA sensors
+# ---------------------------------------------------------------------------
+sensor:
+  - platform: homeassistant
+    id: ha_temp_current
+    entity_id: ${weather_temp_entity}
+  - platform: homeassistant
+    id: ha_today_high
+    entity_id: ${weather_today_high_entity}
+  - platform: homeassistant
+    id: ha_today_low
+    entity_id: ${weather_today_low_entity}
+  - platform: homeassistant
+    id: ha_tomorrow_high
+    entity_id: ${weather_tomorrow_high_entity}
+  - platform: homeassistant
+    id: ha_tomorrow_low
+    entity_id: ${weather_tomorrow_low_entity}
+
+  - platform: homeassistant
+    id: bike_a_soc
+    entity_id: ${bike_a_soc_entity}
+  - platform: homeassistant
+    id: bike_a_odo
+    entity_id: ${bike_a_odo_entity}
+
+  - platform: homeassistant
+    id: bike_b_soc
+    entity_id: ${bike_b_soc_entity}
+  - platform: homeassistant
+    id: bike_b_odo
+    entity_id: ${bike_b_odo_entity}
+
+text_sensor:
+  - platform: homeassistant
+    id: ha_weather_state
+    entity_id: ${weather_entity}
+  - platform: homeassistant
+    id: ha_weather_tomorrow
+    entity_id: ${weather_tomorrow_condition_entity}
+  - platform: homeassistant
+    id: bike_a_last_seen
+    entity_id: ${bike_a_last_seen_entity}
+  - platform: homeassistant
+    id: bike_b_last_seen
+    entity_id: ${bike_b_last_seen_entity}
+
+binary_sensor:
+  - platform: homeassistant
+    id: bike_a_charging
+    entity_id: ${bike_a_charging_entity}
+  - platform: homeassistant
+    id: bike_a_connected
+    entity_id: ${bike_a_connected_entity}
+  - platform: homeassistant
+    id: bike_b_charging
+    entity_id: ${bike_b_charging_entity}
+  - platform: homeassistant
+    id: bike_b_connected
+    entity_id: ${bike_b_connected_entity}
+
+# ---------------------------------------------------------------------------
+# Helpers: idle detection for backlight dimming
+# ---------------------------------------------------------------------------
+globals:
+  - id: last_touch_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: "0"
+  - id: bike_b_configured
+    type: bool
+    restore_value: no
+    initial_value: ${bike_b_name:+"true"}${bike_b_name:-"false"}
+    # Evaluates to "true" if bike_b_name is non-empty, "false" otherwise.
+
+interval:
+  - interval: 5s
+    then:
+      - lambda: |-
+          uint32_t idle_ms = millis() - id(last_touch_ms);
+          float target = 1.0f;
+          if (idle_ms > 5 * 60 * 1000) target = 0.05f;
+          else if (idle_ms > 60 * 1000) target = 0.30f;
+          auto call = id(backlight).turn_on();
+          call.set_brightness(target);
+          call.set_transition_length(500);
+          call.perform();
+
+# ---------------------------------------------------------------------------
+# LVGL UI
+# ---------------------------------------------------------------------------
+lvgl:
+  displays:
+    - main_display
+  touchscreens:
+    - gt911_touch
+  theme:
+    button:
+      bg_color: 0x1E6FDB
+      text_color: 0xFFFFFF
+      radius: 8
+  on_idle:
+    timeout: 1s
+    then:
+      - lambda: 'id(last_touch_ms) = millis();'
+
+  pages:
+    # ------------------------------ Bike A -------------------------------
+    - id: page_bike_a
+      bg_color: 0x101418
+      widgets:
+        # ---------- Header ----------
+        - obj:
+            x: 0
+            y: 0
+            width: 480
+            height: 32
+            bg_color: 0x1E2530
+            bg_opa: COVER
+            border_width: 0
+            pad_all: 4
+            widgets:
+              - label:
+                  id: lbl_date
+                  x: 8
+                  y: 4
+                  text_color: 0xFFFFFF
+                  text_font: font_med
+                  text: "..."
+              - label:
+                  id: lbl_time
+                  x: 380
+                  y: 0
+                  width: 92
+                  height: 28
+                  long_mode: clip
+                  text_align: RIGHT
+                  text_color: 0xFFFFFF
+                  text_font: font_big
+                  text: "--:--"
+
+        # ---------- Weather strip ----------
+        - obj:
+            x: 0
+            y: 36
+            width: 480
+            height: 40
+            bg_color: 0x182030
+            bg_opa: COVER
+            border_width: 0
+            pad_all: 4
+            widgets:
+              - label:
+                  id: lbl_weather_today_icon
+                  x: 8
+                  y: 0
+                  text_font: font_icons
+                  text_color: 0xFFD060
+                  text: "\U0000E81A"
+              - label:
+                  id: lbl_weather_today
+                  x: 50
+                  y: 8
+                  text_font: font_small
+                  text_color: 0xFFFFFF
+                  text: "Heute --/-- C"
+              - label:
+                  id: lbl_weather_tomorrow_icon
+                  x: 250
+                  y: 0
+                  text_font: font_icons
+                  text_color: 0xFFD060
+                  text: "\U0000E2BD"
+              - label:
+                  id: lbl_weather_tomorrow
+                  x: 290
+                  y: 8
+                  text_font: font_small
+                  text_color: 0xCCCCCC
+                  text: "Morgen --/-- C"
+
+        # ---------- Bike A card ----------
+        - label:
+            id: lbl_bike_a_name
+            x: 20
+            y: 90
+            text_font: font_big
+            text_color: 0xFFFFFF
+            text: ${bike_a_name}
+        - label:
+            id: lbl_bike_a_odo_label
+            x: 20
+            y: 130
+            text_font: font_med
+            text_color: 0x9AA8B8
+            text: "Tachostand"
+        - label:
+            id: lbl_bike_a_odo
+            x: 240
+            y: 128
+            text_font: font_med
+            text_color: 0xFFFFFF
+            text: "--- km"
+        - label:
+            id: lbl_bike_a_soc_label
+            x: 20
+            y: 160
+            text_font: font_med
+            text_color: 0x9AA8B8
+            text: "Akku"
+        - label:
+            id: lbl_bike_a_soc
+            x: 240
+            y: 158
+            text_font: font_med
+            text_color: 0xFFFFFF
+            text: "-- %"
+        - bar:
+            id: bar_bike_a_soc
+            x: 20
+            y: 190
+            width: 440
+            height: 12
+            min_value: 0
+            max_value: 100
+            value: 0
+            indicator:
+              bg_color: 0x42C76A
+              bg_opa: COVER
+        - label:
+            id: lbl_bike_a_status
+            x: 20
+            y: 212
+            text_font: font_med
+            text_color: 0xFFFFFF
+            text: "Status: --"
+        - label:
+            id: lbl_bike_a_last_seen
+            x: 20
+            y: 240
+            text_font: font_small
+            text_color: 0x9AA8B8
+            text: "Zuletzt gesehen: --"
+
+        # ---------- Page indicator ----------
+        - led:
+            id: led_dot_a_left
+            x: 224
+            y: 258
+            color: 0xFFFFFF
+            brightness: 100%
+        - led:
+            id: led_dot_a_right
+            x: 246
+            y: 258
+            color: 0x555555
+            brightness: 40%
+
+    # ------------------------------ Bike B -------------------------------
+    - id: page_bike_b
+      bg_color: 0x101418
+      widgets:
+        - label:
+            id: lbl_bike_b_name
+            x: 20
+            y: 90
+            text_font: font_big
+            text_color: 0xFFFFFF
+            text: ${bike_b_name}
+        - label:
+            x: 20
+            y: 130
+            text_font: font_med
+            text_color: 0x9AA8B8
+            text: "Tachostand"
+        - label:
+            id: lbl_bike_b_odo
+            x: 240
+            y: 128
+            text_font: font_med
+            text_color: 0xFFFFFF
+            text: "--- km"
+        - label:
+            x: 20
+            y: 160
+            text_font: font_med
+            text_color: 0x9AA8B8
+            text: "Akku"
+        - label:
+            id: lbl_bike_b_soc
+            x: 240
+            y: 158
+            text_font: font_med
+            text_color: 0xFFFFFF
+            text: "-- %"
+        - bar:
+            id: bar_bike_b_soc
+            x: 20
+            y: 190
+            width: 440
+            height: 12
+            min_value: 0
+            max_value: 100
+            value: 0
+            indicator:
+              bg_color: 0x42C76A
+              bg_opa: COVER
+        - label:
+            id: lbl_bike_b_status
+            x: 20
+            y: 212
+            text_font: font_med
+            text_color: 0xFFFFFF
+            text: "Status: --"
+        - label:
+            id: lbl_bike_b_last_seen
+            x: 20
+            y: 240
+            text_font: font_small
+            text_color: 0x9AA8B8
+            text: "Zuletzt gesehen: --"
+
+        - led:
+            id: led_dot_b_left
+            x: 224
+            y: 258
+            color: 0x555555
+            brightness: 40%
+        - led:
+            id: led_dot_b_right
+            x: 246
+            y: 258
+            color: 0xFFFFFF
+            brightness: 100%
+
+# ---------------------------------------------------------------------------
+# Bind HA values to LVGL widgets
+# ---------------------------------------------------------------------------
+script:
+  - id: refresh_weather_icons
+    then:
+      - lvgl.label.update:
+          id: lbl_weather_today_icon
+          text: !lambda |-
+            std::string s = id(ha_weather_state).state;
+            if (s == "sunny" || s == "clear-night") return std::string("\U0000E81A");
+            if (s == "partlycloudy")                return std::string("\U0000F176");
+            if (s == "cloudy")                      return std::string("\U0000E2BD");
+            if (s == "rainy" || s == "pouring")     return std::string("\U0000F67F");
+            if (s == "snowy")                       return std::string("\U0000E80F");
+            if (s == "fog")                         return std::string("\U0000E818");
+            if (s == "lightning" || s == "lightning-rainy") return std::string("\U0000E1FF");
+            return std::string("\U0000E2BD");
+      - lvgl.label.update:
+          id: lbl_weather_tomorrow_icon
+          text: !lambda |-
+            std::string s = id(ha_weather_tomorrow).state;
+            if (s == "sunny")                       return std::string("\U0000E81A");
+            if (s == "partlycloudy")                return std::string("\U0000F176");
+            if (s == "cloudy")                      return std::string("\U0000E2BD");
+            if (s == "rainy" || s == "pouring")     return std::string("\U0000F67F");
+            if (s == "snowy")                       return std::string("\U0000E80F");
+            if (s == "fog")                         return std::string("\U0000E818");
+            if (s == "lightning" || s == "lightning-rainy") return std::string("\U0000E1FF");
+            return std::string("\U0000E2BD");
+
+interval:
+  - interval: 1s
+    then:
+      # ---------- Date + time ----------
+      - lvgl.label.update:
+          id: lbl_date
+          text: !lambda 'char b[24]; auto t = id(ha_time).now(); if (!t.is_valid()) return std::string("..."); strftime(b, sizeof(b), "%a %d. %b", &t.to_c_tm()); return std::string(b);'
+      - lvgl.label.update:
+          id: lbl_time
+          text: !lambda 'char b[8]; auto t = id(ha_time).now(); if (!t.is_valid()) return std::string("--:--"); strftime(b, sizeof(b), "%H:%M", &t.to_c_tm()); return std::string(b);'
+
+  - interval: 10s
+    then:
+      # ---------- Weather labels ----------
+      - lvgl.label.update:
+          id: lbl_weather_today
+          text: !lambda |-
+            char b[40];
+            float hi = id(ha_today_high).state;
+            float lo = id(ha_today_low).state;
+            float cur = id(ha_temp_current).state;
+            snprintf(b, sizeof(b), "Heute %.0f/%.0f  jetzt %.0f C", hi, lo, cur);
+            return std::string(b);
+      - lvgl.label.update:
+          id: lbl_weather_tomorrow
+          text: !lambda |-
+            char b[40];
+            float hi = id(ha_tomorrow_high).state;
+            float lo = id(ha_tomorrow_low).state;
+            snprintf(b, sizeof(b), "Morgen %.0f/%.0f C", hi, lo);
+            return std::string(b);
+      - script.execute: refresh_weather_icons
+
+      # ---------- Bike A values ----------
+      - lvgl.label.update:
+          id: lbl_bike_a_odo
+          text: !lambda |-
+            char b[24];
+            if (isnan(id(bike_a_odo).state)) return std::string("n/v");
+            snprintf(b, sizeof(b), "%.0f km", id(bike_a_odo).state);
+            return std::string(b);
+      - lvgl.label.update:
+          id: lbl_bike_a_soc
+          text: !lambda |-
+            char b[16];
+            if (isnan(id(bike_a_soc).state)) return std::string("n/v");
+            snprintf(b, sizeof(b), "%.0f %%", id(bike_a_soc).state);
+            return std::string(b);
+      - lvgl.bar.update:
+          id: bar_bike_a_soc
+          value: !lambda 'return isnan(id(bike_a_soc).state) ? 0 : (int) id(bike_a_soc).state;'
+      - lvgl.label.update:
+          id: lbl_bike_a_status
+          text: !lambda |-
+            if (id(bike_a_charging).state)  return std::string("Status: Laedt");
+            if (id(bike_a_connected).state) return std::string("Status: Verbunden");
+            return std::string("Status: Schlaeft");
+      - lvgl.label.update:
+          id: lbl_bike_a_last_seen
+          text: !lambda |-
+            return std::string("Zuletzt gesehen: ") + id(bike_a_last_seen).state;
+
+      # ---------- Bike B values (skipped if not configured) ----------
+      - if:
+          condition:
+            lambda: 'return id(bike_b_configured);'
+          then:
+            - lvgl.label.update:
+                id: lbl_bike_b_odo
+                text: !lambda |-
+                  char b[24];
+                  if (isnan(id(bike_b_odo).state)) return std::string("n/v");
+                  snprintf(b, sizeof(b), "%.0f km", id(bike_b_odo).state);
+                  return std::string(b);
+            - lvgl.label.update:
+                id: lbl_bike_b_soc
+                text: !lambda |-
+                  char b[16];
+                  if (isnan(id(bike_b_soc).state)) return std::string("n/v");
+                  snprintf(b, sizeof(b), "%.0f %%", id(bike_b_soc).state);
+                  return std::string(b);
+            - lvgl.bar.update:
+                id: bar_bike_b_soc
+                value: !lambda 'return isnan(id(bike_b_soc).state) ? 0 : (int) id(bike_b_soc).state;'
+            - lvgl.label.update:
+                id: lbl_bike_b_status
+                text: !lambda |-
+                  if (id(bike_b_charging).state)  return std::string("Status: Laedt");
+                  if (id(bike_b_connected).state) return std::string("Status: Verbunden");
+                  return std::string("Status: Schlaeft");
+            - lvgl.label.update:
+                id: lbl_bike_b_last_seen
+                text: !lambda |-
+                  return std::string("Zuletzt gesehen: ") + id(bike_b_last_seen).state;

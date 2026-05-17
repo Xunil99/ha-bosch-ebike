@@ -191,6 +191,14 @@
     </noscript>
 
     <div class="install-card">
+      <h2 style="margin-top:0;font-size:1.15rem;">
+        <span class="lang-de">eBike-Bridge (ESP32)</span>
+        <span class="lang-en">eBike Bridge (ESP32)</span>
+      </h2>
+      <p class="subtitle" style="margin:.25rem 0 1rem;">
+        <span class="lang-de">BLE-Verbindung zum Bike, sendet Daten an Home Assistant.</span>
+        <span class="lang-en">BLE link to the bike, publishes data to Home Assistant.</span>
+      </p>
       <esp-web-install-button manifest="manifest.json">
         <button slot="activate" type="button">
           <span class="lang-de">Bridge auf ESP32 flashen</span>
@@ -209,6 +217,36 @@
          href="./firmware/ebike-bridge.factory.bin">
         <span class="lang-de">Alternativ: factory.bin manuell herunterladen und mit esptool flashen</span>
         <span class="lang-en">Alternatively: download factory.bin and flash it manually with esptool</span>
+      </a>
+    </div>
+
+    <div class="install-card">
+      <h2 style="margin-top:0;font-size:1.15rem;">
+        <span class="lang-de">eBike-Display (JC4827W543)</span>
+        <span class="lang-en">eBike Display (JC4827W543)</span>
+      </h2>
+      <p class="subtitle" style="margin:.25rem 0 1rem;">
+        <span class="lang-de">Optionales 4,3"-Display für Datum, Wetter und Live-Daten aus Home Assistant. Bis zu zwei Bikes parallel.</span>
+        <span class="lang-en">Optional 4.3" dashboard showing date, weather, and live data from Home Assistant. Up to two bikes side by side.</span>
+      </p>
+      <esp-web-install-button manifest="manifest-display.json">
+        <button slot="activate" type="button">
+          <span class="lang-de">Display auf JC4827W543 flashen</span>
+          <span class="lang-en">Install display onto JC4827W543</span>
+        </button>
+        <span slot="unsupported" class="unsupported">
+          <span class="lang-de">Dein Browser unterstützt kein Web Serial. Bitte Chrome oder Edge auf einem Desktop verwenden.</span>
+          <span class="lang-en">Your browser does not support Web Serial. Please use Chrome or Edge on a desktop computer.</span>
+        </span>
+        <span slot="not-allowed" class="not-allowed">
+          <span class="lang-de">Diese Seite muss über HTTPS aufgerufen werden.</span>
+          <span class="lang-en">This page must be opened over HTTPS.</span>
+        </span>
+      </esp-web-install-button>
+      <a class="fallback-link"
+         href="./firmware/ebike-display.factory.bin">
+        <span class="lang-de">Alternativ: Display-factory.bin manuell herunterladen und mit esptool flashen</span>
+        <span class="lang-en">Alternatively: download the display factory.bin and flash it manually with esptool</span>
       </a>
     </div>
 
