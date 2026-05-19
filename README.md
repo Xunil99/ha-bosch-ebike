@@ -40,6 +40,7 @@ Diese Custom Integration verbindet dein **Bosch eBike Smart System** mit Home As
 - **Gesamtstatistiken:** Anzahl aller Fahrten, Gesamtdistanz, Gesamtfahrzeit, Gesamtkalorien, Gesamthöhenmeter, Durchschnittswerte für Geschwindigkeit/Leistung/Trittfrequenz über alle Fahrten
 - **GPS-Track-Export:** Export aller Fahrten als GPX-Dateien (mit Speed, Cadence, Power als Garmin TrackPointExtension)
 - **Interaktive Kartendarstellung:** Custom Lovelace Card mit GPS-Tracks, geschwindigkeitsabhängiger Farbcodierung, Date-Picker und Prev/Next-Navigation
+- **Dashboard-Card mit Bike-Bild, Live-Daten und Ladesteuerung:** Custom Lovelace Card (`bosch-ebike-dashboard-card`) mit eigenem Bike-Foto, Tachostand, Akkustand, Lade-Status, optionalem Ladeleistungssensor, Ziel-SoC-Schieberegler sowie Start-/Stop-Buttons über eine smarte Steckdose
 - **Automatische Token-Aktualisierung** über Refresh-Token
 - **30-Minuten-Polling-Intervall** (beim ersten Start werden alle Fahrten importiert)
 
@@ -189,6 +190,8 @@ Die Integration enthält eine interaktive Lovelace-Karte zur Anzeige deiner GPS-
 
 > **Hinweis:** Wenn die Karte nach einem Update nicht korrekt angezeigt wird, leere den Browser-Cache mit `Ctrl+Shift+R` (Hard Reload).
 
+> **HACS-Update für die Karten:** Alle vier Lovelace-Karten (Map, Heatmap, Calendar, Dashboard) liegen in einer einzigen JS-Datei (`bosch-ebike-map-card.js`) und werden automatisch mit der Integration aktualisiert. Nach einem Versions-Update von HACS ein Hard Reload des Browser-Caches durchführen, sonst kann der Card-Picker eine neue Karte noch nicht anzeigen.
+
 #### HACS-Installation (Alternative)
 
 1. Öffne HACS in Home Assistant
@@ -310,6 +313,53 @@ bike_id: bike-uuid-1
 
 Farb-Buckets pro Tag: leer, 1-10 km, 10-25 km, 25-50 km, 50+ km. Die Farben kommen aus den HA-Theme-Variablen, hellen Designs sehen wie GitHub-Light aus, im dunklen Modus wird automatisch das passende dunkle Palette geladen.
 
+### Dashboard-Card - Bike-Foto, Live-Daten und Ladesteuerung
+
+Die Card `bosch-ebike-dashboard-card` ist als Kombi-Anzeige fürs Wohnzimmer-Dashboard gedacht: oben ein eigenes Foto des Bikes, darunter die Live-Werte aus der ESPHome-Bridge und optional die Bedien-Elemente für eine smarte Steckdose, an der der Charger hängt. Alle Felder sind optional - was nicht konfiguriert ist, blendet die Karte sauber aus, statt eine leere Zeile zu rendern.
+
+```yaml
+type: custom:bosch-ebike-dashboard-card
+title: Performance CX
+bike_image: /local/ebike-cx.jpg
+odometer_entity: sensor.ebike_odometer_live
+battery_entity: sensor.ebike_battery_soc_live
+charging_entity: binary_sensor.ebike_charger_connected
+last_tour_distance_entity: sensor.bosch_ebike_last_activity_distance
+charge_power_entity: sensor.ebike_smart_plug_power
+charge_switch_entity: switch.ebike_smart_plug
+target_soc_entity: input_number.ebike_target_soc
+```
+
+**Was die Karte zeigt:**
+
+- **Bike-Foto** (User-Upload nach `/config/www/`, Referenz als `/local/datei.jpg`) oder Platzhalter mit Fahrrad-Icon
+- **Tachostand-Kachel** und optional **Letzte-Tour-Distanz**, **Ladeleistung in Watt**
+- **Status-Pills** für Lade-Zustand und Akku-Prozent
+- **Ziel-SoC-Schieberegler**, der den Wert eines `input_number` setzt
+- **Start- und Stop-Buttons** mit Zwei-Klick-Bestätigung bei Stop (Versehensschutz)
+- **Akku-Balken** unten, der unter 35 % auf Orange und unter 15 % auf Rot wechselt
+
+**Voraussetzungen für die volle Funktionalität:**
+
+- Eine laufende **ESPHome-Bosch-eBike-Bridge** für Akkustand, Tachostand und Lade-Erkennung
+- Eine **smarte Steckdose** (Shelly, Tasmota, Fritz!DECT, etc.), die in HA als `switch.*` und optional als Leistungssensor `sensor.*_power` erscheint, falls Du Start/Stop und Ladeleistung sehen willst
+- Ein `input_number.*` mit Bereich 0-100, falls Du den Ziel-SoC-Slider nutzen willst
+
+**Auto-Stop bei Ziel-SoC** ist bewusst nicht in der Karte selbst implementiert, sondern als HA-Automation, damit Du Toleranzen, Tageszeit-Bedingungen oder Mehrfach-Geräte-Logik frei gestalten kannst. Beispiel-Automation:
+
+```yaml
+alias: eBike Auto-Stop bei Ziel-SoC
+trigger:
+  - platform: numeric_state
+    entity_id: sensor.ebike_battery_soc_live
+    above: input_number.ebike_target_soc
+action:
+  - service: switch.turn_off
+    target:
+      entity_id: switch.ebike_smart_plug
+mode: single
+```
+
 ### Wikipedia-Artikel entlang der Route
 
 Auf der Lovelace-Karte gibt es einen 📚-Toggle in den Karten-Steuerelementen. Ist er aktiviert, sucht die Karte entlang der gefahrenen Route alle 2 km nach nahegelegenen Wikipedia-Artikeln und zeigt sie als (i)-Marker an. Ein Klick öffnet ein kleines Popup mit Titel, Vorschaubild, Kurzbeschreibung und einem Link auf den vollständigen Artikel.
@@ -409,6 +459,7 @@ This custom integration connects your **Bosch eBike Smart System** to Home Assis
 - **Aggregate statistics:** Total rides, total distance, total ride time, total calories, total elevation, averages for speed/power/cadence across all rides
 - **GPS track export:** Export all rides as GPX files (with speed, cadence, power as Garmin TrackPointExtension)
 - **Interactive map card:** Custom Lovelace card with GPS tracks, speed-based color coding, date picker and prev/next navigation
+- **Dashboard card with bike photo, live data and charging control:** Custom Lovelace card (`bosch-ebike-dashboard-card`) with a user-supplied bike photo, odometer, state of charge, charging status, optional charging-power sensor, target-SoC slider, and Start/Stop buttons backed by a smart plug
 - **Automatic token refresh** via refresh token
 - **30-minute polling interval** (all rides are imported on first startup)
 
@@ -558,6 +609,8 @@ The integration includes an interactive Lovelace card for displaying your GPS tr
 
 > **Note:** If the card doesn't display correctly after an update, clear your browser cache with `Ctrl+Shift+R` (hard reload).
 
+> **HACS update for the cards:** All four Lovelace cards (Map, Heatmap, Calendar, Dashboard) ship inside a single JS file (`bosch-ebike-map-card.js`) and update automatically with the integration. After a HACS version bump, hard-reload the browser cache, otherwise a newly added card may not show up in the card picker yet.
+
 #### HACS Installation (Alternative)
 
 1. Open HACS in Home Assistant
@@ -676,6 +729,53 @@ bike_id: bike-uuid-1
 ```
 
 Color buckets per day: empty, 1-10 km, 10-25 km, 25-50 km, 50+ km. Colors are pulled from HA theme variables, light themes look like GitHub-Light; in dark mode the matching dark palette is applied automatically.
+
+### Dashboard card - bike photo, live data and charging control
+
+The card `bosch-ebike-dashboard-card` is designed as a one-stop dashboard tile: your own photo of the bike at the top, live values from the ESPHome bridge in the middle, and optional controls for a smart plug that the charger is plugged into. Every field is optional. Anything that is not configured is hidden cleanly instead of rendered as an empty row.
+
+```yaml
+type: custom:bosch-ebike-dashboard-card
+title: Performance CX
+bike_image: /local/ebike-cx.jpg
+odometer_entity: sensor.ebike_odometer_live
+battery_entity: sensor.ebike_battery_soc_live
+charging_entity: binary_sensor.ebike_charger_connected
+last_tour_distance_entity: sensor.bosch_ebike_last_activity_distance
+charge_power_entity: sensor.ebike_smart_plug_power
+charge_switch_entity: switch.ebike_smart_plug
+target_soc_entity: input_number.ebike_target_soc
+```
+
+**What the card shows:**
+
+- **Bike photo** (upload to `/config/www/`, reference as `/local/file.jpg`) or a placeholder with a bicycle icon
+- **Odometer tile**, plus optional **last-tour distance** and **charging power in watts**
+- **Status pills** for charging state and battery percent
+- **Target-SoC slider** that writes to an `input_number`
+- **Start and Stop buttons** with a two-click confirm on Stop (accident protection)
+- **Battery bar** at the bottom that turns amber under 35 % and red under 15 %
+
+**Requirements for full functionality:**
+
+- A running **ESPHome Bosch eBike bridge** for state of charge, odometer and charging detection
+- A **smart plug** (Shelly, Tasmota, Fritz!DECT, etc.) exposed in HA as `switch.*` and optionally as a power sensor `sensor.*_power`, if you want Start/Stop and charging-power readouts
+- An `input_number.*` in the range 0-100, if you want the target-SoC slider
+
+**Auto-stop at target SoC** is intentionally not implemented inside the card itself but as a regular HA automation so you can add tolerances, time-of-day conditions, or multi-device logic. Example:
+
+```yaml
+alias: eBike auto-stop at target SoC
+trigger:
+  - platform: numeric_state
+    entity_id: sensor.ebike_battery_soc_live
+    above: input_number.ebike_target_soc
+action:
+  - service: switch.turn_off
+    target:
+      entity_id: switch.ebike_smart_plug
+mode: single
+```
 
 ### Wikipedia articles along the route
 
