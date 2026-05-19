@@ -4585,24 +4585,38 @@ class BoschEBikeDashboardCardEditor extends HTMLElement {
     const token = this._hass.auth && this._hass.auth.data && this._hass.auth.data.access_token;
     if (!token) throw new Error("No access token available");
 
+    // HA's image_upload endpoint imposes a 10 MB ceiling and rejects formats
+    // PIL cannot decode. Surface that upfront so the user does not chase a
+    // network error when the file is simply too big.
+    const MAX_BYTES = 10 * 1024 * 1024;
+    if (file.size > MAX_BYTES) {
+      throw new Error(`File too large (${(file.size / 1024 / 1024).toFixed(1)} MB, max 10 MB)`);
+    }
+
     const fd = new FormData();
-    fd.append("file", file);
+    fd.append("file", file, file.name || "bike.webp");
     const resp = await fetch("/api/image/upload", {
       method: "POST",
       headers: { Authorization: `Bearer ${token}` },
       body: fd,
     });
     if (!resp.ok) {
-      let msg = `HTTP ${resp.status}`;
+      // Try JSON first, fall back to plain text so the user sees the server's
+      // own message (e.g. "Unable to decode image") in the editor.
+      let detail = "";
+      const ctype = resp.headers.get("content-type") || "";
       try {
-        const j = await resp.json();
-        if (j && j.message) msg += `: ${j.message}`;
+        if (ctype.includes("application/json")) {
+          const j = await resp.json();
+          detail = j?.message || j?.error || JSON.stringify(j);
+        } else {
+          detail = (await resp.text()).slice(0, 200);
+        }
       } catch (_) { /* ignore */ }
-      throw new Error(msg);
+      throw new Error(`HTTP ${resp.status}${detail ? " - " + detail : ""}`);
     }
     const data = await resp.json();
     if (!data || !data.id) throw new Error("Upload response missing id");
-    // Image is served back at this canonical path
     return `/api/image/serve/${data.id}/original`;
   }
 }
