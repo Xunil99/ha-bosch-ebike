@@ -136,6 +136,33 @@ const I18N = {
     style_standard: "Standard",
     style_topo: "Topo",
     style_sat: "Satellite",
+    // Dashboard card
+    dash_no_image: "No image configured",
+    dash_no_image_hint: "Set a bike_image URL in the card editor.",
+    dash_label_odo: "Odometer",
+    dash_label_last_tour: "Last tour",
+    dash_label_battery: "Battery",
+    dash_label_charge_power: "Charging power",
+    dash_label_target_soc: "Stop charging at",
+    dash_state_charging: "Charging",
+    dash_state_not_charging: "Not charging",
+    dash_state_unknown: "n/a",
+    dash_btn_start: "Start charging",
+    dash_btn_stop: "Stop charging",
+    dash_btn_confirm: "Sure?",
+    dash_editor_title: "Title (optional)",
+    dash_editor_image: "Bike image URL",
+    dash_editor_image_hint: "Upload an image to /config/www/ and reference it as /local/file.jpg.",
+    dash_editor_bike_name: "Bike name (optional)",
+    dash_editor_bike_name_hint: "Defaults to the title if empty.",
+    dash_editor_odo: "Odometer entity",
+    dash_editor_battery: "Battery SoC entity (0..100)",
+    dash_editor_charging: "Charging-detected entity (binary)",
+    dash_editor_last_tour: "Last tour distance entity (optional)",
+    dash_editor_charge_power: "Charging power entity (W, optional)",
+    dash_editor_charge_switch: "Charger switch entity (optional)",
+    dash_editor_target_soc: "Target SoC input_number entity (optional)",
+    dash_editor_target_soc_hint: "When set, an HA automation can read this value and stop the smart plug when the battery reaches it.",
   },
   de: {
     rides_title: "Bosch eBike Rides",
@@ -253,6 +280,33 @@ const I18N = {
     style_standard: "Standard",
     style_topo: "Topo",
     style_sat: "Satellit",
+    // Dashboard card
+    dash_no_image: "Kein Bild hinterlegt",
+    dash_no_image_hint: "Im Karten-Editor unter Bike-Bild-URL ein Bild eintragen.",
+    dash_label_odo: "Tachostand",
+    dash_label_last_tour: "Letzte Tour",
+    dash_label_battery: "Akku",
+    dash_label_charge_power: "Ladeleistung",
+    dash_label_target_soc: "Laden stoppen bei",
+    dash_state_charging: "Lädt",
+    dash_state_not_charging: "Lädt nicht",
+    dash_state_unknown: "n/v",
+    dash_btn_start: "Laden starten",
+    dash_btn_stop: "Laden stoppen",
+    dash_btn_confirm: "Sicher?",
+    dash_editor_title: "Titel (optional)",
+    dash_editor_image: "Bike-Bild-URL",
+    dash_editor_image_hint: "Bild nach /config/www/ hochladen und als /local/datei.jpg eintragen.",
+    dash_editor_bike_name: "Bike-Name (optional)",
+    dash_editor_bike_name_hint: "Fällt auf den Titel zurück, wenn leer.",
+    dash_editor_odo: "Tachostand-Entity",
+    dash_editor_battery: "Akku-SoC-Entity (0..100)",
+    dash_editor_charging: "Lade-Erkennung-Entity (binär)",
+    dash_editor_last_tour: "Letzte-Tour-Distanz-Entity (optional)",
+    dash_editor_charge_power: "Ladeleistung-Entity (W, optional)",
+    dash_editor_charge_switch: "Charger-Switch-Entity (optional)",
+    dash_editor_target_soc: "Ziel-SoC input_number-Entity (optional)",
+    dash_editor_target_soc_hint: "Wenn gesetzt, kann eine HA-Automation diesen Wert lesen und die Steckdose abschalten, sobald der Akku ihn erreicht.",
   },
   nl: {
     rides_title: "Bosch eBike Ritten",
@@ -370,6 +424,33 @@ const I18N = {
     style_standard: "Standaard",
     style_topo: "Topo",
     style_sat: "Satelliet",
+    // Dashboard card
+    dash_no_image: "Geen afbeelding ingesteld",
+    dash_no_image_hint: "Stel in de kaart-editor een bike_image URL in.",
+    dash_label_odo: "Kilometerstand",
+    dash_label_last_tour: "Laatste rit",
+    dash_label_battery: "Accu",
+    dash_label_charge_power: "Laadvermogen",
+    dash_label_target_soc: "Laden stoppen bij",
+    dash_state_charging: "Aan het laden",
+    dash_state_not_charging: "Niet aan het laden",
+    dash_state_unknown: "n.v.t.",
+    dash_btn_start: "Laden starten",
+    dash_btn_stop: "Laden stoppen",
+    dash_btn_confirm: "Zeker weten?",
+    dash_editor_title: "Titel (optioneel)",
+    dash_editor_image: "URL fiets-afbeelding",
+    dash_editor_image_hint: "Upload een afbeelding naar /config/www/ en verwijs ernaar als /local/bestand.jpg.",
+    dash_editor_bike_name: "Naam fiets (optioneel)",
+    dash_editor_bike_name_hint: "Valt terug op de titel als leeg.",
+    dash_editor_odo: "Kilometerstand-entity",
+    dash_editor_battery: "Accu-SoC-entity (0..100)",
+    dash_editor_charging: "Laden-detectie-entity (binair)",
+    dash_editor_last_tour: "Entity laatste rit-afstand (optioneel)",
+    dash_editor_charge_power: "Laadvermogen-entity (W, optioneel)",
+    dash_editor_charge_switch: "Lader-schakelaar-entity (optioneel)",
+    dash_editor_target_soc: "Doel-SoC input_number-entity (optioneel)",
+    dash_editor_target_soc_hint: "Indien ingesteld kan een HA-automation deze waarde uitlezen en de stekker uitschakelen zodra de accu deze bereikt.",
   },
 };
 
@@ -3853,6 +3934,519 @@ class BoschEBikeCalendarCardEditor extends BoschEBikeMapCardEditor {
   }
 }
 
+// ===========================================================================
+// Dashboard card: user-uploaded image + live ESPHome data + smart-plug control
+// ===========================================================================
+class BoschEBikeDashboardCard extends HTMLElement {
+  constructor() {
+    super();
+    this._hass = null;
+    this._config = {};
+    this._built = false;
+    this._pendingStop = false;
+    this._pendingStopTimer = null;
+  }
+
+  setConfig(config) {
+    if (!config) throw new Error("Invalid configuration");
+    this._config = { ...config };
+    if (this._built) { this._applyStatic(); this._render(); }
+  }
+
+  set hass(hass) {
+    this._hass = hass;
+    if (!this._built) this._build();
+    this._render();
+  }
+
+  static getConfigElement() { return document.createElement("bosch-ebike-dashboard-card-editor"); }
+  static getStubConfig() {
+    return {
+      bike_image: "",
+      odometer_entity: "",
+      battery_entity: "",
+      charging_entity: "",
+    };
+  }
+  getCardSize() { return 6; }
+
+  _t(key, ...args) {
+    const lang = (this._hass && this._hass.language) ? this._hass.language.split("-")[0] : "en";
+    const dict = (I18N && I18N[lang]) || I18N.en;
+    const v = dict[key] != null ? dict[key] : I18N.en[key];
+    return typeof v === "function" ? v(...args) : v;
+  }
+
+  _build() {
+    this.innerHTML = "";
+    const card = document.createElement("ha-card");
+    this.appendChild(card);
+
+    const style = document.createElement("style");
+    style.textContent = `
+      .dash-wrap { padding: 16px; box-sizing: border-box; }
+      .dash-title {
+        text-align: center; font-size: 20px; font-weight: 600;
+        margin: 0 0 8px 0; color: var(--primary-text-color);
+      }
+      .dash-image-wrap {
+        width: 100%; aspect-ratio: 16/10;
+        display: flex; align-items: center; justify-content: center;
+        background: var(--secondary-background-color, #f5f5f5);
+        border-radius: 12px; overflow: hidden; margin-bottom: 14px;
+      }
+      .dash-image-wrap img { max-width: 100%; max-height: 100%; object-fit: contain; }
+      .dash-no-image {
+        text-align: center; padding: 16px; color: var(--secondary-text-color);
+        font-size: 13px; line-height: 1.4;
+      }
+      .dash-no-image .ico {
+        display: block; margin: 0 auto 8px; opacity: .5;
+      }
+      .dash-row {
+        display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+        gap: 12px; margin-bottom: 12px;
+      }
+      .dash-tile {
+        display: flex; flex-direction: column; align-items: center;
+        gap: 4px; padding: 6px 4px;
+      }
+      .dash-tile ha-icon { --mdc-icon-size: 24px; color: var(--secondary-text-color); }
+      .dash-tile ha-icon.accent { color: var(--primary-color, #03a9f4); }
+      .dash-tile .val { font-size: 14px; font-weight: 500; color: var(--primary-text-color); }
+      .dash-tile .lbl { font-size: 11px; color: var(--secondary-text-color); text-transform: uppercase; letter-spacing: .04em; }
+      .dash-pills {
+        display: flex; flex-wrap: wrap; gap: 10px; justify-content: center;
+        margin: 6px 0 14px;
+      }
+      .dash-pill {
+        display: inline-flex; align-items: center; gap: 6px;
+        padding: 6px 12px; border-radius: 999px;
+        background: var(--secondary-background-color, #f0f0f0);
+        font-size: 13px; color: var(--primary-text-color);
+      }
+      .dash-pill ha-icon { --mdc-icon-size: 18px; }
+      .dash-pill.charging { background: rgba(76,175,80,.18); color: #2e7d32; }
+      .dash-pill.charging ha-icon { color: #2e7d32; }
+      .dash-controls {
+        display: flex; gap: 10px; margin: 14px 0 12px; flex-wrap: wrap;
+      }
+      .dash-btn {
+        flex: 1 1 140px;
+        display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+        padding: 10px 14px; border-radius: 10px; border: 0; cursor: pointer;
+        font-size: 14px; font-weight: 500;
+        background: var(--primary-color, #03a9f4); color: var(--text-primary-color, #fff);
+        transition: filter .15s ease;
+      }
+      .dash-btn:hover { filter: brightness(1.08); }
+      .dash-btn.stop { background: #e53935; }
+      .dash-btn.stop.confirm { background: #b71c1c; }
+      .dash-btn:disabled { opacity: .4; cursor: not-allowed; }
+      .dash-slider-row {
+        display: flex; align-items: center; gap: 10px; margin: 10px 0 14px;
+      }
+      .dash-slider-row .lbl { flex: 0 0 auto; font-size: 13px; color: var(--secondary-text-color); }
+      .dash-slider-row input[type=range] { flex: 1; }
+      .dash-slider-row .val {
+        flex: 0 0 auto; min-width: 38px; text-align: right;
+        font-size: 14px; font-weight: 600; color: var(--primary-text-color);
+      }
+      .dash-batbar-wrap {
+        margin-top: 6px;
+        background: var(--secondary-background-color, #eee);
+        border-radius: 999px; overflow: hidden; height: 22px; position: relative;
+      }
+      .dash-batbar {
+        height: 100%; background: linear-gradient(90deg,#66bb6a,#43a047);
+        transition: width .4s ease;
+      }
+      .dash-batbar.low { background: linear-gradient(90deg,#ffb74d,#fb8c00); }
+      .dash-batbar.crit { background: linear-gradient(90deg,#ef5350,#e53935); }
+      .dash-batbar-label {
+        position: absolute; right: 12px; top: 0; bottom: 0; display: flex;
+        align-items: center; font-size: 13px; font-weight: 600;
+        color: var(--primary-text-color);
+      }
+    `;
+    card.appendChild(style);
+
+    const wrap = document.createElement("div");
+    wrap.className = "dash-wrap";
+    card.appendChild(wrap);
+
+    wrap.innerHTML = `
+      <div class="dash-title" id="dash-title"></div>
+      <div class="dash-image-wrap" id="dash-image-wrap"></div>
+      <div class="dash-row" id="dash-row-stats"></div>
+      <div class="dash-pills" id="dash-pills"></div>
+      <div class="dash-slider-row" id="dash-slider-row" style="display:none">
+        <span class="lbl" id="dash-slider-lbl"></span>
+        <input type="range" id="dash-slider" min="20" max="100" step="5" value="80" />
+        <span class="val" id="dash-slider-val">80%</span>
+      </div>
+      <div class="dash-controls" id="dash-controls" style="display:none"></div>
+      <div class="dash-batbar-wrap" id="dash-batbar-wrap">
+        <div class="dash-batbar" id="dash-batbar" style="width:0%"></div>
+        <div class="dash-batbar-label" id="dash-batbar-label">--%</div>
+      </div>
+    `;
+
+    // Slider live preview + commit on change
+    const slider = wrap.querySelector("#dash-slider");
+    const sliderVal = wrap.querySelector("#dash-slider-val");
+    slider.addEventListener("input", () => { sliderVal.textContent = slider.value + "%"; });
+    slider.addEventListener("change", () => {
+      const target = this._config.target_soc_entity;
+      if (!target || !this._hass) return;
+      this._hass.callService("input_number", "set_value", {
+        entity_id: target, value: Number(slider.value),
+      }).catch((err) => console.error("[Bosch eBike Dashboard] set_value failed", err));
+    });
+
+    this._built = true;
+    this._applyStatic();
+  }
+
+  _applyStatic() {
+    const title = this.querySelector("#dash-title");
+    if (title) {
+      title.textContent =
+        this._config.bike_name || this._config.title || "eBike";
+    }
+  }
+
+  _state(entityId) {
+    if (!entityId || !this._hass) return null;
+    return this._hass.states[entityId] || null;
+  }
+
+  _num(entityId, fallback = null) {
+    const s = this._state(entityId);
+    if (!s) return fallback;
+    const v = Number(s.state);
+    return Number.isFinite(v) ? v : fallback;
+  }
+
+  _onOff(entityId) {
+    const s = this._state(entityId);
+    if (!s) return null;
+    return s.state === "on" || s.state === "true" || s.state === "charging";
+  }
+
+  _formatKm(v) {
+    if (v == null || !Number.isFinite(v)) return this._t("dash_state_unknown");
+    return v.toLocaleString(undefined, { maximumFractionDigits: 1 }) + " km";
+  }
+  _formatW(v) {
+    if (v == null || !Number.isFinite(v)) return this._t("dash_state_unknown");
+    return v.toLocaleString(undefined, { maximumFractionDigits: 0 }) + " W";
+  }
+  _formatPct(v) {
+    if (v == null || !Number.isFinite(v)) return this._t("dash_state_unknown");
+    return v.toLocaleString(undefined, { maximumFractionDigits: 0 }) + " %";
+  }
+
+  _render() {
+    if (!this._built || !this._hass) return;
+
+    const cfg = this._config;
+
+    // ---------- Image ----------
+    const imgWrap = this.querySelector("#dash-image-wrap");
+    if (imgWrap) {
+      imgWrap.innerHTML = "";
+      if (cfg.bike_image) {
+        const img = document.createElement("img");
+        img.src = cfg.bike_image;
+        img.alt = cfg.bike_name || "eBike";
+        imgWrap.appendChild(img);
+      } else {
+        const placeholder = document.createElement("div");
+        placeholder.className = "dash-no-image";
+        placeholder.innerHTML = `
+          <ha-icon class="ico" icon="mdi:bicycle-electric" style="--mdc-icon-size:48px"></ha-icon>
+          <div>${this._t("dash_no_image")}</div>
+          <div style="opacity:.6;margin-top:4px">${this._t("dash_no_image_hint")}</div>
+        `;
+        imgWrap.appendChild(placeholder);
+      }
+    }
+
+    // ---------- Stat tiles ----------
+    const odo = this._num(cfg.odometer_entity);
+    const lastTour = this._num(cfg.last_tour_distance_entity);
+    const power = this._num(cfg.charge_power_entity);
+    const battery = this._num(cfg.battery_entity);
+    const isCharging = this._onOff(cfg.charging_entity);
+
+    const row = this.querySelector("#dash-row-stats");
+    if (row) {
+      row.innerHTML = "";
+      const tiles = [
+        { icon: "mdi:counter", label: this._t("dash_label_odo"), val: this._formatKm(odo) },
+      ];
+      if (cfg.last_tour_distance_entity) {
+        tiles.push({ icon: "mdi:map-marker-distance", label: this._t("dash_label_last_tour"), val: this._formatKm(lastTour) });
+      }
+      if (cfg.charge_power_entity) {
+        tiles.push({
+          icon: "mdi:flash",
+          label: this._t("dash_label_charge_power"),
+          val: this._formatW(power),
+          accent: !!(isCharging && power && power > 0),
+        });
+      }
+      for (const t of tiles) {
+        const el = document.createElement("div");
+        el.className = "dash-tile";
+        el.innerHTML = `
+          <ha-icon class="${t.accent ? "accent" : ""}" icon="${t.icon}"></ha-icon>
+          <div class="val">${t.val}</div>
+          <div class="lbl">${t.label}</div>
+        `;
+        row.appendChild(el);
+      }
+    }
+
+    // ---------- Status pills ----------
+    const pills = this.querySelector("#dash-pills");
+    if (pills) {
+      pills.innerHTML = "";
+      const stateLabel = isCharging == null
+        ? this._t("dash_state_unknown")
+        : isCharging ? this._t("dash_state_charging") : this._t("dash_state_not_charging");
+      const stateIcon = isCharging ? "mdi:battery-charging" : "mdi:power-plug-off";
+      const pill = document.createElement("span");
+      pill.className = "dash-pill" + (isCharging ? " charging" : "");
+      pill.innerHTML = `<ha-icon icon="${stateIcon}"></ha-icon><span>${stateLabel}</span>`;
+      pills.appendChild(pill);
+
+      if (cfg.battery_entity) {
+        const bp = document.createElement("span");
+        bp.className = "dash-pill";
+        bp.innerHTML = `<ha-icon icon="mdi:battery"></ha-icon><span>${this._formatPct(battery)}</span>`;
+        pills.appendChild(bp);
+      }
+    }
+
+    // ---------- Slider ----------
+    const sliderRow = this.querySelector("#dash-slider-row");
+    const slider = this.querySelector("#dash-slider");
+    const sliderVal = this.querySelector("#dash-slider-val");
+    const sliderLbl = this.querySelector("#dash-slider-lbl");
+    if (cfg.target_soc_entity) {
+      sliderRow.style.display = "flex";
+      sliderLbl.textContent = this._t("dash_label_target_soc");
+      const targetState = this._state(cfg.target_soc_entity);
+      if (targetState) {
+        const a = targetState.attributes || {};
+        if (a.min != null) slider.min = a.min;
+        if (a.max != null) slider.max = a.max;
+        if (a.step != null) slider.step = a.step;
+        const v = Number(targetState.state);
+        if (Number.isFinite(v) && document.activeElement !== slider) {
+          slider.value = v;
+          sliderVal.textContent = v + "%";
+        }
+      }
+    } else {
+      sliderRow.style.display = "none";
+    }
+
+    // ---------- Buttons ----------
+    const controls = this.querySelector("#dash-controls");
+    if (controls) {
+      controls.innerHTML = "";
+      if (cfg.charge_switch_entity) {
+        controls.style.display = "flex";
+        const sw = this._state(cfg.charge_switch_entity);
+        const swOn = sw && sw.state === "on";
+        const startBtn = document.createElement("button");
+        startBtn.className = "dash-btn";
+        startBtn.innerHTML = `<ha-icon icon="mdi:play"></ha-icon><span>${this._t("dash_btn_start")}</span>`;
+        startBtn.disabled = swOn === true;
+        startBtn.addEventListener("click", () => this._callSwitch("turn_on"));
+        controls.appendChild(startBtn);
+
+        const stopBtn = document.createElement("button");
+        stopBtn.className = "dash-btn stop" + (this._pendingStop ? " confirm" : "");
+        stopBtn.innerHTML = `<ha-icon icon="mdi:stop"></ha-icon><span>${this._pendingStop ? this._t("dash_btn_confirm") : this._t("dash_btn_stop")}</span>`;
+        stopBtn.disabled = swOn === false;
+        stopBtn.addEventListener("click", () => this._handleStop());
+        controls.appendChild(stopBtn);
+      } else {
+        controls.style.display = "none";
+      }
+    }
+
+    // ---------- Battery bar ----------
+    const bar = this.querySelector("#dash-batbar");
+    const barLbl = this.querySelector("#dash-batbar-label");
+    if (bar && barLbl) {
+      const pct = battery != null && Number.isFinite(battery) ? Math.max(0, Math.min(100, battery)) : 0;
+      bar.style.width = pct + "%";
+      bar.classList.remove("low", "crit");
+      if (pct < 15) bar.classList.add("crit");
+      else if (pct < 35) bar.classList.add("low");
+      barLbl.textContent = battery != null && Number.isFinite(battery)
+        ? Math.round(battery) + " %" : "--%";
+    }
+  }
+
+  _handleStop() {
+    if (!this._pendingStop) {
+      this._pendingStop = true;
+      this._render();
+      this._pendingStopTimer = setTimeout(() => {
+        this._pendingStop = false;
+        this._render();
+      }, 3000);
+      return;
+    }
+    clearTimeout(this._pendingStopTimer);
+    this._pendingStop = false;
+    this._callSwitch("turn_off");
+  }
+
+  _callSwitch(action) {
+    const entityId = this._config.charge_switch_entity;
+    if (!entityId || !this._hass) return;
+    const [domain] = entityId.split(".");
+    this._hass.callService(domain, action, { entity_id: entityId })
+      .catch((err) => console.error("[Bosch eBike Dashboard] switch call failed", err));
+  }
+}
+
+// Editor for Dashboard card
+class BoschEBikeDashboardCardEditor extends HTMLElement {
+  constructor() {
+    super();
+    this._hass = null;
+    this._config = {};
+    this._built = false;
+  }
+
+  setConfig(config) {
+    this._config = { ...config };
+    if (this._built) this._sync();
+  }
+
+  set hass(hass) {
+    this._hass = hass;
+    if (!this._built) this._build();
+  }
+
+  _t(key) {
+    const lang = (this._hass && this._hass.language) ? this._hass.language.split("-")[0] : "en";
+    const dict = (I18N && I18N[lang]) || I18N.en;
+    return dict[key] != null ? dict[key] : I18N.en[key];
+  }
+
+  _emit() {
+    this.dispatchEvent(new CustomEvent("config-changed", { detail: { config: this._config } }));
+  }
+
+  _entities(filter) {
+    if (!this._hass) return [];
+    return Object.keys(this._hass.states).filter(filter).sort();
+  }
+
+  _build() {
+    this.innerHTML = "";
+    const wrap = document.createElement("div");
+    wrap.style.cssText = "display:flex;flex-direction:column;gap:12px;padding:12px;";
+    this.appendChild(wrap);
+
+    const mk = (label, hint, makeInput) => {
+      const block = document.createElement("div");
+      block.style.cssText = "display:flex;flex-direction:column;gap:4px;";
+      const lbl = document.createElement("label");
+      lbl.textContent = label;
+      lbl.style.fontWeight = "500";
+      block.appendChild(lbl);
+      const input = makeInput();
+      block.appendChild(input);
+      if (hint) {
+        const h = document.createElement("small");
+        h.textContent = hint;
+        h.style.cssText = "color:var(--secondary-text-color);font-size:11px;";
+        block.appendChild(h);
+      }
+      wrap.appendChild(block);
+      return input;
+    };
+
+    const mkText = (key, labelKey, hintKey) => {
+      const input = mk(this._t(labelKey), hintKey ? this._t(hintKey) : null, () => {
+        const i = document.createElement("input");
+        i.type = "text";
+        i.style.cssText = "padding:8px;border-radius:4px;border:1px solid var(--divider-color);background:var(--card-background-color);color:var(--primary-text-color);";
+        return i;
+      });
+      input.value = this._config[key] || "";
+      input.addEventListener("input", () => {
+        if (input.value) this._config[key] = input.value;
+        else delete this._config[key];
+        this._emit();
+      });
+      return input;
+    };
+
+    const mkEntity = (key, labelKey, hintKey, filter) => {
+      const input = mk(this._t(labelKey), hintKey ? this._t(hintKey) : null, () => {
+        const sel = document.createElement("select");
+        sel.style.cssText = "padding:8px;border-radius:4px;border:1px solid var(--divider-color);background:var(--card-background-color);color:var(--primary-text-color);";
+        const opt0 = document.createElement("option");
+        opt0.value = ""; opt0.textContent = "—";
+        sel.appendChild(opt0);
+        for (const e of this._entities(filter)) {
+          const o = document.createElement("option");
+          o.value = e; o.textContent = e;
+          sel.appendChild(o);
+        }
+        return sel;
+      });
+      input.value = this._config[key] || "";
+      input.addEventListener("change", () => {
+        if (input.value) this._config[key] = input.value;
+        else delete this._config[key];
+        this._emit();
+      });
+      return input;
+    };
+
+    this._fields = {
+      title: mkText("title", "dash_editor_title"),
+      bike_image: mkText("bike_image", "dash_editor_image", "dash_editor_image_hint"),
+      bike_name: mkText("bike_name", "dash_editor_bike_name", "dash_editor_bike_name_hint"),
+      odometer_entity: mkEntity("odometer_entity", "dash_editor_odo", null,
+        (e) => e.startsWith("sensor.")),
+      battery_entity: mkEntity("battery_entity", "dash_editor_battery", null,
+        (e) => e.startsWith("sensor.")),
+      charging_entity: mkEntity("charging_entity", "dash_editor_charging", null,
+        (e) => e.startsWith("binary_sensor.") || e.startsWith("sensor.")),
+      last_tour_distance_entity: mkEntity("last_tour_distance_entity", "dash_editor_last_tour", null,
+        (e) => e.startsWith("sensor.")),
+      charge_power_entity: mkEntity("charge_power_entity", "dash_editor_charge_power", null,
+        (e) => e.startsWith("sensor.")),
+      charge_switch_entity: mkEntity("charge_switch_entity", "dash_editor_charge_switch", null,
+        (e) => e.startsWith("switch.")),
+      target_soc_entity: mkEntity("target_soc_entity", "dash_editor_target_soc", "dash_editor_target_soc_hint",
+        (e) => e.startsWith("input_number.")),
+    };
+
+    this._built = true;
+  }
+
+  _sync() {
+    if (!this._fields) return;
+    for (const [key, input] of Object.entries(this._fields)) {
+      input.value = this._config[key] || "";
+    }
+  }
+}
+
 if (!customElements.get("bosch-ebike-map-card")) {
   customElements.define("bosch-ebike-map-card", BoschEBikeMapCard);
 }
@@ -3870,6 +4464,12 @@ if (!customElements.get("bosch-ebike-calendar-card")) {
 }
 if (!customElements.get("bosch-ebike-calendar-card-editor")) {
   customElements.define("bosch-ebike-calendar-card-editor", BoschEBikeCalendarCardEditor);
+}
+if (!customElements.get("bosch-ebike-dashboard-card")) {
+  customElements.define("bosch-ebike-dashboard-card", BoschEBikeDashboardCard);
+}
+if (!customElements.get("bosch-ebike-dashboard-card-editor")) {
+  customElements.define("bosch-ebike-dashboard-card-editor", BoschEBikeDashboardCardEditor);
 }
 
 window.customCards = window.customCards || [];
@@ -3894,6 +4494,14 @@ if (!window.customCards.find((c) => c.type === "bosch-ebike-calendar-card")) {
     type: "bosch-ebike-calendar-card",
     name: "Bosch eBike Calendar",
     description: "Kalender-Heatmap der Fahrtage (GitHub-Contributions-Stil)",
+    preview: false,
+  });
+}
+if (!window.customCards.find((c) => c.type === "bosch-ebike-dashboard-card")) {
+  window.customCards.push({
+    type: "bosch-ebike-dashboard-card",
+    name: "Bosch eBike Dashboard",
+    description: "Bike-Bild, Live-Daten und optional Ladesteuerung (für ESPHome-Bridge + Smart-Plug)",
     preview: false,
   });
 }
