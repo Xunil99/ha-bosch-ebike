@@ -332,7 +332,7 @@ target_soc_entity: input_number.ebike_target_soc
 
 **Was die Karte zeigt:**
 
-- **Bike-Foto** (User-Upload nach `/config/www/`, Referenz als `/local/datei.jpg`) oder Platzhalter mit Fahrrad-Icon
+- **Bike-Foto** mit eingebautem Upload im Karten-Editor (Bild auswählen, Karte schreibt den Pfad selbst). Alternativ klassisch über `/config/www/` und `/local/datei.jpg` referenzieren. Platzhalter mit Fahrrad-Icon, solange nichts gesetzt ist.
 - **Tachostand-Kachel** und optional **Letzte-Tour-Distanz**, **Ladeleistung in Watt**
 - **Status-Pills** für Lade-Zustand und Akku-Prozent
 - **Ziel-SoC-Schieberegler**, der den Wert eines `input_number` setzt
@@ -749,7 +749,7 @@ target_soc_entity: input_number.ebike_target_soc
 
 **What the card shows:**
 
-- **Bike photo** (upload to `/config/www/`, reference as `/local/file.jpg`) or a placeholder with a bicycle icon
+- **Bike photo** with a built-in upload right in the card editor (pick a file, the card fills the path itself). Or paste a classic `/local/file.jpg` URL after dropping a file into `/config/www/`. A placeholder with a bicycle icon is shown when nothing is set.
 - **Odometer tile**, plus optional **last-tour distance** and **charging power in watts**
 - **Status pills** for charging state and battery percent
 - **Target-SoC slider** that writes to an `input_number`

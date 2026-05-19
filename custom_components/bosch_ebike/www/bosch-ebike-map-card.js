@@ -151,8 +151,12 @@ const I18N = {
     dash_btn_stop: "Stop charging",
     dash_btn_confirm: "Sure?",
     dash_editor_title: "Title (optional)",
-    dash_editor_image: "Bike image URL",
-    dash_editor_image_hint: "Upload an image to /config/www/ and reference it as /local/file.jpg.",
+    dash_editor_image: "Bike image",
+    dash_editor_image_hint: "Pick a file with Upload, or paste a URL (/local/..., /media/local/..., or https://...). Upload stores the file in Home Assistant and fills the URL automatically.",
+    dash_editor_image_upload: "Upload",
+    dash_editor_image_uploading: "Uploading…",
+    dash_editor_image_upload_failed: "Upload failed: ",
+    dash_editor_image_clear: "Clear",
     dash_editor_bike_name: "Bike name (optional)",
     dash_editor_bike_name_hint: "Defaults to the title if empty.",
     dash_editor_odo: "Odometer entity",
@@ -295,8 +299,12 @@ const I18N = {
     dash_btn_stop: "Laden stoppen",
     dash_btn_confirm: "Sicher?",
     dash_editor_title: "Titel (optional)",
-    dash_editor_image: "Bike-Bild-URL",
-    dash_editor_image_hint: "Bild nach /config/www/ hochladen und als /local/datei.jpg eintragen.",
+    dash_editor_image: "Bike-Bild",
+    dash_editor_image_hint: "Datei per Hochladen wählen oder URL eintragen (/local/..., /media/local/... oder https://...). Beim Hochladen wird die Datei in Home Assistant gespeichert und der Pfad automatisch eingetragen.",
+    dash_editor_image_upload: "Hochladen",
+    dash_editor_image_uploading: "Wird hochgeladen…",
+    dash_editor_image_upload_failed: "Upload fehlgeschlagen: ",
+    dash_editor_image_clear: "Entfernen",
     dash_editor_bike_name: "Bike-Name (optional)",
     dash_editor_bike_name_hint: "Fällt auf den Titel zurück, wenn leer.",
     dash_editor_odo: "Tachostand-Entity",
@@ -439,8 +447,12 @@ const I18N = {
     dash_btn_stop: "Laden stoppen",
     dash_btn_confirm: "Zeker weten?",
     dash_editor_title: "Titel (optioneel)",
-    dash_editor_image: "URL fiets-afbeelding",
-    dash_editor_image_hint: "Upload een afbeelding naar /config/www/ en verwijs ernaar als /local/bestand.jpg.",
+    dash_editor_image: "Fiets-afbeelding",
+    dash_editor_image_hint: "Kies een bestand met Uploaden of plak een URL (/local/..., /media/local/... of https://...). Bij uploaden wordt het bestand in Home Assistant opgeslagen en het pad automatisch ingevuld.",
+    dash_editor_image_upload: "Uploaden",
+    dash_editor_image_uploading: "Wordt geüpload…",
+    dash_editor_image_upload_failed: "Upload mislukt: ",
+    dash_editor_image_clear: "Verwijderen",
     dash_editor_bike_name: "Naam fiets (optioneel)",
     dash_editor_bike_name_hint: "Valt terug op de titel als leeg.",
     dash_editor_odo: "Kilometerstand-entity",
@@ -4416,9 +4428,107 @@ class BoschEBikeDashboardCardEditor extends HTMLElement {
       return input;
     };
 
+    const mkImage = (key, labelKey, hintKey) => {
+      // Composite widget: text input + Upload button + preview + Clear button.
+      // Uses HA's built-in /api/image/upload endpoint (image_upload integration,
+      // active in HA core since 2023.4). Files persist under /config/image/
+      // and survive HACS updates.
+      const block = document.createElement("div");
+      block.style.cssText = "display:flex;flex-direction:column;gap:6px;";
+
+      const lbl = document.createElement("label");
+      lbl.textContent = this._t(labelKey);
+      lbl.style.fontWeight = "500";
+      block.appendChild(lbl);
+
+      const row = document.createElement("div");
+      row.style.cssText = "display:flex;gap:6px;align-items:center;flex-wrap:wrap;";
+      block.appendChild(row);
+
+      const text = document.createElement("input");
+      text.type = "text";
+      text.placeholder = "/local/bike.webp";
+      text.style.cssText = "flex:1 1 220px;min-width:160px;padding:8px;border-radius:4px;border:1px solid var(--divider-color);background:var(--card-background-color);color:var(--primary-text-color);";
+      row.appendChild(text);
+
+      const file = document.createElement("input");
+      file.type = "file";
+      file.accept = "image/*";
+      file.style.display = "none";
+      row.appendChild(file);
+
+      const uploadBtn = document.createElement("button");
+      uploadBtn.type = "button";
+      uploadBtn.textContent = this._t("dash_editor_image_upload");
+      uploadBtn.style.cssText = "padding:8px 12px;border-radius:4px;border:0;background:var(--primary-color,#03a9f4);color:var(--text-primary-color,#fff);cursor:pointer;font-weight:500;";
+      uploadBtn.addEventListener("click", () => file.click());
+      row.appendChild(uploadBtn);
+
+      const clearBtn = document.createElement("button");
+      clearBtn.type = "button";
+      clearBtn.textContent = this._t("dash_editor_image_clear");
+      clearBtn.style.cssText = "padding:8px 12px;border-radius:4px;border:1px solid var(--divider-color);background:transparent;color:var(--primary-text-color);cursor:pointer;";
+      clearBtn.addEventListener("click", () => {
+        text.value = "";
+        delete this._config[key];
+        this._refreshPreview(preview, "");
+        this._emit();
+      });
+      row.appendChild(clearBtn);
+
+      const status = document.createElement("div");
+      status.style.cssText = "font-size:12px;color:var(--secondary-text-color);min-height:16px;";
+      block.appendChild(status);
+
+      const preview = document.createElement("div");
+      preview.style.cssText = "margin-top:4px;max-width:260px;aspect-ratio:16/10;background:var(--secondary-background-color,#f5f5f5);border-radius:8px;overflow:hidden;display:flex;align-items:center;justify-content:center;";
+      block.appendChild(preview);
+
+      if (hintKey) {
+        const h = document.createElement("small");
+        h.textContent = this._t(hintKey);
+        h.style.cssText = "color:var(--secondary-text-color);font-size:11px;";
+        block.appendChild(h);
+      }
+
+      text.value = this._config[key] || "";
+      this._refreshPreview(preview, text.value);
+
+      text.addEventListener("input", () => {
+        if (text.value) this._config[key] = text.value;
+        else delete this._config[key];
+        this._refreshPreview(preview, text.value);
+        this._emit();
+      });
+
+      file.addEventListener("change", async () => {
+        if (!file.files || !file.files[0]) return;
+        const picked = file.files[0];
+        status.textContent = this._t("dash_editor_image_uploading");
+        uploadBtn.disabled = true;
+        try {
+          const url = await this._uploadImage(picked);
+          text.value = url;
+          this._config[key] = url;
+          this._refreshPreview(preview, url);
+          status.textContent = "";
+          this._emit();
+        } catch (err) {
+          console.error("[Bosch eBike Dashboard] image upload failed", err);
+          status.textContent = this._t("dash_editor_image_upload_failed") + (err?.message || err);
+        } finally {
+          uploadBtn.disabled = false;
+          file.value = "";
+        }
+      });
+
+      wrap.appendChild(block);
+      return text;  // return text input so _sync() can still set its value
+    };
+
     this._fields = {
       title: mkText("title", "dash_editor_title"),
-      bike_image: mkText("bike_image", "dash_editor_image", "dash_editor_image_hint"),
+      bike_image: mkImage("bike_image", "dash_editor_image", "dash_editor_image_hint"),
       bike_name: mkText("bike_name", "dash_editor_bike_name", "dash_editor_bike_name_hint"),
       odometer_entity: mkEntity("odometer_entity", "dash_editor_odo", null,
         (e) => e.startsWith("sensor.")),
@@ -4444,6 +4554,56 @@ class BoschEBikeDashboardCardEditor extends HTMLElement {
     for (const [key, input] of Object.entries(this._fields)) {
       input.value = this._config[key] || "";
     }
+  }
+
+  _refreshPreview(container, url) {
+    if (!container) return;
+    container.innerHTML = "";
+    if (!url) {
+      const ph = document.createElement("ha-icon");
+      ph.setAttribute("icon", "mdi:image-outline");
+      ph.style.cssText = "--mdc-icon-size:36px;color:var(--secondary-text-color);";
+      container.appendChild(ph);
+      return;
+    }
+    const img = document.createElement("img");
+    img.src = url;
+    img.alt = "preview";
+    img.style.cssText = "max-width:100%;max-height:100%;object-fit:contain;";
+    img.addEventListener("error", () => {
+      container.innerHTML = "";
+      const broken = document.createElement("ha-icon");
+      broken.setAttribute("icon", "mdi:image-broken-variant");
+      broken.style.cssText = "--mdc-icon-size:36px;color:#e53935;";
+      container.appendChild(broken);
+    });
+    container.appendChild(img);
+  }
+
+  async _uploadImage(file) {
+    if (!this._hass) throw new Error("Home Assistant connection not available");
+    const token = this._hass.auth && this._hass.auth.data && this._hass.auth.data.access_token;
+    if (!token) throw new Error("No access token available");
+
+    const fd = new FormData();
+    fd.append("file", file);
+    const resp = await fetch("/api/image/upload", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: fd,
+    });
+    if (!resp.ok) {
+      let msg = `HTTP ${resp.status}`;
+      try {
+        const j = await resp.json();
+        if (j && j.message) msg += `: ${j.message}`;
+      } catch (_) { /* ignore */ }
+      throw new Error(msg);
+    }
+    const data = await resp.json();
+    if (!data || !data.id) throw new Error("Upload response missing id");
+    // Image is served back at this canonical path
+    return `/api/image/serve/${data.id}/original`;
   }
 }
 
