@@ -6010,8 +6010,13 @@ class BoschEBike3DMapCard extends HTMLElement {
   _startRecording() {
     if (this._isRecording) return;
     if (!this._map) return;
-    const canvas = this._map.getCanvas();
-    if (!canvas || typeof canvas.captureStream !== "function") {
+    const sourceCanvas = this._map.getCanvas();
+    if (!sourceCanvas) return;
+    // Detect a usable captureStream path. We will capture from a 2D
+    // mirror canvas anyway (see below for the reason), so we only need
+    // 2D captureStream to be present.
+    const probe = document.createElement("canvas");
+    if (typeof probe.captureStream !== "function") {
       console.warn("[Bosch eBike 3D] canvas.captureStream not available");
       return;
     }
@@ -6050,13 +6055,50 @@ class BoschEBike3DMapCard extends HTMLElement {
     }
     console.log("[Bosch eBike 3D] recording mime selected:", mimeType || "(browser default)", "(safari =", isSafari + ")");
 
-    let stream;
-    try {
-      stream = canvas.captureStream(30);
-    } catch (e) {
-      console.warn("[Bosch eBike 3D] captureStream failed", e);
+    // Safari (and historically several WebKit-based browsers) silently
+    // produce empty MediaRecorder output when captureStream is called on
+    // a WebGL canvas, regardless of preserveDrawingBuffer. The robust
+    // workaround is to mirror the WebGL canvas into a hidden 2D canvas
+    // on every animation frame, and capture from THAT 2D canvas. 2D
+    // captureStream is well behaved everywhere.
+    const w = sourceCanvas.width || sourceCanvas.clientWidth || 640;
+    const h = sourceCanvas.height || sourceCanvas.clientHeight || 360;
+    const mirror = document.createElement("canvas");
+    mirror.width = w;
+    mirror.height = h;
+    // Hidden but in-DOM (some browsers refuse captureStream on detached
+    // canvas elements).
+    mirror.style.cssText = "position:absolute;left:-99999px;top:-99999px;width:1px;height:1px;opacity:0;";
+    document.body.appendChild(mirror);
+    this._recMirror = mirror;
+
+    const mirrorCtx = mirror.getContext("2d");
+    if (!mirrorCtx) {
+      try { mirror.remove(); } catch (_) {}
+      this._recMirror = null;
+      console.warn("[Bosch eBike 3D] 2D context unavailable on mirror canvas");
       return;
     }
+    // Per-frame copy loop. Runs as long as recording is active.
+    const copyFrame = () => {
+      if (!this._isRecording) return;
+      try { mirrorCtx.drawImage(sourceCanvas, 0, 0, w, h); }
+      catch (_) { /* drawImage may throw if canvas was torn down */ }
+      this._recCopyRAF = requestAnimationFrame(copyFrame);
+    };
+
+    let stream;
+    try {
+      stream = mirror.captureStream(30);
+    } catch (e) {
+      console.warn("[Bosch eBike 3D] mirror captureStream failed", e);
+      try { mirror.remove(); } catch (_) {}
+      this._recMirror = null;
+      return;
+    }
+    // Kick off the copy loop just before MediaRecorder.start so the
+    // first frame already has content.
+    mirrorCtx.drawImage(sourceCanvas, 0, 0, w, h);
 
     this._recChunks = [];
     try {
@@ -6076,24 +6118,38 @@ class BoschEBike3DMapCard extends HTMLElement {
       console.warn("[Bosch eBike 3D] MediaRecorder error", e);
     };
 
+    // CRITICAL ordering: stop any in-flight playback FIRST, while
+    // _isRecording is still false, so the bail-out at the end of
+    // _stopAnim does not call _stopRecording on us mid-setup.
+    this._stopAnim();
+
+    // Reset slider and lay down the first frame so the mirror is not
+    // black on the very first capture tick.
+    const slider = this._root.querySelector("#m3d-slider");
+    if (slider) slider.value = "0";
+    this._applyIndex(0);
+    try { mirrorCtx.drawImage(sourceCanvas, 0, 0, w, h); } catch (_) {}
+
+    // Set state, then start the encoder and the per-frame copy loop.
+    this._isRecording = true;
+    this._updateRecordUI(true);
+
     try {
       this._mediaRecorder.start(1000);  // chunk every 1 s
     } catch (e) {
       console.warn("[Bosch eBike 3D] MediaRecorder start failed", e);
       this._mediaRecorder = null;
+      this._isRecording = false;
+      this._updateRecordUI(false);
+      try { mirror.remove(); } catch (_) {}
+      this._recMirror = null;
       return;
     }
+    this._recCopyRAF = requestAnimationFrame(copyFrame);
 
-    this._isRecording = true;
-    this._updateRecordUI(true);
-
-    // Reset to start and play through the whole tour so the recording
-    // covers the full visual sequence. _stopAnim() at the end will
-    // automatically stop the recording too.
-    this._stopAnim();
-    const slider = this._root.querySelector("#m3d-slider");
-    if (slider) slider.value = "0";
-    this._applyIndex(0);
+    // Now drive the chase-cam playback. When the animation ends,
+    // _stopAnim's tail will see _isRecording === true and call
+    // _stopRecording, finalising the file.
     this._startAnim();
   }
 
@@ -6101,6 +6157,13 @@ class BoschEBike3DMapCard extends HTMLElement {
     if (!this._isRecording) return;
     this._isRecording = false;
     this._updateRecordUI(false);
+    // Cancel the per-frame mirror copy loop; the encoder will drain
+    // any pending frame and then fire 'stop' which lands in
+    // _finalizeRecording.
+    if (this._recCopyRAF) {
+      cancelAnimationFrame(this._recCopyRAF);
+      this._recCopyRAF = null;
+    }
     try {
       if (this._mediaRecorder && this._mediaRecorder.state !== "inactive") {
         this._mediaRecorder.stop();
@@ -6114,6 +6177,11 @@ class BoschEBike3DMapCard extends HTMLElement {
     const chunks = this._recChunks || [];
     this._recChunks = null;
     this._mediaRecorder = null;
+    // Remove the hidden mirror canvas now that the encoder is done.
+    if (this._recMirror) {
+      try { this._recMirror.remove(); } catch (_) {}
+      this._recMirror = null;
+    }
 
     const totalBytes = chunks.reduce((n, c) => n + (c.size || 0), 0);
     console.log("[Bosch eBike 3D] recording finalised:", {
@@ -6233,6 +6301,8 @@ class BoschEBike3DMapCard extends HTMLElement {
   _destroyMap() {
     this._stopAnim();
     if (this._isRecording) this._stopRecording();
+    if (this._recCopyRAF) { cancelAnimationFrame(this._recCopyRAF); this._recCopyRAF = null; }
+    if (this._recMirror) { try { this._recMirror.remove(); } catch (_) {} this._recMirror = null; }
     if (this._downloadChipTimer) { clearTimeout(this._downloadChipTimer); this._downloadChipTimer = null; }
     if (this._downloadChipEl) {
       const u = this._downloadChipEl.getAttribute("href");
