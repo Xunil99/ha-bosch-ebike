@@ -203,7 +203,7 @@ const I18N = {
     map3d_sun_twilight: "Twilight",
     map3d_sun_golden: "Golden hour",
     map3d_sun_morning: "Daylight",
-    map3d_sun_day: "Midday",
+    map3d_sun_day: "Daylight",
   },
   de: {
     rides_title: "Bosch eBike Rides",
@@ -388,7 +388,7 @@ const I18N = {
     map3d_sun_twilight: "Dämmerung",
     map3d_sun_golden: "Goldene Stunde",
     map3d_sun_morning: "Tageslicht",
-    map3d_sun_day: "Mittag",
+    map3d_sun_day: "Tageslicht",
   },
   nl: {
     rides_title: "Bosch eBike Ritten",
@@ -573,7 +573,7 @@ const I18N = {
     map3d_sun_twilight: "Schemering",
     map3d_sun_golden: "Gouden uur",
     map3d_sun_morning: "Daglicht",
-    map3d_sun_day: "Middag",
+    map3d_sun_day: "Daglicht",
   },
 };
 
@@ -768,6 +768,63 @@ function sunPositionAt(date, lat, lon) {
   const altitude = Math.asin(Math.sin(phi) * Math.sin(dec) + Math.cos(phi) * Math.cos(dec) * Math.cos(H));
   const azimuth = Math.atan2(Math.sin(H), Math.cos(H) * Math.sin(phi) - Math.tan(dec) * Math.cos(phi));
   return { altitude, azimuth };
+}
+
+// Andrew's monotone-chain convex hull. Input: [[x,y], ...]. Output: hull
+// vertices in CCW order (NOT closed; caller pushes hull[0] to close).
+function convexHull2D(points) {
+  if (points.length < 3) return points.slice();
+  const sorted = points.slice().sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  const cross = (O, A, B) =>
+    (A[0] - O[0]) * (B[1] - O[1]) - (A[1] - O[1]) * (B[0] - O[0]);
+  const lower = [];
+  for (const p of sorted) {
+    while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) {
+      lower.pop();
+    }
+    lower.push(p);
+  }
+  const upper = [];
+  for (let i = sorted.length - 1; i >= 0; i--) {
+    const p = sorted[i];
+    while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) {
+      upper.pop();
+    }
+    upper.push(p);
+  }
+  return lower.concat(upper.slice(1, -1));
+}
+
+// Project a building footprint's cast shadow on the ground.
+// sunAlt, sunAz: radians (sunAz convention from sunPositionAt: 0 = south,
+// +π/2 = west, ±π = north). Returns a closed GeoJSON Polygon ring (last
+// vertex equals first) or null if the sun is below the horizon.
+function buildingShadowRing(ring, heightM, sunAlt, sunAz, refLat) {
+  if (sunAlt <= 0) return null;
+  if (!ring || ring.length < 3) return null;
+  if (!Number.isFinite(heightM) || heightM <= 0) return null;
+  // Shadow compass bearing (from north clockwise) = sun.azimuth + 2π mod 2π
+  // (because sun compass = my_az + π, shadow compass = sun_compass + π).
+  const shadowCompass = (sunAz + 2 * Math.PI) % (2 * Math.PI);
+  const shadowLenM = Math.min(400, heightM / Math.tan(sunAlt));
+  // Convert meters to lat/lon offsets
+  const dLatPerM = 1 / 111320;
+  const cosLat = Math.cos(refLat * Math.PI / 180);
+  const dLonPerM = 1 / (111320 * Math.max(0.05, cosLat));
+  const dLat = shadowLenM * Math.cos(shadowCompass) * dLatPerM;
+  const dLon = shadowLenM * Math.sin(shadowCompass) * dLonPerM;
+  // Original ring + projected ring, then convex hull
+  const all = [];
+  for (const v of ring) {
+    if (!Array.isArray(v) || v.length < 2) continue;
+    all.push([v[0], v[1]]);
+    all.push([v[0] + dLon, v[1] + dLat]);
+  }
+  if (all.length < 3) return null;
+  const hull = convexHull2D(all);
+  if (hull.length < 3) return null;
+  hull.push(hull[0]); // close the ring
+  return hull;
 }
 
 // Map a sun altitude (degrees) to a tint that conveys time of day.
@@ -5189,6 +5246,10 @@ class BoschEBike3DMapCard extends HTMLElement {
       this._stopAnim();
       this._applyIndex(Number(slider.value));
     });
+    slider.addEventListener("change", () => {
+      // Refresh shadows once the user releases the slider (sun has moved)
+      this._updateShadows();
+    });
 
     const playBtn = this._root.querySelector("#m3d-play");
     playBtn.addEventListener("click", () => this._togglePlay());
@@ -5275,6 +5336,12 @@ class BoschEBike3DMapCard extends HTMLElement {
 
       this._addTrackLayers(pts);
       this._addBuildingsIfNeeded();
+      this._initShadowLayer();
+
+      // Recompute shadows whenever the camera settles in a new spot
+      // (new buildings come into view). queryRenderedFeatures only sees
+      // currently-rendered tiles, so we wait for moveend.
+      this._map.on("moveend", () => this._updateShadows());
 
       // Start + end markers
       this._addPointMarker(pts[0], "#42c76a", "S");
@@ -5410,6 +5477,116 @@ class BoschEBike3DMapCard extends HTMLElement {
       layout: { "line-cap": "round", "line-join": "round" },
       paint: { "line-color": "#03a9f4", "line-width": 4.5, "line-opacity": 0.95 },
     });
+  }
+
+  // Empty shadow source + layer, populated by _updateShadows() once the
+  // map has settled. Placed BEFORE any building layer so building
+  // extrusions render on top of their own shadows.
+  _initShadowLayer() {
+    if (!this._map) return;
+    try {
+      if (this._map.getSource("ebike-shadows")) return;
+      this._map.addSource("ebike-shadows", {
+        type: "geojson",
+        data: { type: "FeatureCollection", features: [] },
+      });
+      const buildingLayer = ["building-3d", "ebike-buildings-3d", "building"]
+        .find((id) => this._map.getLayer(id));
+      this._map.addLayer({
+        id: "ebike-shadows",
+        type: "fill",
+        source: "ebike-shadows",
+        minzoom: 14,
+        paint: {
+          "fill-color": "#000",
+          "fill-opacity": 0.32,
+          "fill-antialias": false,
+        },
+      }, buildingLayer);
+    } catch (e) {
+      console.warn("[Bosch eBike 3D] shadow layer init failed", e);
+    }
+  }
+
+  // Re-project all visible building footprints into ground-level cast
+  // shadows for the sun position at the current slider index. Throttled
+  // so a busy chase cam does not hammer it every frame.
+  _updateShadows() {
+    if (!this._map || !this._map.loaded()) return;
+    const now = performance.now();
+    if (this._shadowsThrottleUntil && now < this._shadowsThrottleUntil) {
+      if (!this._shadowsPending) {
+        this._shadowsPending = true;
+        setTimeout(() => {
+          this._shadowsPending = false;
+          this._updateShadows();
+        }, this._shadowsThrottleUntil - now);
+      }
+      return;
+    }
+    this._shadowsThrottleUntil = now + 500;
+
+    const pts = this._currentTrack;
+    if (!pts || !pts.length) return;
+    const i = this._currentIndex != null ? this._currentIndex : 0;
+    const p = pts[i];
+
+    // Sun position at the slider's interpolated time
+    const a = this._currentActivity;
+    const dur = this._tourDurationSec(a);
+    const startTime = a?.startTime ? new Date(a.startTime) : new Date();
+    const t = new Date(startTime.getTime() + (i / Math.max(1, pts.length - 1)) * dur * 1000);
+    const sun = sunPositionAt(t, p.lat, p.lon);
+
+    const src = this._map.getSource("ebike-shadows");
+    if (!src) return;
+    if (sun.altitude <= 0) {
+      // Below horizon: clear shadows
+      src.setData({ type: "FeatureCollection", features: [] });
+      return;
+    }
+
+    const layerIds = ["building-3d", "ebike-buildings-3d", "building"]
+      .filter((id) => this._map.getLayer(id));
+    if (!layerIds.length) {
+      src.setData({ type: "FeatureCollection", features: [] });
+      return;
+    }
+
+    const buildings = this._map.queryRenderedFeatures(undefined, { layers: layerIds });
+
+    const features = [];
+    const seen = new Set();
+    for (const b of buildings) {
+      // Dedupe across tile boundaries
+      const key = b.id != null ? `i:${b.id}` :
+        `g:${b.geometry.coordinates?.[0]?.[0]?.join(",")}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+
+      const props = b.properties || {};
+      const h = Number(props.render_height || props.height || props.min_height || 6);
+      if (!Number.isFinite(h) || h < 3) continue;
+
+      const rings = b.geometry.type === "Polygon"
+        ? [b.geometry.coordinates[0]]
+        : b.geometry.type === "MultiPolygon"
+          ? b.geometry.coordinates.map((poly) => poly[0])
+          : null;
+      if (!rings) continue;
+
+      for (const ring of rings) {
+        const shadow = buildingShadowRing(ring, h, sun.altitude, sun.azimuth, p.lat);
+        if (shadow) {
+          features.push({
+            type: "Feature",
+            geometry: { type: "Polygon", coordinates: [shadow] },
+            properties: {},
+          });
+        }
+      }
+    }
+    src.setData({ type: "FeatureCollection", features });
   }
 
   // Add a 3D building-extrusion fallback layer if the active style does
@@ -5570,6 +5747,12 @@ class BoschEBike3DMapCard extends HTMLElement {
     this._isPlaying = true;
     const icon = this._root.querySelector("#m3d-play-ico");
     if (icon) icon.setAttribute("icon", "mdi:pause");
+    // moveend does not fire during continuous chase-cam playback, so we
+    // also refresh shadows on a slow interval. 800 ms is fast enough to
+    // catch sun-angle changes during a play-through, slow enough not to
+    // hurt frame rate.
+    if (this._shadowPlayInterval) clearInterval(this._shadowPlayInterval);
+    this._shadowPlayInterval = setInterval(() => this._updateShadows(), 800);
     const slider = this._root.querySelector("#m3d-slider");
     const startIdx = Number(slider.value) || 0;
     const totalIdx = this._currentTrack.length - 1;
@@ -5597,8 +5780,14 @@ class BoschEBike3DMapCard extends HTMLElement {
     this._isPlaying = false;
     if (this._animRAF) cancelAnimationFrame(this._animRAF);
     this._animRAF = null;
+    if (this._shadowPlayInterval) {
+      clearInterval(this._shadowPlayInterval);
+      this._shadowPlayInterval = null;
+    }
     const icon = this._root.querySelector("#m3d-play-ico");
     if (icon) icon.setAttribute("icon", "mdi:play");
+    // One final shadow refresh now that the bike has stopped
+    this._updateShadows();
   }
 
   _destroyMap() {

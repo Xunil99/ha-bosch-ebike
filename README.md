@@ -336,7 +336,8 @@ playback_speed: 60     # 60x Echtzeit (1h-Tour = 1min Wiedergabe)
 - Zeit-Slider mit Start/End-Uhrzeiten der Tour, scrubbbar; Kamera schwenkt synchron mit
 - Play/Pause-Button für die zeitgeraffte Wiedergabe (Dauer konfigurierbar)
 - Live-Stats zur Slider-Position: kumulierte Distanz, Geschwindigkeit, Höhe
-- Zeit- und Sonnen-Chip im Overlay zeigt aktuelle Uhrzeit und Tageslicht-Phase (Nacht, Dämmerung, Goldene Stunde, Tageslicht, Mittag)
+- Zeit- und Sonnen-Chip im Overlay zeigt aktuelle Uhrzeit und Tageslicht-Phase (Nacht, Dämmerung, Goldene Stunde, Tageslicht)
+- **Cast-Shadows von Gebäuden** auf den Boden, projiziert aus Sonnen-Azimut und Sonnen-Höhe zur Slider-Zeit. Schatten werden bei Tageslicht angezeigt, bei Dämmerung kürzer, bei Nacht ausgeblendet. Update automatisch, wenn die Kamera in ein neues Stadtgebiet schwenkt oder der Slider bewegt wird.
 - Zurück-Button kehrt zur Tour-Liste zurück
 
 **Karten-Konfig-Optionen:**
@@ -360,7 +361,7 @@ playback_speed: 60     # 60x Echtzeit (1h-Tour = 1min Wiedergabe)
 - Die Karte wird erst geladen, wenn der User sie tatsächlich öffnet. Die bestehenden Karten (Map, Heatmap, Calendar, Dashboard) sind nicht betroffen.
 - 3D-Rendering ist auf Desktop und modernen Mobilgeräten flüssig. Bei sehr langen Tracks (> 10.000 Punkten) kann es auf älteren Geräten ruckeln.
 - OSM-Building-Coverage ist in Städten dicht, auf dem Land sparsamer. Touren durch urbane Gebiete profitieren am stärksten.
-- Echte Cast-Shadows von Gebäuden sind bewusst noch nicht enthalten, sondern geplant für eine spätere Version (Helios-Shadow-Modul, MIT-Lizenz).
+- **Gelände-Schatten** (Berge, Hügel) sind bewusst nicht enthalten. Sie würden eine DEM-Tile-Source (Maptiler mit API-Key, AWS-Open-Data-SRTM oder selbst gehostete Höhendaten) plus eigenes Ray-Casting im Shader erfordern. Wenn das Interesse besteht, kann das in einer späteren Version nachgereicht werden.
 
 ### Dashboard-Card - Bike-Foto, Live-Daten und Ladesteuerung
 
