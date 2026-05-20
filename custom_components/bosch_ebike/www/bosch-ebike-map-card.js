@@ -212,6 +212,13 @@ const I18N = {
     map3d_record_unsupported: "Recording not supported in this browser",
     map3d_record_download: "Download video",
     map3d_record_empty: "Recording produced no data — check the browser console",
+    map3d_editor_overlay_section: "Overlay elements (1 = show, 0 = hide). Hidden elements are also absent from the downloaded recording.",
+    map3d_editor_show_date: "Show date chip",
+    map3d_editor_show_time: "Show time chip",
+    map3d_editor_show_sun: "Show sun chip",
+    map3d_editor_show_speed: "Show speed in stats",
+    map3d_editor_show_distance: "Show distance in stats",
+    map3d_editor_show_elevation: "Show elevation in stats",
   },
   de: {
     rides_title: "Bosch eBike Rides",
@@ -405,6 +412,13 @@ const I18N = {
     map3d_record_unsupported: "Aufnahme in diesem Browser nicht unterstützt",
     map3d_record_download: "Video herunterladen",
     map3d_record_empty: "Aufnahme leer — Browser-Konsole prüfen",
+    map3d_editor_overlay_section: "Overlay-Elemente (1 = anzeigen, 0 = ausblenden). Ausgeblendete Elemente fehlen auch im heruntergeladenen Video.",
+    map3d_editor_show_date: "Datums-Chip anzeigen",
+    map3d_editor_show_time: "Uhrzeit-Chip anzeigen",
+    map3d_editor_show_sun: "Sonnen-Chip anzeigen",
+    map3d_editor_show_speed: "Geschwindigkeit in Stats anzeigen",
+    map3d_editor_show_distance: "Distanz in Stats anzeigen",
+    map3d_editor_show_elevation: "Höhe in Stats anzeigen",
   },
   nl: {
     rides_title: "Bosch eBike Ritten",
@@ -598,6 +612,13 @@ const I18N = {
     map3d_record_unsupported: "Opname in deze browser niet ondersteund",
     map3d_record_download: "Video downloaden",
     map3d_record_empty: "Opname leeg — controleer browserconsole",
+    map3d_editor_overlay_section: "Overlay-elementen (1 = tonen, 0 = verbergen). Verborgen elementen ontbreken ook in de gedownloade opname.",
+    map3d_editor_show_date: "Datum-chip tonen",
+    map3d_editor_show_time: "Tijd-chip tonen",
+    map3d_editor_show_sun: "Zon-chip tonen",
+    map3d_editor_show_speed: "Snelheid in stats tonen",
+    map3d_editor_show_distance: "Afstand in stats tonen",
+    map3d_editor_show_elevation: "Hoogte in stats tonen",
   },
 };
 
@@ -4936,7 +4957,14 @@ class BoschEBike3DMapCard extends HTMLElement {
   }
 
   static getConfigElement() { return document.createElement("bosch-ebike-3d-map-card-editor"); }
-  static getStubConfig() { return { height: 540, default_pitch: 55, chase_zoom: 17, smooth_window: 15, track_smooth_window: 2, playback_speed: 60 }; }
+  static getStubConfig() {
+    return {
+      height: 540, default_pitch: 55, chase_zoom: 17,
+      smooth_window: 15, track_smooth_window: 2, playback_speed: 60,
+      show_date: 1, show_time: 1, show_sun: 1,
+      show_speed: 1, show_distance: 1, show_elevation: 1,
+    };
+  }
   getCardSize() { return 7; }
 
   _t(key, ...args) {
@@ -5275,10 +5303,19 @@ class BoschEBike3DMapCard extends HTMLElement {
     return 0;
   }
 
+  // Resolve an overlay-visibility flag from config. Truthy by default;
+  // only an explicit 0 / "0" / false / "false" / "off" disables.
+  _showFlag(key) {
+    const v = this._config[key];
+    if (v === undefined || v === null || v === "") return true;
+    return !(v === 0 || v === "0" || v === false || v === "false" || v === "off");
+  }
+
   _renderDetail() {
     const a = this._currentActivity;
     if (!a) return;
     const title = a.title || this._t("msg_unnamed_ride");
+    const hide = (key) => this._showFlag(key) ? "" : "display:none;";
     this._root.innerHTML = `
       <div class="map3d-head">
         <button class="map3d-back-btn" type="button">
@@ -5289,10 +5326,13 @@ class BoschEBike3DMapCard extends HTMLElement {
       <div class="map3d-detail">
         <div class="map3d-canvas" id="m3d-canvas"></div>
         <div class="map3d-overlay">
-          <span class="map3d-chip" id="m3d-time-chip">
+          <span class="map3d-chip" id="m3d-date-chip" style="${hide("show_date")}">
+            <ha-icon icon="mdi:calendar-blank"></ha-icon><span id="m3d-date-text">--</span>
+          </span>
+          <span class="map3d-chip" id="m3d-time-chip" style="${hide("show_time")}">
             <ha-icon icon="mdi:clock-outline"></ha-icon><span id="m3d-time-text">--:--</span>
           </span>
-          <span class="map3d-chip" id="m3d-sun-chip">
+          <span class="map3d-chip" id="m3d-sun-chip" style="${hide("show_sun")}">
             <ha-icon icon="mdi:white-balance-sunny" id="m3d-sun-ico"></ha-icon><span id="m3d-sun-text">--</span>
           </span>
           <span class="map3d-chip map3d-rec-badge" id="m3d-rec-badge" style="display:none">
@@ -5312,9 +5352,9 @@ class BoschEBike3DMapCard extends HTMLElement {
             </button>
           </div>
           <div class="map3d-stats">
-            <span><span>${this._t("map3d_distance_label")}: </span><span class="v" id="m3d-stat-dist">–</span></span>
-            <span><span>${this._t("map3d_speed_label")}: </span><span class="v" id="m3d-stat-speed">–</span></span>
-            <span><span>${this._t("map3d_elevation_label")}: </span><span class="v" id="m3d-stat-ele">–</span></span>
+            <span id="m3d-stat-dist-wrap" style="${hide("show_distance")}"><span>${this._t("map3d_distance_label")}: </span><span class="v" id="m3d-stat-dist">–</span></span>
+            <span id="m3d-stat-speed-wrap" style="${hide("show_speed")}"><span>${this._t("map3d_speed_label")}: </span><span class="v" id="m3d-stat-speed">–</span></span>
+            <span id="m3d-stat-ele-wrap" style="${hide("show_elevation")}"><span>${this._t("map3d_elevation_label")}: </span><span class="v" id="m3d-stat-ele">–</span></span>
           </div>
         </div>
       </div>
@@ -5894,6 +5934,17 @@ class BoschEBike3DMapCard extends HTMLElement {
     const fmtHm = (d) => `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
     const tt = this._root.querySelector("#m3d-time-text");
     if (tt) tt.textContent = fmtHm(time);
+    const dt = this._root.querySelector("#m3d-date-text");
+    if (dt) {
+      const lang = (this._hass && this._hass.language) ? this._hass.language : "de-DE";
+      try {
+        dt.textContent = time.toLocaleDateString(lang, {
+          weekday: "short", day: "2-digit", month: "short"
+        });
+      } catch (_) {
+        dt.textContent = time.toISOString().slice(0, 10);
+      }
+    }
     const st = this._root.querySelector("#m3d-sun-text");
     if (st) {
       // Word label, not a degree value: degree symbol on a sun-themed chip
@@ -6465,6 +6516,24 @@ class BoschEBike3DMapCardEditor extends HTMLElement {
       account_id: mkText("account_id", "map3d_editor_account", null, "text"),
       bike_id: mkText("bike_id", "map3d_editor_bike", null, "text"),
     };
+
+    // Overlay-visibility section: small heading followed by the six toggles
+    const sectionHead = document.createElement("div");
+    sectionHead.textContent = this._t("map3d_editor_overlay_section");
+    sectionHead.style.cssText =
+      "margin-top:14px;padding-top:10px;border-top:1px solid var(--divider-color);" +
+      "color:var(--secondary-text-color);font-size:12px;line-height:1.4;";
+    wrap.appendChild(sectionHead);
+
+    Object.assign(this._fields, {
+      show_date: mkText("show_date", "map3d_editor_show_date", null, "number"),
+      show_time: mkText("show_time", "map3d_editor_show_time", null, "number"),
+      show_sun: mkText("show_sun", "map3d_editor_show_sun", null, "number"),
+      show_speed: mkText("show_speed", "map3d_editor_show_speed", null, "number"),
+      show_distance: mkText("show_distance", "map3d_editor_show_distance", null, "number"),
+      show_elevation: mkText("show_elevation", "map3d_editor_show_elevation", null, "number"),
+    });
+
     this._built = true;
   }
   _sync() {

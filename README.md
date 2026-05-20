@@ -353,8 +353,16 @@ playback_speed: 60     # 60x Echtzeit (1h-Tour = 1min Wiedergabe)
 | `track_smooth_window` | 2 | Track-Positions-Glättung für den Kamerapfad. 0 = aus (rohes GPS, kann zittern), 2 = sanft (Default), 5+ schneidet ggf. sichtbar Kurven. Die angezeigte Track-Linie zeigt unabhängig davon immer das rohe GPS |
 | `playback_speed` | 60 | Echtzeit-Multiplikator beim Play-Button. 60 = 60× schneller als die echte Fahrt, eine 1h-Tour läuft in 1 Min, eine 30-Min-Tour in 30 Sek |
 | `animate_seconds` | — | Optional. Erzwingt feste Abspieldauer (z. B. immer 25 s), überschreibt `playback_speed` |
+| `show_date` | 1 | Datums-Chip im Overlay anzeigen (0 = aus) |
+| `show_time` | 1 | Uhrzeit-Chip im Overlay anzeigen (0 = aus) |
+| `show_sun` | 1 | Sonnenstand-Chip im Overlay anzeigen (0 = aus) |
+| `show_speed` | 1 | Geschwindigkeit in der Stats-Leiste unten anzeigen (0 = aus) |
+| `show_distance` | 1 | Kumulierte Distanz in der Stats-Leiste anzeigen (0 = aus) |
+| `show_elevation` | 1 | Höhe in der Stats-Leiste anzeigen (0 = aus) |
 | `account_id` | (leer) | Auf ein Konto fixieren, wie bei der 2D-Karte |
 | `bike_id` | (leer) | Auf ein Bike fixieren |
+
+Hinweis: Ausgeblendete Overlay-Elemente fehlen automatisch auch im heruntergeladenen Video, da die Aufnahme schlicht den dargestellten Karten-Inhalt mitschneidet.
 
 **Abhängigkeiten und Hinweise:**
 
@@ -822,8 +830,16 @@ playback_speed: 60     # 60× real time (1 h ride plays in 1 min)
 | `track_smooth_window` | 2 | Smooths GPS jitter in the camera path. 0 = off (raw GPS, may jitter), 2 = gentle (default), 5+ may visibly cut corners. The displayed track polyline always shows raw GPS regardless |
 | `playback_speed` | 60 | Real-time multiplier for Play. 60 = 60× faster than reality, a 1 h ride plays in 1 min, a 30 min ride in 30 s |
 | `animate_seconds` | — | Optional. Forces a fixed playback duration (e.g. always 25 s) and overrides `playback_speed` |
+| `show_date` | 1 | Show the date chip in the overlay (0 = hide) |
+| `show_time` | 1 | Show the time chip in the overlay (0 = hide) |
+| `show_sun` | 1 | Show the sun-phase chip in the overlay (0 = hide) |
+| `show_speed` | 1 | Show speed in the stats bar (0 = hide) |
+| `show_distance` | 1 | Show cumulative distance in the stats bar (0 = hide) |
+| `show_elevation` | 1 | Show elevation in the stats bar (0 = hide) |
 | `account_id` | (empty) | Lock to a specific account, like the 2D card |
 | `bike_id` | (empty) | Lock to a specific bike |
+
+Note: hidden overlay elements are also absent from the downloaded video, because the recording simply captures the rendered map.
 
 **Dependencies and notes:**
 
