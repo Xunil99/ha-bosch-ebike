@@ -1,0 +1,117 @@
+# Factory firmware for the ESP32-C3 variant of the Bosch eBike LDI bridge.
+#
+# Same component, same behaviour as the standard ESP32 factory firmware,
+# only the chip target differs. C3 is a single-core RISC-V part with BLE 5.0
+# (no BT-Classic) which is fine for our pure BLE-central use case.
+#
+# Produces ebike-bridge-c3.factory.bin, advertised via the ESP-Web-Tools
+# manifest at /. ESP Web Tools auto-detects the chip family on connect
+# and offers this binary when an ESP32-C3 is plugged in.
+#
+# DIY users with C3 boards should base their own YAML on
+# example-bridge.yaml and copy this esp32: block.
+
+esphome:
+  name: ebike-bridge
+  friendly_name: eBike Bridge
+  min_version: 2025.11.0
+  name_add_mac_suffix: true
+  project:
+    name: "xunil99.bosch_ebike_ldi"
+    version: "1.0.0"
+
+esp32:
+  variant: esp32c3
+  # Espressif reference dev board pins. Most "C3 mini" boards
+  # (LOLIN/Wemos C3 Mini, Seeed XIAO ESP32-C3, generic AliExpress
+  # variants) work with these defaults too because the C3 has fixed
+  # internal flash configuration. If your specific board needs a
+  # different setting, fork this YAML and adjust 'board:'.
+  board: esp32-c3-devkitm-1
+  framework:
+    type: esp-idf
+    sdkconfig_options:
+      CONFIG_BT_ENABLED: y
+      CONFIG_BT_NIMBLE_ENABLED: y
+      CONFIG_BT_BLUEDROID_ENABLED: n
+      CONFIG_BT_CONTROLLER_ENABLED: y
+      # C3 is BLE-only by hardware design, so the BTDM mode toggles
+      # from the dual-mode ESP32 are not needed. Just NimBLE roles.
+      CONFIG_BT_NIMBLE_MAX_CONNECTIONS: "1"
+      CONFIG_BT_NIMBLE_ROLE_PERIPHERAL: y
+      CONFIG_BT_NIMBLE_ROLE_BROADCASTER: y
+      CONFIG_BT_NIMBLE_ROLE_CENTRAL: y
+      CONFIG_BT_NIMBLE_ROLE_OBSERVER: y
+      CONFIG_BT_NIMBLE_SM_LEGACY: n
+      CONFIG_BT_NIMBLE_SM_SC: y
+      CONFIG_BT_NIMBLE_NVS_PERSIST: y
+      CONFIG_BT_NIMBLE_ATT_PREFERRED_MTU: "247"
+
+logger:
+  level: DEBUG
+  logs:
+    bosch_ebike_ldi: DEBUG
+
+wifi:
+  ap:
+    ssid: "eBike Bridge Setup"
+
+captive_portal:
+
+improv_serial:
+
+api:
+
+ota:
+  - platform: esphome
+
+external_components:
+  - source: github://Xunil99/ha-bosch-ebike@main
+    components: [bosch_ebike_ldi]
+    refresh: 1d
+
+bosch_ebike_ldi:
+  id: ebike_bridge
+  device_name: "HA eBike Bridge"
+
+sensor:
+  - platform: bosch_ebike_ldi
+    bosch_ebike_ldi_id: ebike_bridge
+    speed:
+      name: "eBike Speed"
+    cadence:
+      name: "eBike Cadence"
+    rider_power:
+      name: "eBike Rider Power"
+    ambient_brightness:
+      name: "eBike Ambient Brightness"
+    battery_soc:
+      name: "eBike Battery SoC (Live)"
+    odometer:
+      name: "eBike Odometer (Live)"
+
+binary_sensor:
+  - platform: bosch_ebike_ldi
+    bosch_ebike_ldi_id: ebike_bridge
+    connected:
+      name: "eBike Connected"
+    light:
+      name: "eBike Light"
+    system_locked:
+      name: "eBike System Locked"
+    charger_connected:
+      name: "eBike Charger Connected"
+    light_reserve:
+      name: "eBike Light Reserve"
+    diagnosis_active:
+      name: "eBike Diagnosis Active"
+    in_motion:
+      name: "eBike In Motion"
+
+button:
+  - platform: template
+    name: "eBike Clear Bonding"
+    on_press:
+      then:
+        - lambda: |-
+            id(ebike_bridge).clear_bonding();

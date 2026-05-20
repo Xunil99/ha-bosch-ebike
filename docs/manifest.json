@@ -14,6 +14,16 @@
           "offset": 0
         }
       ]
+    },
+    {
+      "chipFamily": "ESP32-C3",
+      "improv": true,
+      "parts": [
+        {
+          "path": "./firmware/ebike-bridge-c3.factory.bin",
+          "offset": 0
+        }
+      ]
     }
   ]
 }

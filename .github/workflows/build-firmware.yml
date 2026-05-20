@@ -11,34 +11,46 @@ permissions:
 
 jobs:
   build:
-    name: Build factory firmware for ESP32
+    name: Build factory firmware for ESP32 and ESP32-C3
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          # Need full history + ability to push back to main for Pages-hosted firmware
           fetch-depth: 0
           ref: main
 
-      - name: Build ESP32 firmware
-        id: esphome-build
+      - name: Build classic ESP32 firmware
+        id: esphome-build-esp32
         uses: esphome/build-action@v6
         with:
           yaml-file: esphome/factory.yaml
           version: latest
 
+      - name: Build ESP32-C3 firmware
+        id: esphome-build-c3
+        uses: esphome/build-action@v6
+        with:
+          yaml-file: esphome/factory-c3.yaml
+          version: latest
+
       - name: Collect firmware artifacts
         run: |
           set -euo pipefail
-          OUT="${{ steps.esphome-build.outputs.name }}"
-          echo "ESPHome build output dir: $OUT"
-          ls -la "$OUT"
           mkdir -p firmware-output
-          # Pick up the factory bin (single-shot, includes bootloader+partitions+app)
-          cp "$OUT"/*.factory.bin firmware-output/ebike-bridge.factory.bin
-          # Also include the OTA bin for users who already have ESPHome dashboard
-          cp "$OUT"/*.ota.bin firmware-output/ebike-bridge.ota.bin || true
+
+          OUT_ESP32="${{ steps.esphome-build-esp32.outputs.name }}"
+          echo "ESP32 build output dir: $OUT_ESP32"
+          ls -la "$OUT_ESP32"
+          cp "$OUT_ESP32"/*.factory.bin firmware-output/ebike-bridge.factory.bin
+          cp "$OUT_ESP32"/*.ota.bin     firmware-output/ebike-bridge.ota.bin || true
+
+          OUT_C3="${{ steps.esphome-build-c3.outputs.name }}"
+          echo "ESP32-C3 build output dir: $OUT_C3"
+          ls -la "$OUT_C3"
+          cp "$OUT_C3"/*.factory.bin firmware-output/ebike-bridge-c3.factory.bin
+          cp "$OUT_C3"/*.ota.bin     firmware-output/ebike-bridge-c3.ota.bin || true
+
           ls -la firmware-output/
 
       - name: Generate manifest.json for ESP Web Tools (release-asset variant)
@@ -61,6 +73,13 @@ jobs:
                 "parts": [
                   { "path": "ebike-bridge.factory.bin", "offset": 0 }
                 ]
+              },
+              {
+                "chipFamily": "ESP32-C3",
+                "improv": true,
+                "parts": [
+                  { "path": "ebike-bridge-c3.factory.bin", "offset": 0 }
+                ]
               }
             ]
           }
@@ -74,6 +93,8 @@ jobs:
           files: |
             firmware-output/ebike-bridge.factory.bin
             firmware-output/ebike-bridge.ota.bin
+            firmware-output/ebike-bridge-c3.factory.bin
+            firmware-output/ebike-bridge-c3.ota.bin
             firmware-output/manifest.json
 
       - name: Publish firmware to GitHub Pages (same-origin, CORS-safe)
@@ -83,11 +104,16 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p docs/firmware
-          cp firmware-output/ebike-bridge.factory.bin docs/firmware/ebike-bridge.factory.bin
-          cp firmware-output/ebike-bridge.ota.bin docs/firmware/ebike-bridge.ota.bin || true
+          cp firmware-output/ebike-bridge.factory.bin    docs/firmware/ebike-bridge.factory.bin
+          cp firmware-output/ebike-bridge.ota.bin        docs/firmware/ebike-bridge.ota.bin || true
+          cp firmware-output/ebike-bridge-c3.factory.bin docs/firmware/ebike-bridge-c3.factory.bin
+          cp firmware-output/ebike-bridge-c3.ota.bin     docs/firmware/ebike-bridge-c3.ota.bin || true
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add docs/firmware/ebike-bridge.factory.bin docs/firmware/ebike-bridge.ota.bin
+          git add docs/firmware/ebike-bridge.factory.bin \
+                  docs/firmware/ebike-bridge.ota.bin \
+                  docs/firmware/ebike-bridge-c3.factory.bin \
+                  docs/firmware/ebike-bridge-c3.ota.bin
           if git diff --cached --quiet; then
             echo "No firmware changes to commit."
           else

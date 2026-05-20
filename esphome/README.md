@@ -233,8 +233,11 @@ included).
   stehen. Wände und Metallschränke verkürzen das deutlich. Eine Garage oder
   ein Gartenhaus, wo das Bike abgestellt ist, ist der typische Aufstellort.
 - **Hardware**: Beliebiges ESP32-Devboard mit Bluetooth Low Energy
-  (z. B. ESP32-WROOM-32, ESP32-DevKitC). ESP32-S2 funktioniert **nicht** (kein
-  BT). ESP32-C3 / -S3 / -C6 sollten gehen, sind aber nicht getestet.
+  (z. B. ESP32-WROOM-32, ESP32-DevKitC). ESP32-S2 funktioniert **nicht**
+  (kein BT). Der vorgeflashte Web-Installer liefert seit v1.13.2 zusätzlich
+  eine ESP32-C3-Variante mit, der Chip-Typ wird beim Anschluss automatisch
+  erkannt. ESP32-S3 / -C6 sollten ebenfalls funktionieren, sind aber nicht
+  vorgeflashed.
 - **Software**: Home Assistant mit dem **ESPHome**-Addon oder eine eigenständige
   ESPHome-Installation. Getestet mit ESPHome 2026.4.5.
 

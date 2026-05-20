@@ -192,12 +192,12 @@
 
     <div class="install-card">
       <h2 style="margin-top:0;font-size:1.15rem;">
-        <span class="lang-de">eBike-Bridge (ESP32)</span>
-        <span class="lang-en">eBike Bridge (ESP32)</span>
+        <span class="lang-de">eBike-Bridge (ESP32 oder ESP32-C3)</span>
+        <span class="lang-en">eBike Bridge (ESP32 or ESP32-C3)</span>
       </h2>
       <p class="subtitle" style="margin:.25rem 0 1rem;">
-        <span class="lang-de">BLE-Verbindung zum Bike, sendet Daten an Home Assistant.</span>
-        <span class="lang-en">BLE link to the bike, publishes data to Home Assistant.</span>
+        <span class="lang-de">BLE-Verbindung zum Bike, sendet Daten an Home Assistant. Der Installer erkennt automatisch, ob ein klassischer ESP32 oder ein ESP32-C3 (z. B. "C3 Mini") angeschlossen ist, und flasht die passende Firmware.</span>
+        <span class="lang-en">BLE link to the bike, publishes data to Home Assistant. The installer auto-detects whether a classic ESP32 or an ESP32-C3 (e.g. "C3 Mini") is connected and flashes the matching firmware.</span>
       </p>
       <esp-web-install-button manifest="manifest.json">
         <button slot="activate" type="button">
