@@ -5618,19 +5618,28 @@ class BoschEBike3DMapCard extends HTMLElement {
           const lngLat = this._marker ? this._marker.getLngLat() : null;
           const projected = (lngLat && this._map)
             ? this._map.project([lngLat.lng, lngLat.lat]) : null;
-          const allMarkers = document.querySelectorAll(".maplibregl-marker").length;
-          const greenMarker = document.querySelectorAll(".ebike-3d-marker").length;
-          const greenEl = document.querySelector(".ebike-3d-marker");
+          // Search WITHIN the map container, not the whole document,
+          // because the card may live inside a shadow root that the
+          // global query cannot pierce.
+          const mapContainer = myMap.getContainer();
+          const allMarkers = mapContainer.querySelectorAll(".maplibregl-marker").length;
+          const greenMarker = mapContainer.querySelectorAll(".ebike-3d-marker").length;
+          const greenEl = mapContainer.querySelector(".ebike-3d-marker");
           const greenRect = greenEl ? greenEl.getBoundingClientRect() : null;
           const cssDisplay = greenEl ? getComputedStyle(greenEl).display : "n/a";
           const cssVis = greenEl ? getComputedStyle(greenEl).visibility : "n/a";
-          // Primitive-only line so Safari prints values inline rather
-          // than collapsing them to '[object Object]'.
+          const cssOpacity = greenEl ? getComputedStyle(greenEl).opacity : "n/a";
+          const cssTransform = greenEl ? getComputedStyle(greenEl).transform : "n/a";
+          const cssZ = greenEl ? getComputedStyle(greenEl).zIndex : "n/a";
+          // Walk up to the wrapper that MapLibre sets up around the marker
+          const parent = greenEl ? greenEl.parentElement : null;
+          const parentClass = parent ? parent.className : "n/a";
+          const parentTransform = parent ? getComputedStyle(parent).transform : "n/a";
+          const parentDisplay = parent ? getComputedStyle(parent).display : "n/a";
           console.log(
             "[Bosch eBike 3D] marker-diag" +
-            " | allMarkers=" + allMarkers +
-            " | greenMarkers=" + greenMarker +
-            " | startLatLon=" + pts[0].lat.toFixed(5) + "," + pts[0].lon.toFixed(5) +
+            " | inContainerAll=" + allMarkers +
+            " | inContainerGreen=" + greenMarker +
             " | curLatLon=" + (lngLat ? lngLat.lat.toFixed(5) + "," + lngLat.lng.toFixed(5) : "null") +
             " | projectedPx=" + (projected ? Math.round(projected.x) + "," + Math.round(projected.y) : "null") +
             " | rect=" + (greenRect
@@ -5638,7 +5647,13 @@ class BoschEBike3DMapCard extends HTMLElement {
                    " " + Math.round(greenRect.width) + "x" + Math.round(greenRect.height))
                 : "null") +
             " | display=" + cssDisplay +
-            " | vis=" + cssVis
+            " | vis=" + cssVis +
+            " | opacity=" + cssOpacity +
+            " | z=" + cssZ +
+            " | transform=" + cssTransform +
+            " | parentClass=\"" + parentClass + "\"" +
+            " | parentTransform=" + parentTransform +
+            " | parentDisplay=" + parentDisplay
           );
         } catch (e) {
           console.warn("[Bosch eBike 3D] marker diagnostic failed", e);
