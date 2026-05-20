@@ -192,6 +192,8 @@ const I18N = {
     map3d_editor_default_pitch_hint: "Camera tilt while following the bike. 20 = nearly top-down, 55 = third-person, 65 = almost first-person.",
     map3d_editor_chase_zoom: "Chase-cam zoom (14-19)",
     map3d_editor_chase_zoom_hint: "Higher zoom = closer to the bike. 17 ≈ 100 m ahead visible.",
+    map3d_editor_chase_lookahead: "Chase-cam look-ahead (m)",
+    map3d_editor_chase_lookahead_hint: "How many metres in front of the bike the camera target sits. Smaller value = bike sits higher in the frame. 0 = camera centred on the bike. Default 30.",
     map3d_editor_animate_seconds: "Playback duration (seconds)",
     map3d_editor_animate_seconds_hint: "How long a full Play-cycle takes from tour start to tour end.",
     map3d_editor_smooth_window: "Bearing-smoothing window",
@@ -394,6 +396,8 @@ const I18N = {
     map3d_editor_default_pitch_hint: "Kamera-Neigung beim Verfolgen des Bikes. 20 = fast Vogelperspektive, 55 = Third-Person, 65 = fast First-Person.",
     map3d_editor_chase_zoom: "Chase-Cam-Zoom (14-19)",
     map3d_editor_chase_zoom_hint: "Höherer Zoom = näher am Bike. 17 ≈ 100 m Sicht nach vorne.",
+    map3d_editor_chase_lookahead: "Chase-Cam Look-Ahead (m)",
+    map3d_editor_chase_lookahead_hint: "Wie viele Meter vor dem Bike das Kameraziel liegt. Kleinerer Wert = Bike sitzt höher im Bild. 0 = Kamera direkt aufs Bike zentriert. Default 30.",
     map3d_editor_animate_seconds: "Abspieldauer (Sekunden)",
     map3d_editor_animate_seconds_hint: "Wie lange ein voller Play-Durchlauf von Tour-Start bis Tour-Ende dauert.",
     map3d_editor_smooth_window: "Bearing-Glättungsfenster",
@@ -596,6 +600,8 @@ const I18N = {
     map3d_editor_default_pitch_hint: "Camerakanteling tijdens het volgen van de fiets. 20 = bijna van bovenaf, 55 = third-person, 65 = bijna first-person.",
     map3d_editor_chase_zoom: "Chase-cam zoom (14-19)",
     map3d_editor_chase_zoom_hint: "Hogere zoom = dichter bij de fiets. 17 ≈ 100 m vooruit zichtbaar.",
+    map3d_editor_chase_lookahead: "Chase-cam look-ahead (m)",
+    map3d_editor_chase_lookahead_hint: "Hoeveel meter voor de fiets het cameramidden ligt. Lagere waarde = fiets staat hoger in beeld. 0 = camera direct op de fiets. Default 30.",
     map3d_editor_animate_seconds: "Afspeelduur (seconden)",
     map3d_editor_animate_seconds_hint: "Hoe lang een volledige Play-cyclus duurt van begin tot einde van de tour.",
     map3d_editor_smooth_window: "Bearing-smoothingvenster",
@@ -4955,10 +4961,7 @@ class BoschEBike3DMapCard extends HTMLElement {
     // the live MapLibre map and recreate it, which both flashes and
     // wipes the markers/track that the user is looking at.
     const newStr = JSON.stringify(config || {});
-    const same = this._configStr === newStr;
-    console.log("[Bosch eBike 3D] setConfig called; same-as-previous=" + same +
-      "; ready=" + !!this._ready + "; mode=" + this._mode);
-    if (same) return;
+    if (this._configStr === newStr) return;
     this._configStr = newStr;
 
     this._config = { ...config };
@@ -4979,7 +4982,7 @@ class BoschEBike3DMapCard extends HTMLElement {
   static getConfigElement() { return document.createElement("bosch-ebike-3d-map-card-editor"); }
   static getStubConfig() {
     return {
-      height: 540, default_pitch: 55, chase_zoom: 17,
+      height: 540, default_pitch: 55, chase_zoom: 17, chase_lookahead: 30,
       smooth_window: 15, track_smooth_window: 2, playback_speed: 60,
       show_date: 1, show_time: 1, show_sun: 1,
       show_speed: 1, show_distance: 1, show_elevation: 1,
@@ -5346,7 +5349,6 @@ class BoschEBike3DMapCard extends HTMLElement {
   }
 
   _renderDetail() {
-    console.log("[Bosch eBike 3D] _renderDetail called");
     const a = this._currentActivity;
     if (!a) return;
     // Tear down any previous MapLibre instance + markers before we
@@ -5497,7 +5499,13 @@ class BoschEBike3DMapCard extends HTMLElement {
     // so the rendered bike sits in the lower part of the screen and the
     // upcoming road fills the rest.
     const initialBearing = this._bearingAt(0);
-    const lookAt = this._lookAheadCoord(pts[0], initialBearing, 60);
+    // Look-ahead distance: how many metres in front of the bike the
+    // camera target sits. Smaller value -> bike sits higher in the
+    // canvas. 30 m keeps the bike visible even on layouts where the
+    // card bottom is close to the viewport edge.
+    const lookAheadM = Math.max(0, Math.min(150, Number(this._config.chase_lookahead) || 30));
+    this._chaseLookAhead = lookAheadM;
+    const lookAt = this._lookAheadCoord(pts[0], initialBearing, lookAheadM);
     this._currentIndex = 0;
     // Local capture: 'myMap' is THIS init's map. Use it instead of
     // this._map inside async callbacks, so a later re-init that
@@ -5514,7 +5522,6 @@ class BoschEBike3DMapCard extends HTMLElement {
       preserveDrawingBuffer: true,
     });
     this._map = myMap;
-    console.log("[Bosch eBike 3D] map created (epoch=" + myEpoch + ")");
     myMap.addControl(new mlib.AttributionControl({ compact: true }), "bottom-right");
     myMap.addControl(new mlib.NavigationControl({ visualizePitch: true }), "top-right");
 
@@ -5530,14 +5537,9 @@ class BoschEBike3DMapCard extends HTMLElement {
     });
 
     myMap.on("load", () => {
-      console.log("[Bosch eBike 3D] map load fired (epoch=" + myEpoch +
-        ", thisMapIsMyMap=" + (this._map === myMap) + ")");
       // If a newer init has overwritten this._map already, do not touch
       // it — that map has its own load handler that will run.
-      if (this._map !== myMap) {
-        console.log("[Bosch eBike 3D] stale load: bailing");
-        return;
-      }
+      if (this._map !== myMap) return;
 
       // Lighting & sky from sun mood
       try {
@@ -5575,90 +5577,12 @@ class BoschEBike3DMapCard extends HTMLElement {
       this._marker = new mlib.Marker({ element: el, anchor: "center" })
         .setLngLat([pts[0].lon, pts[0].lat])
         .addTo(myMap);
-      console.log("[Bosch eBike 3D] markers added; current marker DOM parent=" +
-        (el.parentElement ? el.parentElement.className : "(none)"));
-
-      // Watchdog: log whenever any marker is removed from the DOM in
-      // the next 5 seconds, with a stack trace pointing to whoever
-      // triggered the mutation. This is purely diagnostic for the
-      // 'markers disappear after 1.5 s' bug. Removed automatically
-      // after the watch window or when the card is destroyed.
-      try {
-        const mapContainer = myMap.getContainer();
-        const mo = new MutationObserver((muts) => {
-          for (const m of muts) {
-            for (const removed of m.removedNodes) {
-              if (removed.nodeType !== 1) continue;
-              const looksLikeMarker =
-                (removed.classList && removed.classList.contains("maplibregl-marker")) ||
-                (removed.querySelector && removed.querySelector(".maplibregl-marker"));
-              if (looksLikeMarker) {
-                console.warn("[Bosch eBike 3D] marker removed from DOM",
-                  { time: performance.now().toFixed(0), removed, stack: new Error("removal").stack });
-              }
-            }
-          }
-        });
-        mo.observe(mapContainer, { childList: true, subtree: true });
-        setTimeout(() => {
-          try { mo.disconnect(); } catch (_) {}
-          console.log("[Bosch eBike 3D] marker watchdog stopped after 5 s");
-        }, 5000);
-      } catch (e) {
-        console.warn("[Bosch eBike 3D] could not install marker watchdog", e);
-      }
 
       // Diagnostic: verify marker placement and DOM visibility shortly
       // after creation. If the marker is in DOM but reports a
       // projected pixel position outside the canvas, the camera has
       // moved away from it. If it is not in DOM at all, something is
       // removing it.
-      setTimeout(() => {
-        try {
-          const lngLat = this._marker ? this._marker.getLngLat() : null;
-          const projected = (lngLat && this._map)
-            ? this._map.project([lngLat.lng, lngLat.lat]) : null;
-          // Search WITHIN the map container, not the whole document,
-          // because the card may live inside a shadow root that the
-          // global query cannot pierce.
-          const mapContainer = myMap.getContainer();
-          const allMarkers = mapContainer.querySelectorAll(".maplibregl-marker").length;
-          const greenMarker = mapContainer.querySelectorAll(".ebike-3d-marker").length;
-          const greenEl = mapContainer.querySelector(".ebike-3d-marker");
-          const greenRect = greenEl ? greenEl.getBoundingClientRect() : null;
-          const cssDisplay = greenEl ? getComputedStyle(greenEl).display : "n/a";
-          const cssVis = greenEl ? getComputedStyle(greenEl).visibility : "n/a";
-          const cssOpacity = greenEl ? getComputedStyle(greenEl).opacity : "n/a";
-          const cssTransform = greenEl ? getComputedStyle(greenEl).transform : "n/a";
-          const cssZ = greenEl ? getComputedStyle(greenEl).zIndex : "n/a";
-          // Walk up to the wrapper that MapLibre sets up around the marker
-          const parent = greenEl ? greenEl.parentElement : null;
-          const parentClass = parent ? parent.className : "n/a";
-          const parentTransform = parent ? getComputedStyle(parent).transform : "n/a";
-          const parentDisplay = parent ? getComputedStyle(parent).display : "n/a";
-          console.log(
-            "[Bosch eBike 3D] marker-diag" +
-            " | inContainerAll=" + allMarkers +
-            " | inContainerGreen=" + greenMarker +
-            " | curLatLon=" + (lngLat ? lngLat.lat.toFixed(5) + "," + lngLat.lng.toFixed(5) : "null") +
-            " | projectedPx=" + (projected ? Math.round(projected.x) + "," + Math.round(projected.y) : "null") +
-            " | rect=" + (greenRect
-                ? (Math.round(greenRect.x) + "," + Math.round(greenRect.y) +
-                   " " + Math.round(greenRect.width) + "x" + Math.round(greenRect.height))
-                : "null") +
-            " | display=" + cssDisplay +
-            " | vis=" + cssVis +
-            " | opacity=" + cssOpacity +
-            " | z=" + cssZ +
-            " | transform=" + cssTransform +
-            " | parentClass=\"" + parentClass + "\"" +
-            " | parentTransform=" + parentTransform +
-            " | parentDisplay=" + parentDisplay
-          );
-        } catch (e) {
-          console.warn("[Bosch eBike 3D] marker diagnostic failed", e);
-        }
-      }, 1500);
 
       // Resize once after layers are added, then apply the chase-cam at
       // index 0. _applyIndex jumps the camera to the bike's position,
@@ -6024,7 +5948,7 @@ class BoschEBike3DMapCard extends HTMLElement {
     if (this._map && this._map.loaded()) {
       try {
         const bearing = this._bearingAtFractional(clamped);
-        const lookAt = this._lookAheadCoord(p, bearing, 60);
+        const lookAt = this._lookAheadCoord(p, bearing, this._chaseLookAhead != null ? this._chaseLookAhead : 30);
         const camera = {
           center: lookAt,
           zoom: this._chaseZoom != null ? this._chaseZoom : 17,
@@ -6580,8 +6504,6 @@ class BoschEBike3DMapCard extends HTMLElement {
   _destroyMap() {
     // Invalidate any in-flight _initMap waiting on ensureMapLibre
     this._mapInitEpoch = (this._mapInitEpoch || 0) + 1;
-    console.log("[Bosch eBike 3D] _destroyMap called; new epoch=" + this._mapInitEpoch +
-      "; hadMap=" + !!this._map + "; hadMarker=" + !!this._marker);
     this._stopAnim();
     if (this._isRecording) this._stopRecording();
     if (this._renderHandlerForRec && this._map) {
@@ -6666,6 +6588,7 @@ class BoschEBike3DMapCardEditor extends HTMLElement {
       height: mkText("height", "map3d_editor_height", null, "number"),
       default_pitch: mkText("default_pitch", "map3d_editor_default_pitch", "map3d_editor_default_pitch_hint", "number"),
       chase_zoom: mkText("chase_zoom", "map3d_editor_chase_zoom", "map3d_editor_chase_zoom_hint", "number"),
+      chase_lookahead: mkText("chase_lookahead", "map3d_editor_chase_lookahead", "map3d_editor_chase_lookahead_hint", "number"),
       smooth_window: mkText("smooth_window", "map3d_editor_smooth_window", "map3d_editor_smooth_window_hint", "number"),
       track_smooth_window: mkText("track_smooth_window", "map3d_editor_track_smooth", "map3d_editor_track_smooth_hint", "number"),
       playback_speed: mkText("playback_speed", "map3d_editor_playback_speed", "map3d_editor_playback_speed_hint", "number"),

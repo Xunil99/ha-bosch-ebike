@@ -349,6 +349,7 @@ playback_speed: 60     # 60x Echtzeit (1h-Tour = 1min Wiedergabe)
 | `height` | 540 | Karten-Höhe in Pixel |
 | `default_pitch` | 55 | Chase-Cam-Neigung (20-65°). 20 ≈ Vogelperspektive, 65 ≈ First-Person |
 | `chase_zoom` | 17 | Chase-Cam-Zoom (14-19). Höher = näher, 17 ≈ 100 m Sicht nach vorne |
+| `chase_lookahead` | 30 | Look-Ahead-Distanz in Metern. Wie weit das Kameraziel vor dem Bike sitzt. Kleiner = Bike weiter oben im Bild. 0 = Kamera direkt aufs Bike zentriert. |
 | `smooth_window` | 15 | Bearing-Glättungsfenster. Höher = glattere Kamera, schneidet aber Kurven weiter. 5 fühlt sich zittrig an, 40 wirkt sehr träge |
 | `track_smooth_window` | 2 | Track-Positions-Glättung für den Kamerapfad. 0 = aus (rohes GPS, kann zittern), 2 = sanft (Default), 5+ schneidet ggf. sichtbar Kurven. Die angezeigte Track-Linie zeigt unabhängig davon immer das rohe GPS |
 | `playback_speed` | 60 | Echtzeit-Multiplikator beim Play-Button. 60 = 60× schneller als die echte Fahrt, eine 1h-Tour läuft in 1 Min, eine 30-Min-Tour in 30 Sek |
@@ -827,6 +828,7 @@ playback_speed: 60     # 60× real time (1 h ride plays in 1 min)
 | `height` | 540 | Card height in pixels |
 | `default_pitch` | 55 | Chase-cam pitch (20-65°). 20 ≈ bird's eye, 65 ≈ first-person |
 | `chase_zoom` | 17 | Chase-cam zoom (14-19). Higher = closer, 17 ≈ 100 m ahead |
+| `chase_lookahead` | 30 | Look-ahead distance in metres. How far in front of the bike the camera target sits. Lower = bike sits higher in the frame. 0 = camera centred on the bike. |
 | `smooth_window` | 15 | Bearing-smoothing window. Higher = calmer camera, sweeps corners wider. 5 feels twitchy, 40 feels sluggish |
 | `track_smooth_window` | 2 | Smooths GPS jitter in the camera path. 0 = off (raw GPS, may jitter), 2 = gentle (default), 5+ may visibly cut corners. The displayed track polyline always shows raw GPS regardless |
 | `playback_speed` | 60 | Real-time multiplier for Play. 60 = 60× faster than reality, a 1 h ride plays in 1 min, a 30 min ride in 30 s |
