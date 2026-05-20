@@ -5111,20 +5111,20 @@ class BoschEBike3DMapCard extends HTMLElement {
       .maplibregl-canvas:focus { outline: none; }
       .ebike-3d-marker {
         position: relative;
-        width: 22px; height: 22px; border-radius: 50%;
-        background: #03a9f4; border: 4px solid #fff;
-        box-shadow: 0 2px 8px rgba(0,0,0,.5);
+        width: 28px; height: 28px; border-radius: 50%;
+        background: #42c76a; border: 4px solid #fff;
+        box-shadow: 0 2px 10px rgba(0,0,0,.55);
         z-index: 10;
       }
       .ebike-3d-marker::before {
         content: ""; position: absolute;
-        inset: -10px; border-radius: 50%;
-        border: 3px solid #03a9f4; opacity: 0.6;
+        inset: -12px; border-radius: 50%;
+        border: 4px solid #42c76a; opacity: 0.65;
         animation: ebike-3d-pulse 1.6s ease-out infinite;
       }
       @keyframes ebike-3d-pulse {
-        0%   { transform: scale(0.6); opacity: 0.8; }
-        100% { transform: scale(1.7); opacity: 0; }
+        0%   { transform: scale(0.6); opacity: 0.85; }
+        100% { transform: scale(1.85); opacity: 0; }
       }
       /* MapLibre marker container z-stacking: ensure the current-position
          marker sits above the start/end dot markers */
@@ -5522,8 +5522,9 @@ class BoschEBike3DMapCard extends HTMLElement {
       setTimeout(() => this._updateShadows(), 400);
       setTimeout(() => this._updateShadows(), 1500);
 
-      // Start + end markers
-      this._addPointMarker(pts[0], "#42c76a", "S");
+      // Start + end markers. Start uses orange so it stays
+      // distinguishable from the larger green pulsing position marker.
+      this._addPointMarker(pts[0], "#ff9800", "S");
       this._addPointMarker(pts[pts.length - 1], "#e53935", "Z");
 
       // Animated current-position marker (added LAST so it stacks above
@@ -5532,9 +5533,9 @@ class BoschEBike3DMapCard extends HTMLElement {
       const el = document.createElement("div");
       el.className = "ebike-3d-marker";
       el.style.cssText =
-        "position:relative;width:22px;height:22px;border-radius:50%;" +
-        "background:#03a9f4;border:4px solid #fff;" +
-        "box-shadow:0 2px 8px rgba(0,0,0,.5);z-index:10;";
+        "position:relative;width:28px;height:28px;border-radius:50%;" +
+        "background:#42c76a;border:4px solid #fff;" +
+        "box-shadow:0 2px 10px rgba(0,0,0,.55);z-index:10;";
       this._marker = new mlib.Marker({ element: el, anchor: "center" })
         .setLngLat([pts[0].lon, pts[0].lat])
         .addTo(this._map);
