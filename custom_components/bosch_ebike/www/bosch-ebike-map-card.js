@@ -6066,14 +6066,13 @@ class BoschEBike3DMapCard extends HTMLElement {
     const mirror = document.createElement("canvas");
     mirror.width = w;
     mirror.height = h;
-    // Mirror canvas must be IN the DOM and treated as visible by the
-    // browser's compositor. Off-screen canvases are skipped during
-    // paint in Safari, which then never delivers frames to captureStream.
-    // We pin it to a 1x1 pixel in the corner of the card, slightly
-    // transparent. This is enough to keep paint scheduling active.
+    // Off-screen but with REAL pixel dimensions (not 1x1 via CSS). A
+    // CSS-resized canvas can confuse the browser's compositor into
+    // capturing the displayed (1x1, black) size, which is exactly what
+    // we saw producing a 10 MB but visually black MP4.
     mirror.style.cssText =
-      "position:fixed;right:0;bottom:0;width:1px;height:1px;opacity:0.01;" +
-      "pointer-events:none;z-index:0;";
+      "position:fixed;left:-" + (w + 100) + "px;top:0;" +
+      "width:" + w + "px;height:" + h + "px;pointer-events:none;opacity:0;";
     document.body.appendChild(mirror);
     this._recMirror = mirror;
 
@@ -6084,19 +6083,19 @@ class BoschEBike3DMapCard extends HTMLElement {
       console.warn("[Bosch eBike 3D] 2D context unavailable on mirror canvas");
       return;
     }
+    console.log("[Bosch eBike 3D] mirror canvas size:", w, "x", h);
 
-    // Use captureStream(0) so the stream is manual-frame-driven. We
-    // call track.requestFrame() ourselves after each drawImage(), which
-    // is the only reliable way to push frames in Safari where automatic
-    // paint scheduling on the mirror canvas does not always fire.
+    // captureStream(0) = manual-frame mode. We push frames explicitly
+    // via track.requestFrame() right after drawImage. This is the only
+    // pattern that works in Safari and is harmless in Chrome.
     let stream;
     try {
       stream = mirror.captureStream(0);
     } catch (e) {
-      console.warn("[Bosch eBike 3D] mirror captureStream(0) failed, falling back to 30 fps", e);
+      console.warn("[Bosch eBike 3D] captureStream(0) failed, trying (30)", e);
       try { stream = mirror.captureStream(30); }
       catch (e2) {
-        console.warn("[Bosch eBike 3D] mirror captureStream(30) also failed", e2);
+        console.warn("[Bosch eBike 3D] captureStream(30) also failed", e2);
         try { mirror.remove(); } catch (_) {}
         this._recMirror = null;
         return;
@@ -6104,34 +6103,52 @@ class BoschEBike3DMapCard extends HTMLElement {
     }
     const streamTrack = stream.getVideoTracks()[0];
     const supportsRequestFrame = streamTrack && typeof streamTrack.requestFrame === "function";
-    console.log("[Bosch eBike 3D] mirror stream track supports requestFrame:", supportsRequestFrame);
 
-    let pixelLogged = false;
-    const copyFrame = () => {
+    // Diagnostic counters
+    this._recDiag = { renders: 0, draws: 0, drawErrors: 0, firstPixelLogged: false };
+    const diag = this._recDiag;
+
+    // Hook MapLibre's post-render event so drawImage() always runs
+    // synchronously after the WebGL backbuffer has been flushed. The
+    // previous RAF-driven loop ran at arbitrary times relative to
+    // MapLibre's render cycle, which is why the buffer was often
+    // empty at copy time and the resulting frames were black.
+    const renderHandler = () => {
+      diag.renders++;
       if (!this._isRecording) return;
       try {
         mirrorCtx.drawImage(sourceCanvas, 0, 0, w, h);
-        // Manually request a frame so the encoder receives it. Without
-        // this, Safari with captureStream(0) sits idle.
-        if (supportsRequestFrame) streamTrack.requestFrame();
-        // One-shot pixel sample so we can verify the mirror actually
-        // received WebGL content rather than blank pixels.
-        if (!pixelLogged) {
-          pixelLogged = true;
-          try {
-            const px = mirrorCtx.getImageData(Math.floor(w / 2), Math.floor(h / 2), 1, 1).data;
-            console.log("[Bosch eBike 3D] mirror centre pixel after first frame: rgba(" +
-              px[0] + "," + px[1] + "," + px[2] + "," + px[3] + ")");
-          } catch (e) {
-            console.log("[Bosch eBike 3D] mirror pixel sample failed (CORS?):", e);
-          }
+        diag.draws++;
+      } catch (e) {
+        diag.drawErrors++;
+        if (diag.drawErrors === 1) {
+          console.warn("[Bosch eBike 3D] drawImage to mirror threw:", e);
         }
-      } catch (_) { /* drawImage may throw if canvas was torn down */ }
-      this._recCopyRAF = requestAnimationFrame(copyFrame);
+      }
+      if (supportsRequestFrame) {
+        try { streamTrack.requestFrame(); } catch (_) {}
+      }
+      // One-shot pixel sample so we know whether the mirror has real
+      // content. Done a few frames in to let the encoder warm up.
+      if (!diag.firstPixelLogged && diag.draws >= 3) {
+        diag.firstPixelLogged = true;
+        try {
+          const px = mirrorCtx.getImageData(Math.floor(w / 2), Math.floor(h / 2), 1, 1).data;
+          console.log("[Bosch eBike 3D] mirror centre pixel after " + diag.draws +
+            " draws: rgba(" + px[0] + "," + px[1] + "," + px[2] + "," + px[3] + ")");
+        } catch (e) {
+          console.warn("[Bosch eBike 3D] getImageData failed (likely SecurityError):", e);
+        }
+      }
     };
+    this._map.on("render", renderHandler);
+    this._renderHandlerForRec = renderHandler;
+    console.log("[Bosch eBike 3D] render-event copy active; requestFrame:", supportsRequestFrame);
 
-    // Lay down the first frame so the encoder does not see a blank canvas
-    mirrorCtx.drawImage(sourceCanvas, 0, 0, w, h);
+    // First frame: force a repaint + immediate drawImage so the encoder
+    // does not start with a blank reference frame.
+    try { this._map.triggerRepaint(); } catch (_) {}
+    try { mirrorCtx.drawImage(sourceCanvas, 0, 0, w, h); } catch (_) {}
 
     this._recChunks = [];
     try {
@@ -6178,7 +6195,7 @@ class BoschEBike3DMapCard extends HTMLElement {
       this._recMirror = null;
       return;
     }
-    this._recCopyRAF = requestAnimationFrame(copyFrame);
+    // The render-event hook is already attached; nothing more to start.
 
     // Now drive the chase-cam playback. When the animation ends,
     // _stopAnim's tail will see _isRecording === true and call
@@ -6190,12 +6207,14 @@ class BoschEBike3DMapCard extends HTMLElement {
     if (!this._isRecording) return;
     this._isRecording = false;
     this._updateRecordUI(false);
-    // Cancel the per-frame mirror copy loop; the encoder will drain
-    // any pending frame and then fire 'stop' which lands in
-    // _finalizeRecording.
-    if (this._recCopyRAF) {
-      cancelAnimationFrame(this._recCopyRAF);
-      this._recCopyRAF = null;
+    // Detach the MapLibre render-event copy hook so we are not stealing
+    // CPU on every paint after recording has ended.
+    if (this._renderHandlerForRec && this._map) {
+      try { this._map.off("render", this._renderHandlerForRec); } catch (_) {}
+    }
+    this._renderHandlerForRec = null;
+    if (this._recDiag) {
+      console.log("[Bosch eBike 3D] recording stopped; counters:", this._recDiag);
     }
     try {
       if (this._mediaRecorder && this._mediaRecorder.state !== "inactive") {
@@ -6334,7 +6353,10 @@ class BoschEBike3DMapCard extends HTMLElement {
   _destroyMap() {
     this._stopAnim();
     if (this._isRecording) this._stopRecording();
-    if (this._recCopyRAF) { cancelAnimationFrame(this._recCopyRAF); this._recCopyRAF = null; }
+    if (this._renderHandlerForRec && this._map) {
+      try { this._map.off("render", this._renderHandlerForRec); } catch (_) {}
+      this._renderHandlerForRec = null;
+    }
     if (this._recMirror) { try { this._recMirror.remove(); } catch (_) {} this._recMirror = null; }
     if (this._downloadChipTimer) { clearTimeout(this._downloadChipTimer); this._downloadChipTimer = null; }
     if (this._downloadChipEl) {
