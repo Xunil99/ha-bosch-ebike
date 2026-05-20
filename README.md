@@ -358,7 +358,8 @@ playback_speed: 60     # 60x Echtzeit (1h-Tour = 1min Wiedergabe)
 | `show_sun` | 1 | Sonnenstand-Chip im Overlay anzeigen (0 = aus) |
 | `show_speed` | 1 | Geschwindigkeit in der Stats-Leiste unten anzeigen (0 = aus) |
 | `show_distance` | 1 | Kumulierte Distanz in der Stats-Leiste anzeigen (0 = aus) |
-| `show_elevation` | 1 | Höhe in der Stats-Leiste anzeigen (0 = aus) |
+| `show_elevation` | 1 | Höhe anzeigen (0 = aus) |
+| `stats_as_chips` | 0 | 1 = Distanz, Geschwindigkeit und Höhe als Overlay-Chips oben links statt unten in der Stats-Leiste. 0 = klassische Stats-Zeile in der Steuerleiste (Default) |
 | `account_id` | (leer) | Auf ein Konto fixieren, wie bei der 2D-Karte |
 | `bike_id` | (leer) | Auf ein Bike fixieren |
 
@@ -835,7 +836,8 @@ playback_speed: 60     # 60× real time (1 h ride plays in 1 min)
 | `show_sun` | 1 | Show the sun-phase chip in the overlay (0 = hide) |
 | `show_speed` | 1 | Show speed in the stats bar (0 = hide) |
 | `show_distance` | 1 | Show cumulative distance in the stats bar (0 = hide) |
-| `show_elevation` | 1 | Show elevation in the stats bar (0 = hide) |
+| `show_elevation` | 1 | Show elevation (0 = hide) |
+| `stats_as_chips` | 0 | 1 = render distance, speed and elevation as chips in the top-left overlay instead of the bottom stats line. 0 = classic stats line in the control bar (default) |
 | `account_id` | (empty) | Lock to a specific account, like the 2D card |
 | `bike_id` | (empty) | Lock to a specific bike |
 

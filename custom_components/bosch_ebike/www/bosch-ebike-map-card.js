@@ -216,9 +216,11 @@ const I18N = {
     map3d_editor_show_date: "Show date chip",
     map3d_editor_show_time: "Show time chip",
     map3d_editor_show_sun: "Show sun chip",
-    map3d_editor_show_speed: "Show speed in stats",
-    map3d_editor_show_distance: "Show distance in stats",
-    map3d_editor_show_elevation: "Show elevation in stats",
+    map3d_editor_show_speed: "Show speed",
+    map3d_editor_show_distance: "Show distance",
+    map3d_editor_show_elevation: "Show elevation",
+    map3d_editor_stats_as_chips: "Stats as overlay chips (1 / 0)",
+    map3d_editor_stats_as_chips_hint: "1 = render distance, speed and elevation as chips in the top-left overlay next to date and time. 0 = keep the classic stats line in the bottom control bar (default).",
   },
   de: {
     rides_title: "Bosch eBike Rides",
@@ -416,9 +418,11 @@ const I18N = {
     map3d_editor_show_date: "Datums-Chip anzeigen",
     map3d_editor_show_time: "Uhrzeit-Chip anzeigen",
     map3d_editor_show_sun: "Sonnen-Chip anzeigen",
-    map3d_editor_show_speed: "Geschwindigkeit in Stats anzeigen",
-    map3d_editor_show_distance: "Distanz in Stats anzeigen",
-    map3d_editor_show_elevation: "Höhe in Stats anzeigen",
+    map3d_editor_show_speed: "Geschwindigkeit anzeigen",
+    map3d_editor_show_distance: "Distanz anzeigen",
+    map3d_editor_show_elevation: "Höhe anzeigen",
+    map3d_editor_stats_as_chips: "Stats als Overlay-Chips (1 / 0)",
+    map3d_editor_stats_as_chips_hint: "1 = Distanz, Geschwindigkeit und Höhe werden als Chips oben links neben Datum und Uhrzeit angezeigt. 0 = klassische Stats-Zeile in der unteren Steuerleiste (Default).",
   },
   nl: {
     rides_title: "Bosch eBike Ritten",
@@ -616,9 +620,11 @@ const I18N = {
     map3d_editor_show_date: "Datum-chip tonen",
     map3d_editor_show_time: "Tijd-chip tonen",
     map3d_editor_show_sun: "Zon-chip tonen",
-    map3d_editor_show_speed: "Snelheid in stats tonen",
-    map3d_editor_show_distance: "Afstand in stats tonen",
-    map3d_editor_show_elevation: "Hoogte in stats tonen",
+    map3d_editor_show_speed: "Snelheid tonen",
+    map3d_editor_show_distance: "Afstand tonen",
+    map3d_editor_show_elevation: "Hoogte tonen",
+    map3d_editor_stats_as_chips: "Stats als overlay-chips (1 / 0)",
+    map3d_editor_stats_as_chips_hint: "1 = afstand, snelheid en hoogte verschijnen als chips linksboven naast datum en tijd. 0 = klassieke stats-regel in de onderste balk (default).",
   },
 };
 
@@ -4963,6 +4969,7 @@ class BoschEBike3DMapCard extends HTMLElement {
       smooth_window: 15, track_smooth_window: 2, playback_speed: 60,
       show_date: 1, show_time: 1, show_sun: 1,
       show_speed: 1, show_distance: 1, show_elevation: 1,
+      stats_as_chips: 0,
     };
   }
   getCardSize() { return 7; }
@@ -5311,11 +5318,20 @@ class BoschEBike3DMapCard extends HTMLElement {
     return !(v === 0 || v === "0" || v === false || v === "false" || v === "off");
   }
 
+  // Like _showFlag but with an explicit default (used for options that
+  // should be OFF unless the user opts in).
+  _optionOn(key, defaultOn) {
+    const v = this._config[key];
+    if (v === undefined || v === null || v === "") return !!defaultOn;
+    return !(v === 0 || v === "0" || v === false || v === "false" || v === "off");
+  }
+
   _renderDetail() {
     const a = this._currentActivity;
     if (!a) return;
     const title = a.title || this._t("msg_unnamed_ride");
     const hide = (key) => this._showFlag(key) ? "" : "display:none;";
+    const statsAsChips = this._optionOn("stats_as_chips", false);
     this._root.innerHTML = `
       <div class="map3d-head">
         <button class="map3d-back-btn" type="button">
@@ -5335,6 +5351,17 @@ class BoschEBike3DMapCard extends HTMLElement {
           <span class="map3d-chip" id="m3d-sun-chip" style="${hide("show_sun")}">
             <ha-icon icon="mdi:white-balance-sunny" id="m3d-sun-ico"></ha-icon><span id="m3d-sun-text">--</span>
           </span>
+          ${statsAsChips ? `
+          <span class="map3d-chip" id="m3d-dist-chip" style="${hide("show_distance")}">
+            <ha-icon icon="mdi:map-marker-distance"></ha-icon><span id="m3d-stat-dist">–</span>
+          </span>
+          <span class="map3d-chip" id="m3d-speed-chip" style="${hide("show_speed")}">
+            <ha-icon icon="mdi:speedometer"></ha-icon><span id="m3d-stat-speed">–</span>
+          </span>
+          <span class="map3d-chip" id="m3d-ele-chip" style="${hide("show_elevation")}">
+            <ha-icon icon="mdi:elevation-rise"></ha-icon><span id="m3d-stat-ele">–</span>
+          </span>
+          ` : ""}
           <span class="map3d-chip map3d-rec-badge" id="m3d-rec-badge" style="display:none">
             <ha-icon icon="mdi:record"></ha-icon><span>${this._t("map3d_record_active")}</span>
           </span>
@@ -5351,11 +5378,13 @@ class BoschEBike3DMapCard extends HTMLElement {
               <ha-icon icon="mdi:record-circle-outline" id="m3d-rec-ico"></ha-icon>
             </button>
           </div>
+          ${statsAsChips ? "" : `
           <div class="map3d-stats">
             <span id="m3d-stat-dist-wrap" style="${hide("show_distance")}"><span>${this._t("map3d_distance_label")}: </span><span class="v" id="m3d-stat-dist">–</span></span>
             <span id="m3d-stat-speed-wrap" style="${hide("show_speed")}"><span>${this._t("map3d_speed_label")}: </span><span class="v" id="m3d-stat-speed">–</span></span>
             <span id="m3d-stat-ele-wrap" style="${hide("show_elevation")}"><span>${this._t("map3d_elevation_label")}: </span><span class="v" id="m3d-stat-ele">–</span></span>
           </div>
+          `}
         </div>
       </div>
     `;
@@ -5916,13 +5945,15 @@ class BoschEBike3DMapCard extends HTMLElement {
     const distLbl = Number.isFinite(dist)
       ? (dist / 1000).toLocaleString(undefined, { maximumFractionDigits: 1 }) + " km"
       : "–";
-    this._root.querySelector("#m3d-stat-dist").textContent = distLbl;
+    const distEl = this._root.querySelector("#m3d-stat-dist");
+    if (distEl) distEl.textContent = distLbl;
     const sp = Number.isFinite(p.speed) ? p.speed : null;
-    this._root.querySelector("#m3d-stat-speed").textContent =
+    const speedEl = this._root.querySelector("#m3d-stat-speed");
+    if (speedEl) speedEl.textContent =
       sp != null ? sp.toLocaleString(undefined, { maximumFractionDigits: 1 }) + " km/h" : "–";
     const ele = Number.isFinite(p.ele) ? p.ele : null;
-    this._root.querySelector("#m3d-stat-ele").textContent =
-      ele != null ? Math.round(ele) + " m" : "–";
+    const eleEl = this._root.querySelector("#m3d-stat-ele");
+    if (eleEl) eleEl.textContent = ele != null ? Math.round(ele) + " m" : "–";
 
     const slider = this._root.querySelector("#m3d-slider");
     if (slider && document.activeElement !== slider) {
@@ -6532,6 +6563,7 @@ class BoschEBike3DMapCardEditor extends HTMLElement {
       show_speed: mkText("show_speed", "map3d_editor_show_speed", null, "number"),
       show_distance: mkText("show_distance", "map3d_editor_show_distance", null, "number"),
       show_elevation: mkText("show_elevation", "map3d_editor_show_elevation", null, "number"),
+      stats_as_chips: mkText("stats_as_chips", "map3d_editor_stats_as_chips", "map3d_editor_stats_as_chips_hint", "number"),
     });
 
     this._built = true;
