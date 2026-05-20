@@ -337,6 +337,7 @@ animate_seconds: 25
 - Play/Pause-Button für die zeitgeraffte Wiedergabe (Dauer konfigurierbar)
 - Live-Stats zur Slider-Position: kumulierte Distanz, Geschwindigkeit, Höhe
 - Zeit- und Sonnen-Chip im Overlay zeigt aktuelle Uhrzeit und Sonnenstand
+- Stil-Umschalter oben rechts wechselt zwischen **3D-Vektor-Karte** (OpenFreeMap mit Gebäude-Extrusionen) und **Satelliten-Bild** (Esri World Imagery, frei für nicht-kommerzielle Nutzung)
 - Zurück-Button kehrt zur Tour-Liste zurück
 
 **Karten-Konfig-Optionen:**
@@ -347,6 +348,7 @@ animate_seconds: 25
 | `height` | 540 | Karten-Höhe in Pixel |
 | `default_pitch` | 55 | Chase-Cam-Neigung (20-65°). 20 ≈ Vogelperspektive, 65 ≈ First-Person |
 | `chase_zoom` | 17 | Chase-Cam-Zoom (14-19). Höher = näher, 17 ≈ 100 m Sicht nach vorne |
+| `smooth_window` | 15 | Bearing-Glättungsfenster. Höher = glattere Kamera, schneidet aber Kurven weiter. 5 fühlt sich zittrig an, 40 wirkt sehr träge |
 | `animate_seconds` | 25 | Dauer eines vollständigen Play-Durchlaufs |
 | `account_id` | (leer) | Auf ein Konto fixieren, wie bei der 2D-Karte |
 | `bike_id` | (leer) | Auf ein Bike fixieren |

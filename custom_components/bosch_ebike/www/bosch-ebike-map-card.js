@@ -194,6 +194,10 @@ const I18N = {
     map3d_editor_chase_zoom_hint: "Higher zoom = closer to the bike. 17 ≈ 100 m ahead visible.",
     map3d_editor_animate_seconds: "Playback duration (seconds)",
     map3d_editor_animate_seconds_hint: "How long a full Play-cycle takes from tour start to tour end.",
+    map3d_editor_smooth_window: "Bearing-smoothing window",
+    map3d_editor_smooth_window_hint: "Higher = smoother camera, slower to react. 15 is a good default; 5 is twitchy, 40 sweeps corners wide.",
+    map3d_style_3d: "3D",
+    map3d_style_sat: "Satellite",
   },
   de: {
     rides_title: "Bosch eBike Rides",
@@ -369,6 +373,10 @@ const I18N = {
     map3d_editor_chase_zoom_hint: "Höherer Zoom = näher am Bike. 17 ≈ 100 m Sicht nach vorne.",
     map3d_editor_animate_seconds: "Abspieldauer (Sekunden)",
     map3d_editor_animate_seconds_hint: "Wie lange ein voller Play-Durchlauf von Tour-Start bis Tour-Ende dauert.",
+    map3d_editor_smooth_window: "Bearing-Glättungsfenster",
+    map3d_editor_smooth_window_hint: "Höher = glattere Kamera, träger. 15 ist guter Default; 5 zittrig, 40 schneidet Kurven weit.",
+    map3d_style_3d: "3D",
+    map3d_style_sat: "Satellit",
   },
   nl: {
     rides_title: "Bosch eBike Ritten",
@@ -544,6 +552,10 @@ const I18N = {
     map3d_editor_chase_zoom_hint: "Hogere zoom = dichter bij de fiets. 17 ≈ 100 m vooruit zichtbaar.",
     map3d_editor_animate_seconds: "Afspeelduur (seconden)",
     map3d_editor_animate_seconds_hint: "Hoe lang een volledige Play-cyclus duurt van begin tot einde van de tour.",
+    map3d_editor_smooth_window: "Bearing-smoothingvenster",
+    map3d_editor_smooth_window_hint: "Hoger = soepelere camera, trager. 15 is goede default; 5 schokkerig, 40 snijdt bochten breed af.",
+    map3d_style_3d: "3D",
+    map3d_style_sat: "Satelliet",
   },
 };
 
@@ -688,6 +700,28 @@ function ensureLeaflet() {
 const MAPLIBRE_JS = "https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.js";
 const MAPLIBRE_CSS = "https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.css";
 const OPENFREEMAP_LIBERTY = "https://tiles.openfreemap.org/styles/liberty";
+
+// Esri World Imagery as a free raster basemap for the satellite mode.
+// Free for non-commercial / low-volume hobby use, requires attribution.
+const SATELLITE_STYLE = {
+  version: 8,
+  glyphs: "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
+  sources: {
+    "esri-imagery": {
+      type: "raster",
+      tiles: [
+        "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+      ],
+      tileSize: 256,
+      maxzoom: 19,
+      attribution: "Tiles © Esri — World Imagery",
+    },
+  },
+  layers: [
+    { id: "background", type: "background", paint: { "background-color": "#101418" } },
+    { id: "esri-imagery-layer", type: "raster", source: "esri-imagery" },
+  ],
+};
 
 function ensureMapLibre() {
   if (window.maplibregl) return Promise.resolve(window.maplibregl);
@@ -4825,7 +4859,7 @@ class BoschEBike3DMapCard extends HTMLElement {
   }
 
   static getConfigElement() { return document.createElement("bosch-ebike-3d-map-card-editor"); }
-  static getStubConfig() { return { height: 540, default_pitch: 55, chase_zoom: 17, animate_seconds: 25 }; }
+  static getStubConfig() { return { height: 540, default_pitch: 55, chase_zoom: 17, smooth_window: 15, animate_seconds: 25 }; }
   getCardSize() { return 7; }
 
   _t(key, ...args) {
@@ -4961,6 +4995,21 @@ class BoschEBike3DMapCard extends HTMLElement {
       /* MapLibre marker container z-stacking: ensure the current-position
          marker sits above the start/end dot markers */
       .maplibregl-marker:has(.ebike-3d-marker) { z-index: 5; }
+      .map3d-style-toggle {
+        position: absolute; right: 8px; top: 8px;
+        display: inline-flex; gap: 0;
+        background: rgba(20,24,32,.78); color: #fff;
+        backdrop-filter: blur(6px); border-radius: 999px;
+        padding: 2px; pointer-events: auto;
+      }
+      .map3d-style-toggle button {
+        background: transparent; color: inherit; border: 0;
+        padding: 4px 12px; border-radius: 999px;
+        font-size: 12px; font-weight: 500; cursor: pointer;
+      }
+      .map3d-style-toggle button.active {
+        background: var(--primary-color, #03a9f4); color: #fff;
+      }
     `;
     card.appendChild(style);
 
@@ -5056,6 +5105,7 @@ class BoschEBike3DMapCard extends HTMLElement {
       }
       this._currentTrack = pts;
       this._buildCumulativeDistances();
+      this._precomputeBearings();
       this._renderDetail();
     } catch (err) {
       console.error("[Bosch eBike 3D] track load failed", err);
@@ -5125,6 +5175,10 @@ class BoschEBike3DMapCard extends HTMLElement {
             <ha-icon icon="mdi:white-balance-sunny" id="m3d-sun-ico"></ha-icon><span id="m3d-sun-text">--°</span>
           </span>
         </div>
+        <div class="map3d-style-toggle" id="m3d-style-toggle">
+          <button type="button" data-style="vector" class="active">${this._t("map3d_style_3d")}</button>
+          <button type="button" data-style="satellite">${this._t("map3d_style_sat")}</button>
+        </div>
         <div class="map3d-controls">
           <div class="row1">
             <button class="map3d-play-btn" type="button" id="m3d-play">
@@ -5161,6 +5215,18 @@ class BoschEBike3DMapCard extends HTMLElement {
 
     const playBtn = this._root.querySelector("#m3d-play");
     playBtn.addEventListener("click", () => this._togglePlay());
+
+    // Style toggle (3D vector vs Satellite raster)
+    const toggle = this._root.querySelector("#m3d-style-toggle");
+    toggle.addEventListener("click", (ev) => {
+      const btn = ev.target.closest("button[data-style]");
+      if (!btn) return;
+      const mode = btn.getAttribute("data-style");
+      if (mode === this._mapMode) return;
+      toggle.querySelectorAll("button").forEach((b) =>
+        b.classList.toggle("active", b === btn));
+      this._setMapStyle(mode);
+    });
 
     this._initMap();
   }
@@ -5199,6 +5265,8 @@ class BoschEBike3DMapCard extends HTMLElement {
 
     // Initial pose: chase-cam at the start of the track, looking forward.
     const initialBearing = this._bearingAt(0);
+    this._mapMode = "vector";
+    this._currentIndex = 0;
     this._map = new mlib.Map({
       container: canvas,
       style: OPENFREEMAP_LIBERTY,
@@ -5234,47 +5302,8 @@ class BoschEBike3DMapCard extends HTMLElement {
         });
       } catch (_) { /* older MapLibre versions */ }
 
-      // Track polyline
-      const coords = pts.map((p) => [p.lon, p.lat]);
-      this._map.addSource("ebike-track", {
-        type: "geojson",
-        data: { type: "Feature", geometry: { type: "LineString", coordinates: coords }, properties: {} },
-      });
-      this._map.addLayer({
-        id: "ebike-track-glow",
-        type: "line",
-        source: "ebike-track",
-        layout: { "line-cap": "round", "line-join": "round" },
-        paint: { "line-color": "#03a9f4", "line-width": 9, "line-opacity": 0.25, "line-blur": 3 },
-      });
-      this._map.addLayer({
-        id: "ebike-track",
-        type: "line",
-        source: "ebike-track",
-        layout: { "line-cap": "round", "line-join": "round" },
-        paint: { "line-color": "#03a9f4", "line-width": 4.5, "line-opacity": 0.95 },
-      });
-
-      // Ensure 3D building extrusions are present (some Liberty variants
-      // ship them disabled; force-add a fallback if not found).
-      const hasBldg = this._map.getLayer("building-3d") || this._map.getLayer("building");
-      if (!hasBldg) {
-        try {
-          this._map.addLayer({
-            id: "ebike-buildings-3d",
-            type: "fill-extrusion",
-            source: "openmaptiles",
-            "source-layer": "building",
-            minzoom: 14,
-            paint: {
-              "fill-extrusion-color": ["case", ["has", "colour"], ["get", "colour"], "#c9c4be"],
-              "fill-extrusion-height": ["coalesce", ["get", "render_height"], ["get", "height"], 6],
-              "fill-extrusion-base": ["coalesce", ["get", "render_min_height"], 0],
-              "fill-extrusion-opacity": 0.85,
-            },
-          });
-        } catch (_) { /* style without openmaptiles source */ }
-      }
+      this._addTrackLayers(pts);
+      this._addBuildingsIfNeeded();
 
       // Start + end markers
       this._addPointMarker(pts[0], "#42c76a", "S");
@@ -5304,24 +5333,51 @@ class BoschEBike3DMapCard extends HTMLElement {
     });
   }
 
-  // Great-circle bearing in degrees (0..360) from track[i] toward a point
-  // 'lookAhead' positions later. Averaged window smooths GPS jitter and
-  // produces a stable chase-cam orientation.
-  _bearingAt(i) {
+  // Pre-compute a smoothed bearing for every track point. The chase-cam
+  // then looks up the value instead of recomputing on every frame, which
+  // both eliminates jitter and removes per-frame cost.
+  //
+  // Smoothing uses a sliding window of W points on each side and
+  // averages bearings as unit vectors (cos, sin) so that the 0°/360°
+  // wrap-around is handled correctly (averaging 350° and 10° yields 0°,
+  // not 180°).
+  _precomputeBearings() {
     const pts = this._currentTrack;
-    if (!pts || pts.length < 2) return 0;
-    const lookAhead = 5;
-    const i1 = Math.max(0, Math.min(pts.length - 2, i));
-    const i2 = Math.min(pts.length - 1, i1 + lookAhead);
-    const a = pts[i1];
-    const b = pts[i2];
-    if (!a || !b || (a.lat === b.lat && a.lon === b.lon)) {
-      // Fallback: look one point behind
-      const aPrev = pts[Math.max(0, i1 - 1)];
-      if (!aPrev || (aPrev.lat === a.lat && aPrev.lon === a.lon)) return 0;
-      return this._calcBearing(aPrev, a);
+    if (!pts || pts.length < 2) {
+      this._smoothedBearings = null;
+      return;
     }
-    return this._calcBearing(a, b);
+    // Raw bearings between consecutive points
+    const raw = new Array(pts.length);
+    for (let i = 0; i < pts.length - 1; i++) {
+      raw[i] = this._calcBearing(pts[i], pts[i + 1]);
+    }
+    raw[pts.length - 1] = raw[pts.length - 2] != null ? raw[pts.length - 2] : 0;
+
+    // Wider window = smoother camera but corners are taken wider.
+    const W = Math.max(1, Math.min(60, Number(this._config.smooth_window) || 15));
+    const smoothed = new Array(raw.length);
+    const rad = Math.PI / 180;
+    for (let i = 0; i < raw.length; i++) {
+      const lo = Math.max(0, i - W);
+      const hi = Math.min(raw.length - 1, i + W);
+      let sx = 0, sy = 0;
+      for (let j = lo; j <= hi; j++) {
+        const a = raw[j] * rad;
+        sx += Math.cos(a);
+        sy += Math.sin(a);
+      }
+      smoothed[i] = (Math.atan2(sy, sx) * 180 / Math.PI + 360) % 360;
+    }
+    this._smoothedBearings = smoothed;
+  }
+
+  _bearingAt(i) {
+    if (this._smoothedBearings) {
+      const idx = Math.max(0, Math.min(this._smoothedBearings.length - 1, Math.round(i)));
+      return this._smoothedBearings[idx];
+    }
+    return 0;
   }
 
   _calcBearing(a, b) {
@@ -5341,10 +5397,88 @@ class BoschEBike3DMapCard extends HTMLElement {
     new window.maplibregl.Marker({ element: el }).setLngLat([p.lon, p.lat]).addTo(this._map);
   }
 
+  // Track polyline (glow + main stroke). Idempotent: removes existing
+  // ebike layers/sources first so it can be safely called after a
+  // style.setStyle() swap.
+  _addTrackLayers(pts) {
+    if (!this._map) return;
+    pts = pts || this._currentTrack;
+    if (!pts || !pts.length) return;
+    const coords = pts.map((p) => [p.lon, p.lat]);
+    try { if (this._map.getLayer("ebike-track")) this._map.removeLayer("ebike-track"); } catch (_) {}
+    try { if (this._map.getLayer("ebike-track-glow")) this._map.removeLayer("ebike-track-glow"); } catch (_) {}
+    try { if (this._map.getSource("ebike-track")) this._map.removeSource("ebike-track"); } catch (_) {}
+    this._map.addSource("ebike-track", {
+      type: "geojson",
+      data: { type: "Feature", geometry: { type: "LineString", coordinates: coords }, properties: {} },
+    });
+    this._map.addLayer({
+      id: "ebike-track-glow",
+      type: "line",
+      source: "ebike-track",
+      layout: { "line-cap": "round", "line-join": "round" },
+      paint: { "line-color": "#03a9f4", "line-width": 9, "line-opacity": 0.25, "line-blur": 3 },
+    });
+    this._map.addLayer({
+      id: "ebike-track",
+      type: "line",
+      source: "ebike-track",
+      layout: { "line-cap": "round", "line-join": "round" },
+      paint: { "line-color": "#03a9f4", "line-width": 4.5, "line-opacity": 0.95 },
+    });
+  }
+
+  // Add a 3D building-extrusion fallback layer if the active style does
+  // not already provide one. In satellite mode the openmaptiles source
+  // does not exist, so this is a no-op there.
+  _addBuildingsIfNeeded() {
+    if (!this._map) return;
+    if (this._mapMode !== "vector") return;
+    if (this._map.getLayer("building-3d") || this._map.getLayer("building") || this._map.getLayer("ebike-buildings-3d")) {
+      return;
+    }
+    try {
+      this._map.addLayer({
+        id: "ebike-buildings-3d",
+        type: "fill-extrusion",
+        source: "openmaptiles",
+        "source-layer": "building",
+        minzoom: 14,
+        paint: {
+          "fill-extrusion-color": ["case", ["has", "colour"], ["get", "colour"], "#c9c4be"],
+          "fill-extrusion-height": ["coalesce", ["get", "render_height"], ["get", "height"], 6],
+          "fill-extrusion-base": ["coalesce", ["get", "render_min_height"], 0],
+          "fill-extrusion-opacity": 0.85,
+        },
+      });
+    } catch (_) { /* style without openmaptiles source */ }
+  }
+
+  // Swap between the OpenFreeMap vector style (3D buildings, named
+  // streets) and the Esri satellite raster style. Custom layers
+  // (track) are re-added on the 'style.load' event because setStyle()
+  // clears them. HTML markers survive style swaps.
+  _setMapStyle(mode) {
+    if (!this._map) return;
+    this._mapMode = mode;
+    const style = mode === "satellite" ? SATELLITE_STYLE : OPENFREEMAP_LIBERTY;
+    this._map.once("style.load", () => {
+      this._addTrackLayers();
+      this._addBuildingsIfNeeded();
+      // Re-apply current index so light/marker/camera state matches
+      const idx = this._currentIndex != null ? this._currentIndex : 0;
+      this._applyIndex(idx);
+    });
+    try { this._map.setStyle(style); } catch (e) {
+      console.warn("[Bosch eBike 3D] setStyle failed", e);
+    }
+  }
+
   _applyIndex(idx, isInitial) {
     const pts = this._currentTrack;
     if (!pts || !pts.length) return;
     const i = Math.max(0, Math.min(pts.length - 1, Math.round(idx)));
+    this._currentIndex = i;
     const p = pts[i];
     if (this._marker) this._marker.setLngLat([p.lon, p.lat]);
 
@@ -5549,6 +5683,7 @@ class BoschEBike3DMapCardEditor extends HTMLElement {
       height: mkText("height", "map3d_editor_height", null, "number"),
       default_pitch: mkText("default_pitch", "map3d_editor_default_pitch", "map3d_editor_default_pitch_hint", "number"),
       chase_zoom: mkText("chase_zoom", "map3d_editor_chase_zoom", "map3d_editor_chase_zoom_hint", "number"),
+      smooth_window: mkText("smooth_window", "map3d_editor_smooth_window", "map3d_editor_smooth_window_hint", "number"),
       animate_seconds: mkText("animate_seconds", "map3d_editor_animate_seconds", "map3d_editor_animate_seconds_hint", "number"),
       account_id: mkText("account_id", "map3d_editor_account", null, "text"),
       bike_id: mkText("bike_id", "map3d_editor_bike", null, "text"),
