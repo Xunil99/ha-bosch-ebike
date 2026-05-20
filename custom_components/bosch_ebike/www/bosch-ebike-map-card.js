@@ -196,6 +196,8 @@ const I18N = {
     map3d_editor_animate_seconds_hint: "How long a full Play-cycle takes from tour start to tour end.",
     map3d_editor_smooth_window: "Bearing-smoothing window",
     map3d_editor_smooth_window_hint: "Higher = smoother camera, slower to react. 15 is a good default; 5 is twitchy, 40 sweeps corners wide.",
+    map3d_editor_track_smooth: "Track-position smoothing window",
+    map3d_editor_track_smooth_hint: "Smooths GPS jitter in the camera path. 0 = off (raw GPS), 2 = gentle (default), 5+ may visibly cut corners. The displayed track polyline always shows raw GPS regardless.",
     map3d_editor_playback_speed: "Playback speed factor (×)",
     map3d_editor_playback_speed_hint: "Real-time multiplier. 60 = 60× faster than reality, so a 1-hour ride plays in 1 minute and a 2-hour ride in 2 minutes. Higher = faster.",
     map3d_editor_animate_seconds_override_hint: "Optional. If set, forces a fixed playback duration regardless of tour length and overrides the speed factor.",
@@ -381,6 +383,8 @@ const I18N = {
     map3d_editor_animate_seconds_hint: "Wie lange ein voller Play-Durchlauf von Tour-Start bis Tour-Ende dauert.",
     map3d_editor_smooth_window: "Bearing-Glättungsfenster",
     map3d_editor_smooth_window_hint: "Höher = glattere Kamera, träger. 15 ist guter Default; 5 zittrig, 40 schneidet Kurven weit.",
+    map3d_editor_track_smooth: "Track-Positions-Glättungsfenster",
+    map3d_editor_track_smooth_hint: "Glättet GPS-Rauschen im Kamerapfad. 0 = aus (rohes GPS), 2 = sanft (Default), 5+ schneidet ggf. sichtbar Kurven. Die angezeigte Track-Linie zeigt unabhängig davon immer das rohe GPS.",
     map3d_editor_playback_speed: "Abspielgeschwindigkeit (×)",
     map3d_editor_playback_speed_hint: "Echtzeit-Multiplikator. 60 = 60× schneller als die echte Fahrt, eine 1h-Tour läuft in 1 Min, eine 2h-Tour in 2 Min. Höher = schneller.",
     map3d_editor_animate_seconds_override_hint: "Optional. Wenn gesetzt, erzwingt eine feste Abspieldauer unabhängig von der Tour-Länge und überschreibt den Speed-Faktor.",
@@ -566,6 +570,8 @@ const I18N = {
     map3d_editor_animate_seconds_hint: "Hoe lang een volledige Play-cyclus duurt van begin tot einde van de tour.",
     map3d_editor_smooth_window: "Bearing-smoothingvenster",
     map3d_editor_smooth_window_hint: "Hoger = soepelere camera, trager. 15 is goede default; 5 schokkerig, 40 snijdt bochten breed af.",
+    map3d_editor_track_smooth: "Track-positie smoothingvenster",
+    map3d_editor_track_smooth_hint: "Smoothet GPS-jitter in het camerapad. 0 = uit (ruwe GPS), 2 = mild (default), 5+ kan zichtbaar bochten afsnijden. De weergegeven track-lijn toont altijd de ruwe GPS, ongeacht deze instelling.",
     map3d_editor_playback_speed: "Afspeelsnelheid (×)",
     map3d_editor_playback_speed_hint: "Realtime-vermenigvuldiger. 60 = 60× sneller dan de echte rit; een 1u-rit speelt in 1 min, 2u-rit in 2 min. Hoger = sneller.",
     map3d_editor_animate_seconds_override_hint: "Optioneel. Indien ingesteld dwingt dit een vaste afspeelduur af, ongeacht de toerlengte, en overschrijft de snelheidsfactor.",
@@ -4912,7 +4918,7 @@ class BoschEBike3DMapCard extends HTMLElement {
   }
 
   static getConfigElement() { return document.createElement("bosch-ebike-3d-map-card-editor"); }
-  static getStubConfig() { return { height: 540, default_pitch: 55, chase_zoom: 17, smooth_window: 15, playback_speed: 60 }; }
+  static getStubConfig() { return { height: 540, default_pitch: 55, chase_zoom: 17, smooth_window: 15, track_smooth_window: 2, playback_speed: 60 }; }
   getCardSize() { return 7; }
 
   _t(key, ...args) {
@@ -5141,7 +5147,15 @@ class BoschEBike3DMapCard extends HTMLElement {
         this._showMessage(this._t("map3d_no_gps"));
         return;
       }
-      this._currentTrack = pts;
+      // Keep the raw GPS samples for the visible polyline so the track
+      // on the map matches what was actually recorded. The chase cam,
+      // marker, bearings and distance counter use a smoothed copy to
+      // damp GPS jitter and avoid motion sickness during playback.
+      this._rawTrack = pts;
+      const wRaw = this._config.track_smooth_window;
+      const w = Number.isFinite(Number(wRaw)) && wRaw !== "" && wRaw !== null
+        ? Math.max(0, Math.min(15, Number(wRaw))) : 2;
+      this._currentTrack = this._smoothTrackPositions(pts, w);
       this._buildCumulativeDistances();
       this._precomputeBearings();
       this._renderDetail();
@@ -5149,6 +5163,34 @@ class BoschEBike3DMapCard extends HTMLElement {
       console.error("[Bosch eBike 3D] track load failed", err);
       this._showMessage("Fehler: " + (err?.message || err));
     }
+  }
+
+  // Moving-average smoothing of lat/lon. Used to give the chase cam a
+  // calm path that does not surface raw GPS wobble. Returns a NEW array
+  // so the raw points stay available for the visible polyline.
+  _smoothTrackPositions(pts, window) {
+    if (!pts || pts.length < 3 || window <= 0) {
+      return pts ? pts.slice() : [];
+    }
+    const W = Math.floor(window);
+    const N = pts.length;
+    const out = new Array(N);
+    for (let i = 0; i < N; i++) {
+      const lo = Math.max(0, i - W);
+      const hi = Math.min(N - 1, i + W);
+      let sLat = 0, sLon = 0, n = 0;
+      for (let j = lo; j <= hi; j++) {
+        sLat += pts[j].lat;
+        sLon += pts[j].lon;
+        n++;
+      }
+      out[i] = {
+        ...pts[i],
+        lat: sLat / n,
+        lon: sLon / n,
+      };
+    }
+    return out;
   }
 
   _buildCumulativeDistances() {
@@ -5334,7 +5376,8 @@ class BoschEBike3DMapCard extends HTMLElement {
         });
       } catch (_) { /* older MapLibre versions */ }
 
-      this._addTrackLayers(pts);
+      // Polyline shows raw GPS, chase cam uses smoothed positions
+      this._addTrackLayers(this._rawTrack || pts);
       this._addBuildingsIfNeeded();
       this._initShadowLayer();
 
@@ -5450,10 +5493,12 @@ class BoschEBike3DMapCard extends HTMLElement {
 
   // Track polyline (glow + main stroke). Idempotent: removes existing
   // ebike layers/sources first so it can be safely called after a
-  // style.setStyle() swap.
+  // style.setStyle() swap. Always uses the RAW GPS samples (not the
+  // smoothed camera-path copy) so the line on the map matches what was
+  // actually recorded.
   _addTrackLayers(pts) {
     if (!this._map) return;
-    pts = pts || this._currentTrack;
+    pts = pts || this._rawTrack || this._currentTrack;
     if (!pts || !pts.length) return;
     const coords = pts.map((p) => [p.lon, p.lat]);
     try { if (this._map.getLayer("ebike-track")) this._map.removeLayer("ebike-track"); } catch (_) {}
@@ -5909,6 +5954,7 @@ class BoschEBike3DMapCardEditor extends HTMLElement {
       default_pitch: mkText("default_pitch", "map3d_editor_default_pitch", "map3d_editor_default_pitch_hint", "number"),
       chase_zoom: mkText("chase_zoom", "map3d_editor_chase_zoom", "map3d_editor_chase_zoom_hint", "number"),
       smooth_window: mkText("smooth_window", "map3d_editor_smooth_window", "map3d_editor_smooth_window_hint", "number"),
+      track_smooth_window: mkText("track_smooth_window", "map3d_editor_track_smooth", "map3d_editor_track_smooth_hint", "number"),
       playback_speed: mkText("playback_speed", "map3d_editor_playback_speed", "map3d_editor_playback_speed_hint", "number"),
       animate_seconds: mkText("animate_seconds", "map3d_editor_animate_seconds", "map3d_editor_animate_seconds_override_hint", "number"),
       account_id: mkText("account_id", "map3d_editor_account", null, "text"),
