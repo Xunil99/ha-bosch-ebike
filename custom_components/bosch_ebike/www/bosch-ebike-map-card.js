@@ -5495,7 +5495,10 @@ class BoschEBike3DMapCard extends HTMLElement {
     const initialBearing = this._bearingAt(0);
     const lookAt = this._lookAheadCoord(pts[0], initialBearing, 60);
     this._currentIndex = 0;
-    this._map = new mlib.Map({
+    // Local capture: 'myMap' is THIS init's map. Use it instead of
+    // this._map inside async callbacks, so a later re-init that
+    // overwrites this._map cannot pollute or hijack the wrong map.
+    const myMap = new mlib.Map({
       container: canvas,
       style: OPENFREEMAP_LIBERTY,
       center: lookAt,
@@ -5503,32 +5506,38 @@ class BoschEBike3DMapCard extends HTMLElement {
       pitch: chasePitch,
       bearing: initialBearing,
       attributionControl: false,
-      // Generous cache so the chase cam does not re-fetch tiles when
-      // the bike loops back through a visited area.
       maxTileCacheSize: 200,
-      // Required for canvas.captureStream() / MediaRecorder so the
-      // exported video gets real frames instead of empty squares.
       preserveDrawingBuffer: true,
     });
-    this._map.addControl(new mlib.AttributionControl({ compact: true }), "bottom-right");
-    this._map.addControl(new mlib.NavigationControl({ visualizePitch: true }), "top-right");
+    this._map = myMap;
+    console.log("[Bosch eBike 3D] map created (epoch=" + myEpoch + ")");
+    myMap.addControl(new mlib.AttributionControl({ compact: true }), "bottom-right");
+    myMap.addControl(new mlib.NavigationControl({ visualizePitch: true }), "top-right");
 
-    // Keep the map sized to its container even if the parent resizes later.
     if (typeof ResizeObserver !== "undefined") {
       this._resizeObs = new ResizeObserver(() => {
-        if (this._map) { try { this._map.resize(); } catch (_) {} }
+        if (this._map === myMap) { try { myMap.resize(); } catch (_) {} }
       });
       this._resizeObs.observe(canvas);
     }
 
-    this._map.on("error", (e) => {
+    myMap.on("error", (e) => {
       console.warn("[Bosch eBike 3D] map error", e && e.error);
     });
 
-    this._map.on("load", () => {
+    myMap.on("load", () => {
+      console.log("[Bosch eBike 3D] map load fired (epoch=" + myEpoch +
+        ", thisMapIsMyMap=" + (this._map === myMap) + ")");
+      // If a newer init has overwritten this._map already, do not touch
+      // it — that map has its own load handler that will run.
+      if (this._map !== myMap) {
+        console.log("[Bosch eBike 3D] stale load: bailing");
+        return;
+      }
+
       // Lighting & sky from sun mood
       try {
-        this._map.setLight({
+        myMap.setLight({
           anchor: "viewport",
           color: mood.sun,
           intensity: altDeg > 0 ? 0.6 : 0.15,
@@ -5536,30 +5545,22 @@ class BoschEBike3DMapCard extends HTMLElement {
         });
       } catch (_) { /* older MapLibre versions */ }
 
-      // Polyline shows raw GPS, chase cam uses smoothed positions
       this._addTrackLayers(this._rawTrack || pts);
       this._addBuildingsIfNeeded();
       this._initShadowLayer();
 
-      // Recompute shadows whenever the camera settles in a new spot
-      // (new buildings come into view). queryRenderedFeatures only sees
-      // currently-rendered tiles, so we wait for moveend.
-      this._map.on("moveend", () => this._updateShadows());
+      myMap.on("moveend", () => {
+        if (this._map === myMap) this._updateShadows();
+      });
+      setTimeout(() => { if (this._map === myMap) this._updateShadows(); }, 400);
+      setTimeout(() => { if (this._map === myMap) this._updateShadows(); }, 1500);
 
-      // Initial shadow pass: wait a beat so buildings have actually
-      // rasterised, then compute. Repeat once more shortly after to
-      // catch slow-loading building tiles.
-      setTimeout(() => this._updateShadows(), 400);
-      setTimeout(() => this._updateShadows(), 1500);
+      // Markers — attach explicitly to myMap, the local capture. If
+      // this._map has been swapped to a different instance, those
+      // markers would land on a destroyed map and never reach the DOM.
+      this._addPointMarker(pts[0], "#ff9800", "S", myMap);
+      this._addPointMarker(pts[pts.length - 1], "#e53935", "Z", myMap);
 
-      // Start + end markers. Start uses orange so it stays
-      // distinguishable from the larger green pulsing position marker.
-      this._addPointMarker(pts[0], "#ff9800", "S");
-      this._addPointMarker(pts[pts.length - 1], "#e53935", "Z");
-
-      // Animated current-position marker (added LAST so it stacks above
-      // the start/end dots when at index 0). Inline styles so it always
-      // renders, even if the card-scoped CSS rule does not apply.
       const el = document.createElement("div");
       el.className = "ebike-3d-marker";
       el.style.cssText =
@@ -5569,7 +5570,9 @@ class BoschEBike3DMapCard extends HTMLElement {
         "z-index:100;";
       this._marker = new mlib.Marker({ element: el, anchor: "center" })
         .setLngLat([pts[0].lon, pts[0].lat])
-        .addTo(this._map);
+        .addTo(myMap);
+      console.log("[Bosch eBike 3D] markers added; current marker DOM parent=" +
+        (el.parentElement ? el.parentElement.className : "(none)"));
 
       // Diagnostic: verify marker placement and DOM visibility shortly
       // after creation. If the marker is in DOM but reports a
@@ -5689,11 +5692,12 @@ class BoschEBike3DMapCard extends HTMLElement {
   }
 
 
-  _addPointMarker(p, color, _label) {
-    if (!this._map || !window.maplibregl) return;
+  _addPointMarker(p, color, _label, mapOverride) {
+    const target = mapOverride || this._map;
+    if (!target || !window.maplibregl) return;
     const el = document.createElement("div");
     el.style.cssText = `width:14px;height:14px;border-radius:50%;background:${color};border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.4);`;
-    new window.maplibregl.Marker({ element: el }).setLngLat([p.lon, p.lat]).addTo(this._map);
+    new window.maplibregl.Marker({ element: el }).setLngLat([p.lon, p.lat]).addTo(target);
   }
 
   // Track polyline (glow + main stroke). Idempotent: removes existing
