@@ -210,6 +210,8 @@ const I18N = {
     map3d_record_stop: "Stop",
     map3d_record_active: "Recording…",
     map3d_record_unsupported: "Recording not supported in this browser",
+    map3d_record_download: "Download video",
+    map3d_record_empty: "Recording produced no data — check the browser console",
   },
   de: {
     rides_title: "Bosch eBike Rides",
@@ -401,6 +403,8 @@ const I18N = {
     map3d_record_stop: "Stopp",
     map3d_record_active: "Aufnahme läuft…",
     map3d_record_unsupported: "Aufnahme in diesem Browser nicht unterstützt",
+    map3d_record_download: "Video herunterladen",
+    map3d_record_empty: "Aufnahme leer — Browser-Konsole prüfen",
   },
   nl: {
     rides_title: "Bosch eBike Ritten",
@@ -592,6 +596,8 @@ const I18N = {
     map3d_record_stop: "Stop",
     map3d_record_active: "Opname loopt…",
     map3d_record_unsupported: "Opname in deze browser niet ondersteund",
+    map3d_record_download: "Video downloaden",
+    map3d_record_empty: "Opname leeg — controleer browserconsole",
   },
 };
 
@@ -5051,6 +5057,12 @@ class BoschEBike3DMapCard extends HTMLElement {
       .map3d-rec-btn ha-icon { --mdc-icon-size: 20px; }
       .map3d-rec-badge { background: rgba(229,57,53,.85); color: #fff; }
       .map3d-rec-badge ha-icon { color: #fff; animation: ebike-rec-blink 1s ease-in-out infinite; }
+      .map3d-download-chip {
+        background: #2e7d32; color: #fff; text-decoration: none;
+        cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,.4);
+      }
+      .map3d-download-chip:hover { filter: brightness(1.1); }
+      .map3d-download-chip ha-icon { color: #fff; }
       @keyframes ebike-rec-blink {
         0%, 49% { opacity: 1; }
         50%, 100% { opacity: 0.25; }
@@ -6004,15 +6016,16 @@ class BoschEBike3DMapCard extends HTMLElement {
       return;
     }
 
-    // Pick the best mime type the browser actually supports. MP4 is
-    // preferred because it plays everywhere out of the box (QuickTime,
-    // Windows Media Player, mobile Photos apps). It is only exposed by
-    // MediaRecorder in newer Chromium (Chrome 126+) and Safari 14.4+;
-    // Firefox does not expose MP4 at all. WebM is the universal fallback.
+    // Pick the best mime type the browser actually supports. MP4 (H.264)
+    // is preferred because it plays everywhere out of the box. Important:
+    // do NOT request an audio codec in the mime string; our canvas stream
+    // has no audio track and some browsers (notably newer Chromium) report
+    // 'isTypeSupported' = true for combined video+audio mime types but
+    // then silently produce empty recordings if the stream only has video.
     const mimeCandidates = [
-      "video/mp4;codecs=avc1.42E01E,mp4a.40.2",  // H.264 baseline + AAC
-      "video/mp4;codecs=avc1",                    // generic H.264 in mp4
-      "video/mp4",                                // any mp4 the browser likes
+      "video/mp4;codecs=avc1.42E01E",  // H.264 baseline, video-only
+      "video/mp4;codecs=avc1",         // generic H.264 in mp4, video-only
+      "video/mp4",                     // any mp4 the browser accepts
       "video/webm;codecs=vp9",
       "video/webm;codecs=vp8",
       "video/webm",
@@ -6021,6 +6034,7 @@ class BoschEBike3DMapCard extends HTMLElement {
     for (const m of mimeCandidates) {
       if (MediaRecorder.isTypeSupported(m)) { mimeType = m; break; }
     }
+    console.log("[Bosch eBike 3D] recording mime selected:", mimeType || "(browser default)");
 
     let stream;
     try {
@@ -6086,18 +6100,28 @@ class BoschEBike3DMapCard extends HTMLElement {
     const chunks = this._recChunks || [];
     this._recChunks = null;
     this._mediaRecorder = null;
-    if (!chunks.length) return;
+
+    const totalBytes = chunks.reduce((n, c) => n + (c.size || 0), 0);
+    console.log("[Bosch eBike 3D] recording finalised:", {
+      chunks: chunks.length,
+      totalBytes,
+      mimeType: mimeType || "(default)",
+    });
+
+    if (!chunks.length || totalBytes === 0) {
+      console.warn("[Bosch eBike 3D] recording produced no data; nothing to download");
+      this._showDownloadStatus(this._t("map3d_record_empty") || "Recording produced no data");
+      return;
+    }
+
     const blobType = mimeType || "video/webm";
     const blob = new Blob(chunks, { type: blobType });
 
-    // Pick the file extension from the chosen mime so QuickTime,
-    // Windows Photos etc. open it as expected. MP4 wins where the
-    // browser supports it, WebM is the fallback.
+    // File extension from the actual mime
     const ext = blobType.startsWith("video/mp4") ? "mp4"
               : blobType.startsWith("video/x-matroska") ? "mkv"
               : "webm";
 
-    // Build a filename from tour date + title where possible
     const a = this._currentActivity || {};
     const dateStr = a.startTime
       ? new Date(a.startTime).toISOString().slice(0, 19).replace(/[:T]/g, "-")
@@ -6107,13 +6131,79 @@ class BoschEBike3DMapCard extends HTMLElement {
     const filename = `${safeTitle || "ebike-tour"}-${dateStr}.${ext}`;
 
     const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    setTimeout(() => URL.revokeObjectURL(url), 5000);
+
+    // Try a programmatic auto-download first. Many desktop Chromium
+    // builds honour this even without an explicit user gesture, so it
+    // is a nice convenience when it works.
+    try {
+      const tmp = document.createElement("a");
+      tmp.href = url;
+      tmp.download = filename;
+      tmp.style.display = "none";
+      document.body.appendChild(tmp);
+      tmp.click();
+      document.body.removeChild(tmp);
+    } catch (e) {
+      console.warn("[Bosch eBike 3D] auto-download click was rejected", e);
+    }
+
+    // ALWAYS also show a visible chip with a real anchor element. If
+    // the auto-click was blocked (Safari, newer Chrome under stricter
+    // user-gesture policy), the user can click this manually as a real
+    // user gesture and the browser will accept the download.
+    this._showDownloadChip(url, filename, blob.size);
+  }
+
+  _showDownloadChip(url, filename, sizeBytes) {
+    const overlay = this._root.querySelector(".map3d-overlay");
+    if (!overlay) return;
+
+    // Revoke any previous chip URL so we don't leak Blob URLs
+    if (this._downloadChipEl) {
+      const prevUrl = this._downloadChipEl.getAttribute("href");
+      if (prevUrl && prevUrl.startsWith("blob:")) {
+        try { URL.revokeObjectURL(prevUrl); } catch (_) { /* ignore */ }
+      }
+      try { this._downloadChipEl.remove(); } catch (_) { /* ignore */ }
+      this._downloadChipEl = null;
+    }
+    if (this._downloadChipTimer) {
+      clearTimeout(this._downloadChipTimer);
+      this._downloadChipTimer = null;
+    }
+
+    const chip = document.createElement("a");
+    chip.className = "map3d-chip map3d-download-chip";
+    chip.href = url;
+    chip.download = filename;
+    chip.target = "_self";
+    chip.rel = "noopener";
+    const sizeMB = (sizeBytes / 1024 / 1024).toFixed(1);
+    chip.innerHTML = `<ha-icon icon="mdi:download"></ha-icon><span>${this._t("map3d_record_download")} (${sizeMB} MB)</span>`;
+    chip.title = filename;
+    overlay.appendChild(chip);
+    this._downloadChipEl = chip;
+
+    // Auto-hide and revoke after 2 minutes to free memory
+    this._downloadChipTimer = setTimeout(() => {
+      try { URL.revokeObjectURL(url); } catch (_) { /* ignore */ }
+      try { chip.remove(); } catch (_) { /* ignore */ }
+      this._downloadChipEl = null;
+      this._downloadChipTimer = null;
+    }, 120000);
+  }
+
+  _showDownloadStatus(text) {
+    const overlay = this._root.querySelector(".map3d-overlay");
+    if (!overlay) return;
+    const old = overlay.querySelector(".map3d-rec-status");
+    if (old) old.remove();
+    const chip = document.createElement("span");
+    chip.className = "map3d-chip map3d-rec-status";
+    chip.style.background = "rgba(229,57,53,.85)";
+    chip.innerHTML = `<ha-icon icon="mdi:alert"></ha-icon><span>${text}</span>`;
+    overlay.appendChild(chip);
+    setTimeout(() => { try { chip.remove(); } catch (_) {} }, 6000);
   }
 
   _updateRecordUI(active) {
@@ -6129,6 +6219,13 @@ class BoschEBike3DMapCard extends HTMLElement {
   _destroyMap() {
     this._stopAnim();
     if (this._isRecording) this._stopRecording();
+    if (this._downloadChipTimer) { clearTimeout(this._downloadChipTimer); this._downloadChipTimer = null; }
+    if (this._downloadChipEl) {
+      const u = this._downloadChipEl.getAttribute("href");
+      if (u && u.startsWith("blob:")) { try { URL.revokeObjectURL(u); } catch (_) {} }
+      try { this._downloadChipEl.remove(); } catch (_) {}
+      this._downloadChipEl = null;
+    }
     if (this._resizeObs) { try { this._resizeObs.disconnect(); } catch (_) {} this._resizeObs = null; }
     if (this._marker) { try { this._marker.remove(); } catch (_) {} this._marker = null; }
     if (this._map) { try { this._map.remove(); } catch (_) {} this._map = null; }
