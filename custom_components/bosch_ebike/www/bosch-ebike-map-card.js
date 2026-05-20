@@ -6016,25 +6016,39 @@ class BoschEBike3DMapCard extends HTMLElement {
       return;
     }
 
-    // Pick the best mime type the browser actually supports. MP4 (H.264)
-    // is preferred because it plays everywhere out of the box. Important:
-    // do NOT request an audio codec in the mime string; our canvas stream
-    // has no audio track and some browsers (notably newer Chromium) report
-    // 'isTypeSupported' = true for combined video+audio mime types but
-    // then silently produce empty recordings if the stream only has video.
-    const mimeCandidates = [
-      "video/mp4;codecs=avc1.42E01E",  // H.264 baseline, video-only
-      "video/mp4;codecs=avc1",         // generic H.264 in mp4, video-only
-      "video/mp4",                     // any mp4 the browser accepts
+    // Pick the best mime type the browser actually supports.
+    //
+    // Important Safari caveat: WebKit reports isTypeSupported = true for
+    // 'video/mp4;codecs=avc1.*' but the underlying encoder silently
+    // produces empty containers when fed a canvas.captureStream() with
+    // no audio track. This has been confirmed on Safari 17 and 18.
+    // So in Safari we prefer WebM (which works since macOS 14.4 / iOS
+    // 14.5) and only fall back to MP4 if no WebM variant is supported.
+    //
+    // In Chromium and Firefox there is no such defect, so MP4 stays
+    // preferred there for better cross-app playback.
+    const isSafari = (() => {
+      const ua = navigator.userAgent;
+      return /^((?!chrome|android|crios|fxios|edg).)*safari/i.test(ua);
+    })();
+    const mp4Mimes = [
+      "video/mp4;codecs=avc1.42E01E",
+      "video/mp4;codecs=avc1",
+      "video/mp4",
+    ];
+    const webmMimes = [
       "video/webm;codecs=vp9",
       "video/webm;codecs=vp8",
       "video/webm",
     ];
+    const mimeCandidates = isSafari
+      ? [...webmMimes, ...mp4Mimes]
+      : [...mp4Mimes, ...webmMimes];
     let mimeType = "";
     for (const m of mimeCandidates) {
       if (MediaRecorder.isTypeSupported(m)) { mimeType = m; break; }
     }
-    console.log("[Bosch eBike 3D] recording mime selected:", mimeType || "(browser default)");
+    console.log("[Bosch eBike 3D] recording mime selected:", mimeType || "(browser default)", "(safari =", isSafari + ")");
 
     let stream;
     try {
