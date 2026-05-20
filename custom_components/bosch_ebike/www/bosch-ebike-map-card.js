@@ -4936,10 +4936,25 @@ class BoschEBike3DMapCard extends HTMLElement {
       .map3d-stats .v { font-weight: 600; }
       .maplibregl-canvas:focus { outline: none; }
       .ebike-3d-marker {
-        width: 18px; height: 18px; border-radius: 50%;
-        background: #03a9f4; border: 3px solid #fff;
-        box-shadow: 0 2px 6px rgba(0,0,0,.4);
+        position: relative;
+        width: 22px; height: 22px; border-radius: 50%;
+        background: #03a9f4; border: 4px solid #fff;
+        box-shadow: 0 2px 8px rgba(0,0,0,.5);
+        z-index: 10;
       }
+      .ebike-3d-marker::before {
+        content: ""; position: absolute;
+        inset: -10px; border-radius: 50%;
+        border: 3px solid #03a9f4; opacity: 0.6;
+        animation: ebike-3d-pulse 1.6s ease-out infinite;
+      }
+      @keyframes ebike-3d-pulse {
+        0%   { transform: scale(0.6); opacity: 0.8; }
+        100% { transform: scale(1.7); opacity: 0; }
+      }
+      /* MapLibre marker container z-stacking: ensure the current-position
+         marker sits above the start/end dot markers */
+      .maplibregl-marker:has(.ebike-3d-marker) { z-index: 5; }
     `;
     card.appendChild(style);
 
@@ -5146,17 +5161,32 @@ class BoschEBike3DMapCard extends HTMLElement {
 
     const canvas = this._root.querySelector("#m3d-canvas");
     const pitch = Math.max(0, Math.min(60, Number(this._config.default_pitch) || 50));
+
+    // Wait for layout to settle so the canvas has a real height. Without this
+    // MapLibre boots with a 0x0 WebGL viewport and later fitBounds is a no-op.
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    // Touch offsetHeight to force a synchronous layout pass.
+    void canvas.offsetHeight;
+
     this._map = new mlib.Map({
       container: canvas,
       style: OPENFREEMAP_LIBERTY,
       center: [meanLon, meanLat],
-      zoom: 14,
+      zoom: 13,
       pitch,
       bearing: -20,
       attributionControl: false,
     });
     this._map.addControl(new mlib.AttributionControl({ compact: true }), "bottom-right");
     this._map.addControl(new mlib.NavigationControl({ visualizePitch: true }), "top-right");
+
+    // Keep the map sized to its container even if the parent resizes later.
+    if (typeof ResizeObserver !== "undefined") {
+      this._resizeObs = new ResizeObserver(() => {
+        if (this._map) { try { this._map.resize(); } catch (_) {} }
+      });
+      this._resizeObs.observe(canvas);
+    }
 
     this._map.on("error", (e) => {
       console.warn("[Bosch eBike 3D] map error", e && e.error);
@@ -5219,17 +5249,33 @@ class BoschEBike3DMapCard extends HTMLElement {
       this._addPointMarker(pts[0], "#42c76a", "S");
       this._addPointMarker(pts[pts.length - 1], "#e53935", "Z");
 
-      // Animated current-position marker
+      // Animated current-position marker (added LAST so it stacks above
+      // the start/end dots when at index 0)
       const el = document.createElement("div");
       el.className = "ebike-3d-marker";
-      this._marker = new mlib.Marker({ element: el }).setLngLat([pts[0].lon, pts[0].lat]).addTo(this._map);
+      this._marker = new mlib.Marker({ element: el, anchor: "center" })
+        .setLngLat([pts[0].lon, pts[0].lat])
+        .addTo(this._map);
 
-      // Fit bounds to the track
-      const bounds = coords.reduce(
-        (b, c) => b.extend(c),
-        new mlib.LngLatBounds(coords[0], coords[0])
-      );
-      this._map.fitBounds(bounds, { padding: 60, pitch, bearing: -20, duration: 800 });
+      // Fit bounds to the track. Compute fresh, then do a final resize so
+      // MapLibre's internal viewport matches the now-rendered canvas size.
+      try { this._map.resize(); } catch (_) {}
+      const bounds = new mlib.LngLatBounds();
+      for (const c of coords) bounds.extend(c);
+
+      // Two-phase camera move: first fit (flat to compute zoom correctly),
+      // then tilt+rotate to the requested 3D pose. Many MapLibre versions
+      // ignore pitch/bearing inside fitBounds, hence the split.
+      this._map.fitBounds(bounds, {
+        padding: { top: 90, right: 60, bottom: 160, left: 60 },
+        duration: 700,
+        maxZoom: 17,
+      });
+      this._map.once("moveend", () => {
+        try {
+          this._map.easeTo({ pitch, bearing: -20, duration: 600 });
+        } catch (_) {}
+      });
 
       this._applyIndex(0);
       this._updateTimeChips(0, startTime, altDeg, mood);
@@ -5356,6 +5402,7 @@ class BoschEBike3DMapCard extends HTMLElement {
 
   _destroyMap() {
     this._stopAnim();
+    if (this._resizeObs) { try { this._resizeObs.disconnect(); } catch (_) {} this._resizeObs = null; }
     if (this._marker) { try { this._marker.remove(); } catch (_) {} this._marker = null; }
     if (this._map) { try { this._map.remove(); } catch (_) {} this._map = null; }
   }
