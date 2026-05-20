@@ -5127,21 +5127,25 @@ class BoschEBike3DMapCard extends HTMLElement {
       .map3d-stats .v { font-weight: 600; }
       .maplibregl-canvas:focus { outline: none; }
       .ebike-3d-marker {
-        /* No 'position' override here. MapLibre sets position:absolute
-           on its marker elements and positions them via transform; an
-           override of position:relative pulled the marker out of that
-           positioning context, leaving it stuck at its DOM-flow
-           position several hundred pixels below the map. */
-        width: 36px; height: 36px; border-radius: 50%;
+        /* MapLibre's stylesheet sets position:absolute + top:0 + left:0
+           on .maplibregl-marker, but that stylesheet lives in document
+           <head> and does NOT penetrate HA's shadow DOM boundary. With
+           the shadow tree, markers default to position:static and the
+           transform translate(x, y) is applied relative to DOM flow
+           instead of the map container origin - so all markers stack
+           at the bottom of the flow, invisible. Explicitly setting
+           absolute + top:0 + left:0 here works inside any shadow tree. */
+        position: absolute; top: 0; left: 0;
+        width: 18px; height: 18px; border-radius: 50%;
         background: #42c76a; border: 5px solid #fff;
         box-shadow:
-          0 0 0 4px rgba(66,199,106,0.35),
-          0 4px 14px rgba(0,0,0,.6);
+          0 0 0 6px rgba(66,199,106,0.35),
+          0 4px 18px rgba(0,0,0,.65);
         z-index: 100;
       }
       .ebike-3d-marker::before {
         content: ""; position: absolute;
-        inset: -14px; border-radius: 50%;
+        inset: -8px; border-radius: 50%;
         border: 5px solid #42c76a; opacity: 0.7;
         animation: ebike-3d-pulse 1.6s ease-out infinite;
         z-index: 99;
@@ -5573,13 +5577,18 @@ class BoschEBike3DMapCard extends HTMLElement {
 
       const el = document.createElement("div");
       el.className = "ebike-3d-marker";
-      // Do NOT set position here. MapLibre sets position:absolute on
-      // the marker element itself; overriding it breaks transform-based
-      // positioning and leaves the marker at its DOM-flow location.
+      // Inline 'position:absolute;top:0;left:0' is REQUIRED because the
+      // MapLibre stylesheet does not penetrate HA's shadow-DOM boundary,
+      // so its '.maplibregl-marker { position: absolute }' rule is
+      // missing here. Without these the marker defaults to static, the
+      // transform translate is applied to its DOM flow position, and it
+      // ends up parked at the bottom of the canvas-container instead
+      // of where MapLibre thinks it should be.
       el.style.cssText =
-        "width:36px;height:36px;border-radius:50%;" +
+        "position:absolute;top:0;left:0;" +
+        "width:18px;height:18px;border-radius:50%;" +
         "background:#42c76a;border:5px solid #fff;" +
-        "box-shadow:0 0 0 4px rgba(66,199,106,.35),0 4px 14px rgba(0,0,0,.6);" +
+        "box-shadow:0 0 0 6px rgba(66,199,106,.35),0 4px 18px rgba(0,0,0,.65);" +
         "z-index:100;";
       this._marker = new mlib.Marker({ element: el, anchor: "center" })
         .setLngLat([pts[0].lon, pts[0].lat])
@@ -5676,7 +5685,13 @@ class BoschEBike3DMapCard extends HTMLElement {
     const target = mapOverride || this._map;
     if (!target || !window.maplibregl) return;
     const el = document.createElement("div");
-    el.style.cssText = `width:14px;height:14px;border-radius:50%;background:${color};border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.4);`;
+    // Explicit position:absolute + top/left:0 because MapLibre's
+    // own CSS (which sets these on .maplibregl-marker) is in the
+    // document <head> and does not penetrate HA's shadow DOM.
+    el.style.cssText =
+      "position:absolute;top:0;left:0;" +
+      `width:14px;height:14px;border-radius:50%;background:${color};` +
+      "border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.4);";
     new window.maplibregl.Marker({ element: el }).setLngLat([p.lon, p.lat]).addTo(target);
   }
 
