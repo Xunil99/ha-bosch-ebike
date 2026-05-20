@@ -336,8 +336,7 @@ playback_speed: 60     # 60x Echtzeit (1h-Tour = 1min Wiedergabe)
 - Zeit-Slider mit Start/End-Uhrzeiten der Tour, scrubbbar; Kamera schwenkt synchron mit
 - Play/Pause-Button für die zeitgeraffte Wiedergabe (Dauer konfigurierbar)
 - Live-Stats zur Slider-Position: kumulierte Distanz, Geschwindigkeit, Höhe
-- Zeit- und Sonnen-Chip im Overlay zeigt aktuelle Uhrzeit und Sonnenstand
-- Stil-Umschalter oben rechts wechselt zwischen **3D-Vektor-Karte** (OpenFreeMap mit Gebäude-Extrusionen) und **Satelliten-Bild** (Esri World Imagery, frei für nicht-kommerzielle Nutzung)
+- Zeit- und Sonnen-Chip im Overlay zeigt aktuelle Uhrzeit und Tageslicht-Phase (Nacht, Dämmerung, Goldene Stunde, Tageslicht, Mittag)
 - Zurück-Button kehrt zur Tour-Liste zurück
 
 **Karten-Konfig-Optionen:**

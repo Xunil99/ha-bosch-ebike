@@ -199,8 +199,11 @@ const I18N = {
     map3d_editor_playback_speed: "Playback speed factor (×)",
     map3d_editor_playback_speed_hint: "Real-time multiplier. 60 = 60× faster than reality, so a 1-hour ride plays in 1 minute and a 2-hour ride in 2 minutes. Higher = faster.",
     map3d_editor_animate_seconds_override_hint: "Optional. If set, forces a fixed playback duration regardless of tour length and overrides the speed factor.",
-    map3d_style_3d: "3D",
-    map3d_style_sat: "Satellite",
+    map3d_sun_night: "Night",
+    map3d_sun_twilight: "Twilight",
+    map3d_sun_golden: "Golden hour",
+    map3d_sun_morning: "Daylight",
+    map3d_sun_day: "Midday",
   },
   de: {
     rides_title: "Bosch eBike Rides",
@@ -381,8 +384,11 @@ const I18N = {
     map3d_editor_playback_speed: "Abspielgeschwindigkeit (×)",
     map3d_editor_playback_speed_hint: "Echtzeit-Multiplikator. 60 = 60× schneller als die echte Fahrt, eine 1h-Tour läuft in 1 Min, eine 2h-Tour in 2 Min. Höher = schneller.",
     map3d_editor_animate_seconds_override_hint: "Optional. Wenn gesetzt, erzwingt eine feste Abspieldauer unabhängig von der Tour-Länge und überschreibt den Speed-Faktor.",
-    map3d_style_3d: "3D",
-    map3d_style_sat: "Satellit",
+    map3d_sun_night: "Nacht",
+    map3d_sun_twilight: "Dämmerung",
+    map3d_sun_golden: "Goldene Stunde",
+    map3d_sun_morning: "Tageslicht",
+    map3d_sun_day: "Mittag",
   },
   nl: {
     rides_title: "Bosch eBike Ritten",
@@ -563,8 +569,11 @@ const I18N = {
     map3d_editor_playback_speed: "Afspeelsnelheid (×)",
     map3d_editor_playback_speed_hint: "Realtime-vermenigvuldiger. 60 = 60× sneller dan de echte rit; een 1u-rit speelt in 1 min, 2u-rit in 2 min. Hoger = sneller.",
     map3d_editor_animate_seconds_override_hint: "Optioneel. Indien ingesteld dwingt dit een vaste afspeelduur af, ongeacht de toerlengte, en overschrijft de snelheidsfactor.",
-    map3d_style_3d: "3D",
-    map3d_style_sat: "Satelliet",
+    map3d_sun_night: "Nacht",
+    map3d_sun_twilight: "Schemering",
+    map3d_sun_golden: "Gouden uur",
+    map3d_sun_morning: "Daglicht",
+    map3d_sun_day: "Middag",
   },
 };
 
@@ -709,28 +718,6 @@ function ensureLeaflet() {
 const MAPLIBRE_JS = "https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.js";
 const MAPLIBRE_CSS = "https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.css";
 const OPENFREEMAP_LIBERTY = "https://tiles.openfreemap.org/styles/liberty";
-
-// Esri World Imagery as a free raster basemap for the satellite mode.
-// Free for non-commercial / low-volume hobby use, requires attribution.
-const SATELLITE_STYLE = {
-  version: 8,
-  glyphs: "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
-  sources: {
-    "esri-imagery": {
-      type: "raster",
-      tiles: [
-        "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-      ],
-      tileSize: 256,
-      maxzoom: 19,
-      attribution: "Tiles © Esri — World Imagery",
-    },
-  },
-  layers: [
-    { id: "background", type: "background", paint: { "background-color": "#101418" } },
-    { id: "esri-imagery-layer", type: "raster", source: "esri-imagery" },
-  ],
-};
 
 function ensureMapLibre() {
   if (window.maplibregl) return Promise.resolve(window.maplibregl);
@@ -5004,21 +4991,6 @@ class BoschEBike3DMapCard extends HTMLElement {
       /* MapLibre marker container z-stacking: ensure the current-position
          marker sits above the start/end dot markers */
       .maplibregl-marker:has(.ebike-3d-marker) { z-index: 5; }
-      .map3d-style-toggle {
-        position: absolute; right: 8px; top: 8px;
-        display: inline-flex; gap: 0;
-        background: rgba(20,24,32,.78); color: #fff;
-        backdrop-filter: blur(6px); border-radius: 999px;
-        padding: 2px; pointer-events: auto;
-      }
-      .map3d-style-toggle button {
-        background: transparent; color: inherit; border: 0;
-        padding: 4px 12px; border-radius: 999px;
-        font-size: 12px; font-weight: 500; cursor: pointer;
-      }
-      .map3d-style-toggle button.active {
-        background: var(--primary-color, #03a9f4); color: #fff;
-      }
     `;
     card.appendChild(style);
 
@@ -5100,7 +5072,6 @@ class BoschEBike3DMapCard extends HTMLElement {
     this._mode = "detail";
     this._currentActivity = activity;
     this._currentTrack = null;
-    this._satellitePrefetched = false;
     this._showMessage(this._t("map3d_loading_track"));
     try {
       const params = { type: "bosch_ebike/get_track", activity_id: activity.id };
@@ -5182,12 +5153,8 @@ class BoschEBike3DMapCard extends HTMLElement {
             <ha-icon icon="mdi:clock-outline"></ha-icon><span id="m3d-time-text">--:--</span>
           </span>
           <span class="map3d-chip" id="m3d-sun-chip">
-            <ha-icon icon="mdi:white-balance-sunny" id="m3d-sun-ico"></ha-icon><span id="m3d-sun-text">--°</span>
+            <ha-icon icon="mdi:white-balance-sunny" id="m3d-sun-ico"></ha-icon><span id="m3d-sun-text">--</span>
           </span>
-        </div>
-        <div class="map3d-style-toggle" id="m3d-style-toggle">
-          <button type="button" data-style="vector" class="active">${this._t("map3d_style_3d")}</button>
-          <button type="button" data-style="satellite">${this._t("map3d_style_sat")}</button>
         </div>
         <div class="map3d-controls">
           <div class="row1">
@@ -5225,18 +5192,6 @@ class BoschEBike3DMapCard extends HTMLElement {
 
     const playBtn = this._root.querySelector("#m3d-play");
     playBtn.addEventListener("click", () => this._togglePlay());
-
-    // Style toggle (3D vector vs Satellite raster)
-    const toggle = this._root.querySelector("#m3d-style-toggle");
-    toggle.addEventListener("click", (ev) => {
-      const btn = ev.target.closest("button[data-style]");
-      if (!btn) return;
-      const mode = btn.getAttribute("data-style");
-      if (mode === this._mapMode) return;
-      toggle.querySelectorAll("button").forEach((b) =>
-        b.classList.toggle("active", b === btn));
-      this._setMapStyle(mode);
-    });
 
     this._initMap();
   }
@@ -5279,7 +5234,6 @@ class BoschEBike3DMapCard extends HTMLElement {
     // upcoming road fills the rest.
     const initialBearing = this._bearingAt(0);
     const lookAt = this._lookAheadCoord(pts[0], initialBearing, 60);
-    this._mapMode = "vector";
     this._currentIndex = 0;
     this._map = new mlib.Map({
       container: canvas,
@@ -5289,9 +5243,9 @@ class BoschEBike3DMapCard extends HTMLElement {
       pitch: chasePitch,
       bearing: initialBearing,
       attributionControl: false,
-      // Keep more tiles in memory so the Esri satellite tiles do not have
-      // to round-trip again when the route loops back into a visited area.
-      maxTileCacheSize: 600,
+      // Generous cache so the chase cam does not re-fetch tiles when
+      // the bike loops back through a visited area.
+      maxTileCacheSize: 200,
     });
     this._map.addControl(new mlib.AttributionControl({ compact: true }), "bottom-right");
     this._map.addControl(new mlib.NavigationControl({ visualizePitch: true }), "top-right");
@@ -5419,52 +5373,6 @@ class BoschEBike3DMapCard extends HTMLElement {
     return [p.lon + dLon, p.lat + dLat];
   }
 
-  // Convert a lon/lat into XYZ tile coordinates at the given zoom.
-  _lonLatToTile(lon, lat, zoom) {
-    const n = Math.pow(2, zoom);
-    const x = Math.floor(((lon + 180) / 360) * n);
-    const latRad = lat * Math.PI / 180;
-    const y = Math.floor(
-      ((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) * n
-    );
-    return { x, y };
-  }
-
-  // Warm the browser cache with all Esri satellite tiles that the chase
-  // cam will hit along the current track. Called once when the user
-  // switches into satellite mode. Bounded by a hard cap so absurdly long
-  // tours do not spawn thousands of requests.
-  async _prefetchSatelliteTiles() {
-    const pts = this._currentTrack;
-    if (!pts || !pts.length) return;
-    const zoom = Math.max(14, Math.min(19, Math.round(this._chaseZoom || 17)));
-    const tiles = new Set();
-    // 3x3 tile window around each sample, sampled every ~5 indices to
-    // keep the set small.
-    const stride = Math.max(1, Math.floor(pts.length / 600));
-    for (let i = 0; i < pts.length; i += stride) {
-      const t = this._lonLatToTile(pts[i].lon, pts[i].lat, zoom);
-      for (let dx = -1; dx <= 1; dx++) {
-        for (let dy = -1; dy <= 1; dy++) {
-          tiles.add(`${zoom}/${t.y + dy}/${t.x + dx}`);
-        }
-      }
-    }
-    const tileList = [...tiles].slice(0, 800);
-    const base = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/";
-    // 8 parallel fetches. no-cors so we only warm the HTTP cache, the
-    // response is opaque to us; MapLibre will read it from the cache when
-    // it renders.
-    let idx = 0;
-    const next = async () => {
-      while (idx < tileList.length) {
-        const my = idx++;
-        try { await fetch(base + tileList[my], { mode: "no-cors", cache: "force-cache" }); }
-        catch (_) { /* ignore */ }
-      }
-    };
-    await Promise.all(Array.from({ length: 8 }, () => next()));
-  }
 
   _addPointMarker(p, color, _label) {
     if (!this._map || !window.maplibregl) return;
@@ -5505,11 +5413,10 @@ class BoschEBike3DMapCard extends HTMLElement {
   }
 
   // Add a 3D building-extrusion fallback layer if the active style does
-  // not already provide one. In satellite mode the openmaptiles source
-  // does not exist, so this is a no-op there.
+  // not already provide one. Most Liberty style variants ship a building
+  // layer, but a few revisions disable it; this guarantees extrusion.
   _addBuildingsIfNeeded() {
     if (!this._map) return;
-    if (this._mapMode !== "vector") return;
     if (this._map.getLayer("building-3d") || this._map.getLayer("building") || this._map.getLayer("ebike-buildings-3d")) {
       return;
     }
@@ -5530,34 +5437,6 @@ class BoschEBike3DMapCard extends HTMLElement {
     } catch (_) { /* style without openmaptiles source */ }
   }
 
-  // Swap between the OpenFreeMap vector style (3D buildings, named
-  // streets) and the Esri satellite raster style. Custom layers
-  // (track) are re-added on the 'style.load' event because setStyle()
-  // clears them. HTML markers survive style swaps.
-  _setMapStyle(mode) {
-    if (!this._map) return;
-    const wasSatellite = this._mapMode === "satellite";
-    this._mapMode = mode;
-    const style = mode === "satellite" ? SATELLITE_STYLE : OPENFREEMAP_LIBERTY;
-    this._map.once("style.load", () => {
-      this._addTrackLayers();
-      this._addBuildingsIfNeeded();
-      // Re-apply current index so light/marker/camera state matches
-      const idx = this._currentIndex != null ? this._currentIndex : 0;
-      this._applyIndex(idx);
-    });
-    try { this._map.setStyle(style); } catch (e) {
-      console.warn("[Bosch eBike 3D] setStyle failed", e);
-    }
-    // First switch to satellite: warm the browser tile cache along the
-    // route so subsequent chase-cam moves do not hang waiting on Esri.
-    if (mode === "satellite" && !wasSatellite && !this._satellitePrefetched) {
-      this._satellitePrefetched = true;
-      this._prefetchSatelliteTiles().catch((e) => {
-        console.warn("[Bosch eBike 3D] tile prefetch failed", e);
-      });
-    }
-  }
 
   _applyIndex(idx, isInitial) {
     const pts = this._currentTrack;
@@ -5633,7 +5512,12 @@ class BoschEBike3DMapCard extends HTMLElement {
     const tt = this._root.querySelector("#m3d-time-text");
     if (tt) tt.textContent = fmtHm(time);
     const st = this._root.querySelector("#m3d-sun-text");
-    if (st) st.textContent = Math.round(altDeg) + "°";
+    if (st) {
+      // Word label, not a degree value: degree symbol on a sun-themed chip
+      // was being mistaken for a temperature reading.
+      const key = "map3d_sun_" + (mood?.label || "day");
+      st.textContent = this._t(key);
+    }
     const sico = this._root.querySelector("#m3d-sun-ico");
     if (sico) {
       sico.setAttribute("icon",
