@@ -4944,9 +4944,20 @@ class BoschEBike3DMapCard extends HTMLElement {
     this._isPlaying = false;
     this._cumDist = null;
     this._totalDistM = 0;
+    this._mapInitEpoch = 0;
+    this._configStr = null;
   }
 
   setConfig(config) {
+    // HA tends to call setConfig multiple times during a dashboard load.
+    // If the config is byte-for-byte identical to the one we already
+    // have, skip the work: re-rendering the detail view would tear down
+    // the live MapLibre map and recreate it, which both flashes and
+    // wipes the markers/track that the user is looking at.
+    const newStr = JSON.stringify(config || {});
+    if (this._configStr === newStr) return;
+    this._configStr = newStr;
+
     this._config = { ...config };
     if (config.account_id) { this._filterAccount = config.account_id; this._lockedAccount = true; }
     if (config.bike_id) { this._filterBike = config.bike_id; this._lockedBike = true; }
@@ -5329,6 +5340,12 @@ class BoschEBike3DMapCard extends HTMLElement {
   _renderDetail() {
     const a = this._currentActivity;
     if (!a) return;
+    // Tear down any previous MapLibre instance + markers before we
+    // wipe the DOM with innerHTML. Without this, a re-render leaves
+    // an orphaned map object whose markers are gone from the DOM,
+    // and the new map+markers race against the orphan's leftover
+    // event handlers.
+    this._destroyMap();
     const title = a.title || this._t("msg_unnamed_ride");
     const hide = (key) => this._showFlag(key) ? "" : "display:none;";
     const statsAsChips = this._optionOn("stats_as_chips", false);
@@ -5427,11 +5444,19 @@ class BoschEBike3DMapCard extends HTMLElement {
   }
 
   async _initMap() {
+    // Epoch token: if _initMap is called again before this one finishes
+    // (async race during ensureMapLibre), the older call bails out so
+    // only the newest init creates a Map and adds markers.
+    const myEpoch = ++this._mapInitEpoch;
     let mlib;
     try {
       mlib = await ensureMapLibre();
     } catch (e) {
       this._showMessage(this._t("map3d_err_maplibre"));
+      return;
+    }
+    if (myEpoch !== this._mapInitEpoch) {
+      console.log("[Bosch eBike 3D] init skipped (newer epoch already running)");
       return;
     }
     const a = this._currentActivity;
@@ -6457,6 +6482,8 @@ class BoschEBike3DMapCard extends HTMLElement {
   }
 
   _destroyMap() {
+    // Invalidate any in-flight _initMap waiting on ensureMapLibre
+    this._mapInitEpoch = (this._mapInitEpoch || 0) + 1;
     this._stopAnim();
     if (this._isRecording) this._stopRecording();
     if (this._renderHandlerForRec && this._map) {
