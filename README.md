@@ -40,6 +40,7 @@ Diese Custom Integration verbindet dein **Bosch eBike Smart System** mit Home As
 - **Gesamtstatistiken:** Anzahl aller Fahrten, Gesamtdistanz, Gesamtfahrzeit, Gesamtkalorien, Gesamthöhenmeter, Durchschnittswerte für Geschwindigkeit/Leistung/Trittfrequenz über alle Fahrten
 - **GPS-Track-Export:** Export aller Fahrten als GPX-Dateien (mit Speed, Cadence, Power als Garmin TrackPointExtension)
 - **Interaktive Kartendarstellung:** Custom Lovelace Card mit GPS-Tracks, geschwindigkeitsabhängiger Farbcodierung, Date-Picker und Prev/Next-Navigation
+- **3D-Karte mit Zeit-Slider:** Custom Lovelace Card (`bosch-ebike-3d-map-card`) für die Tour-Detailansicht mit Gebäude-Extrusionen, animiertem Positionsmarker und Sonnenstand-Lichteffekt (MapLibre + OpenFreeMap, kostenlos und ohne API-Key)
 - **Dashboard-Card mit Bike-Bild, Live-Daten und Ladesteuerung:** Custom Lovelace Card (`bosch-ebike-dashboard-card`) mit eigenem Bike-Foto, Tachostand, Akkustand, Lade-Status, optionalem Ladeleistungssensor, Ziel-SoC-Schieberegler sowie Start-/Stop-Buttons über eine smarte Steckdose
 - **Automatische Token-Aktualisierung** über Refresh-Token
 - **30-Minuten-Polling-Intervall** (beim ersten Start werden alle Fahrten importiert)
@@ -312,6 +313,50 @@ bike_id: bike-uuid-1
 ```
 
 Farb-Buckets pro Tag: leer, 1-10 km, 10-25 km, 25-50 km, 50+ km. Die Farben kommen aus den HA-Theme-Variablen, hellen Designs sehen wie GitHub-Light aus, im dunklen Modus wird automatisch das passende dunkle Palette geladen.
+
+### 3D-Karte - Touren im Detail mit Zeit-Slider und Sonnenstand
+
+Die Card `bosch-ebike-3d-map-card` ist eine parallele Karte zur klassischen 2D-Map. Sie startet mit einer Liste der letzten Touren. Beim Klick auf eine Tour öffnet sich die 3D-Detailansicht mit MapLibre und kostenlosen OpenFreeMap-Vector-Tiles: Gebäude-Extrusionen, Track als 3D-Linie, animierter Positionsmarker und ein Zeit-Slider, der den Marker entlang der Strecke wandern lässt. Die Kartenbeleuchtung passt sich dem Sonnenstand zur Tour-Zeit an, eine Morgen-Tour wirkt anders als eine Nachmittags-Tour.
+
+```yaml
+type: custom:bosch-ebike-3d-map-card
+title: Tour in 3D
+height: 540
+default_pitch: 50
+animate_seconds: 25
+```
+
+**Was die Karte zeigt:**
+
+- Tour-Liste (Standardansicht) mit Datum, Titel, Distanz und Dauer
+- 3D-Map nach Klick auf eine Tour, mit Gebäude-Extrusionen aus OpenStreetMap
+- Track-Polyline in zwei Schichten (Glow + Hauptlinie) für gute Lesbarkeit
+- Start- und Ziel-Marker sowie ein animierter Positionsmarker
+- Zeit-Slider mit Start/End-Uhrzeiten der Tour, scrubbbar
+- Play/Pause-Button für die zeitgeraffte Wiedergabe (Dauer konfigurierbar)
+- Live-Stats zur Slider-Position: kumulierte Distanz, Geschwindigkeit, Höhe
+- Zeit- und Sonnen-Chip im Overlay zeigt aktuelle Uhrzeit und Sonnenstand
+- Zurück-Button kehrt zur Tour-Liste zurück
+
+**Karten-Konfig-Optionen:**
+
+| Option | Default | Beschreibung |
+|---|---|---|
+| `title` | "Bosch eBike 3D-Touren" | Header-Text |
+| `height` | 540 | Karten-Höhe in Pixel |
+| `default_pitch` | 50 | Kamera-Neigung (0-60°) beim Öffnen einer Tour |
+| `animate_seconds` | 25 | Dauer eines vollständigen Play-Durchlaufs |
+| `account_id` | (leer) | Auf ein Konto fixieren, wie bei der 2D-Karte |
+| `bike_id` | (leer) | Auf ein Bike fixieren |
+
+**Abhängigkeiten und Hinweise:**
+
+- MapLibre GL wird beim ersten Aufruf von unpkg.com nachgeladen (ca. 800 KB gzipped, danach gecacht)
+- OpenFreeMap liefert die Vector-Tiles ohne API-Key und ohne Anmeldung
+- Die Karte wird erst geladen, wenn der User sie tatsächlich öffnet. Die bestehenden Karten (Map, Heatmap, Calendar, Dashboard) sind nicht betroffen.
+- 3D-Rendering ist auf Desktop und modernen Mobilgeräten flüssig. Bei sehr langen Tracks (> 10.000 Punkten) kann es auf älteren Geräten ruckeln.
+- OSM-Building-Coverage ist in Städten dicht, auf dem Land sparsamer. Touren durch urbane Gebiete profitieren am stärksten.
+- Echte Cast-Shadows von Gebäuden sind bewusst noch nicht enthalten, sondern geplant für eine spätere Version (Helios-Shadow-Modul, MIT-Lizenz).
 
 ### Dashboard-Card - Bike-Foto, Live-Daten und Ladesteuerung
 

@@ -167,6 +167,31 @@ const I18N = {
     dash_editor_charge_switch: "Charger switch entity (optional)",
     dash_editor_target_soc: "Target SoC input_number entity (optional)",
     dash_editor_target_soc_hint: "When set, an HA automation can read this value and stop the smart plug when the battery reaches it.",
+    // 3D map card
+    map3d_title: "Bosch eBike 3D Tours",
+    map3d_loading: "Loading tours…",
+    map3d_loading_track: "Loading 3D track…",
+    map3d_loading_map: "Loading map engine…",
+    map3d_no_rides: "No tours found.",
+    map3d_no_gps: "This tour has no GPS data.",
+    map3d_back: "Back",
+    map3d_open: "Open in 3D",
+    map3d_play: "Play",
+    map3d_pause: "Pause",
+    map3d_speed_label: "Speed",
+    map3d_distance_label: "Distance",
+    map3d_elevation_label: "Elevation",
+    map3d_sun_label: "Sun",
+    map3d_err_maplibre: "MapLibre could not be loaded.",
+    map3d_err_style: "Map tiles unavailable (OpenFreeMap).",
+    map3d_editor_title: "Title (optional)",
+    map3d_editor_height: "Card height (px)",
+    map3d_editor_account: "Pin to account (optional)",
+    map3d_editor_bike: "Pin to bike (optional)",
+    map3d_editor_default_pitch: "3D pitch (0-60°)",
+    map3d_editor_default_pitch_hint: "Camera tilt when opening a tour. 0 = flat, 60 = very steep.",
+    map3d_editor_animate_seconds: "Playback duration (seconds)",
+    map3d_editor_animate_seconds_hint: "How long a full Play-cycle takes from tour start to tour end.",
   },
   de: {
     rides_title: "Bosch eBike Rides",
@@ -315,6 +340,31 @@ const I18N = {
     dash_editor_charge_switch: "Charger-Switch-Entity (optional)",
     dash_editor_target_soc: "Ziel-SoC input_number-Entity (optional)",
     dash_editor_target_soc_hint: "Wenn gesetzt, kann eine HA-Automation diesen Wert lesen und die Steckdose abschalten, sobald der Akku ihn erreicht.",
+    // 3D map card
+    map3d_title: "Bosch eBike 3D-Touren",
+    map3d_loading: "Touren werden geladen…",
+    map3d_loading_track: "3D-Track wird geladen…",
+    map3d_loading_map: "Karten-Engine wird geladen…",
+    map3d_no_rides: "Keine Touren gefunden.",
+    map3d_no_gps: "Diese Tour hat keine GPS-Daten.",
+    map3d_back: "Zurück",
+    map3d_open: "In 3D öffnen",
+    map3d_play: "Abspielen",
+    map3d_pause: "Pause",
+    map3d_speed_label: "Geschwindigkeit",
+    map3d_distance_label: "Distanz",
+    map3d_elevation_label: "Höhe",
+    map3d_sun_label: "Sonne",
+    map3d_err_maplibre: "MapLibre konnte nicht geladen werden.",
+    map3d_err_style: "Karten-Tiles nicht erreichbar (OpenFreeMap).",
+    map3d_editor_title: "Titel (optional)",
+    map3d_editor_height: "Karten-Höhe (px)",
+    map3d_editor_account: "Auf Konto fixieren (optional)",
+    map3d_editor_bike: "Auf Bike fixieren (optional)",
+    map3d_editor_default_pitch: "3D-Neigung (0-60°)",
+    map3d_editor_default_pitch_hint: "Kamera-Neigung beim Öffnen einer Tour. 0 = flach, 60 = sehr steil.",
+    map3d_editor_animate_seconds: "Abspieldauer (Sekunden)",
+    map3d_editor_animate_seconds_hint: "Wie lange ein voller Play-Durchlauf von Tour-Start bis Tour-Ende dauert.",
   },
   nl: {
     rides_title: "Bosch eBike Ritten",
@@ -463,6 +513,31 @@ const I18N = {
     dash_editor_charge_switch: "Lader-schakelaar-entity (optioneel)",
     dash_editor_target_soc: "Doel-SoC input_number-entity (optioneel)",
     dash_editor_target_soc_hint: "Indien ingesteld kan een HA-automation deze waarde uitlezen en de stekker uitschakelen zodra de accu deze bereikt.",
+    // 3D map card
+    map3d_title: "Bosch eBike 3D-tours",
+    map3d_loading: "Tours worden geladen…",
+    map3d_loading_track: "3D-track wordt geladen…",
+    map3d_loading_map: "Kaart-engine wordt geladen…",
+    map3d_no_rides: "Geen tours gevonden.",
+    map3d_no_gps: "Deze tour heeft geen GPS-gegevens.",
+    map3d_back: "Terug",
+    map3d_open: "3D openen",
+    map3d_play: "Afspelen",
+    map3d_pause: "Pauze",
+    map3d_speed_label: "Snelheid",
+    map3d_distance_label: "Afstand",
+    map3d_elevation_label: "Hoogte",
+    map3d_sun_label: "Zon",
+    map3d_err_maplibre: "MapLibre kon niet worden geladen.",
+    map3d_err_style: "Kaart-tiles niet beschikbaar (OpenFreeMap).",
+    map3d_editor_title: "Titel (optioneel)",
+    map3d_editor_height: "Kaart-hoogte (px)",
+    map3d_editor_account: "Account vastzetten (optioneel)",
+    map3d_editor_bike: "Bike vastzetten (optioneel)",
+    map3d_editor_default_pitch: "3D-helling (0-60°)",
+    map3d_editor_default_pitch_hint: "Camerakanteling bij het openen van een tour. 0 = plat, 60 = zeer steil.",
+    map3d_editor_animate_seconds: "Afspeelduur (seconden)",
+    map3d_editor_animate_seconds_hint: "Hoe lang een volledige Play-cyclus duurt van begin tot einde van de tour.",
   },
 };
 
@@ -599,6 +674,73 @@ function ensureLeaflet() {
   });
 
   return window.__ebikeLeafletPromise;
+}
+
+// ===========================================================================
+// MapLibre GL + OpenFreeMap helpers for the 3D Map card (lazy-loaded)
+// ===========================================================================
+const MAPLIBRE_JS = "https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.js";
+const MAPLIBRE_CSS = "https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.css";
+const OPENFREEMAP_LIBERTY = "https://tiles.openfreemap.org/styles/liberty";
+
+function ensureMapLibre() {
+  if (window.maplibregl) return Promise.resolve(window.maplibregl);
+  if (window.__ebikeMapLibrePromise) return window.__ebikeMapLibrePromise;
+  window.__ebikeMapLibrePromise = new Promise((resolve, reject) => {
+    if (!document.querySelector(`link[href="${MAPLIBRE_CSS}"]`)) {
+      const l = document.createElement("link");
+      l.rel = "stylesheet";
+      l.href = MAPLIBRE_CSS;
+      document.head.appendChild(l);
+    }
+    if (window.maplibregl) return resolve(window.maplibregl);
+    const s = document.createElement("script");
+    s.src = MAPLIBRE_JS;
+    s.onload = () => resolve(window.maplibregl);
+    s.onerror = () => reject(new Error("MapLibre GL could not be loaded"));
+    document.head.appendChild(s);
+  });
+  return window.__ebikeMapLibrePromise;
+}
+
+// Lightweight NOAA-based sun position. Returns { altitude, azimuth } in radians.
+function sunPositionAt(date, lat, lon) {
+  const rad = Math.PI / 180;
+  const dayMs = 86400000;
+  const J1970 = 2440588;
+  const J2000 = 2451545;
+  const toJulian = (d) => d.valueOf() / dayMs - 0.5 + J1970;
+  const toDays = (d) => toJulian(d) - J2000;
+  const e = rad * 23.4397;
+  const solarMeanAnomaly = (d) => rad * (357.5291 + 0.98560028 * d);
+  const eclipticLongitude = (M) => {
+    const C = rad * (1.9148 * Math.sin(M) + 0.02 * Math.sin(2 * M) + 0.0003 * Math.sin(3 * M));
+    const P = rad * 102.9372;
+    return M + C + P + Math.PI;
+  };
+  const declination = (l) => Math.asin(Math.sin(e) * Math.sin(l));
+  const rightAscension = (l) => Math.atan2(Math.sin(l) * Math.cos(e), Math.cos(l));
+  const siderealTime = (d, lw) => rad * (280.16 + 360.9856235 * d) - lw;
+  const d = toDays(date);
+  const M = solarMeanAnomaly(d);
+  const L = eclipticLongitude(M);
+  const ra = rightAscension(L);
+  const dec = declination(L);
+  const lw = rad * -lon;
+  const phi = rad * lat;
+  const H = siderealTime(d, lw) - ra;
+  const altitude = Math.asin(Math.sin(phi) * Math.sin(dec) + Math.cos(phi) * Math.cos(dec) * Math.cos(H));
+  const azimuth = Math.atan2(Math.sin(H), Math.cos(H) * Math.sin(phi) - Math.tan(dec) * Math.cos(phi));
+  return { altitude, azimuth };
+}
+
+// Map a sun altitude (degrees) to a tint that conveys time of day.
+function sunMoodFor(altDeg) {
+  if (altDeg < -6)  return { fog: "#0c1228", sky: "#0a1530", sun: "#2a3a5a", label: "night" };
+  if (altDeg < 0)   return { fog: "#3a2638", sky: "#cf6a3e", sun: "#ff7e3e", label: "twilight" };
+  if (altDeg < 10)  return { fog: "#c89c6a", sky: "#ffb777", sun: "#ffa566", label: "golden" };
+  if (altDeg < 30)  return { fog: "#d9c8a3", sky: "#bfdcff", sun: "#ffd884", label: "morning" };
+  return                { fog: "#cfe2f2", sky: "#a8d2ff", sun: "#ffffff", label: "day" };
 }
 
 class BoschEBikeMapCard extends HTMLElement {
@@ -4621,6 +4763,680 @@ class BoschEBikeDashboardCardEditor extends HTMLElement {
   }
 }
 
+// ===========================================================================
+// 3D Map card: MapLibre + OpenFreeMap, opens individual tours in 3D with
+// a time slider, animated marker and sun-mood lighting.
+//
+// Architecture:
+// - Initial view: scrollable list of recent tours matching the configured
+//   filters (account_id / bike_id, locked via card YAML).
+// - Detail view: click a tour, swap to 3D map. Track polyline, animated
+//   marker, time slider, play/pause, info chips, back-button.
+// - MapLibre is lazy-loaded from CDN the first time the card mounts.
+// ===========================================================================
+class BoschEBike3DMapCard extends HTMLElement {
+  constructor() {
+    super();
+    this._hass = null;
+    this._config = {};
+    this._instances = [];
+    this._activities = [];
+    this._allActivities = [];
+    this._filterAccount = "all";
+    this._filterBike = "all";
+    this._lockedAccount = false;
+    this._lockedBike = false;
+    this._ready = false;
+    this._booting = false;
+    this._mode = "list";          // "list" or "detail"
+    this._currentActivity = null;
+    this._currentTrack = null;
+    this._map = null;
+    this._marker = null;
+    this._fitDone = false;
+    this._animRAF = null;
+    this._animStartTs = 0;
+    this._animStartIndex = 0;
+    this._isPlaying = false;
+    this._cumDist = null;
+    this._totalDistM = 0;
+  }
+
+  setConfig(config) {
+    this._config = { ...config };
+    if (config.account_id) { this._filterAccount = config.account_id; this._lockedAccount = true; }
+    if (config.bike_id) { this._filterBike = config.bike_id; this._lockedBike = true; }
+    if (this._ready) {
+      this._applyHeight();
+      this._renderRoot();
+    }
+  }
+
+  set hass(hass) {
+    const first = !this._hass;
+    this._hass = hass;
+    if (first) this._boot();
+  }
+
+  static getConfigElement() { return document.createElement("bosch-ebike-3d-map-card-editor"); }
+  static getStubConfig() { return { height: 540, default_pitch: 50, animate_seconds: 25 }; }
+  getCardSize() { return 7; }
+
+  _t(key, ...args) {
+    const lang = (this._hass && this._hass.language) ? this._hass.language.split("-")[0] : "en";
+    const dict = (I18N && I18N[lang]) || I18N.en;
+    const v = dict[key] != null ? dict[key] : I18N.en[key];
+    return typeof v === "function" ? v(...args) : v;
+  }
+
+  async _boot() {
+    if (this._booting || this._ready) return;
+    this._booting = true;
+    try {
+      this._buildShell();
+      this._ready = true;
+      this._applyHeight();
+      this._showMessage(this._t("map3d_loading"));
+      try {
+        const res = await this._hass.callWS({ type: "bosch_ebike/list_instances" });
+        this._instances = res.instances || [];
+      } catch (e) { /* ignore */ }
+      const res = await this._hass.callWS({ type: "bosch_ebike/list_activities" });
+      this._allActivities = (res.activities || []).sort(
+        (a, b) => new Date(b.startTime) - new Date(a.startTime)
+      );
+      this._applyFilter();
+      this._renderRoot();
+    } catch (err) {
+      console.error("[Bosch eBike 3D] boot error", err);
+      this._showMessage("Fehler: " + (err?.message || err));
+    } finally {
+      this._booting = false;
+    }
+  }
+
+  _applyFilter() {
+    let list = [...this._allActivities];
+    if (this._filterAccount !== "all") list = list.filter((a) => a.accountId === this._filterAccount);
+    if (this._filterBike !== "all") list = list.filter((a) => a.bikeId === this._filterBike);
+    this._activities = list;
+  }
+
+  _buildShell() {
+    this.innerHTML = "";
+    const card = document.createElement("ha-card");
+    this.appendChild(card);
+
+    const style = document.createElement("style");
+    style.textContent = `
+      .map3d-root { position: relative; padding: 0; overflow: hidden; }
+      .map3d-head {
+        display: flex; align-items: center; gap: 8px; padding: 12px 16px;
+        background: var(--primary-color, #03a9f4); color: #fff;
+        font-size: 16px; font-weight: 500;
+      }
+      .map3d-head .title { flex: 1; }
+      .map3d-back-btn {
+        background: rgba(255,255,255,.15); border: 0; color: #fff;
+        padding: 4px 10px; border-radius: 6px; cursor: pointer;
+        font-size: 13px; display: inline-flex; align-items: center; gap: 4px;
+      }
+      .map3d-back-btn:hover { background: rgba(255,255,255,.25); }
+      .map3d-list {
+        max-height: var(--m3d-h, 540px); overflow-y: auto;
+        background: var(--card-background-color);
+      }
+      .map3d-tour {
+        display: flex; align-items: center; gap: 12px;
+        padding: 10px 16px; cursor: pointer;
+        border-bottom: 1px solid var(--divider-color, #e3e3e5);
+        transition: background-color .12s ease;
+      }
+      .map3d-tour:hover { background: var(--secondary-background-color); }
+      .map3d-tour .date { flex: 0 0 110px; font-size: 13px; color: var(--secondary-text-color); }
+      .map3d-tour .meta { flex: 1; font-size: 14px; color: var(--primary-text-color); }
+      .map3d-tour .right { font-size: 13px; color: var(--secondary-text-color); }
+      .map3d-tour .right b { color: var(--primary-text-color); font-weight: 600; }
+      .map3d-tour ha-icon { color: var(--primary-color); --mdc-icon-size: 20px; }
+      .map3d-msg { padding: 24px; text-align: center; color: var(--secondary-text-color); }
+      .map3d-detail { position: relative; }
+      .map3d-canvas { width: 100%; height: var(--m3d-h, 540px); position: relative; }
+      .map3d-overlay {
+        position: absolute; top: 8px; left: 8px; right: 8px;
+        display: flex; flex-wrap: wrap; gap: 6px; pointer-events: none;
+      }
+      .map3d-chip {
+        background: rgba(20,24,32,.78); color: #fff; backdrop-filter: blur(6px);
+        padding: 4px 10px; border-radius: 999px; font-size: 12px;
+        display: inline-flex; align-items: center; gap: 5px;
+        pointer-events: auto;
+      }
+      .map3d-chip ha-icon { --mdc-icon-size: 14px; }
+      .map3d-controls {
+        position: absolute; left: 8px; right: 8px; bottom: 8px;
+        background: rgba(20,24,32,.78); color: #fff; backdrop-filter: blur(8px);
+        border-radius: 12px; padding: 10px 12px;
+        display: flex; flex-direction: column; gap: 8px;
+      }
+      .map3d-controls .row1 {
+        display: flex; align-items: center; gap: 10px;
+      }
+      .map3d-play-btn {
+        background: var(--primary-color, #03a9f4); color: #fff; border: 0;
+        width: 36px; height: 36px; border-radius: 50%;
+        display: inline-flex; align-items: center; justify-content: center;
+        cursor: pointer;
+      }
+      .map3d-play-btn ha-icon { --mdc-icon-size: 22px; }
+      .map3d-time { font-variant-numeric: tabular-nums; font-size: 13px; }
+      .map3d-slider { flex: 1; }
+      .map3d-stats {
+        display: flex; gap: 14px; font-size: 12px; opacity: .85;
+      }
+      .map3d-stats .v { font-weight: 600; }
+      .maplibregl-canvas:focus { outline: none; }
+      .ebike-3d-marker {
+        width: 18px; height: 18px; border-radius: 50%;
+        background: #03a9f4; border: 3px solid #fff;
+        box-shadow: 0 2px 6px rgba(0,0,0,.4);
+      }
+    `;
+    card.appendChild(style);
+
+    this._root = document.createElement("div");
+    this._root.className = "map3d-root";
+    card.appendChild(this._root);
+  }
+
+  _applyHeight() {
+    const h = Number.isFinite(Number(this._config.height)) ? Number(this._config.height) : 540;
+    this._root.style.setProperty("--m3d-h", h + "px");
+  }
+
+  _showMessage(text) {
+    if (!this._root) return;
+    this._root.innerHTML = `
+      <div class="map3d-head"><div class="title">${this._config.title || this._t("map3d_title")}</div></div>
+      <div class="map3d-msg">${text}</div>
+    `;
+  }
+
+  _renderRoot() {
+    if (!this._root) return;
+    if (this._mode === "detail" && this._currentActivity) {
+      this._renderDetail();
+    } else {
+      this._renderList();
+    }
+  }
+
+  _renderList() {
+    this._destroyMap();
+    if (!this._activities.length) {
+      this._showMessage(this._t("map3d_no_rides"));
+      return;
+    }
+    const lang = (this._hass && this._hass.language) ? this._hass.language : "de-DE";
+    const fmtDate = (iso) => {
+      try { return new Date(iso).toLocaleDateString(lang, { day: "2-digit", month: "short", year: "numeric" }); }
+      catch { return iso; }
+    };
+    const fmtKm = (m) => (m != null && Number.isFinite(m)) ? (m / 1000).toFixed(1) + " km" : "–";
+    const fmtDur = (s) => {
+      if (!Number.isFinite(s)) return "–";
+      const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
+      return h > 0 ? `${h}h ${m}min` : `${m} min`;
+    };
+    const rows = this._activities.slice(0, 50).map((a, i) => {
+      const km = fmtKm(a.distance);
+      const dur = fmtDur(a.duration);
+      const title = a.title || this._t("msg_unnamed_ride");
+      return `
+        <div class="map3d-tour" data-idx="${i}">
+          <div class="date">${fmtDate(a.startTime)}</div>
+          <div class="meta">${this._escapeHtml(title)}</div>
+          <div class="right"><b>${km}</b> · ${dur}</div>
+          <ha-icon icon="mdi:chevron-right"></ha-icon>
+        </div>
+      `;
+    }).join("");
+    this._root.innerHTML = `
+      <div class="map3d-head"><div class="title">${this._config.title || this._t("map3d_title")}</div></div>
+      <div class="map3d-list">${rows}</div>
+    `;
+    this._root.querySelectorAll(".map3d-tour").forEach((el) => {
+      el.addEventListener("click", () => {
+        const idx = Number(el.getAttribute("data-idx"));
+        const act = this._activities[idx];
+        if (act) this._openTour(act);
+      });
+    });
+  }
+
+  _escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  }
+
+  async _openTour(activity) {
+    this._mode = "detail";
+    this._currentActivity = activity;
+    this._currentTrack = null;
+    this._showMessage(this._t("map3d_loading_track"));
+    try {
+      const params = { type: "bosch_ebike/get_track", activity_id: activity.id };
+      if (activity.accountId) params.config_entry_id = activity.accountId;
+      const res = await this._hass.callWS(params);
+      const pts = Array.isArray(res.track)
+        ? res.track.filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lon))
+        : [];
+      if (!pts.length) {
+        this._showMessage(this._t("map3d_no_gps"));
+        return;
+      }
+      this._currentTrack = pts;
+      this._buildCumulativeDistances();
+      this._renderDetail();
+    } catch (err) {
+      console.error("[Bosch eBike 3D] track load failed", err);
+      this._showMessage("Fehler: " + (err?.message || err));
+    }
+  }
+
+  _buildCumulativeDistances() {
+    const pts = this._currentTrack;
+    const cum = [0];
+    let total = 0;
+    for (let i = 1; i < pts.length; i++) {
+      total += this._haversine(pts[i - 1], pts[i]);
+      cum.push(total);
+    }
+    this._cumDist = cum;
+    this._totalDistM = total;
+  }
+
+  _haversine(a, b) {
+    const R = 6371000;
+    const rad = Math.PI / 180;
+    const dLat = (b.lat - a.lat) * rad;
+    const dLon = (b.lon - a.lon) * rad;
+    const lat1 = a.lat * rad, lat2 = b.lat * rad;
+    const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+    return 2 * R * Math.asin(Math.sqrt(h));
+  }
+
+  _renderDetail() {
+    const a = this._currentActivity;
+    if (!a) return;
+    const title = a.title || this._t("msg_unnamed_ride");
+    this._root.innerHTML = `
+      <div class="map3d-head">
+        <button class="map3d-back-btn" type="button">
+          <ha-icon icon="mdi:arrow-left"></ha-icon><span>${this._t("map3d_back")}</span>
+        </button>
+        <div class="title">${this._escapeHtml(title)}</div>
+      </div>
+      <div class="map3d-detail">
+        <div class="map3d-canvas" id="m3d-canvas"></div>
+        <div class="map3d-overlay">
+          <span class="map3d-chip" id="m3d-time-chip">
+            <ha-icon icon="mdi:clock-outline"></ha-icon><span id="m3d-time-text">--:--</span>
+          </span>
+          <span class="map3d-chip" id="m3d-sun-chip">
+            <ha-icon icon="mdi:white-balance-sunny" id="m3d-sun-ico"></ha-icon><span id="m3d-sun-text">--°</span>
+          </span>
+        </div>
+        <div class="map3d-controls">
+          <div class="row1">
+            <button class="map3d-play-btn" type="button" id="m3d-play">
+              <ha-icon icon="mdi:play" id="m3d-play-ico"></ha-icon>
+            </button>
+            <span class="map3d-time" id="m3d-t-start">--:--</span>
+            <input type="range" class="map3d-slider" id="m3d-slider" min="0" max="100" step="1" value="0">
+            <span class="map3d-time" id="m3d-t-end">--:--</span>
+          </div>
+          <div class="map3d-stats">
+            <span><span>${this._t("map3d_distance_label")}: </span><span class="v" id="m3d-stat-dist">–</span></span>
+            <span><span>${this._t("map3d_speed_label")}: </span><span class="v" id="m3d-stat-speed">–</span></span>
+            <span><span>${this._t("map3d_elevation_label")}: </span><span class="v" id="m3d-stat-ele">–</span></span>
+          </div>
+        </div>
+      </div>
+    `;
+
+    this._root.querySelector(".map3d-back-btn").addEventListener("click", () => {
+      this._stopAnim();
+      this._destroyMap();
+      this._mode = "list";
+      this._currentActivity = null;
+      this._currentTrack = null;
+      this._renderRoot();
+    });
+
+    const slider = this._root.querySelector("#m3d-slider");
+    slider.max = String(this._currentTrack.length - 1);
+    slider.addEventListener("input", () => {
+      this._stopAnim();
+      this._applyIndex(Number(slider.value));
+    });
+
+    const playBtn = this._root.querySelector("#m3d-play");
+    playBtn.addEventListener("click", () => this._togglePlay());
+
+    this._initMap();
+  }
+
+  async _initMap() {
+    let mlib;
+    try {
+      mlib = await ensureMapLibre();
+    } catch (e) {
+      this._showMessage(this._t("map3d_err_maplibre"));
+      return;
+    }
+    const a = this._currentActivity;
+    const pts = this._currentTrack;
+    const startTime = a.startTime ? new Date(a.startTime) : new Date();
+    const meanLat = pts.reduce((s, p) => s + p.lat, 0) / pts.length;
+    const meanLon = pts.reduce((s, p) => s + p.lon, 0) / pts.length;
+
+    const sun = sunPositionAt(startTime, meanLat, meanLon);
+    const altDeg = sun.altitude * 180 / Math.PI;
+    const azDeg = ((sun.azimuth * 180 / Math.PI) + 180 + 360) % 360;
+    const mood = sunMoodFor(altDeg);
+
+    const canvas = this._root.querySelector("#m3d-canvas");
+    const pitch = Math.max(0, Math.min(60, Number(this._config.default_pitch) || 50));
+    this._map = new mlib.Map({
+      container: canvas,
+      style: OPENFREEMAP_LIBERTY,
+      center: [meanLon, meanLat],
+      zoom: 14,
+      pitch,
+      bearing: -20,
+      attributionControl: false,
+    });
+    this._map.addControl(new mlib.AttributionControl({ compact: true }), "bottom-right");
+    this._map.addControl(new mlib.NavigationControl({ visualizePitch: true }), "top-right");
+
+    this._map.on("error", (e) => {
+      console.warn("[Bosch eBike 3D] map error", e && e.error);
+    });
+
+    this._map.on("load", () => {
+      // Lighting & sky from sun mood
+      try {
+        this._map.setLight({
+          anchor: "viewport",
+          color: mood.sun,
+          intensity: altDeg > 0 ? 0.6 : 0.15,
+          position: [1.15, azDeg, Math.max(5, 90 - altDeg)],
+        });
+      } catch (_) { /* older MapLibre versions */ }
+
+      // Track polyline
+      const coords = pts.map((p) => [p.lon, p.lat]);
+      this._map.addSource("ebike-track", {
+        type: "geojson",
+        data: { type: "Feature", geometry: { type: "LineString", coordinates: coords }, properties: {} },
+      });
+      this._map.addLayer({
+        id: "ebike-track-glow",
+        type: "line",
+        source: "ebike-track",
+        layout: { "line-cap": "round", "line-join": "round" },
+        paint: { "line-color": "#03a9f4", "line-width": 9, "line-opacity": 0.25, "line-blur": 3 },
+      });
+      this._map.addLayer({
+        id: "ebike-track",
+        type: "line",
+        source: "ebike-track",
+        layout: { "line-cap": "round", "line-join": "round" },
+        paint: { "line-color": "#03a9f4", "line-width": 4.5, "line-opacity": 0.95 },
+      });
+
+      // Ensure 3D building extrusions are present (some Liberty variants
+      // ship them disabled; force-add a fallback if not found).
+      const hasBldg = this._map.getLayer("building-3d") || this._map.getLayer("building");
+      if (!hasBldg) {
+        try {
+          this._map.addLayer({
+            id: "ebike-buildings-3d",
+            type: "fill-extrusion",
+            source: "openmaptiles",
+            "source-layer": "building",
+            minzoom: 14,
+            paint: {
+              "fill-extrusion-color": ["case", ["has", "colour"], ["get", "colour"], "#c9c4be"],
+              "fill-extrusion-height": ["coalesce", ["get", "render_height"], ["get", "height"], 6],
+              "fill-extrusion-base": ["coalesce", ["get", "render_min_height"], 0],
+              "fill-extrusion-opacity": 0.85,
+            },
+          });
+        } catch (_) { /* style without openmaptiles source */ }
+      }
+
+      // Start + end markers
+      this._addPointMarker(pts[0], "#42c76a", "S");
+      this._addPointMarker(pts[pts.length - 1], "#e53935", "Z");
+
+      // Animated current-position marker
+      const el = document.createElement("div");
+      el.className = "ebike-3d-marker";
+      this._marker = new mlib.Marker({ element: el }).setLngLat([pts[0].lon, pts[0].lat]).addTo(this._map);
+
+      // Fit bounds to the track
+      const bounds = coords.reduce(
+        (b, c) => b.extend(c),
+        new mlib.LngLatBounds(coords[0], coords[0])
+      );
+      this._map.fitBounds(bounds, { padding: 60, pitch, bearing: -20, duration: 800 });
+
+      this._applyIndex(0);
+      this._updateTimeChips(0, startTime, altDeg, mood);
+      this._updateRangeLabels();
+    });
+  }
+
+  _addPointMarker(p, color, _label) {
+    if (!this._map || !window.maplibregl) return;
+    const el = document.createElement("div");
+    el.style.cssText = `width:14px;height:14px;border-radius:50%;background:${color};border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.4);`;
+    new window.maplibregl.Marker({ element: el }).setLngLat([p.lon, p.lat]).addTo(this._map);
+  }
+
+  _applyIndex(idx) {
+    const pts = this._currentTrack;
+    if (!pts || !pts.length) return;
+    const i = Math.max(0, Math.min(pts.length - 1, Math.round(idx)));
+    const p = pts[i];
+    if (this._marker) this._marker.setLngLat([p.lon, p.lat]);
+
+    // Interpolate per-point time from startTime + (i/N) * duration
+    const a = this._currentActivity;
+    const dur = Number.isFinite(a?.duration) ? a.duration : 0;
+    const startTime = a?.startTime ? new Date(a.startTime) : new Date();
+    const t = new Date(startTime.getTime() + (i / Math.max(1, pts.length - 1)) * dur * 1000);
+    const sun = sunPositionAt(t, p.lat, p.lon);
+    const altDeg = sun.altitude * 180 / Math.PI;
+    const mood = sunMoodFor(altDeg);
+    this._updateTimeChips(i, t, altDeg, mood);
+
+    if (this._map && this._map.loaded()) {
+      try {
+        const azDeg = ((sun.azimuth * 180 / Math.PI) + 180 + 360) % 360;
+        this._map.setLight({
+          anchor: "viewport",
+          color: mood.sun,
+          intensity: altDeg > 0 ? 0.6 : 0.15,
+          position: [1.15, azDeg, Math.max(5, 90 - altDeg)],
+        });
+      } catch (_) { /* ignore */ }
+    }
+
+    // Stats
+    const dist = this._cumDist?.[i] ?? 0;
+    const distLbl = (dist / 1000).toLocaleString(undefined, { maximumFractionDigits: 1 }) + " km";
+    this._root.querySelector("#m3d-stat-dist").textContent = distLbl;
+    const sp = Number.isFinite(p.speed) ? p.speed : null;
+    this._root.querySelector("#m3d-stat-speed").textContent =
+      sp != null ? sp.toLocaleString(undefined, { maximumFractionDigits: 1 }) + " km/h" : "–";
+    const ele = Number.isFinite(p.ele) ? p.ele : null;
+    this._root.querySelector("#m3d-stat-ele").textContent =
+      ele != null ? Math.round(ele) + " m" : "–";
+
+    const slider = this._root.querySelector("#m3d-slider");
+    if (slider && document.activeElement !== slider) slider.value = String(i);
+  }
+
+  _updateTimeChips(_i, time, altDeg, mood) {
+    const fmtHm = (d) => `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+    const tt = this._root.querySelector("#m3d-time-text");
+    if (tt) tt.textContent = fmtHm(time);
+    const st = this._root.querySelector("#m3d-sun-text");
+    if (st) st.textContent = Math.round(altDeg) + "°";
+    const sico = this._root.querySelector("#m3d-sun-ico");
+    if (sico) {
+      sico.setAttribute("icon",
+        altDeg < -6 ? "mdi:weather-night" :
+        altDeg < 0  ? "mdi:weather-sunset" :
+        altDeg < 10 ? "mdi:weather-sunset-up" :
+                      "mdi:white-balance-sunny");
+      sico.style.color = mood.sun;
+    }
+  }
+
+  _updateRangeLabels() {
+    const a = this._currentActivity;
+    const dur = Number.isFinite(a?.duration) ? a.duration : 0;
+    const start = a?.startTime ? new Date(a.startTime) : new Date();
+    const end = new Date(start.getTime() + dur * 1000);
+    const fmt = (d) => `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+    const s = this._root.querySelector("#m3d-t-start");
+    const e = this._root.querySelector("#m3d-t-end");
+    if (s) s.textContent = fmt(start);
+    if (e) e.textContent = fmt(end);
+  }
+
+  _togglePlay() {
+    if (this._isPlaying) this._stopAnim();
+    else this._startAnim();
+  }
+
+  _startAnim() {
+    if (!this._currentTrack || !this._currentTrack.length) return;
+    this._isPlaying = true;
+    const icon = this._root.querySelector("#m3d-play-ico");
+    if (icon) icon.setAttribute("icon", "mdi:pause");
+    const slider = this._root.querySelector("#m3d-slider");
+    const startIdx = Number(slider.value) || 0;
+    const totalIdx = this._currentTrack.length - 1;
+    const wrapAt = startIdx >= totalIdx ? 0 : startIdx;
+    this._animStartIndex = wrapAt;
+    this._animStartTs = performance.now();
+    const dur = Math.max(5, Number(this._config.animate_seconds) || 25) * 1000;
+    const step = (ts) => {
+      if (!this._isPlaying) return;
+      const elapsed = ts - this._animStartTs;
+      const frac = Math.min(1, elapsed / dur);
+      const idx = wrapAt + (totalIdx - wrapAt) * frac;
+      this._applyIndex(idx);
+      if (frac >= 1) { this._stopAnim(); return; }
+      this._animRAF = requestAnimationFrame(step);
+    };
+    this._animRAF = requestAnimationFrame(step);
+  }
+
+  _stopAnim() {
+    this._isPlaying = false;
+    if (this._animRAF) cancelAnimationFrame(this._animRAF);
+    this._animRAF = null;
+    const icon = this._root.querySelector("#m3d-play-ico");
+    if (icon) icon.setAttribute("icon", "mdi:play");
+  }
+
+  _destroyMap() {
+    this._stopAnim();
+    if (this._marker) { try { this._marker.remove(); } catch (_) {} this._marker = null; }
+    if (this._map) { try { this._map.remove(); } catch (_) {} this._map = null; }
+  }
+}
+
+class BoschEBike3DMapCardEditor extends HTMLElement {
+  constructor() {
+    super();
+    this._hass = null;
+    this._config = {};
+    this._built = false;
+  }
+  setConfig(config) { this._config = { ...config }; if (this._built) this._sync(); }
+  set hass(hass) { this._hass = hass; if (!this._built) this._build(); }
+  _t(key) {
+    const lang = (this._hass && this._hass.language) ? this._hass.language.split("-")[0] : "en";
+    const dict = (I18N && I18N[lang]) || I18N.en;
+    return dict[key] != null ? dict[key] : I18N.en[key];
+  }
+  _emit() { this.dispatchEvent(new CustomEvent("config-changed", { detail: { config: this._config } })); }
+  _build() {
+    this.innerHTML = "";
+    const wrap = document.createElement("div");
+    wrap.style.cssText = "display:flex;flex-direction:column;gap:12px;padding:12px;";
+    this.appendChild(wrap);
+
+    const mkLabeled = (labelKey, hintKey, makeInput) => {
+      const block = document.createElement("div");
+      block.style.cssText = "display:flex;flex-direction:column;gap:4px;";
+      const lbl = document.createElement("label");
+      lbl.textContent = this._t(labelKey);
+      lbl.style.fontWeight = "500";
+      block.appendChild(lbl);
+      const input = makeInput();
+      block.appendChild(input);
+      if (hintKey) {
+        const h = document.createElement("small");
+        h.textContent = this._t(hintKey);
+        h.style.cssText = "color:var(--secondary-text-color);font-size:11px;";
+        block.appendChild(h);
+      }
+      wrap.appendChild(block);
+      return input;
+    };
+
+    const mkText = (key, labelKey, hintKey, type) => {
+      const i = mkLabeled(labelKey, hintKey, () => {
+        const el = document.createElement("input");
+        el.type = type || "text";
+        el.style.cssText = "padding:8px;border-radius:4px;border:1px solid var(--divider-color);background:var(--card-background-color);color:var(--primary-text-color);";
+        return el;
+      });
+      i.value = this._config[key] != null ? this._config[key] : "";
+      i.addEventListener("input", () => {
+        const v = i.value;
+        if (v === "" || v == null) delete this._config[key];
+        else if (i.type === "number") this._config[key] = Number(v);
+        else this._config[key] = v;
+        this._emit();
+      });
+      return i;
+    };
+
+    this._fields = {
+      title: mkText("title", "map3d_editor_title", null, "text"),
+      height: mkText("height", "map3d_editor_height", null, "number"),
+      default_pitch: mkText("default_pitch", "map3d_editor_default_pitch", "map3d_editor_default_pitch_hint", "number"),
+      animate_seconds: mkText("animate_seconds", "map3d_editor_animate_seconds", "map3d_editor_animate_seconds_hint", "number"),
+      account_id: mkText("account_id", "map3d_editor_account", null, "text"),
+      bike_id: mkText("bike_id", "map3d_editor_bike", null, "text"),
+    };
+    this._built = true;
+  }
+  _sync() {
+    if (!this._fields) return;
+    for (const [k, el] of Object.entries(this._fields)) {
+      el.value = this._config[k] != null ? this._config[k] : "";
+    }
+  }
+}
+
 if (!customElements.get("bosch-ebike-map-card")) {
   customElements.define("bosch-ebike-map-card", BoschEBikeMapCard);
 }
@@ -4644,6 +5460,12 @@ if (!customElements.get("bosch-ebike-dashboard-card")) {
 }
 if (!customElements.get("bosch-ebike-dashboard-card-editor")) {
   customElements.define("bosch-ebike-dashboard-card-editor", BoschEBikeDashboardCardEditor);
+}
+if (!customElements.get("bosch-ebike-3d-map-card")) {
+  customElements.define("bosch-ebike-3d-map-card", BoschEBike3DMapCard);
+}
+if (!customElements.get("bosch-ebike-3d-map-card-editor")) {
+  customElements.define("bosch-ebike-3d-map-card-editor", BoschEBike3DMapCardEditor);
 }
 
 window.customCards = window.customCards || [];
@@ -4676,6 +5498,14 @@ if (!window.customCards.find((c) => c.type === "bosch-ebike-dashboard-card")) {
     type: "bosch-ebike-dashboard-card",
     name: "Bosch eBike Dashboard",
     description: "Bike-Bild, Live-Daten und optional Ladesteuerung (für ESPHome-Bridge + Smart-Plug)",
+    preview: false,
+  });
+}
+if (!window.customCards.find((c) => c.type === "bosch-ebike-3d-map-card")) {
+  window.customCards.push({
+    type: "bosch-ebike-3d-map-card",
+    name: "Bosch eBike 3D-Karte",
+    description: "Tour-Detailansicht in 3D mit Gebäude-Extrusionen, Zeit-Slider und Sonnenstand-Lichteffekt (MapLibre + OpenFreeMap)",
     preview: false,
   });
 }
