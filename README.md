@@ -40,7 +40,7 @@ Diese Custom Integration verbindet dein **Bosch eBike Smart System** mit Home As
 - **Gesamtstatistiken:** Anzahl aller Fahrten, Gesamtdistanz, Gesamtfahrzeit, Gesamtkalorien, Gesamthöhenmeter, Durchschnittswerte für Geschwindigkeit/Leistung/Trittfrequenz über alle Fahrten
 - **GPS-Track-Export:** Export aller Fahrten als GPX-Dateien (mit Speed, Cadence, Power als Garmin TrackPointExtension)
 - **Interaktive Kartendarstellung:** Custom Lovelace Card mit GPS-Tracks, geschwindigkeitsabhängiger Farbcodierung, Date-Picker und Prev/Next-Navigation
-- **3D-Karte mit Zeit-Slider:** Custom Lovelace Card (`bosch-ebike-3d-map-card`) für die Tour-Detailansicht mit Gebäude-Extrusionen, animiertem Positionsmarker und Sonnenstand-Lichteffekt (MapLibre + OpenFreeMap, kostenlos und ohne API-Key)
+- **3D-Karte mit Chase-Cam, Zeit-Slider und Gebäudeschatten:** Custom Lovelace Card (`bosch-ebike-3d-map-card`) für die Tour-Detailansicht mit 3D-Gebäuden, einer Kamera die dem Bike von hinten folgt, proportionaler Play-Geschwindigkeit (Default 60× Echtzeit) und Cast-Shadows nach Sonnenstand zur Tour-Zeit (MapLibre + OpenFreeMap, kostenlos und ohne API-Key)
 - **Dashboard-Card mit Bike-Bild, Live-Daten und Ladesteuerung:** Custom Lovelace Card (`bosch-ebike-dashboard-card`) mit eigenem Bike-Foto, Tachostand, Akkustand, Lade-Status, optionalem Ladeleistungssensor, Ziel-SoC-Schieberegler sowie Start-/Stop-Buttons über eine smarte Steckdose
 - **Automatische Token-Aktualisierung** über Refresh-Token
 - **30-Minuten-Polling-Intervall** (beim ersten Start werden alle Fahrten importiert)
@@ -510,6 +510,7 @@ This custom integration connects your **Bosch eBike Smart System** to Home Assis
 - **Aggregate statistics:** Total rides, total distance, total ride time, total calories, total elevation, averages for speed/power/cadence across all rides
 - **GPS track export:** Export all rides as GPX files (with speed, cadence, power as Garmin TrackPointExtension)
 - **Interactive map card:** Custom Lovelace card with GPS tracks, speed-based color coding, date picker and prev/next navigation
+- **3D map card with chase-cam, time slider and building shadows:** Custom Lovelace card (`bosch-ebike-3d-map-card`) for the tour detail view, with 3D buildings, a camera that follows the bike from behind, real-time-proportional playback (60× by default) and cast shadows that match the sun position at the tour's actual time (MapLibre + OpenFreeMap, free and no API key)
 - **Dashboard card with bike photo, live data and charging control:** Custom Lovelace card (`bosch-ebike-dashboard-card`) with a user-supplied bike photo, odometer, state of charge, charging status, optional charging-power sensor, target-SoC slider, and Start/Stop buttons backed by a smart plug
 - **Automatic token refresh** via refresh token
 - **30-minute polling interval** (all rides are imported on first startup)
@@ -780,6 +781,56 @@ bike_id: bike-uuid-1
 ```
 
 Color buckets per day: empty, 1-10 km, 10-25 km, 25-50 km, 50+ km. Colors are pulled from HA theme variables, light themes look like GitHub-Light; in dark mode the matching dark palette is applied automatically.
+
+### 3D map card - chase-cam, time slider, sun-aware building shadows
+
+The card `bosch-ebike-3d-map-card` is a second, parallel card to the classic 2D map. It opens with a list of recent tours. Clicking a tour switches to the 3D detail view powered by MapLibre and free OpenFreeMap vector tiles: the camera follows the bike in a third-person chase-cam, bearing rotates to match the direction of travel, pitch and zoom are configurable. Dragging the slider pans the camera with it. Map lighting and a cast-shadow layer on the ground both update to match the sun position at the tour's actual time of day.
+
+```yaml
+type: custom:bosch-ebike-3d-map-card
+title: Tour in 3D
+height: 540
+default_pitch: 55      # chase-cam pitch
+chase_zoom: 17         # ~100 m of road visible ahead
+playback_speed: 60     # 60× real time (1 h ride plays in 1 min)
+```
+
+**What the card shows:**
+
+- Tour list (default view) with date, title, distance, duration
+- 3D chase-cam after clicking a tour, with OSM building extrusions
+- Track polyline rendered in two layers (glow + main stroke) for readability
+- Start and finish dot markers, plus a pulsing blue current-position marker that represents the bike
+- Scrubbable time slider with start/end timestamps; the camera pans synchronously
+- Play/Pause for time-compressed playback (duration configurable)
+- Live stats at the slider position: cumulative distance, speed, elevation
+- Time and sun-altitude chip in the overlay showing the current time of day and daylight phase (Night, Twilight, Golden hour, Daylight)
+- **Cast shadows from buildings** projected onto the ground from sun azimuth and altitude at the slider's time. Shadows are visible during daylight, shorter at twilight, hidden at night. They refresh automatically when the camera moves into a new neighbourhood or the slider is released.
+- Back button returns to the tour list
+
+**Card config options:**
+
+| Option | Default | Description |
+|---|---|---|
+| `title` | "Bosch eBike 3D Tours" | Header text |
+| `height` | 540 | Card height in pixels |
+| `default_pitch` | 55 | Chase-cam pitch (20-65°). 20 ≈ bird's eye, 65 ≈ first-person |
+| `chase_zoom` | 17 | Chase-cam zoom (14-19). Higher = closer, 17 ≈ 100 m ahead |
+| `smooth_window` | 15 | Bearing-smoothing window. Higher = calmer camera, sweeps corners wider. 5 feels twitchy, 40 feels sluggish |
+| `track_smooth_window` | 2 | Smooths GPS jitter in the camera path. 0 = off (raw GPS, may jitter), 2 = gentle (default), 5+ may visibly cut corners. The displayed track polyline always shows raw GPS regardless |
+| `playback_speed` | 60 | Real-time multiplier for Play. 60 = 60× faster than reality, a 1 h ride plays in 1 min, a 30 min ride in 30 s |
+| `animate_seconds` | — | Optional. Forces a fixed playback duration (e.g. always 25 s) and overrides `playback_speed` |
+| `account_id` | (empty) | Lock to a specific account, like the 2D card |
+| `bike_id` | (empty) | Lock to a specific bike |
+
+**Dependencies and notes:**
+
+- MapLibre GL is lazy-loaded from unpkg on first use (~800 KB gzipped, cached afterwards)
+- OpenFreeMap delivers the vector tiles without an API key or signup
+- The 3D card is only loaded when the user actually opens it. The other cards (Map, Heatmap, Calendar, Dashboard) are not affected.
+- 3D rendering is smooth on desktops and recent mobile devices. Very long tracks (>10 000 points) may stutter on older hardware.
+- OSM building coverage is dense in cities, sparser in the countryside. Urban rides benefit the most from the visual richness.
+- **Terrain shadows** (mountains, hills) are intentionally not included. They would require a DEM tile source (Maptiler with API key, AWS Open Data SRTM, or self-hosted elevation data) plus per-tile ray-casting in a shader. Can be added in a later release if there is interest.
 
 ### Dashboard card - bike photo, live data and charging control
 
