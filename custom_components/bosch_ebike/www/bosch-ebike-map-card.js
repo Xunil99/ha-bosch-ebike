@@ -5135,6 +5135,7 @@ class BoschEBike3DMapCard extends HTMLElement {
     this._mode = "detail";
     this._currentActivity = activity;
     this._currentTrack = null;
+    this._shadowDiagLogged = false;
     this._showMessage(this._t("map3d_loading_track"));
     try {
       const params = { type: "bosch_ebike/get_track", activity_id: activity.id };
@@ -5386,6 +5387,12 @@ class BoschEBike3DMapCard extends HTMLElement {
       // currently-rendered tiles, so we wait for moveend.
       this._map.on("moveend", () => this._updateShadows());
 
+      // Initial shadow pass: wait a beat so buildings have actually
+      // rasterised, then compute. Repeat once more shortly after to
+      // catch slow-loading building tiles.
+      setTimeout(() => this._updateShadows(), 400);
+      setTimeout(() => this._updateShadows(), 1500);
+
       // Start + end markers
       this._addPointMarker(pts[0], "#42c76a", "S");
       this._addPointMarker(pts[pts.length - 1], "#e53935", "Z");
@@ -5524,9 +5531,25 @@ class BoschEBike3DMapCard extends HTMLElement {
     });
   }
 
+  // Discover all style layers that visualise buildings, regardless of
+  // the exact id used by the upstream OpenFreeMap / OpenMapTiles
+  // variant. Used both to find the layer to insert shadows before, and
+  // to know which layers to query for building features.
+  _findBuildingLayers() {
+    if (!this._map || !this._map.getStyle) return [];
+    const style = this._map.getStyle();
+    if (!style || !style.layers) return [];
+    return style.layers
+      .filter((l) =>
+        (l["source-layer"] === "building") ||
+        (typeof l.id === "string" &&
+         (l.id === "building" || l.id.startsWith("building-") || l.id.includes("buildings"))))
+      .map((l) => l.id);
+  }
+
   // Empty shadow source + layer, populated by _updateShadows() once the
-  // map has settled. Placed BEFORE any building layer so building
-  // extrusions render on top of their own shadows.
+  // map has settled. Placed BEFORE the first building-related layer so
+  // building extrusions render on top of their own shadows.
   _initShadowLayer() {
     if (!this._map) return;
     try {
@@ -5535,19 +5558,20 @@ class BoschEBike3DMapCard extends HTMLElement {
         type: "geojson",
         data: { type: "FeatureCollection", features: [] },
       });
-      const buildingLayer = ["building-3d", "ebike-buildings-3d", "building"]
-        .find((id) => this._map.getLayer(id));
+      const buildingLayers = this._findBuildingLayers();
+      const beforeId = buildingLayers[0]; // may be undefined; that is fine
       this._map.addLayer({
         id: "ebike-shadows",
         type: "fill",
         source: "ebike-shadows",
-        minzoom: 14,
+        minzoom: 13,
         paint: {
-          "fill-color": "#000",
-          "fill-opacity": 0.32,
-          "fill-antialias": false,
+          "fill-color": "#0a1018",
+          "fill-opacity": 0.55,
+          "fill-antialias": true,
         },
-      }, buildingLayer);
+      }, beforeId);
+      console.log("[Bosch eBike 3D] shadow layer ready. beforeId =", beforeId, "buildingLayers =", buildingLayers);
     } catch (e) {
       console.warn("[Bosch eBike 3D] shadow layer init failed", e);
     }
@@ -5591,34 +5615,50 @@ class BoschEBike3DMapCard extends HTMLElement {
       return;
     }
 
-    const layerIds = ["building-3d", "ebike-buildings-3d", "building"]
-      .filter((id) => this._map.getLayer(id));
+    const layerIds = this._findBuildingLayers().filter((id) => this._map.getLayer(id));
     if (!layerIds.length) {
+      console.warn("[Bosch eBike 3D] no building layers found in the active style; shadows skipped");
       src.setData({ type: "FeatureCollection", features: [] });
       return;
     }
 
-    const buildings = this._map.queryRenderedFeatures(undefined, { layers: layerIds });
+    let buildings = [];
+    try {
+      buildings = this._map.queryRenderedFeatures(undefined, { layers: layerIds });
+    } catch (e) {
+      console.warn("[Bosch eBike 3D] queryRenderedFeatures failed", e);
+    }
 
     const features = [];
     const seen = new Set();
+    let skippedHeight = 0;
+    let skippedGeom = 0;
     for (const b of buildings) {
       // Dedupe across tile boundaries
       const key = b.id != null ? `i:${b.id}` :
-        `g:${b.geometry.coordinates?.[0]?.[0]?.join(",")}`;
+        `g:${b.geometry?.coordinates?.[0]?.[0]?.join(",")}`;
       if (seen.has(key)) continue;
       seen.add(key);
 
       const props = b.properties || {};
-      const h = Number(props.render_height || props.height || props.min_height || 6);
-      if (!Number.isFinite(h) || h < 3) continue;
+      // OpenMapTiles uses 'render_height'; some vector schemas use 'height',
+      // 'min_height' is the building base. Fall back to a 6 m default so
+      // small buildings without an explicit height still cast a shadow.
+      let h = Number(props.render_height);
+      if (!Number.isFinite(h) || h <= 0) h = Number(props.height);
+      if (!Number.isFinite(h) || h <= 0) {
+        const levels = Number(props["building:levels"] || props.levels);
+        if (Number.isFinite(levels) && levels > 0) h = levels * 3;
+      }
+      if (!Number.isFinite(h) || h <= 0) h = 6;
+      if (h < 1) { skippedHeight++; continue; }
 
-      const rings = b.geometry.type === "Polygon"
+      const rings = b.geometry?.type === "Polygon"
         ? [b.geometry.coordinates[0]]
-        : b.geometry.type === "MultiPolygon"
+        : b.geometry?.type === "MultiPolygon"
           ? b.geometry.coordinates.map((poly) => poly[0])
           : null;
-      if (!rings) continue;
+      if (!rings) { skippedGeom++; continue; }
 
       for (const ring of rings) {
         const shadow = buildingShadowRing(ring, h, sun.altitude, sun.azimuth, p.lat);
@@ -5630,6 +5670,20 @@ class BoschEBike3DMapCard extends HTMLElement {
           });
         }
       }
+    }
+    if (!this._shadowDiagLogged) {
+      this._shadowDiagLogged = true;
+      console.log("[Bosch eBike 3D] shadow diagnostic:", {
+        layerIds,
+        rawBuildings: buildings.length,
+        uniqueBuildings: seen.size,
+        skippedHeight,
+        skippedGeom,
+        shadowFeatures: features.length,
+        sunAltDeg: (sun.altitude * 180 / Math.PI).toFixed(1),
+        sampleProps: buildings[0]?.properties,
+        sampleGeomType: buildings[0]?.geometry?.type,
+      });
     }
     src.setData({ type: "FeatureCollection", features });
   }
