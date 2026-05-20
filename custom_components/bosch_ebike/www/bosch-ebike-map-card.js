@@ -5127,7 +5127,11 @@ class BoschEBike3DMapCard extends HTMLElement {
       .map3d-stats .v { font-weight: 600; }
       .maplibregl-canvas:focus { outline: none; }
       .ebike-3d-marker {
-        position: relative;
+        /* No 'position' override here. MapLibre sets position:absolute
+           on its marker elements and positions them via transform; an
+           override of position:relative pulled the marker out of that
+           positioning context, leaving it stuck at its DOM-flow
+           position several hundred pixels below the map. */
         width: 36px; height: 36px; border-radius: 50%;
         background: #42c76a; border: 5px solid #fff;
         box-shadow:
@@ -5569,8 +5573,11 @@ class BoschEBike3DMapCard extends HTMLElement {
 
       const el = document.createElement("div");
       el.className = "ebike-3d-marker";
+      // Do NOT set position here. MapLibre sets position:absolute on
+      // the marker element itself; overriding it breaks transform-based
+      // positioning and leaves the marker at its DOM-flow location.
       el.style.cssText =
-        "position:relative;width:36px;height:36px;border-radius:50%;" +
+        "width:36px;height:36px;border-radius:50%;" +
         "background:#42c76a;border:5px solid #fff;" +
         "box-shadow:0 0 0 4px rgba(66,199,106,.35),0 4px 14px rgba(0,0,0,.6);" +
         "z-index:100;";
