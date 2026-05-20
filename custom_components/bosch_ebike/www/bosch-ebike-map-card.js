@@ -6004,8 +6004,15 @@ class BoschEBike3DMapCard extends HTMLElement {
       return;
     }
 
-    // Pick the best mime type the browser actually supports
+    // Pick the best mime type the browser actually supports. MP4 is
+    // preferred because it plays everywhere out of the box (QuickTime,
+    // Windows Media Player, mobile Photos apps). It is only exposed by
+    // MediaRecorder in newer Chromium (Chrome 126+) and Safari 14.4+;
+    // Firefox does not expose MP4 at all. WebM is the universal fallback.
     const mimeCandidates = [
+      "video/mp4;codecs=avc1.42E01E,mp4a.40.2",  // H.264 baseline + AAC
+      "video/mp4;codecs=avc1",                    // generic H.264 in mp4
+      "video/mp4",                                // any mp4 the browser likes
       "video/webm;codecs=vp9",
       "video/webm;codecs=vp8",
       "video/webm",
@@ -6083,6 +6090,13 @@ class BoschEBike3DMapCard extends HTMLElement {
     const blobType = mimeType || "video/webm";
     const blob = new Blob(chunks, { type: blobType });
 
+    // Pick the file extension from the chosen mime so QuickTime,
+    // Windows Photos etc. open it as expected. MP4 wins where the
+    // browser supports it, WebM is the fallback.
+    const ext = blobType.startsWith("video/mp4") ? "mp4"
+              : blobType.startsWith("video/x-matroska") ? "mkv"
+              : "webm";
+
     // Build a filename from tour date + title where possible
     const a = this._currentActivity || {};
     const dateStr = a.startTime
@@ -6090,7 +6104,7 @@ class BoschEBike3DMapCard extends HTMLElement {
       : "tour";
     const safeTitle = (a.title || "ebike-tour")
       .toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40);
-    const filename = `${safeTitle || "ebike-tour"}-${dateStr}.webm`;
+    const filename = `${safeTitle || "ebike-tour"}-${dateStr}.${ext}`;
 
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
