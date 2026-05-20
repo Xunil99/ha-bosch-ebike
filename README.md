@@ -338,6 +338,7 @@ playback_speed: 60     # 60x Echtzeit (1h-Tour = 1min Wiedergabe)
 - Live-Stats zur Slider-Position: kumulierte Distanz, Geschwindigkeit, Höhe
 - Zeit- und Sonnen-Chip im Overlay zeigt aktuelle Uhrzeit und Tageslicht-Phase (Nacht, Dämmerung, Goldene Stunde, Tageslicht)
 - **Cast-Shadows von Gebäuden** auf den Boden, projiziert aus Sonnen-Azimut und Sonnen-Höhe zur Slider-Zeit. Schatten werden bei Tageslicht angezeigt, bei Dämmerung kürzer, bei Nacht ausgeblendet. Update automatisch, wenn die Kamera in ein neues Stadtgebiet schwenkt oder der Slider bewegt wird.
+- **Video-Export** rechts neben dem Slider: Aufnahme-Button startet eine Wiedergabe vom Tour-Anfang und schreibt den Karten-Inhalt parallel als WebM-Video mit, beim Tour-Ende kommt automatisch ein Datei-Download (ca. 20-40 MB pro Minute). Komplett im Browser via `canvas.captureStream()` + `MediaRecorder`, der HA-Server hat damit nichts zu tun.
 - Zurück-Button kehrt zur Tour-Liste zurück
 
 **Karten-Konfig-Optionen:**
@@ -806,6 +807,7 @@ playback_speed: 60     # 60× real time (1 h ride plays in 1 min)
 - Live stats at the slider position: cumulative distance, speed, elevation
 - Time and sun-altitude chip in the overlay showing the current time of day and daylight phase (Night, Twilight, Golden hour, Daylight)
 - **Cast shadows from buildings** projected onto the ground from sun azimuth and altitude at the slider's time. Shadows are visible during daylight, shorter at twilight, hidden at night. They refresh automatically when the camera moves into a new neighbourhood or the slider is released.
+- **Video export** next to the slider: the record button restarts playback from the tour beginning and captures the canvas content as a WebM video in parallel. When the playback ends, the file is offered for download automatically (about 20-40 MB per minute). Pure browser-side via `canvas.captureStream()` + `MediaRecorder`; the HA server is not involved.
 - Back button returns to the tour list
 
 **Card config options:**

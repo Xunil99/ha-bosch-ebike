@@ -206,6 +206,10 @@ const I18N = {
     map3d_sun_golden: "Golden hour",
     map3d_sun_morning: "Daylight",
     map3d_sun_day: "Daylight",
+    map3d_record_start: "Record",
+    map3d_record_stop: "Stop",
+    map3d_record_active: "Recording…",
+    map3d_record_unsupported: "Recording not supported in this browser",
   },
   de: {
     rides_title: "Bosch eBike Rides",
@@ -393,6 +397,10 @@ const I18N = {
     map3d_sun_golden: "Goldene Stunde",
     map3d_sun_morning: "Tageslicht",
     map3d_sun_day: "Tageslicht",
+    map3d_record_start: "Aufnehmen",
+    map3d_record_stop: "Stopp",
+    map3d_record_active: "Aufnahme läuft…",
+    map3d_record_unsupported: "Aufnahme in diesem Browser nicht unterstützt",
   },
   nl: {
     rides_title: "Bosch eBike Ritten",
@@ -580,6 +588,10 @@ const I18N = {
     map3d_sun_golden: "Gouden uur",
     map3d_sun_morning: "Daglicht",
     map3d_sun_day: "Daglicht",
+    map3d_record_start: "Opnemen",
+    map3d_record_stop: "Stop",
+    map3d_record_active: "Opname loopt…",
+    map3d_record_unsupported: "Opname in deze browser niet ondersteund",
   },
 };
 
@@ -5027,6 +5039,22 @@ class BoschEBike3DMapCard extends HTMLElement {
         cursor: pointer;
       }
       .map3d-play-btn ha-icon { --mdc-icon-size: 22px; }
+      .map3d-rec-btn {
+        background: rgba(255,255,255,.18); color: #fff; border: 0;
+        width: 32px; height: 32px; border-radius: 50%;
+        display: inline-flex; align-items: center; justify-content: center;
+        cursor: pointer; flex: 0 0 32px;
+      }
+      .map3d-rec-btn:hover { background: rgba(255,255,255,.32); }
+      .map3d-rec-btn.active { background: #e53935; color: #fff; }
+      .map3d-rec-btn:disabled { opacity: .35; cursor: not-allowed; }
+      .map3d-rec-btn ha-icon { --mdc-icon-size: 20px; }
+      .map3d-rec-badge { background: rgba(229,57,53,.85); color: #fff; }
+      .map3d-rec-badge ha-icon { color: #fff; animation: ebike-rec-blink 1s ease-in-out infinite; }
+      @keyframes ebike-rec-blink {
+        0%, 49% { opacity: 1; }
+        50%, 100% { opacity: 0.25; }
+      }
       .map3d-time { font-variant-numeric: tabular-nums; font-size: 13px; }
       .map3d-slider { flex: 1; }
       .map3d-stats {
@@ -5255,6 +5283,9 @@ class BoschEBike3DMapCard extends HTMLElement {
           <span class="map3d-chip" id="m3d-sun-chip">
             <ha-icon icon="mdi:white-balance-sunny" id="m3d-sun-ico"></ha-icon><span id="m3d-sun-text">--</span>
           </span>
+          <span class="map3d-chip map3d-rec-badge" id="m3d-rec-badge" style="display:none">
+            <ha-icon icon="mdi:record"></ha-icon><span>${this._t("map3d_record_active")}</span>
+          </span>
         </div>
         <div class="map3d-controls">
           <div class="row1">
@@ -5264,6 +5295,9 @@ class BoschEBike3DMapCard extends HTMLElement {
             <span class="map3d-time" id="m3d-t-start">--:--</span>
             <input type="range" class="map3d-slider" id="m3d-slider" min="0" max="100" step="0.01" value="0">
             <span class="map3d-time" id="m3d-t-end">--:--</span>
+            <button class="map3d-rec-btn" type="button" id="m3d-rec" title="${this._t("map3d_record_start")}">
+              <ha-icon icon="mdi:record-circle-outline" id="m3d-rec-ico"></ha-icon>
+            </button>
           </div>
           <div class="map3d-stats">
             <span><span>${this._t("map3d_distance_label")}: </span><span class="v" id="m3d-stat-dist">–</span></span>
@@ -5296,6 +5330,17 @@ class BoschEBike3DMapCard extends HTMLElement {
 
     const playBtn = this._root.querySelector("#m3d-play");
     playBtn.addEventListener("click", () => this._togglePlay());
+
+    const recBtn = this._root.querySelector("#m3d-rec");
+    if (recBtn) {
+      if (typeof MediaRecorder === "undefined" ||
+          typeof HTMLCanvasElement.prototype.captureStream !== "function") {
+        recBtn.disabled = true;
+        recBtn.title = this._t("map3d_record_unsupported");
+      } else {
+        recBtn.addEventListener("click", () => this._toggleRecording());
+      }
+    }
 
     this._initMap();
   }
@@ -5350,6 +5395,9 @@ class BoschEBike3DMapCard extends HTMLElement {
       // Generous cache so the chase cam does not re-fetch tiles when
       // the bike loops back through a visited area.
       maxTileCacheSize: 200,
+      // Required for canvas.captureStream() / MediaRecorder so the
+      // exported video gets real frames instead of empty squares.
+      preserveDrawingBuffer: true,
     });
     this._map.addControl(new mlib.AttributionControl({ compact: true }), "bottom-right");
     this._map.addControl(new mlib.NavigationControl({ visualizePitch: true }), "top-right");
@@ -5934,10 +5982,139 @@ class BoschEBike3DMapCard extends HTMLElement {
     if (icon) icon.setAttribute("icon", "mdi:play");
     // One final shadow refresh now that the bike has stopped
     this._updateShadows();
+    // If a recording session was tied to this play-through, finish it
+    if (this._isRecording) this._stopRecording();
+  }
+
+  // Toggle recording. The exported file is a WebM video of exactly the
+  // canvas content during a single play-through, no audio. Renders in
+  // the user's browser via MediaRecorder + canvas.captureStream(); HA
+  // server is not involved.
+  _toggleRecording() {
+    if (this._isRecording) this._stopRecording();
+    else this._startRecording();
+  }
+
+  _startRecording() {
+    if (this._isRecording) return;
+    if (!this._map) return;
+    const canvas = this._map.getCanvas();
+    if (!canvas || typeof canvas.captureStream !== "function") {
+      console.warn("[Bosch eBike 3D] canvas.captureStream not available");
+      return;
+    }
+
+    // Pick the best mime type the browser actually supports
+    const mimeCandidates = [
+      "video/webm;codecs=vp9",
+      "video/webm;codecs=vp8",
+      "video/webm",
+    ];
+    let mimeType = "";
+    for (const m of mimeCandidates) {
+      if (MediaRecorder.isTypeSupported(m)) { mimeType = m; break; }
+    }
+
+    let stream;
+    try {
+      stream = canvas.captureStream(30);
+    } catch (e) {
+      console.warn("[Bosch eBike 3D] captureStream failed", e);
+      return;
+    }
+
+    this._recChunks = [];
+    try {
+      this._mediaRecorder = mimeType
+        ? new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 4_000_000 })
+        : new MediaRecorder(stream);
+    } catch (e) {
+      console.warn("[Bosch eBike 3D] MediaRecorder construction failed", e);
+      return;
+    }
+
+    this._mediaRecorder.ondataavailable = (ev) => {
+      if (ev.data && ev.data.size > 0) this._recChunks.push(ev.data);
+    };
+    this._mediaRecorder.onstop = () => this._finalizeRecording(mimeType);
+    this._mediaRecorder.onerror = (e) => {
+      console.warn("[Bosch eBike 3D] MediaRecorder error", e);
+    };
+
+    try {
+      this._mediaRecorder.start(1000);  // chunk every 1 s
+    } catch (e) {
+      console.warn("[Bosch eBike 3D] MediaRecorder start failed", e);
+      this._mediaRecorder = null;
+      return;
+    }
+
+    this._isRecording = true;
+    this._updateRecordUI(true);
+
+    // Reset to start and play through the whole tour so the recording
+    // covers the full visual sequence. _stopAnim() at the end will
+    // automatically stop the recording too.
+    this._stopAnim();
+    const slider = this._root.querySelector("#m3d-slider");
+    if (slider) slider.value = "0";
+    this._applyIndex(0);
+    this._startAnim();
+  }
+
+  _stopRecording() {
+    if (!this._isRecording) return;
+    this._isRecording = false;
+    this._updateRecordUI(false);
+    try {
+      if (this._mediaRecorder && this._mediaRecorder.state !== "inactive") {
+        this._mediaRecorder.stop();
+      }
+    } catch (e) {
+      console.warn("[Bosch eBike 3D] MediaRecorder stop failed", e);
+    }
+  }
+
+  _finalizeRecording(mimeType) {
+    const chunks = this._recChunks || [];
+    this._recChunks = null;
+    this._mediaRecorder = null;
+    if (!chunks.length) return;
+    const blobType = mimeType || "video/webm";
+    const blob = new Blob(chunks, { type: blobType });
+
+    // Build a filename from tour date + title where possible
+    const a = this._currentActivity || {};
+    const dateStr = a.startTime
+      ? new Date(a.startTime).toISOString().slice(0, 19).replace(/[:T]/g, "-")
+      : "tour";
+    const safeTitle = (a.title || "ebike-tour")
+      .toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40);
+    const filename = `${safeTitle || "ebike-tour"}-${dateStr}.webm`;
+
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+  }
+
+  _updateRecordUI(active) {
+    const btn = this._root.querySelector("#m3d-rec");
+    const ico = this._root.querySelector("#m3d-rec-ico");
+    const badge = this._root.querySelector("#m3d-rec-badge");
+    if (btn) btn.classList.toggle("active", active);
+    if (ico) ico.setAttribute("icon", active ? "mdi:stop" : "mdi:record-circle-outline");
+    if (btn) btn.title = active ? this._t("map3d_record_stop") : this._t("map3d_record_start");
+    if (badge) badge.style.display = active ? "inline-flex" : "none";
   }
 
   _destroyMap() {
     this._stopAnim();
+    if (this._isRecording) this._stopRecording();
     if (this._resizeObs) { try { this._resizeObs.disconnect(); } catch (_) {} this._resizeObs = null; }
     if (this._marker) { try { this._marker.remove(); } catch (_) {} this._marker = null; }
     if (this._map) { try { this._map.remove(); } catch (_) {} this._map = null; }
