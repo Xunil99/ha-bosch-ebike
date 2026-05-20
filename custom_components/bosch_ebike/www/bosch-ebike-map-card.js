@@ -4998,13 +4998,13 @@ class BoschEBike3DMapCard extends HTMLElement {
     };
     const fmtKm = (m) => (m != null && Number.isFinite(m)) ? (m / 1000).toFixed(1) + " km" : "–";
     const fmtDur = (s) => {
-      if (!Number.isFinite(s)) return "–";
+      if (!Number.isFinite(s) || s <= 0) return "–";
       const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
       return h > 0 ? `${h}h ${m}min` : `${m} min`;
     };
     const rows = this._activities.slice(0, 50).map((a, i) => {
       const km = fmtKm(a.distance);
-      const dur = fmtDur(a.duration);
+      const dur = fmtDur(this._tourDurationSec(a));
       const title = a.title || this._t("msg_unnamed_ride");
       return `
         <div class="map3d-tour" data-idx="${i}">
@@ -5077,6 +5077,25 @@ class BoschEBike3DMapCard extends HTMLElement {
     const lat1 = a.lat * rad, lat2 = b.lat * rad;
     const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
     return 2 * R * Math.asin(Math.sqrt(h));
+  }
+
+  // Best-available tour duration in seconds. The backend exposes
+  // `durationWithoutStops` (preferred) and `endTime`; legacy callers may
+  // also pass a `duration` field. We try them in that order and fall
+  // back to 0 if nothing usable is present.
+  _tourDurationSec(a) {
+    if (!a) return 0;
+    if (Number.isFinite(a.durationWithoutStops) && a.durationWithoutStops > 0) {
+      return a.durationWithoutStops;
+    }
+    if (Number.isFinite(a.duration) && a.duration > 0) {
+      return a.duration;
+    }
+    if (a.startTime && a.endTime) {
+      const d = (new Date(a.endTime).getTime() - new Date(a.startTime).getTime()) / 1000;
+      if (Number.isFinite(d) && d > 0) return d;
+    }
+    return 0;
   }
 
   _renderDetail() {
@@ -5250,32 +5269,49 @@ class BoschEBike3DMapCard extends HTMLElement {
       this._addPointMarker(pts[pts.length - 1], "#e53935", "Z");
 
       // Animated current-position marker (added LAST so it stacks above
-      // the start/end dots when at index 0)
+      // the start/end dots when at index 0). Inline styles so it always
+      // renders, even if the card-scoped CSS rule does not apply.
       const el = document.createElement("div");
       el.className = "ebike-3d-marker";
+      el.style.cssText =
+        "position:relative;width:22px;height:22px;border-radius:50%;" +
+        "background:#03a9f4;border:4px solid #fff;" +
+        "box-shadow:0 2px 8px rgba(0,0,0,.5);z-index:10;";
       this._marker = new mlib.Marker({ element: el, anchor: "center" })
         .setLngLat([pts[0].lon, pts[0].lat])
         .addTo(this._map);
 
-      // Fit bounds to the track. Compute fresh, then do a final resize so
-      // MapLibre's internal viewport matches the now-rendered canvas size.
+      // Compute bounds and a camera that fits them, then ease to that
+      // camera with our preferred pitch/bearing. cameraForBounds is more
+      // reliable than fitBounds because the latter sometimes silently
+      // ignores pitch/bearing options in some MapLibre 5.x builds.
       try { this._map.resize(); } catch (_) {}
       const bounds = new mlib.LngLatBounds();
       for (const c of coords) bounds.extend(c);
 
-      // Two-phase camera move: first fit (flat to compute zoom correctly),
-      // then tilt+rotate to the requested 3D pose. Many MapLibre versions
-      // ignore pitch/bearing inside fitBounds, hence the split.
-      this._map.fitBounds(bounds, {
+      const camera = this._map.cameraForBounds(bounds, {
         padding: { top: 90, right: 60, bottom: 160, left: 60 },
-        duration: 700,
         maxZoom: 17,
       });
-      this._map.once("moveend", () => {
-        try {
-          this._map.easeTo({ pitch, bearing: -20, duration: 600 });
-        } catch (_) {}
-      });
+      if (camera) {
+        this._map.easeTo({
+          center: camera.center,
+          zoom: camera.zoom,
+          pitch,
+          bearing: -20,
+          duration: 900,
+        });
+      } else {
+        // Fallback: jump to bounds center at a sensible zoom
+        const c = bounds.getCenter();
+        this._map.easeTo({
+          center: [c.lng, c.lat],
+          zoom: 13,
+          pitch,
+          bearing: -20,
+          duration: 900,
+        });
+      }
 
       this._applyIndex(0);
       this._updateTimeChips(0, startTime, altDeg, mood);
@@ -5299,7 +5335,7 @@ class BoschEBike3DMapCard extends HTMLElement {
 
     // Interpolate per-point time from startTime + (i/N) * duration
     const a = this._currentActivity;
-    const dur = Number.isFinite(a?.duration) ? a.duration : 0;
+    const dur = this._tourDurationSec(a);
     const startTime = a?.startTime ? new Date(a.startTime) : new Date();
     const t = new Date(startTime.getTime() + (i / Math.max(1, pts.length - 1)) * dur * 1000);
     const sun = sunPositionAt(t, p.lat, p.lon);
@@ -5353,7 +5389,7 @@ class BoschEBike3DMapCard extends HTMLElement {
 
   _updateRangeLabels() {
     const a = this._currentActivity;
-    const dur = Number.isFinite(a?.duration) ? a.duration : 0;
+    const dur = this._tourDurationSec(a);
     const start = a?.startTime ? new Date(a.startTime) : new Date();
     const end = new Date(start.getTime() + dur * 1000);
     const fmt = (d) => `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
