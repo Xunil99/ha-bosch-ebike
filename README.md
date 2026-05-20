@@ -351,6 +351,8 @@ playback_speed: 60     # 60x Echtzeit (1h-Tour = 1min Wiedergabe)
 | `smooth_window` | 15 | Bearing-Glättungsfenster. Höher = glattere Kamera, schneidet aber Kurven weiter. 5 fühlt sich zittrig an, 40 wirkt sehr träge |
 | `track_smooth_window` | 2 | Track-Positions-Glättung für den Kamerapfad. 0 = aus (rohes GPS, kann zittern), 2 = sanft (Default), 5+ schneidet ggf. sichtbar Kurven. Die angezeigte Track-Linie zeigt unabhängig davon immer das rohe GPS |
 | `playback_speed` | 60 | Echtzeit-Multiplikator beim Play-Button. 60 = 60× schneller als die echte Fahrt, eine 1h-Tour läuft in 1 Min, eine 30-Min-Tour in 30 Sek |
+| `terrain_enabled` | 1 | 3D-Geländemesh + sonnenstandsabhängiges Hillshading aus AWS-DEM-Tiles. `0` deaktiviert (für ältere Mobilgeräte) |
+| `terrain_exaggeration` | 1.5 | Überhöhung des 3D-Geländes. 1 = echter Maßstab, 1.5 = leicht überzeichnet, 2-3 = sehr dramatisch |
 | `animate_seconds` | — | Optional. Erzwingt feste Abspieldauer (z. B. immer 25 s), überschreibt `playback_speed` |
 | `account_id` | (leer) | Auf ein Konto fixieren, wie bei der 2D-Karte |
 | `bike_id` | (leer) | Auf ein Bike fixieren |
@@ -362,7 +364,7 @@ playback_speed: 60     # 60x Echtzeit (1h-Tour = 1min Wiedergabe)
 - Die Karte wird erst geladen, wenn der User sie tatsächlich öffnet. Die bestehenden Karten (Map, Heatmap, Calendar, Dashboard) sind nicht betroffen.
 - 3D-Rendering ist auf Desktop und modernen Mobilgeräten flüssig. Bei sehr langen Tracks (> 10.000 Punkten) kann es auf älteren Geräten ruckeln.
 - OSM-Building-Coverage ist in Städten dicht, auf dem Land sparsamer. Touren durch urbane Gebiete profitieren am stärksten.
-- **Gelände-Schatten** (Berge, Hügel) sind bewusst nicht enthalten. Sie würden eine DEM-Tile-Source (Maptiler mit API-Key, AWS-Open-Data-SRTM oder selbst gehostete Höhendaten) plus eigenes Ray-Casting im Shader erfordern. Wenn das Interesse besteht, kann das in einer späteren Version nachgereicht werden.
+- **Gelände-Beleuchtung** (Berge, Hügel) ist seit v1.14.0 als sonnenstandsabhängiges Hillshading integriert. DEM-Tiles kommen von AWS Open Data ohne API-Key. Standardmäßig aktiv (`terrain_enabled: 1`), auf älteren Mobilgeräten ggf. mit `terrain_enabled: 0` abschalten. Echte Ray-Casting-Schatten von Berg auf Tal sind nicht enthalten, das Hillshading ist eine per-Pixel-Hangschattierung.
 
 ### Dashboard-Card - Bike-Foto, Live-Daten und Ladesteuerung
 
@@ -819,6 +821,8 @@ playback_speed: 60     # 60× real time (1 h ride plays in 1 min)
 | `smooth_window` | 15 | Bearing-smoothing window. Higher = calmer camera, sweeps corners wider. 5 feels twitchy, 40 feels sluggish |
 | `track_smooth_window` | 2 | Smooths GPS jitter in the camera path. 0 = off (raw GPS, may jitter), 2 = gentle (default), 5+ may visibly cut corners. The displayed track polyline always shows raw GPS regardless |
 | `playback_speed` | 60 | Real-time multiplier for Play. 60 = 60× faster than reality, a 1 h ride plays in 1 min, a 30 min ride in 30 s |
+| `terrain_enabled` | 1 | 3D terrain mesh + sun-aware hillshading from AWS DEM tiles. `0` disables (for older mobile devices) |
+| `terrain_exaggeration` | 1.5 | Vertical scale of the 3D terrain. 1 = true scale, 1.5 = slightly enhanced, 2-3 = dramatic |
 | `animate_seconds` | — | Optional. Forces a fixed playback duration (e.g. always 25 s) and overrides `playback_speed` |
 | `account_id` | (empty) | Lock to a specific account, like the 2D card |
 | `bike_id` | (empty) | Lock to a specific bike |
@@ -830,7 +834,7 @@ playback_speed: 60     # 60× real time (1 h ride plays in 1 min)
 - The 3D card is only loaded when the user actually opens it. The other cards (Map, Heatmap, Calendar, Dashboard) are not affected.
 - 3D rendering is smooth on desktops and recent mobile devices. Very long tracks (>10 000 points) may stutter on older hardware.
 - OSM building coverage is dense in cities, sparser in the countryside. Urban rides benefit the most from the visual richness.
-- **Terrain shadows** (mountains, hills) are intentionally not included. They would require a DEM tile source (Maptiler with API key, AWS Open Data SRTM, or self-hosted elevation data) plus per-tile ray-casting in a shader. Can be added in a later release if there is interest.
+- **Terrain illumination** (mountains, hills) is included since v1.14.0 as sun-aware hillshading driven by AWS Open Data DEM tiles, no API key needed. Enabled by default (`terrain_enabled: 1`); set to `0` on older mobile devices if the chase cam stutters. True ray-cast shadows from one mountain onto another valley are not included; the hillshade is per-pixel slope shading.
 
 ### Dashboard card - bike photo, live data and charging control
 

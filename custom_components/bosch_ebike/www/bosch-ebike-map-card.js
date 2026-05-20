@@ -206,6 +206,10 @@ const I18N = {
     map3d_sun_golden: "Golden hour",
     map3d_sun_morning: "Daylight",
     map3d_sun_day: "Daylight",
+    map3d_editor_terrain: "3D terrain + hillshade (1 / 0)",
+    map3d_editor_terrain_hint: "1 = on (default), 0 = off. Adds an elevation mesh and sun-aware hillshading from AWS DEM tiles. Disable on older mobile devices if the chase cam stutters.",
+    map3d_editor_terrain_exag: "Terrain exaggeration",
+    map3d_editor_terrain_exag_hint: "Vertical scale of the 3D terrain mesh. 1 = true scale, 1.5 = default (slightly enhanced for visual punch), 0.5 = flatter.",
   },
   de: {
     rides_title: "Bosch eBike Rides",
@@ -393,6 +397,10 @@ const I18N = {
     map3d_sun_golden: "Goldene Stunde",
     map3d_sun_morning: "Tageslicht",
     map3d_sun_day: "Tageslicht",
+    map3d_editor_terrain: "3D-Gelände + Hangschatten (1 / 0)",
+    map3d_editor_terrain_hint: "1 = an (Default), 0 = aus. Fügt 3D-Geländemesh und sonnenstandsabhängige Hang-Beleuchtung aus AWS-DEM-Tiles hinzu. Auf älteren Mobilgeräten deaktivieren, wenn die Chase-Cam ruckelt.",
+    map3d_editor_terrain_exag: "Gelände-Überhöhung",
+    map3d_editor_terrain_exag_hint: "Vertikale Skalierung des 3D-Geländemesh. 1 = echter Maßstab, 1.5 = Default (etwas überzeichnet für visuellen Effekt), 0.5 = flacher.",
   },
   nl: {
     rides_title: "Bosch eBike Ritten",
@@ -580,6 +588,10 @@ const I18N = {
     map3d_sun_golden: "Gouden uur",
     map3d_sun_morning: "Daglicht",
     map3d_sun_day: "Daglicht",
+    map3d_editor_terrain: "3D-terrein + hillshade (1 / 0)",
+    map3d_editor_terrain_hint: "1 = aan (default), 0 = uit. Voegt 3D-terreinmesh en zonstand-afhankelijke hellingverlichting toe via AWS DEM-tiles. Schakel uit op oudere mobiele apparaten als de chase-cam hapert.",
+    map3d_editor_terrain_exag: "Terrein-overdrijving",
+    map3d_editor_terrain_exag_hint: "Verticale schaal van het 3D-terreinmesh. 1 = echte schaal, 1.5 = default (licht overdreven), 0.5 = vlakker.",
   },
 };
 
@@ -724,6 +736,12 @@ function ensureLeaflet() {
 const MAPLIBRE_JS = "https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.js";
 const MAPLIBRE_CSS = "https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.css";
 const OPENFREEMAP_LIBERTY = "https://tiles.openfreemap.org/styles/liberty";
+
+// AWS Open Data Terrain Tiles (Mapzen "terrarium" encoding). Free,
+// no API key, CORS-enabled. Used as a DEM source for 3D-terrain mesh
+// and sun-aware hillshading.
+const AWS_TERRARIUM_TILES =
+  "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png";
 
 function ensureMapLibre() {
   if (window.maplibregl) return Promise.resolve(window.maplibregl);
@@ -4918,7 +4936,7 @@ class BoschEBike3DMapCard extends HTMLElement {
   }
 
   static getConfigElement() { return document.createElement("bosch-ebike-3d-map-card-editor"); }
-  static getStubConfig() { return { height: 540, default_pitch: 55, chase_zoom: 17, smooth_window: 15, track_smooth_window: 2, playback_speed: 60 }; }
+  static getStubConfig() { return { height: 540, default_pitch: 55, chase_zoom: 17, smooth_window: 15, track_smooth_window: 2, terrain_enabled: 1, terrain_exaggeration: 1.5, playback_speed: 60 }; }
   getCardSize() { return 7; }
 
   _t(key, ...args) {
@@ -5380,6 +5398,7 @@ class BoschEBike3DMapCard extends HTMLElement {
       // Polyline shows raw GPS, chase cam uses smoothed positions
       this._addTrackLayers(this._rawTrack || pts);
       this._addBuildingsIfNeeded();
+      this._initTerrainAndHillshade();
       this._initShadowLayer();
 
       // Recompute shadows whenever the camera settles in a new spot
@@ -5545,6 +5564,88 @@ class BoschEBike3DMapCard extends HTMLElement {
         (typeof l.id === "string" &&
          (l.id === "building" || l.id.startsWith("building-") || l.id.includes("buildings"))))
       .map((l) => l.id);
+  }
+
+  // 3D terrain mesh + sun-aware hillshading. DEM tiles come from
+  // AWS Open Data (Mapzen terrarium encoding), free and CORS-friendly.
+  // Disabled cleanly when terrain_enabled = 0.
+  //
+  // Note: hillshade is per-pixel slope-based shading, not a true
+  // ray-cast cast-shadow. For 'mountain X casts a shadow on valley Y'
+  // we would need a custom WebGL ray-marching shader. The hillshade
+  // illumination direction is driven by the sun azimuth at the slider
+  // time, so morning and evening rides look visibly different.
+  _initTerrainAndHillshade() {
+    if (!this._map) return;
+    const enabled = this._config.terrain_enabled;
+    // Default ON; only "0", false, "false", "off" disable.
+    const off = enabled === 0 || enabled === "0" || enabled === false ||
+                enabled === "false" || enabled === "off";
+    if (off) {
+      console.log("[Bosch eBike 3D] terrain disabled by config");
+      return;
+    }
+    const exagRaw = Number(this._config.terrain_exaggeration);
+    const exag = Number.isFinite(exagRaw) && exagRaw > 0
+      ? Math.max(0.1, Math.min(3, exagRaw)) : 1.5;
+    try {
+      if (!this._map.getSource("terrain-dem")) {
+        this._map.addSource("terrain-dem", {
+          type: "raster-dem",
+          encoding: "terrarium",
+          tiles: [AWS_TERRARIUM_TILES],
+          tileSize: 256,
+          maxzoom: 15,
+          attribution: "Elevation © Mapzen / AWS Open Data",
+        });
+      }
+      // 3D terrain mesh under all overlay layers.
+      this._map.setTerrain({ source: "terrain-dem", exaggeration: exag });
+
+      // Hillshade fill layer below buildings and shadows, above the
+      // basemap. Illumination direction updated per slider tick from
+      // the sun position.
+      if (!this._map.getLayer("ebike-hillshade")) {
+        const buildings = this._findBuildingLayers();
+        const beforeId = buildings[0];
+        this._map.addLayer({
+          id: "ebike-hillshade",
+          type: "hillshade",
+          source: "terrain-dem",
+          paint: {
+            "hillshade-shadow-color": "#1a1f24",
+            "hillshade-highlight-color": "#ffffff",
+            "hillshade-accent-color": "#5a3c1a",
+            "hillshade-exaggeration": 0.55,
+            "hillshade-illumination-direction": 315,
+            "hillshade-illumination-anchor": "map",
+          },
+        }, beforeId);
+      }
+      console.log("[Bosch eBike 3D] terrain + hillshade initialised, exag =", exag);
+    } catch (e) {
+      console.warn("[Bosch eBike 3D] terrain setup failed; continuing without", e);
+    }
+  }
+
+  // Re-aim the hillshade illumination at the current sun bearing.
+  // Also dampens the effect at night and amplifies it at low sun.
+  _updateHillshadeFromSun(sunAltRad, sunAzRad) {
+    if (!this._map || !this._map.getLayer("ebike-hillshade")) return;
+    try {
+      // sun.azimuth: 0 = south, +π/2 = west. Compass bearing = +180°.
+      const sunCompass = ((sunAzRad * 180 / Math.PI) + 180 + 360) % 360;
+      const altDeg = sunAltRad * 180 / Math.PI;
+      // At night fall back to a faint relief shading (no sun direction);
+      // at low altitude amplify, at high altitude attenuate.
+      let exag;
+      if (altDeg <= 0) exag = 0.15;
+      else if (altDeg < 15) exag = 0.85;
+      else if (altDeg < 35) exag = 0.6;
+      else exag = 0.4;
+      this._map.setPaintProperty("ebike-hillshade", "hillshade-illumination-direction", sunCompass);
+      this._map.setPaintProperty("ebike-hillshade", "hillshade-exaggeration", exag);
+    } catch (_) { /* ignore */ }
   }
 
   // Empty shadow source + layer, populated by _updateShadows() once the
@@ -5808,6 +5909,8 @@ class BoschEBike3DMapCard extends HTMLElement {
           position: [1.15, azDeg, Math.max(5, 90 - altDeg)],
         });
       } catch (_) { /* ignore */ }
+      // Hillshade follows the sun too (no-op if terrain is disabled)
+      this._updateHillshadeFromSun(sun.altitude, sun.azimuth);
     }
 
     // Stats: also interpolated. Distance uses the cumulative array.
@@ -6009,6 +6112,8 @@ class BoschEBike3DMapCardEditor extends HTMLElement {
       chase_zoom: mkText("chase_zoom", "map3d_editor_chase_zoom", "map3d_editor_chase_zoom_hint", "number"),
       smooth_window: mkText("smooth_window", "map3d_editor_smooth_window", "map3d_editor_smooth_window_hint", "number"),
       track_smooth_window: mkText("track_smooth_window", "map3d_editor_track_smooth", "map3d_editor_track_smooth_hint", "number"),
+      terrain_enabled: mkText("terrain_enabled", "map3d_editor_terrain", "map3d_editor_terrain_hint", "number"),
+      terrain_exaggeration: mkText("terrain_exaggeration", "map3d_editor_terrain_exag", "map3d_editor_terrain_exag_hint", "number"),
       playback_speed: mkText("playback_speed", "map3d_editor_playback_speed", "map3d_editor_playback_speed_hint", "number"),
       animate_seconds: mkText("animate_seconds", "map3d_editor_animate_seconds", "map3d_editor_animate_seconds_override_hint", "number"),
       account_id: mkText("account_id", "map3d_editor_account", null, "text"),
