@@ -5219,7 +5219,7 @@ class BoschEBike3DMapCard extends HTMLElement {
               <ha-icon icon="mdi:play" id="m3d-play-ico"></ha-icon>
             </button>
             <span class="map3d-time" id="m3d-t-start">--:--</span>
-            <input type="range" class="map3d-slider" id="m3d-slider" min="0" max="100" step="1" value="0">
+            <input type="range" class="map3d-slider" id="m3d-slider" min="0" max="100" step="0.01" value="0">
             <span class="map3d-time" id="m3d-t-end">--:--</span>
           </div>
           <div class="map3d-stats">
@@ -5615,23 +5615,65 @@ class BoschEBike3DMapCard extends HTMLElement {
   }
 
 
+  // Linearly interpolate two values, treating non-finite operands gracefully.
+  _lerpFinite(a, b, f) {
+    const af = Number.isFinite(a), bf = Number.isFinite(b);
+    if (af && bf) return a + (b - a) * f;
+    if (af) return a;
+    if (bf) return b;
+    return NaN;
+  }
+
+  // Shortest-arc circular interpolation of two compass bearings in degrees.
+  _lerpBearing(a, b, f) {
+    const diff = (((b - a + 540) % 360) - 180);
+    return ((a + diff * f) + 360) % 360;
+  }
+
+  // Fractional version of _bearingAt: looks up two adjacent smoothed
+  // bearings and shortest-arc-interpolates between them. The chase cam
+  // then turns smoothly across the gap between two GPS samples instead
+  // of snapping at each integer index.
+  _bearingAtFractional(idx) {
+    const arr = this._smoothedBearings;
+    if (!arr || !arr.length) return 0;
+    const N = arr.length - 1;
+    const c = Math.max(0, Math.min(N, idx));
+    const i0 = Math.floor(c);
+    const i1 = Math.min(N, i0 + 1);
+    const f = c - i0;
+    return this._lerpBearing(arr[i0], arr[i1], f);
+  }
+
   _applyIndex(idx, isInitial) {
     const pts = this._currentTrack;
     if (!pts || !pts.length) return;
-    const i = Math.max(0, Math.min(pts.length - 1, Math.round(idx)));
-    this._currentIndex = i;
-    const p = pts[i];
+    const clamped = Math.max(0, Math.min(pts.length - 1, idx));
+    const i0 = Math.floor(clamped);
+    const i1 = Math.min(pts.length - 1, i0 + 1);
+    const f = clamped - i0;
+    const a0 = pts[i0];
+    const a1 = pts[i1];
+    // Interpolated current bike state. All downstream visual updates
+    // (marker, camera, stats, sun) use this fractional position so the
+    // chase cam glides between GPS samples instead of jumping every
+    // time the rounded index increments.
+    const p = {
+      lat: a0.lat + (a1.lat - a0.lat) * f,
+      lon: a0.lon + (a1.lon - a0.lon) * f,
+      ele: this._lerpFinite(a0.ele, a1.ele, f),
+      speed: this._lerpFinite(a0.speed, a1.speed, f),
+    };
+    this._currentIndex = i0;       // for shadow snapping (integer-anchored)
+    this._currentFracIndex = clamped;
+
     if (this._marker) this._marker.setLngLat([p.lon, p.lat]);
 
     // Chase-cam: look-target sits ~60 m ahead of the bike along the
-    // smoothed bearing. With pitch+bearing the bike then renders in the
-    // lower-center of the screen, the road ahead fills the upper portion,
-    // and the perspective reads as "behind the bike" rather than the
-    // ambiguous "from the side" feeling earlier padding-only versions
-    // produced.
+    // smoothed (and now also fractionally interpolated) bearing.
     if (this._map && this._map.loaded()) {
       try {
-        const bearing = this._bearingAt(i);
+        const bearing = this._bearingAtFractional(clamped);
         const lookAt = this._lookAheadCoord(p, bearing, 60);
         const camera = {
           center: lookAt,
@@ -5647,15 +5689,15 @@ class BoschEBike3DMapCard extends HTMLElement {
       } catch (e) { console.warn("[Bosch eBike 3D] chase-cam update failed", e); }
     }
 
-    // Interpolate per-point time from startTime + (i/N) * duration
+    // Per-frame interpolated tour time
     const a = this._currentActivity;
     const dur = this._tourDurationSec(a);
     const startTime = a?.startTime ? new Date(a.startTime) : new Date();
-    const t = new Date(startTime.getTime() + (i / Math.max(1, pts.length - 1)) * dur * 1000);
+    const t = new Date(startTime.getTime() + (clamped / Math.max(1, pts.length - 1)) * dur * 1000);
     const sun = sunPositionAt(t, p.lat, p.lon);
     const altDeg = sun.altitude * 180 / Math.PI;
     const mood = sunMoodFor(altDeg);
-    this._updateTimeChips(i, t, altDeg, mood);
+    this._updateTimeChips(clamped, t, altDeg, mood);
 
     if (this._map && this._map.loaded()) {
       try {
@@ -5669,9 +5711,12 @@ class BoschEBike3DMapCard extends HTMLElement {
       } catch (_) { /* ignore */ }
     }
 
-    // Stats
-    const dist = this._cumDist?.[i] ?? 0;
-    const distLbl = (dist / 1000).toLocaleString(undefined, { maximumFractionDigits: 1 }) + " km";
+    // Stats: also interpolated. Distance uses the cumulative array.
+    const cum = this._cumDist;
+    const dist = cum ? this._lerpFinite(cum[i0], cum[i1], f) : 0;
+    const distLbl = Number.isFinite(dist)
+      ? (dist / 1000).toLocaleString(undefined, { maximumFractionDigits: 1 }) + " km"
+      : "–";
     this._root.querySelector("#m3d-stat-dist").textContent = distLbl;
     const sp = Number.isFinite(p.speed) ? p.speed : null;
     this._root.querySelector("#m3d-stat-speed").textContent =
@@ -5681,7 +5726,9 @@ class BoschEBike3DMapCard extends HTMLElement {
       ele != null ? Math.round(ele) + " m" : "–";
 
     const slider = this._root.querySelector("#m3d-slider");
-    if (slider && document.activeElement !== slider) slider.value = String(i);
+    if (slider && document.activeElement !== slider) {
+      slider.value = String(clamped);
+    }
   }
 
   _updateTimeChips(_i, time, altDeg, mood) {
