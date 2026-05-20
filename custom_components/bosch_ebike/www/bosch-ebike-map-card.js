@@ -4955,7 +4955,10 @@ class BoschEBike3DMapCard extends HTMLElement {
     // the live MapLibre map and recreate it, which both flashes and
     // wipes the markers/track that the user is looking at.
     const newStr = JSON.stringify(config || {});
-    if (this._configStr === newStr) return;
+    const same = this._configStr === newStr;
+    console.log("[Bosch eBike 3D] setConfig called; same-as-previous=" + same +
+      "; ready=" + !!this._ready + "; mode=" + this._mode);
+    if (same) return;
     this._configStr = newStr;
 
     this._config = { ...config };
@@ -5343,6 +5346,7 @@ class BoschEBike3DMapCard extends HTMLElement {
   }
 
   _renderDetail() {
+    console.log("[Bosch eBike 3D] _renderDetail called");
     const a = this._currentActivity;
     if (!a) return;
     // Tear down any previous MapLibre instance + markers before we
@@ -5573,6 +5577,36 @@ class BoschEBike3DMapCard extends HTMLElement {
         .addTo(myMap);
       console.log("[Bosch eBike 3D] markers added; current marker DOM parent=" +
         (el.parentElement ? el.parentElement.className : "(none)"));
+
+      // Watchdog: log whenever any marker is removed from the DOM in
+      // the next 5 seconds, with a stack trace pointing to whoever
+      // triggered the mutation. This is purely diagnostic for the
+      // 'markers disappear after 1.5 s' bug. Removed automatically
+      // after the watch window or when the card is destroyed.
+      try {
+        const mapContainer = myMap.getContainer();
+        const mo = new MutationObserver((muts) => {
+          for (const m of muts) {
+            for (const removed of m.removedNodes) {
+              if (removed.nodeType !== 1) continue;
+              const looksLikeMarker =
+                (removed.classList && removed.classList.contains("maplibregl-marker")) ||
+                (removed.querySelector && removed.querySelector(".maplibregl-marker"));
+              if (looksLikeMarker) {
+                console.warn("[Bosch eBike 3D] marker removed from DOM",
+                  { time: performance.now().toFixed(0), removed, stack: new Error("removal").stack });
+              }
+            }
+          }
+        });
+        mo.observe(mapContainer, { childList: true, subtree: true });
+        setTimeout(() => {
+          try { mo.disconnect(); } catch (_) {}
+          console.log("[Bosch eBike 3D] marker watchdog stopped after 5 s");
+        }, 5000);
+      } catch (e) {
+        console.warn("[Bosch eBike 3D] could not install marker watchdog", e);
+      }
 
       // Diagnostic: verify marker placement and DOM visibility shortly
       // after creation. If the marker is in DOM but reports a
@@ -6531,6 +6565,8 @@ class BoschEBike3DMapCard extends HTMLElement {
   _destroyMap() {
     // Invalidate any in-flight _initMap waiting on ensureMapLibre
     this._mapInitEpoch = (this._mapInitEpoch || 0) + 1;
+    console.log("[Bosch eBike 3D] _destroyMap called; new epoch=" + this._mapInitEpoch +
+      "; hadMap=" + !!this._map + "; hadMarker=" + !!this._marker);
     this._stopAnim();
     if (this._isRecording) this._stopRecording();
     if (this._renderHandlerForRec && this._map) {
