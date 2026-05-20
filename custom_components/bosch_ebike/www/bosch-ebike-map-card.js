@@ -5091,6 +5091,7 @@ class BoschEBike3DMapCard extends HTMLElement {
     this._mode = "detail";
     this._currentActivity = activity;
     this._currentTrack = null;
+    this._satellitePrefetched = false;
     this._showMessage(this._t("map3d_loading_track"));
     try {
       const params = { type: "bosch_ebike/get_track", activity_id: activity.id };
@@ -5263,18 +5264,25 @@ class BoschEBike3DMapCard extends HTMLElement {
     await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
     void canvas.offsetHeight;
 
-    // Initial pose: chase-cam at the start of the track, looking forward.
+    // Initial pose: chase-cam look-target ~60 m AHEAD of the bike along
+    // the smoothed bearing. That places the bike behind the camera focus,
+    // so the rendered bike sits in the lower part of the screen and the
+    // upcoming road fills the rest.
     const initialBearing = this._bearingAt(0);
+    const lookAt = this._lookAheadCoord(pts[0], initialBearing, 60);
     this._mapMode = "vector";
     this._currentIndex = 0;
     this._map = new mlib.Map({
       container: canvas,
       style: OPENFREEMAP_LIBERTY,
-      center: [pts[0].lon, pts[0].lat],
+      center: lookAt,
       zoom: chaseZoom,
       pitch: chasePitch,
       bearing: initialBearing,
       attributionControl: false,
+      // Keep more tiles in memory so the Esri satellite tiles do not have
+      // to round-trip again when the route loops back into a visited area.
+      maxTileCacheSize: 600,
     });
     this._map.addControl(new mlib.AttributionControl({ compact: true }), "bottom-right");
     this._map.addControl(new mlib.NavigationControl({ visualizePitch: true }), "top-right");
@@ -5390,6 +5398,65 @@ class BoschEBike3DMapCard extends HTMLElement {
     return (brng + 360) % 360;
   }
 
+  // Coordinate `distanceMeters` ahead of `p` along compass `bearingDeg`.
+  // Equirectangular approximation, accurate enough for chase-cam offsets
+  // of a few dozen metres.
+  _lookAheadCoord(p, bearingDeg, distanceMeters) {
+    const bRad = bearingDeg * Math.PI / 180;
+    const metersPerDegLat = 111320;
+    const metersPerDegLon = 111320 * Math.cos(p.lat * Math.PI / 180);
+    const dLat = (distanceMeters * Math.cos(bRad)) / metersPerDegLat;
+    const dLon = (distanceMeters * Math.sin(bRad)) / Math.max(1, metersPerDegLon);
+    return [p.lon + dLon, p.lat + dLat];
+  }
+
+  // Convert a lon/lat into XYZ tile coordinates at the given zoom.
+  _lonLatToTile(lon, lat, zoom) {
+    const n = Math.pow(2, zoom);
+    const x = Math.floor(((lon + 180) / 360) * n);
+    const latRad = lat * Math.PI / 180;
+    const y = Math.floor(
+      ((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) * n
+    );
+    return { x, y };
+  }
+
+  // Warm the browser cache with all Esri satellite tiles that the chase
+  // cam will hit along the current track. Called once when the user
+  // switches into satellite mode. Bounded by a hard cap so absurdly long
+  // tours do not spawn thousands of requests.
+  async _prefetchSatelliteTiles() {
+    const pts = this._currentTrack;
+    if (!pts || !pts.length) return;
+    const zoom = Math.max(14, Math.min(19, Math.round(this._chaseZoom || 17)));
+    const tiles = new Set();
+    // 3x3 tile window around each sample, sampled every ~5 indices to
+    // keep the set small.
+    const stride = Math.max(1, Math.floor(pts.length / 600));
+    for (let i = 0; i < pts.length; i += stride) {
+      const t = this._lonLatToTile(pts[i].lon, pts[i].lat, zoom);
+      for (let dx = -1; dx <= 1; dx++) {
+        for (let dy = -1; dy <= 1; dy++) {
+          tiles.add(`${zoom}/${t.y + dy}/${t.x + dx}`);
+        }
+      }
+    }
+    const tileList = [...tiles].slice(0, 800);
+    const base = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/";
+    // 8 parallel fetches. no-cors so we only warm the HTTP cache, the
+    // response is opaque to us; MapLibre will read it from the cache when
+    // it renders.
+    let idx = 0;
+    const next = async () => {
+      while (idx < tileList.length) {
+        const my = idx++;
+        try { await fetch(base + tileList[my], { mode: "no-cors", cache: "force-cache" }); }
+        catch (_) { /* ignore */ }
+      }
+    };
+    await Promise.all(Array.from({ length: 8 }, () => next()));
+  }
+
   _addPointMarker(p, color, _label) {
     if (!this._map || !window.maplibregl) return;
     const el = document.createElement("div");
@@ -5460,6 +5527,7 @@ class BoschEBike3DMapCard extends HTMLElement {
   // clears them. HTML markers survive style swaps.
   _setMapStyle(mode) {
     if (!this._map) return;
+    const wasSatellite = this._mapMode === "satellite";
     this._mapMode = mode;
     const style = mode === "satellite" ? SATELLITE_STYLE : OPENFREEMAP_LIBERTY;
     this._map.once("style.load", () => {
@@ -5472,6 +5540,14 @@ class BoschEBike3DMapCard extends HTMLElement {
     try { this._map.setStyle(style); } catch (e) {
       console.warn("[Bosch eBike 3D] setStyle failed", e);
     }
+    // First switch to satellite: warm the browser tile cache along the
+    // route so subsequent chase-cam moves do not hang waiting on Esri.
+    if (mode === "satellite" && !wasSatellite && !this._satellitePrefetched) {
+      this._satellitePrefetched = true;
+      this._prefetchSatelliteTiles().catch((e) => {
+        console.warn("[Bosch eBike 3D] tile prefetch failed", e);
+      });
+    }
   }
 
   _applyIndex(idx, isInitial) {
@@ -5482,26 +5558,23 @@ class BoschEBike3DMapCard extends HTMLElement {
     const p = pts[i];
     if (this._marker) this._marker.setLngLat([p.lon, p.lat]);
 
-    // Chase-cam: move map center to the bike, rotate to the direction of
-    // travel, hold a constant pitch and zoom. Use jumpTo for snappy
-    // response (no easing latency during slider drag or RAF playback).
+    // Chase-cam: look-target sits ~60 m ahead of the bike along the
+    // smoothed bearing. With pitch+bearing the bike then renders in the
+    // lower-center of the screen, the road ahead fills the upper portion,
+    // and the perspective reads as "behind the bike" rather than the
+    // ambiguous "from the side" feeling earlier padding-only versions
+    // produced.
     if (this._map && this._map.loaded()) {
       try {
         const bearing = this._bearingAt(i);
-        // padding pushes the visible center down, so the bike chip sits
-        // in the lower third and the rider sees the road ahead.
-        const ch = this._root.querySelector("#m3d-canvas");
-        const hostH = ch ? ch.clientHeight : 540;
-        const padTop = Math.max(60, Math.floor(hostH * 0.45));
+        const lookAt = this._lookAheadCoord(p, bearing, 60);
         const camera = {
-          center: [p.lon, p.lat],
+          center: lookAt,
           zoom: this._chaseZoom != null ? this._chaseZoom : 17,
           pitch: this._chasePitch != null ? this._chasePitch : 55,
           bearing,
-          padding: { top: padTop, right: 0, bottom: 0, left: 0 },
         };
         if (isInitial) {
-          // Soft swoop-in on first frame
           this._map.easeTo({ ...camera, duration: 900 });
         } else {
           this._map.jumpTo(camera);
