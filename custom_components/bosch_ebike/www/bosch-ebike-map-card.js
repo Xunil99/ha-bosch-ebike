@@ -196,6 +196,9 @@ const I18N = {
     map3d_editor_animate_seconds_hint: "How long a full Play-cycle takes from tour start to tour end.",
     map3d_editor_smooth_window: "Bearing-smoothing window",
     map3d_editor_smooth_window_hint: "Higher = smoother camera, slower to react. 15 is a good default; 5 is twitchy, 40 sweeps corners wide.",
+    map3d_editor_playback_speed: "Playback speed factor (×)",
+    map3d_editor_playback_speed_hint: "Real-time multiplier. 60 = 60× faster than reality, so a 1-hour ride plays in 1 minute and a 2-hour ride in 2 minutes. Higher = faster.",
+    map3d_editor_animate_seconds_override_hint: "Optional. If set, forces a fixed playback duration regardless of tour length and overrides the speed factor.",
     map3d_style_3d: "3D",
     map3d_style_sat: "Satellite",
   },
@@ -375,6 +378,9 @@ const I18N = {
     map3d_editor_animate_seconds_hint: "Wie lange ein voller Play-Durchlauf von Tour-Start bis Tour-Ende dauert.",
     map3d_editor_smooth_window: "Bearing-Glättungsfenster",
     map3d_editor_smooth_window_hint: "Höher = glattere Kamera, träger. 15 ist guter Default; 5 zittrig, 40 schneidet Kurven weit.",
+    map3d_editor_playback_speed: "Abspielgeschwindigkeit (×)",
+    map3d_editor_playback_speed_hint: "Echtzeit-Multiplikator. 60 = 60× schneller als die echte Fahrt, eine 1h-Tour läuft in 1 Min, eine 2h-Tour in 2 Min. Höher = schneller.",
+    map3d_editor_animate_seconds_override_hint: "Optional. Wenn gesetzt, erzwingt eine feste Abspieldauer unabhängig von der Tour-Länge und überschreibt den Speed-Faktor.",
     map3d_style_3d: "3D",
     map3d_style_sat: "Satellit",
   },
@@ -554,6 +560,9 @@ const I18N = {
     map3d_editor_animate_seconds_hint: "Hoe lang een volledige Play-cyclus duurt van begin tot einde van de tour.",
     map3d_editor_smooth_window: "Bearing-smoothingvenster",
     map3d_editor_smooth_window_hint: "Hoger = soepelere camera, trager. 15 is goede default; 5 schokkerig, 40 snijdt bochten breed af.",
+    map3d_editor_playback_speed: "Afspeelsnelheid (×)",
+    map3d_editor_playback_speed_hint: "Realtime-vermenigvuldiger. 60 = 60× sneller dan de echte rit; een 1u-rit speelt in 1 min, 2u-rit in 2 min. Hoger = sneller.",
+    map3d_editor_animate_seconds_override_hint: "Optioneel. Indien ingesteld dwingt dit een vaste afspeelduur af, ongeacht de toerlengte, en overschrijft de snelheidsfactor.",
     map3d_style_3d: "3D",
     map3d_style_sat: "Satelliet",
   },
@@ -4859,7 +4868,7 @@ class BoschEBike3DMapCard extends HTMLElement {
   }
 
   static getConfigElement() { return document.createElement("bosch-ebike-3d-map-card-editor"); }
-  static getStubConfig() { return { height: 540, default_pitch: 55, chase_zoom: 17, smooth_window: 15, animate_seconds: 25 }; }
+  static getStubConfig() { return { height: 540, default_pitch: 55, chase_zoom: 17, smooth_window: 15, playback_speed: 60 }; }
   getCardSize() { return 7; }
 
   _t(key, ...args) {
@@ -5653,6 +5662,25 @@ class BoschEBike3DMapCard extends HTMLElement {
     else this._startAnim();
   }
 
+  // Total playback duration in milliseconds. Two modes:
+  //   1. If the user set `animate_seconds` explicitly, that wins and the
+  //      whole tour plays in that fixed duration regardless of length.
+  //   2. Otherwise the tour plays at `playback_speed` × real-time. 60×
+  //      means 1 h of riding becomes 1 min of playback. Clamped to
+  //      [2 s, 10 min] so absurd configs do not produce unusable values.
+  _playbackDurationMs() {
+    const cfg = this._config || {};
+    if (cfg.animate_seconds != null && cfg.animate_seconds !== "" &&
+        Number.isFinite(Number(cfg.animate_seconds))) {
+      const fixed = Math.max(2, Number(cfg.animate_seconds));
+      return fixed * 1000;
+    }
+    const factor = Math.max(1, Number(cfg.playback_speed) || 60);
+    const tourSec = this._tourDurationSec(this._currentActivity);
+    const ms = tourSec > 0 ? (tourSec * 1000) / factor : 25000;
+    return Math.max(2000, Math.min(600000, ms));
+  }
+
   _startAnim() {
     if (!this._currentTrack || !this._currentTrack.length) return;
     this._isPlaying = true;
@@ -5664,7 +5692,11 @@ class BoschEBike3DMapCard extends HTMLElement {
     const wrapAt = startIdx >= totalIdx ? 0 : startIdx;
     this._animStartIndex = wrapAt;
     this._animStartTs = performance.now();
-    const dur = Math.max(5, Number(this._config.animate_seconds) || 25) * 1000;
+    const fullDurMs = this._playbackDurationMs();
+    // If the user pressed Play partway through, only the remaining
+    // fraction should be replayed in proportion to that.
+    const remainingFrac = totalIdx > 0 ? (totalIdx - wrapAt) / totalIdx : 1;
+    const dur = Math.max(500, fullDurMs * remainingFrac);
     const step = (ts) => {
       if (!this._isPlaying) return;
       const elapsed = ts - this._animStartTs;
@@ -5757,7 +5789,8 @@ class BoschEBike3DMapCardEditor extends HTMLElement {
       default_pitch: mkText("default_pitch", "map3d_editor_default_pitch", "map3d_editor_default_pitch_hint", "number"),
       chase_zoom: mkText("chase_zoom", "map3d_editor_chase_zoom", "map3d_editor_chase_zoom_hint", "number"),
       smooth_window: mkText("smooth_window", "map3d_editor_smooth_window", "map3d_editor_smooth_window_hint", "number"),
-      animate_seconds: mkText("animate_seconds", "map3d_editor_animate_seconds", "map3d_editor_animate_seconds_hint", "number"),
+      playback_speed: mkText("playback_speed", "map3d_editor_playback_speed", "map3d_editor_playback_speed_hint", "number"),
+      animate_seconds: mkText("animate_seconds", "map3d_editor_animate_seconds", "map3d_editor_animate_seconds_override_hint", "number"),
       account_id: mkText("account_id", "map3d_editor_account", null, "text"),
       bike_id: mkText("bike_id", "map3d_editor_bike", null, "text"),
     };
