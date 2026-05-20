@@ -5583,16 +5583,26 @@ class BoschEBike3DMapCard extends HTMLElement {
             ? this._map.project([lngLat.lng, lngLat.lat]) : null;
           const allMarkers = document.querySelectorAll(".maplibregl-marker").length;
           const greenMarker = document.querySelectorAll(".ebike-3d-marker").length;
-          const greenRect = document.querySelector(".ebike-3d-marker")?.getBoundingClientRect();
-          console.log("[Bosch eBike 3D] marker diagnostic:", {
-            startLatLon: { lat: pts[0].lat, lon: pts[0].lon },
-            endLatLon: { lat: pts[pts.length - 1].lat, lon: pts[pts.length - 1].lon },
-            currentLatLon: lngLat,
-            currentProjectedPx: projected,
-            allMaplibreMarkers: allMarkers,
-            ebikeMarkers: greenMarker,
-            greenMarkerRect: greenRect,
-          });
+          const greenEl = document.querySelector(".ebike-3d-marker");
+          const greenRect = greenEl ? greenEl.getBoundingClientRect() : null;
+          const cssDisplay = greenEl ? getComputedStyle(greenEl).display : "n/a";
+          const cssVis = greenEl ? getComputedStyle(greenEl).visibility : "n/a";
+          // Primitive-only line so Safari prints values inline rather
+          // than collapsing them to '[object Object]'.
+          console.log(
+            "[Bosch eBike 3D] marker-diag" +
+            " | allMarkers=" + allMarkers +
+            " | greenMarkers=" + greenMarker +
+            " | startLatLon=" + pts[0].lat.toFixed(5) + "," + pts[0].lon.toFixed(5) +
+            " | curLatLon=" + (lngLat ? lngLat.lat.toFixed(5) + "," + lngLat.lng.toFixed(5) : "null") +
+            " | projectedPx=" + (projected ? Math.round(projected.x) + "," + Math.round(projected.y) : "null") +
+            " | rect=" + (greenRect
+                ? (Math.round(greenRect.x) + "," + Math.round(greenRect.y) +
+                   " " + Math.round(greenRect.width) + "x" + Math.round(greenRect.height))
+                : "null") +
+            " | display=" + cssDisplay +
+            " | vis=" + cssVis
+          );
         } catch (e) {
           console.warn("[Bosch eBike 3D] marker diagnostic failed", e);
         }
