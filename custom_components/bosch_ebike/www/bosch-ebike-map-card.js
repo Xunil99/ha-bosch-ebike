@@ -5122,24 +5122,29 @@ class BoschEBike3DMapCard extends HTMLElement {
       .maplibregl-canvas:focus { outline: none; }
       .ebike-3d-marker {
         position: relative;
-        width: 28px; height: 28px; border-radius: 50%;
-        background: #42c76a; border: 4px solid #fff;
-        box-shadow: 0 2px 10px rgba(0,0,0,.55);
-        z-index: 10;
+        width: 36px; height: 36px; border-radius: 50%;
+        background: #42c76a; border: 5px solid #fff;
+        box-shadow:
+          0 0 0 4px rgba(66,199,106,0.35),
+          0 4px 14px rgba(0,0,0,.6);
+        z-index: 100;
       }
       .ebike-3d-marker::before {
         content: ""; position: absolute;
-        inset: -12px; border-radius: 50%;
-        border: 4px solid #42c76a; opacity: 0.65;
+        inset: -14px; border-radius: 50%;
+        border: 5px solid #42c76a; opacity: 0.7;
         animation: ebike-3d-pulse 1.6s ease-out infinite;
+        z-index: 99;
       }
       @keyframes ebike-3d-pulse {
-        0%   { transform: scale(0.6); opacity: 0.85; }
-        100% { transform: scale(1.85); opacity: 0; }
+        0%   { transform: scale(0.55); opacity: 0.9; }
+        100% { transform: scale(2.0); opacity: 0; }
       }
-      /* MapLibre marker container z-stacking: ensure the current-position
-         marker sits above the start/end dot markers */
-      .maplibregl-marker:has(.ebike-3d-marker) { z-index: 5; }
+      /* Force the MapLibre marker wrappers above any 3D building or
+         shadow visuals. Two selector forms because :has() is not
+         everywhere. */
+      .maplibregl-marker { z-index: 100 !important; }
+      .maplibregl-marker:has(.ebike-3d-marker) { z-index: 101 !important; }
     `;
     card.appendChild(style);
 
@@ -5558,12 +5563,40 @@ class BoschEBike3DMapCard extends HTMLElement {
       const el = document.createElement("div");
       el.className = "ebike-3d-marker";
       el.style.cssText =
-        "position:relative;width:28px;height:28px;border-radius:50%;" +
-        "background:#42c76a;border:4px solid #fff;" +
-        "box-shadow:0 2px 10px rgba(0,0,0,.55);z-index:10;";
+        "position:relative;width:36px;height:36px;border-radius:50%;" +
+        "background:#42c76a;border:5px solid #fff;" +
+        "box-shadow:0 0 0 4px rgba(66,199,106,.35),0 4px 14px rgba(0,0,0,.6);" +
+        "z-index:100;";
       this._marker = new mlib.Marker({ element: el, anchor: "center" })
         .setLngLat([pts[0].lon, pts[0].lat])
         .addTo(this._map);
+
+      // Diagnostic: verify marker placement and DOM visibility shortly
+      // after creation. If the marker is in DOM but reports a
+      // projected pixel position outside the canvas, the camera has
+      // moved away from it. If it is not in DOM at all, something is
+      // removing it.
+      setTimeout(() => {
+        try {
+          const lngLat = this._marker ? this._marker.getLngLat() : null;
+          const projected = (lngLat && this._map)
+            ? this._map.project([lngLat.lng, lngLat.lat]) : null;
+          const allMarkers = document.querySelectorAll(".maplibregl-marker").length;
+          const greenMarker = document.querySelectorAll(".ebike-3d-marker").length;
+          const greenRect = document.querySelector(".ebike-3d-marker")?.getBoundingClientRect();
+          console.log("[Bosch eBike 3D] marker diagnostic:", {
+            startLatLon: { lat: pts[0].lat, lon: pts[0].lon },
+            endLatLon: { lat: pts[pts.length - 1].lat, lon: pts[pts.length - 1].lon },
+            currentLatLon: lngLat,
+            currentProjectedPx: projected,
+            allMaplibreMarkers: allMarkers,
+            ebikeMarkers: greenMarker,
+            greenMarkerRect: greenRect,
+          });
+        } catch (e) {
+          console.warn("[Bosch eBike 3D] marker diagnostic failed", e);
+        }
+      }, 1500);
 
       // Resize once after layers are added, then apply the chase-cam at
       // index 0. _applyIndex jumps the camera to the bike's position,
