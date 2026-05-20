@@ -188,8 +188,10 @@ const I18N = {
     map3d_editor_height: "Card height (px)",
     map3d_editor_account: "Pin to account (optional)",
     map3d_editor_bike: "Pin to bike (optional)",
-    map3d_editor_default_pitch: "3D pitch (0-60°)",
-    map3d_editor_default_pitch_hint: "Camera tilt when opening a tour. 0 = flat, 60 = very steep.",
+    map3d_editor_default_pitch: "Chase-cam pitch (20-65°)",
+    map3d_editor_default_pitch_hint: "Camera tilt while following the bike. 20 = nearly top-down, 55 = third-person, 65 = almost first-person.",
+    map3d_editor_chase_zoom: "Chase-cam zoom (14-19)",
+    map3d_editor_chase_zoom_hint: "Higher zoom = closer to the bike. 17 ≈ 100 m ahead visible.",
     map3d_editor_animate_seconds: "Playback duration (seconds)",
     map3d_editor_animate_seconds_hint: "How long a full Play-cycle takes from tour start to tour end.",
   },
@@ -361,8 +363,10 @@ const I18N = {
     map3d_editor_height: "Karten-Höhe (px)",
     map3d_editor_account: "Auf Konto fixieren (optional)",
     map3d_editor_bike: "Auf Bike fixieren (optional)",
-    map3d_editor_default_pitch: "3D-Neigung (0-60°)",
-    map3d_editor_default_pitch_hint: "Kamera-Neigung beim Öffnen einer Tour. 0 = flach, 60 = sehr steil.",
+    map3d_editor_default_pitch: "Chase-Cam-Neigung (20-65°)",
+    map3d_editor_default_pitch_hint: "Kamera-Neigung beim Verfolgen des Bikes. 20 = fast Vogelperspektive, 55 = Third-Person, 65 = fast First-Person.",
+    map3d_editor_chase_zoom: "Chase-Cam-Zoom (14-19)",
+    map3d_editor_chase_zoom_hint: "Höherer Zoom = näher am Bike. 17 ≈ 100 m Sicht nach vorne.",
     map3d_editor_animate_seconds: "Abspieldauer (Sekunden)",
     map3d_editor_animate_seconds_hint: "Wie lange ein voller Play-Durchlauf von Tour-Start bis Tour-Ende dauert.",
   },
@@ -534,8 +538,10 @@ const I18N = {
     map3d_editor_height: "Kaart-hoogte (px)",
     map3d_editor_account: "Account vastzetten (optioneel)",
     map3d_editor_bike: "Bike vastzetten (optioneel)",
-    map3d_editor_default_pitch: "3D-helling (0-60°)",
-    map3d_editor_default_pitch_hint: "Camerakanteling bij het openen van een tour. 0 = plat, 60 = zeer steil.",
+    map3d_editor_default_pitch: "Chase-cam helling (20-65°)",
+    map3d_editor_default_pitch_hint: "Camerakanteling tijdens het volgen van de fiets. 20 = bijna van bovenaf, 55 = third-person, 65 = bijna first-person.",
+    map3d_editor_chase_zoom: "Chase-cam zoom (14-19)",
+    map3d_editor_chase_zoom_hint: "Hogere zoom = dichter bij de fiets. 17 ≈ 100 m vooruit zichtbaar.",
     map3d_editor_animate_seconds: "Afspeelduur (seconden)",
     map3d_editor_animate_seconds_hint: "Hoe lang een volledige Play-cyclus duurt van begin tot einde van de tour.",
   },
@@ -4819,7 +4825,7 @@ class BoschEBike3DMapCard extends HTMLElement {
   }
 
   static getConfigElement() { return document.createElement("bosch-ebike-3d-map-card-editor"); }
-  static getStubConfig() { return { height: 540, default_pitch: 50, animate_seconds: 25 }; }
+  static getStubConfig() { return { height: 540, default_pitch: 55, chase_zoom: 17, animate_seconds: 25 }; }
   getCardSize() { return 7; }
 
   _t(key, ...args) {
@@ -5179,21 +5185,27 @@ class BoschEBike3DMapCard extends HTMLElement {
     const mood = sunMoodFor(altDeg);
 
     const canvas = this._root.querySelector("#m3d-canvas");
-    const pitch = Math.max(0, Math.min(60, Number(this._config.default_pitch) || 50));
+    // Chase-cam: pitch ~55° (looking forward over the bike) and zoom ~17
+    // (about 100 m of road visible ahead). User can override via config.
+    const chasePitch = Math.max(20, Math.min(65, Number(this._config.default_pitch) || 55));
+    const chaseZoom = Math.max(14, Math.min(19, Number(this._config.chase_zoom) || 17));
+    this._chasePitch = chasePitch;
+    this._chaseZoom = chaseZoom;
 
-    // Wait for layout to settle so the canvas has a real height. Without this
-    // MapLibre boots with a 0x0 WebGL viewport and later fitBounds is a no-op.
+    // Wait for layout to settle so the canvas has a real height. Without
+    // this, MapLibre boots with a 0x0 WebGL viewport.
     await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
-    // Touch offsetHeight to force a synchronous layout pass.
     void canvas.offsetHeight;
 
+    // Initial pose: chase-cam at the start of the track, looking forward.
+    const initialBearing = this._bearingAt(0);
     this._map = new mlib.Map({
       container: canvas,
       style: OPENFREEMAP_LIBERTY,
-      center: [meanLon, meanLat],
-      zoom: 13,
-      pitch,
-      bearing: -20,
+      center: [pts[0].lon, pts[0].lat],
+      zoom: chaseZoom,
+      pitch: chasePitch,
+      bearing: initialBearing,
       attributionControl: false,
     });
     this._map.addControl(new mlib.AttributionControl({ compact: true }), "bottom-right");
@@ -5281,42 +5293,45 @@ class BoschEBike3DMapCard extends HTMLElement {
         .setLngLat([pts[0].lon, pts[0].lat])
         .addTo(this._map);
 
-      // Compute bounds and a camera that fits them, then ease to that
-      // camera with our preferred pitch/bearing. cameraForBounds is more
-      // reliable than fitBounds because the latter sometimes silently
-      // ignores pitch/bearing options in some MapLibre 5.x builds.
+      // Resize once after layers are added, then apply the chase-cam at
+      // index 0. _applyIndex jumps the camera to the bike's position,
+      // bearing-aligned with the direction of travel.
       try { this._map.resize(); } catch (_) {}
-      const bounds = new mlib.LngLatBounds();
-      for (const c of coords) bounds.extend(c);
 
-      const camera = this._map.cameraForBounds(bounds, {
-        padding: { top: 90, right: 60, bottom: 160, left: 60 },
-        maxZoom: 17,
-      });
-      if (camera) {
-        this._map.easeTo({
-          center: camera.center,
-          zoom: camera.zoom,
-          pitch,
-          bearing: -20,
-          duration: 900,
-        });
-      } else {
-        // Fallback: jump to bounds center at a sensible zoom
-        const c = bounds.getCenter();
-        this._map.easeTo({
-          center: [c.lng, c.lat],
-          zoom: 13,
-          pitch,
-          bearing: -20,
-          duration: 900,
-        });
-      }
-
-      this._applyIndex(0);
+      this._applyIndex(0, true);
       this._updateTimeChips(0, startTime, altDeg, mood);
       this._updateRangeLabels();
     });
+  }
+
+  // Great-circle bearing in degrees (0..360) from track[i] toward a point
+  // 'lookAhead' positions later. Averaged window smooths GPS jitter and
+  // produces a stable chase-cam orientation.
+  _bearingAt(i) {
+    const pts = this._currentTrack;
+    if (!pts || pts.length < 2) return 0;
+    const lookAhead = 5;
+    const i1 = Math.max(0, Math.min(pts.length - 2, i));
+    const i2 = Math.min(pts.length - 1, i1 + lookAhead);
+    const a = pts[i1];
+    const b = pts[i2];
+    if (!a || !b || (a.lat === b.lat && a.lon === b.lon)) {
+      // Fallback: look one point behind
+      const aPrev = pts[Math.max(0, i1 - 1)];
+      if (!aPrev || (aPrev.lat === a.lat && aPrev.lon === a.lon)) return 0;
+      return this._calcBearing(aPrev, a);
+    }
+    return this._calcBearing(a, b);
+  }
+
+  _calcBearing(a, b) {
+    const rad = Math.PI / 180;
+    const lat1 = a.lat * rad, lat2 = b.lat * rad;
+    const dLon = (b.lon - a.lon) * rad;
+    const y = Math.sin(dLon) * Math.cos(lat2);
+    const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
+    const brng = Math.atan2(y, x) * 180 / Math.PI;
+    return (brng + 360) % 360;
   }
 
   _addPointMarker(p, color, _label) {
@@ -5326,12 +5341,39 @@ class BoschEBike3DMapCard extends HTMLElement {
     new window.maplibregl.Marker({ element: el }).setLngLat([p.lon, p.lat]).addTo(this._map);
   }
 
-  _applyIndex(idx) {
+  _applyIndex(idx, isInitial) {
     const pts = this._currentTrack;
     if (!pts || !pts.length) return;
     const i = Math.max(0, Math.min(pts.length - 1, Math.round(idx)));
     const p = pts[i];
     if (this._marker) this._marker.setLngLat([p.lon, p.lat]);
+
+    // Chase-cam: move map center to the bike, rotate to the direction of
+    // travel, hold a constant pitch and zoom. Use jumpTo for snappy
+    // response (no easing latency during slider drag or RAF playback).
+    if (this._map && this._map.loaded()) {
+      try {
+        const bearing = this._bearingAt(i);
+        // padding pushes the visible center down, so the bike chip sits
+        // in the lower third and the rider sees the road ahead.
+        const ch = this._root.querySelector("#m3d-canvas");
+        const hostH = ch ? ch.clientHeight : 540;
+        const padTop = Math.max(60, Math.floor(hostH * 0.45));
+        const camera = {
+          center: [p.lon, p.lat],
+          zoom: this._chaseZoom != null ? this._chaseZoom : 17,
+          pitch: this._chasePitch != null ? this._chasePitch : 55,
+          bearing,
+          padding: { top: padTop, right: 0, bottom: 0, left: 0 },
+        };
+        if (isInitial) {
+          // Soft swoop-in on first frame
+          this._map.easeTo({ ...camera, duration: 900 });
+        } else {
+          this._map.jumpTo(camera);
+        }
+      } catch (e) { console.warn("[Bosch eBike 3D] chase-cam update failed", e); }
+    }
 
     // Interpolate per-point time from startTime + (i/N) * duration
     const a = this._currentActivity;
@@ -5506,6 +5548,7 @@ class BoschEBike3DMapCardEditor extends HTMLElement {
       title: mkText("title", "map3d_editor_title", null, "text"),
       height: mkText("height", "map3d_editor_height", null, "number"),
       default_pitch: mkText("default_pitch", "map3d_editor_default_pitch", "map3d_editor_default_pitch_hint", "number"),
+      chase_zoom: mkText("chase_zoom", "map3d_editor_chase_zoom", "map3d_editor_chase_zoom_hint", "number"),
       animate_seconds: mkText("animate_seconds", "map3d_editor_animate_seconds", "map3d_editor_animate_seconds_hint", "number"),
       account_id: mkText("account_id", "map3d_editor_account", null, "text"),
       bike_id: mkText("bike_id", "map3d_editor_bike", null, "text"),

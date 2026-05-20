@@ -314,25 +314,26 @@ bike_id: bike-uuid-1
 
 Farb-Buckets pro Tag: leer, 1-10 km, 10-25 km, 25-50 km, 50+ km. Die Farben kommen aus den HA-Theme-Variablen, hellen Designs sehen wie GitHub-Light aus, im dunklen Modus wird automatisch das passende dunkle Palette geladen.
 
-### 3D-Karte - Touren im Detail mit Zeit-Slider und Sonnenstand
+### 3D-Karte - Chase-Cam-Verfolgung mit Zeit-Slider und Sonnenstand
 
-Die Card `bosch-ebike-3d-map-card` ist eine parallele Karte zur klassischen 2D-Map. Sie startet mit einer Liste der letzten Touren. Beim Klick auf eine Tour öffnet sich die 3D-Detailansicht mit MapLibre und kostenlosen OpenFreeMap-Vector-Tiles: Gebäude-Extrusionen, Track als 3D-Linie, animierter Positionsmarker und ein Zeit-Slider, der den Marker entlang der Strecke wandern lässt. Die Kartenbeleuchtung passt sich dem Sonnenstand zur Tour-Zeit an, eine Morgen-Tour wirkt anders als eine Nachmittags-Tour.
+Die Card `bosch-ebike-3d-map-card` ist eine parallele Karte zur klassischen 2D-Map. Sie startet mit einer Liste der letzten Touren. Beim Klick auf eine Tour öffnet sich die 3D-Detailansicht mit MapLibre und kostenlosen OpenFreeMap-Vector-Tiles: die **Kamera folgt dem Bike in Third-Person-Perspektive** ("Chase-Cam"), Bearing dreht sich passend zur Fahrtrichtung, Pitch und Zoom sind konfigurierbar. Beim Slider-Bewegen schwenkt die Kamera mit. Die Kartenbeleuchtung passt sich dem Sonnenstand zur Tour-Zeit an.
 
 ```yaml
 type: custom:bosch-ebike-3d-map-card
 title: Tour in 3D
 height: 540
-default_pitch: 50
+default_pitch: 55      # Chase-Cam-Neigung
+chase_zoom: 17         # ca. 100 m Sicht nach vorne
 animate_seconds: 25
 ```
 
 **Was die Karte zeigt:**
 
 - Tour-Liste (Standardansicht) mit Datum, Titel, Distanz und Dauer
-- 3D-Map nach Klick auf eine Tour, mit Gebäude-Extrusionen aus OpenStreetMap
+- 3D-Chase-Cam nach Klick auf eine Tour, mit Gebäude-Extrusionen aus OpenStreetMap
 - Track-Polyline in zwei Schichten (Glow + Hauptlinie) für gute Lesbarkeit
-- Start- und Ziel-Marker sowie ein animierter Positionsmarker
-- Zeit-Slider mit Start/End-Uhrzeiten der Tour, scrubbbar
+- Start- und Ziel-Marker sowie ein blauer pulsierender Positionsmarker, der das Bike repräsentiert
+- Zeit-Slider mit Start/End-Uhrzeiten der Tour, scrubbbar; Kamera schwenkt synchron mit
 - Play/Pause-Button für die zeitgeraffte Wiedergabe (Dauer konfigurierbar)
 - Live-Stats zur Slider-Position: kumulierte Distanz, Geschwindigkeit, Höhe
 - Zeit- und Sonnen-Chip im Overlay zeigt aktuelle Uhrzeit und Sonnenstand
@@ -344,7 +345,8 @@ animate_seconds: 25
 |---|---|---|
 | `title` | "Bosch eBike 3D-Touren" | Header-Text |
 | `height` | 540 | Karten-Höhe in Pixel |
-| `default_pitch` | 50 | Kamera-Neigung (0-60°) beim Öffnen einer Tour |
+| `default_pitch` | 55 | Chase-Cam-Neigung (20-65°). 20 ≈ Vogelperspektive, 65 ≈ First-Person |
+| `chase_zoom` | 17 | Chase-Cam-Zoom (14-19). Höher = näher, 17 ≈ 100 m Sicht nach vorne |
 | `animate_seconds` | 25 | Dauer eines vollständigen Play-Durchlaufs |
 | `account_id` | (leer) | Auf ein Konto fixieren, wie bei der 2D-Karte |
 | `bike_id` | (leer) | Auf ein Bike fixieren |
