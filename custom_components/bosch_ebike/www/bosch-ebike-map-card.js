@@ -3502,24 +3502,23 @@ class BoschEBikeHeatmapCard extends HTMLElement {
       }
       .heat-head .heat-fs-btn:hover { background:rgba(255,255,255,.28); }
       .heat-head .heat-fs-btn ha-icon { --mdc-icon-size:18px; color:#fff; }
-      /* Host gets this class while fullscreen is active. Pins the card
-         to the entire viewport and stretches the Leaflet map to fill
-         the available height. invalidateSize() is called after the
-         transition so Leaflet recomputes its tile coverage. */
-      bosch-ebike-heatmap-card.heat-fullscreen {
-        position:fixed !important; inset:0 !important;
-        z-index:9999 !important;
-        width:100vw !important; height:100vh !important;
-        max-width:100vw !important; max-height:100vh !important;
+      /* Native :fullscreen pseudo-class so the layout fills 100vh
+         when the browser enters fullscreen on the host. */
+      bosch-ebike-heatmap-card:fullscreen,
+      bosch-ebike-heatmap-card:-webkit-full-screen {
+        background: var(--card-background-color, #fff);
       }
-      bosch-ebike-heatmap-card.heat-fullscreen ha-card {
+      bosch-ebike-heatmap-card:fullscreen ha-card,
+      bosch-ebike-heatmap-card:-webkit-full-screen ha-card {
         height:100vh; max-height:100vh; border-radius:0;
         display:flex; flex-direction:column;
       }
-      bosch-ebike-heatmap-card.heat-fullscreen .heat-map-wrap {
+      bosch-ebike-heatmap-card:fullscreen .heat-map-wrap,
+      bosch-ebike-heatmap-card:-webkit-full-screen .heat-map-wrap {
         flex:1; min-height:0;
       }
-      bosch-ebike-heatmap-card.heat-fullscreen .heat-map {
+      bosch-ebike-heatmap-card:fullscreen .heat-map,
+      bosch-ebike-heatmap-card:-webkit-full-screen .heat-map {
         height:100% !important; min-height:0 !important;
       }
     `;
@@ -3605,45 +3604,51 @@ class BoschEBikeHeatmapCard extends HTMLElement {
 
     const fsBtn = this.querySelector("#heat-fs-btn");
     if (fsBtn) fsBtn.addEventListener("click", () => this._toggleFullscreen());
+    this._ensureFullscreenListener();
   }
 
-  // Toggle fullscreen via CSS class on the host. Leaflet needs an
-  // explicit invalidateSize() after the layout settles so its tile
-  // grid matches the new container size; we also call fitBounds again
-  // so the tracks recenter without forcing the user to pan.
+  // Native Fullscreen API. Same rationale as in the 3D card: a CSS
+  // position:fixed swap on a custom-element host briefly broke the
+  // child renderer's layout assumptions. The native path is rock-
+  // solid because the browser handles the transition.
   _toggleFullscreen() {
-    const on = !this._heatFullscreen;
-    this._heatFullscreen = on;
-    this.classList.toggle("heat-fullscreen", on);
-    document.body.style.overflow = on ? "hidden" : "";
-    const ico = this.querySelector("#heat-fs-ico");
-    if (ico) ico.setAttribute("icon", on ? "mdi:fullscreen-exit" : "mdi:fullscreen");
-    if (on && !this._heatEscHandler) {
-      this._heatEscHandler = (ev) => {
-        if (ev.key === "Escape" && this._heatFullscreen) this._toggleFullscreen();
-      };
-      document.addEventListener("keydown", this._heatEscHandler);
-    } else if (!on && this._heatEscHandler) {
-      document.removeEventListener("keydown", this._heatEscHandler);
-      this._heatEscHandler = null;
+    const target = this;
+    try {
+      if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+        const req = target.requestFullscreen || target.webkitRequestFullscreen;
+        if (req) req.call(target).catch((e) => {
+          console.warn("[Bosch eBike Heatmap] requestFullscreen failed", e);
+        });
+      } else {
+        const exit = document.exitFullscreen || document.webkitExitFullscreen;
+        if (exit) exit.call(document);
+      }
+    } catch (e) {
+      console.warn("[Bosch eBike Heatmap] fullscreen toggle failed", e);
     }
-    requestAnimationFrame(() => requestAnimationFrame(() => {
-      try { this._map?.invalidateSize(); } catch (_) {}
-      try { this._renderTracks(); } catch (_) {}
-    }));
   }
 
-  // Clean up scroll lock + Escape listener if the host is removed from
-  // the DOM mid-fullscreen.
+  _ensureFullscreenListener() {
+    if (this._heatFsChangeHandler) return;
+    this._heatFsChangeHandler = () => {
+      const fsEl = document.fullscreenElement || document.webkitFullscreenElement;
+      const on = fsEl === this;
+      const ico = this.querySelector("#heat-fs-ico");
+      if (ico) ico.setAttribute("icon", on ? "mdi:fullscreen-exit" : "mdi:fullscreen");
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        try { this._map?.invalidateSize(); } catch (_) {}
+        try { this._renderTracks(); } catch (_) {}
+      }));
+    };
+    document.addEventListener("fullscreenchange", this._heatFsChangeHandler);
+    document.addEventListener("webkitfullscreenchange", this._heatFsChangeHandler);
+  }
+
   disconnectedCallback() {
-    if (this._heatFullscreen) {
-      this._heatFullscreen = false;
-      this.classList.remove("heat-fullscreen");
-      document.body.style.overflow = "";
-    }
-    if (this._heatEscHandler) {
-      document.removeEventListener("keydown", this._heatEscHandler);
-      this._heatEscHandler = null;
+    if (this._heatFsChangeHandler) {
+      document.removeEventListener("fullscreenchange", this._heatFsChangeHandler);
+      document.removeEventListener("webkitfullscreenchange", this._heatFsChangeHandler);
+      this._heatFsChangeHandler = null;
     }
   }
 
@@ -5298,18 +5303,15 @@ class BoschEBike3DMapCard extends HTMLElement {
     if (first) this._boot();
   }
 
-  // Restore body scroll + drop the Escape listener if the card is
-  // removed from the DOM while still in fullscreen. Without this the
-  // page would stay scroll-locked after dashboard navigation.
+  // Detach the global fullscreenchange listener so multiple card
+  // instances do not pile up listeners over time. The browser exits
+  // fullscreen automatically when the element is removed from the
+  // DOM, so we don't need to call exitFullscreen() explicitly.
   disconnectedCallback() {
-    if (this._isFullscreen) {
-      this._isFullscreen = false;
-      this.classList.remove("map3d-fullscreen");
-      document.body.style.overflow = "";
-    }
-    if (this._escHandler) {
-      document.removeEventListener("keydown", this._escHandler);
-      this._escHandler = null;
+    if (this._fsChangeHandler) {
+      document.removeEventListener("fullscreenchange", this._fsChangeHandler);
+      document.removeEventListener("webkitfullscreenchange", this._fsChangeHandler);
+      this._fsChangeHandler = null;
     }
   }
 
@@ -5503,25 +5505,24 @@ class BoschEBike3DMapCard extends HTMLElement {
         box-shadow: 0 1px 6px rgba(31,111,235,.45);
       }
       .map3d-nu-btn ha-icon { --mdc-icon-size: 16px; }
-      /* Host gets this class while fullscreen is active. Pins the card
-         to the entire viewport above any other Lovelace content, hides
-         scrollbars so swipes do not break out, and makes the canvas
-         grow to fill the available height. MapLibre's ResizeObserver
-         triggers a redraw automatically. */
-      bosch-ebike-3d-map-card.map3d-fullscreen {
-        position: fixed !important; inset: 0 !important;
-        z-index: 9999 !important;
-        width: 100vw !important; height: 100vh !important;
-        max-width: 100vw !important; max-height: 100vh !important;
+      /* While the host is in browser fullscreen the layout needs to
+         fill 100vh. The :fullscreen pseudo-class targets that state
+         natively, no class swap required. */
+      bosch-ebike-3d-map-card:fullscreen,
+      bosch-ebike-3d-map-card:-webkit-full-screen {
+        background: var(--card-background-color, #000);
       }
-      bosch-ebike-3d-map-card.map3d-fullscreen ha-card {
+      bosch-ebike-3d-map-card:fullscreen ha-card,
+      bosch-ebike-3d-map-card:-webkit-full-screen ha-card {
         height: 100vh; max-height: 100vh; border-radius: 0;
         display: flex; flex-direction: column;
       }
-      bosch-ebike-3d-map-card.map3d-fullscreen .map3d-detail {
+      bosch-ebike-3d-map-card:fullscreen .map3d-detail,
+      bosch-ebike-3d-map-card:-webkit-full-screen .map3d-detail {
         flex: 1; min-height: 0;
       }
-      bosch-ebike-3d-map-card.map3d-fullscreen .map3d-canvas {
+      bosch-ebike-3d-map-card:fullscreen .map3d-canvas,
+      bosch-ebike-3d-map-card:-webkit-full-screen .map3d-canvas {
         height: 100% !important;
       }
       @keyframes ebike-rec-blink {
@@ -5769,33 +5770,50 @@ class BoschEBike3DMapCard extends HTMLElement {
   // ===========================================================================
   // Fullscreen toggle
   // ---------------------------------------------------------------------------
-  // Pins the host element to the entire viewport via CSS. The MapLibre
-  // ResizeObserver attached in _initMap picks up the size change and
-  // triggers a redraw automatically; we still call map.resize()
-  // explicitly after the next two frames so the first paint is correct
-  // (ResizeObserver fires asynchronously and the first frame after the
-  // class flip could otherwise be at the old aspect ratio).
+  // Uses the native Fullscreen API instead of CSS position:fixed. The
+  // CSS approach was unreliable for a custom-element host that
+  // contains a WebGL canvas: layout reflow during the class swap
+  // briefly killed the GL context and produced black frames. The
+  // native API hands the element to the browser's compositor, which
+  // keeps the GL context alive across the transition.
   _toggleFullscreen() {
-    const on = !this._isFullscreen;
-    this._isFullscreen = on;
-    this.classList.toggle("map3d-fullscreen", on);
-    document.body.style.overflow = on ? "hidden" : "";
-    const ico = this._root?.querySelector("#m3d-fs-ico");
-    if (ico) ico.setAttribute("icon", on ? "mdi:fullscreen-exit" : "mdi:fullscreen");
-    if (on) {
-      if (!this._escHandler) {
-        this._escHandler = (ev) => {
-          if (ev.key === "Escape" && this._isFullscreen) this._toggleFullscreen();
-        };
-        document.addEventListener("keydown", this._escHandler);
+    const target = this;
+    try {
+      if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+        const req = target.requestFullscreen || target.webkitRequestFullscreen;
+        if (req) req.call(target).catch((e) => {
+          console.warn("[Bosch eBike 3D] requestFullscreen failed", e);
+        });
+      } else {
+        const exit = document.exitFullscreen || document.webkitExitFullscreen;
+        if (exit) exit.call(document);
       }
-    } else if (this._escHandler) {
-      document.removeEventListener("keydown", this._escHandler);
-      this._escHandler = null;
+    } catch (e) {
+      console.warn("[Bosch eBike 3D] fullscreen toggle failed", e);
     }
-    requestAnimationFrame(() => requestAnimationFrame(() => {
-      try { this._map?.resize(); } catch (_) {}
-    }));
+  }
+
+  // Document-level fullscreen state change. Updates the icon and
+  // forces a MapLibre resize at the new size. We attach this listener
+  // lazily on first _renderDetail so it stays a single global handler
+  // for the lifetime of this card instance.
+  _ensureFullscreenListener() {
+    if (this._fsChangeHandler) return;
+    this._fsChangeHandler = () => {
+      const fsEl = document.fullscreenElement || document.webkitFullscreenElement;
+      const on = fsEl === this;
+      this._isFullscreen = on;
+      this.classList.toggle("map3d-fullscreen", on);
+      const ico = this._root?.querySelector("#m3d-fs-ico");
+      if (ico) ico.setAttribute("icon", on ? "mdi:fullscreen-exit" : "mdi:fullscreen");
+      // Two RAFs let the browser finish the layout transition before
+      // MapLibre measures the canvas.
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        try { this._map?.resize(); } catch (_) {}
+      }));
+    };
+    document.addEventListener("fullscreenchange", this._fsChangeHandler);
+    document.addEventListener("webkitfullscreenchange", this._fsChangeHandler);
   }
 
   // ===========================================================================
@@ -6240,7 +6258,9 @@ class BoschEBike3DMapCard extends HTMLElement {
     `;
 
     this._root.querySelector(".map3d-back-btn").addEventListener("click", () => {
-      if (this._isFullscreen) this._toggleFullscreen();
+      if (document.fullscreenElement === this || document.webkitFullscreenElement === this) {
+        (document.exitFullscreen || document.webkitExitFullscreen)?.call(document);
+      }
       this._stopAnim();
       this._destroyMap();
       this._mode = "list";
@@ -6278,6 +6298,7 @@ class BoschEBike3DMapCard extends HTMLElement {
     if (fsBtn) {
       fsBtn.addEventListener("click", () => this._toggleFullscreen());
     }
+    this._ensureFullscreenListener();
 
     const nuBtn = this._root.querySelector("#m3d-nu-btn");
     if (nuBtn) {
