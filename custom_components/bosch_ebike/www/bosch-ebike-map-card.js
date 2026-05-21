@@ -5983,7 +5983,7 @@ class BoschEBike3DMapCard extends HTMLElement {
     // shape and therefore does not introduce extra corner cutting: when
     // motion is uniform, the EMA settles to the true position within a
     // few frames (lag ~50 ms at 60 fps - imperceptible).
-    const ALPHA = 0.25;
+    const ALPHA = 0.18;
     if (isInitial || this._dispLat == null || this._dispLon == null) {
       this._dispLat = p.lat;
       this._dispLon = p.lon;
