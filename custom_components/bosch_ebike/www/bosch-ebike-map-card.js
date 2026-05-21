@@ -199,7 +199,7 @@ const I18N = {
     map3d_editor_smooth_window: "Bearing-smoothing window",
     map3d_editor_smooth_window_hint: "Higher = smoother camera, slower to react. 15 is a good default; 5 is twitchy, 40 sweeps corners wide.",
     map3d_editor_track_smooth: "Track-position smoothing window",
-    map3d_editor_track_smooth_hint: "Smooths GPS jitter in the camera path. 0 = off (raw GPS), 2 = gentle (default), 5+ may visibly cut corners. The displayed track polyline always shows raw GPS regardless.",
+    map3d_editor_track_smooth_hint: "Smooths GPS jitter in the camera path and position marker (Gaussian kernel). 0 = off (raw GPS), 3 = gentle (default), 6+ may visibly cut corners. The displayed track polyline always shows raw GPS regardless.",
     map3d_editor_playback_speed: "Playback speed factor (×)",
     map3d_editor_playback_speed_hint: "Real-time multiplier. 60 = 60× faster than reality, so a 1-hour ride plays in 1 minute and a 2-hour ride in 2 minutes. Higher = faster.",
     map3d_editor_animate_seconds_override_hint: "Optional. If set, forces a fixed playback duration regardless of tour length and overrides the speed factor.",
@@ -403,7 +403,7 @@ const I18N = {
     map3d_editor_smooth_window: "Bearing-Glättungsfenster",
     map3d_editor_smooth_window_hint: "Höher = glattere Kamera, träger. 15 ist guter Default; 5 zittrig, 40 schneidet Kurven weit.",
     map3d_editor_track_smooth: "Track-Positions-Glättungsfenster",
-    map3d_editor_track_smooth_hint: "Glättet GPS-Rauschen im Kamerapfad. 0 = aus (rohes GPS), 2 = sanft (Default), 5+ schneidet ggf. sichtbar Kurven. Die angezeigte Track-Linie zeigt unabhängig davon immer das rohe GPS.",
+    map3d_editor_track_smooth_hint: "Glättet GPS-Rauschen im Kamerapfad und Positions-Marker (Gauß-Kernel). 0 = aus (rohes GPS), 3 = sanft (Default), 6+ schneidet ggf. sichtbar Kurven. Die angezeigte Track-Linie zeigt unabhängig davon immer das rohe GPS.",
     map3d_editor_playback_speed: "Abspielgeschwindigkeit (×)",
     map3d_editor_playback_speed_hint: "Echtzeit-Multiplikator. 60 = 60× schneller als die echte Fahrt, eine 1h-Tour läuft in 1 Min, eine 2h-Tour in 2 Min. Höher = schneller.",
     map3d_editor_animate_seconds_override_hint: "Optional. Wenn gesetzt, erzwingt eine feste Abspieldauer unabhängig von der Tour-Länge und überschreibt den Speed-Faktor.",
@@ -607,7 +607,7 @@ const I18N = {
     map3d_editor_smooth_window: "Bearing-smoothingvenster",
     map3d_editor_smooth_window_hint: "Hoger = soepelere camera, trager. 15 is goede default; 5 schokkerig, 40 snijdt bochten breed af.",
     map3d_editor_track_smooth: "Track-positie smoothingvenster",
-    map3d_editor_track_smooth_hint: "Smoothet GPS-jitter in het camerapad. 0 = uit (ruwe GPS), 2 = mild (default), 5+ kan zichtbaar bochten afsnijden. De weergegeven track-lijn toont altijd de ruwe GPS, ongeacht deze instelling.",
+    map3d_editor_track_smooth_hint: "Smoothet GPS-jitter in het camerapad en de positie-marker (Gauss-kernel). 0 = uit (ruwe GPS), 3 = mild (default), 6+ kan zichtbaar bochten afsnijden. De weergegeven track-lijn toont altijd de ruwe GPS, ongeacht deze instelling.",
     map3d_editor_playback_speed: "Afspeelsnelheid (×)",
     map3d_editor_playback_speed_hint: "Realtime-vermenigvuldiger. 60 = 60× sneller dan de echte rit; een 1u-rit speelt in 1 min, 2u-rit in 2 min. Hoger = sneller.",
     map3d_editor_animate_seconds_override_hint: "Optioneel. Indien ingesteld dwingt dit een vaste afspeelduur af, ongeacht de toerlengte, en overschrijft de snelheidsfactor.",
@@ -4983,7 +4983,7 @@ class BoschEBike3DMapCard extends HTMLElement {
   static getStubConfig() {
     return {
       height: 540, default_pitch: 55, chase_zoom: 17, chase_lookahead: 30,
-      smooth_window: 15, track_smooth_window: 2, playback_speed: 60,
+      smooth_window: 15, track_smooth_window: 3, playback_speed: 60,
       show_date: 1, show_time: 1, show_sun: 1,
       show_speed: 1, show_distance: 1, show_elevation: 1,
       stats_as_chips: 0,
@@ -5260,7 +5260,7 @@ class BoschEBike3DMapCard extends HTMLElement {
       this._rawTrack = pts;
       const wRaw = this._config.track_smooth_window;
       const w = Number.isFinite(Number(wRaw)) && wRaw !== "" && wRaw !== null
-        ? Math.max(0, Math.min(15, Number(wRaw))) : 2;
+        ? Math.max(0, Math.min(15, Number(wRaw))) : 3;
       this._currentTrack = this._smoothTrackPositions(pts, w);
       this._buildCumulativeDistances();
       this._precomputeBearings();
@@ -5271,29 +5271,41 @@ class BoschEBike3DMapCard extends HTMLElement {
     }
   }
 
-  // Moving-average smoothing of lat/lon. Used to give the chase cam a
-  // calm path that does not surface raw GPS wobble. Returns a NEW array
-  // so the raw points stay available for the visible polyline.
+  // Gaussian-weighted smoothing of lat/lon. Used to give the chase cam
+  // and live marker a calm path that does not surface raw GPS wobble.
+  // Returns a NEW array so the raw points stay available for the
+  // visible polyline. Gauss instead of uniform mean: better high-freq
+  // attenuation at the same window size and noticeably less corner
+  // cutting, because the center sample keeps the highest weight.
   _smoothTrackPositions(pts, window) {
     if (!pts || pts.length < 3 || window <= 0) {
       return pts ? pts.slice() : [];
     }
     const W = Math.floor(window);
+    const sigma = Math.max(0.5, W / 2);
+    const twoSigSq = 2 * sigma * sigma;
+    // Precompute kernel for offsets -W..+W. The 2W+1 weights are reused
+    // for every sample; only the boundary slice changes near the ends.
+    const kernel = new Array(2 * W + 1);
+    for (let k = -W; k <= W; k++) {
+      kernel[k + W] = Math.exp(-(k * k) / twoSigSq);
+    }
     const N = pts.length;
     const out = new Array(N);
     for (let i = 0; i < N; i++) {
       const lo = Math.max(0, i - W);
       const hi = Math.min(N - 1, i + W);
-      let sLat = 0, sLon = 0, n = 0;
+      let sLat = 0, sLon = 0, wSum = 0;
       for (let j = lo; j <= hi; j++) {
-        sLat += pts[j].lat;
-        sLon += pts[j].lon;
-        n++;
+        const w = kernel[j - i + W];
+        sLat += pts[j].lat * w;
+        sLon += pts[j].lon * w;
+        wSum += w;
       }
       out[i] = {
         ...pts[i],
-        lat: sLat / n,
-        lon: sLon / n,
+        lat: sLat / wSum,
+        lon: sLon / wSum,
       };
     }
     return out;
@@ -5963,7 +5975,24 @@ class BoschEBike3DMapCard extends HTMLElement {
     this._currentIndex = i0;       // for shadow snapping (integer-anchored)
     this._currentFracIndex = clamped;
 
-    if (this._marker) this._marker.setLngLat([p.lon, p.lat]);
+    // Second-stage temporal smoothing on the displayed marker position.
+    // The Gaussian-smoothed track still carries ~30 cm of residual GPS
+    // noise that becomes visible as wobble on the green dot at high
+    // playback FPS. An EMA with alpha=0.25 acts as a per-frame low-pass
+    // and absorbs that wobble. It does not affect the underlying track
+    // shape and therefore does not introduce extra corner cutting: when
+    // motion is uniform, the EMA settles to the true position within a
+    // few frames (lag ~50 ms at 60 fps - imperceptible).
+    const ALPHA = 0.25;
+    if (isInitial || this._dispLat == null || this._dispLon == null) {
+      this._dispLat = p.lat;
+      this._dispLon = p.lon;
+    } else {
+      this._dispLat += ALPHA * (p.lat - this._dispLat);
+      this._dispLon += ALPHA * (p.lon - this._dispLon);
+    }
+
+    if (this._marker) this._marker.setLngLat([this._dispLon, this._dispLat]);
 
     // Chase-cam: look-target sits ~60 m ahead of the bike along the
     // smoothed (and now also fractionally interpolated) bearing.
@@ -6544,6 +6573,11 @@ class BoschEBike3DMapCard extends HTMLElement {
     if (this._resizeObs) { try { this._resizeObs.disconnect(); } catch (_) {} this._resizeObs = null; }
     if (this._marker) { try { this._marker.remove(); } catch (_) {} this._marker = null; }
     if (this._map) { try { this._map.remove(); } catch (_) {} this._map = null; }
+    // Reset displayed-position EMA so the next playback starts cleanly
+    // on the new track's first sample instead of easing in from the old
+    // track's last marker position.
+    this._dispLat = null;
+    this._dispLon = null;
   }
 }
 
