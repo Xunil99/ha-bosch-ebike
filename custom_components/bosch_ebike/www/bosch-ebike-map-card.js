@@ -6973,8 +6973,13 @@ class BoschEBike3DMapCard extends HTMLElement {
     if (distEl) distEl.textContent = distLbl;
     const sp = Number.isFinite(p.speed) ? p.speed : null;
     const speedEl = this._root.querySelector("#m3d-stat-speed");
+    // Always one decimal so the chip width stays constant across
+    // whole and fractional values (27 km/h vs 27,3 km/h was visibly
+    // jumping the neighbouring chips around).
     if (speedEl) speedEl.textContent =
-      sp != null ? sp.toLocaleString(undefined, { maximumFractionDigits: 1 }) + " km/h" : "–";
+      sp != null
+        ? sp.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + " km/h"
+        : "–";
     const ele = Number.isFinite(p.ele) ? p.ele : null;
     const eleEl = this._root.querySelector("#m3d-stat-ele");
     if (eleEl) eleEl.textContent = ele != null ? Math.round(ele) + " m" : "–";
