@@ -197,7 +197,8 @@ const I18N = {
     map3d_editor_terrain_exag: "Terrain exaggeration (1.0-3.0)",
     map3d_editor_terrain_exag_hint: "1.0 = realistic relief. 1.5 (default) gently lifts mountains. 2.0+ becomes stylised.",
     map3d_editor_north_up: "North-up mode (0 / 1)",
-    map3d_editor_north_up_hint: "When 1, the map stays oriented north and the bike marker rotates to show travel direction. Calmer to watch but loses the third-person 'flying behind the bike' feel. Default 0 (bearing follows travel).",
+    map3d_editor_north_up_hint: "When 1, the map stays oriented north and the bike marker rotates to show travel direction. Calmer to watch but loses the third-person 'flying behind the bike' feel. Default 0 (bearing follows travel). Can also be toggled live via the compass button on the map.",
+    map3d_btn_north_up: "Toggle north-up",
     map3d_editor_sat_url: "Satellite tile URL template (optional)",
     map3d_editor_sat_url_hint: "Override the default Esri World Imagery source. Use {z}, {x}, {y} placeholders. Leave empty for the free Esri default. Example MapTiler: https://api.maptiler.com/tiles/satellite-v2/{z}/{x}/{y}.jpg?key=YOUR_KEY",
     map3d_editor_sat_maxzoom: "Satellite max preload zoom (12-15)",
@@ -419,7 +420,8 @@ const I18N = {
     map3d_editor_terrain_exag: "Geländeüberhöhung (1.0-3.0)",
     map3d_editor_terrain_exag_hint: "1.0 = realistisches Höhenrelief. 1.5 (Default) hebt Berge dezent hervor. 2.0+ stilisiert.",
     map3d_editor_north_up: "Nord-Fix-Modus (0 / 1)",
-    map3d_editor_north_up_hint: "Bei 1 bleibt die Karte nach Norden ausgerichtet und der Bike-Marker dreht sich mit der Fahrtrichtung. Ruhiger zu schauen, aber ohne den 'hinter dem Bike fliegenden' Third-Person-Effekt. Default 0 (Kamera dreht mit).",
+    map3d_editor_north_up_hint: "Bei 1 bleibt die Karte nach Norden ausgerichtet und der Bike-Marker dreht sich mit der Fahrtrichtung. Ruhiger zu schauen, aber ohne den 'hinter dem Bike fliegenden' Third-Person-Effekt. Default 0 (Kamera dreht mit). Lässt sich auch direkt über den Kompass-Button auf der Karte umschalten.",
+    map3d_btn_north_up: "Nord-Fix umschalten",
     map3d_editor_sat_url: "Satelliten-Tile-URL-Template (optional)",
     map3d_editor_sat_url_hint: "Überschreibt die Esri-World-Imagery-Default-Quelle. Platzhalter {z}, {x}, {y}. Leer = Esri-Default (frei). Beispiel MapTiler: https://api.maptiler.com/tiles/satellite-v2/{z}/{x}/{y}.jpg?key=DEIN_KEY",
     map3d_editor_sat_maxzoom: "Satellit max. Preload-Zoom (12-15)",
@@ -641,7 +643,8 @@ const I18N = {
     map3d_editor_terrain_exag: "Terrein-overdrijving (1.0-3.0)",
     map3d_editor_terrain_exag_hint: "1.0 = realistisch reliëf. 1.5 (default) tilt bergen subtiel op. 2.0+ wordt stilistisch.",
     map3d_editor_north_up: "Noord-vast modus (0 / 1)",
-    map3d_editor_north_up_hint: "Bij 1 blijft de kaart noord-gericht en de fiets-marker draait mee met de rijrichting. Rustiger om te bekijken maar zonder het 'achter de fiets vliegende' third-person gevoel. Default 0 (camera draait mee).",
+    map3d_editor_north_up_hint: "Bij 1 blijft de kaart noord-gericht en de fiets-marker draait mee met de rijrichting. Rustiger om te bekijken maar zonder het 'achter de fiets vliegende' third-person gevoel. Default 0 (camera draait mee). Ook live te schakelen via de kompas-knop op de kaart.",
+    map3d_btn_north_up: "Noord-vast schakelen",
     map3d_editor_sat_url: "Satelliet-tile-URL-template (optioneel)",
     map3d_editor_sat_url_hint: "Overschrijft de Esri World Imagery default. Plaatshouders {z}, {x}, {y}. Leeg = Esri default (gratis). Voorbeeld MapTiler: https://api.maptiler.com/tiles/satellite-v2/{z}/{x}/{y}.jpg?key=JOUW_KEY",
     map3d_editor_sat_maxzoom: "Satelliet max. preload-zoom (12-15)",
@@ -5485,6 +5488,21 @@ class BoschEBike3DMapCard extends HTMLElement {
       }
       .map3d-fs-btn:hover { background: rgba(20,24,32,.92); }
       .map3d-fs-btn ha-icon { --mdc-icon-size: 16px; }
+      /* Compass toggle: same chip shape as the fullscreen button.
+         Highlighted blue while north-up mode is active. */
+      .map3d-nu-btn {
+        background: rgba(20,24,32,.78); color: #fff;
+        backdrop-filter: blur(6px); border: 1px solid rgba(255,255,255,.18);
+        width: 26px; height: 26px; border-radius: 50%;
+        display: inline-flex; align-items: center; justify-content: center;
+        cursor: pointer; pointer-events: auto;
+      }
+      .map3d-nu-btn:hover { background: rgba(20,24,32,.92); }
+      .map3d-nu-btn.active {
+        background: #1f6feb; border-color: #1f6feb;
+        box-shadow: 0 1px 6px rgba(31,111,235,.45);
+      }
+      .map3d-nu-btn ha-icon { --mdc-icon-size: 16px; }
       /* Host gets this class while fullscreen is active. Pins the card
          to the entire viewport above any other Lovelace content, hides
          scrollbars so swipes do not break out, and makes the canvas
@@ -5778,6 +5796,51 @@ class BoschEBike3DMapCard extends HTMLElement {
     requestAnimationFrame(() => requestAnimationFrame(() => {
       try { this._map?.resize(); } catch (_) {}
     }));
+  }
+
+  // ===========================================================================
+  // North-up toggle (compass button on the map)
+  // ---------------------------------------------------------------------------
+  // The editor option `north_up` provides the initial default per card
+  // config. A runtime click on the compass button overrides that
+  // default and persists in localStorage so the choice survives
+  // reloads. Cleared by switching back to the same state as the
+  // config option (so the editor change can still take effect).
+  _loadNorthUpPref() {
+    try {
+      const v = localStorage.getItem("bosch-ebike-3d-north-up");
+      if (v === "1") return true;
+      if (v === "0") return false;
+    } catch (_) { /* ignore */ }
+    return null;   // sentinel: use config default
+  }
+  _saveNorthUpPref(on) {
+    try { localStorage.setItem("bosch-ebike-3d-north-up", on ? "1" : "0"); }
+    catch (_) { /* private mode */ }
+  }
+  _currentNorthUp() {
+    const pref = this._loadNorthUpPref();
+    if (pref !== null) return pref;
+    return this._optionOn("north_up", false);
+  }
+
+  _updateNorthUpButton() {
+    const btn = this._root?.querySelector("#m3d-nu-btn");
+    if (!btn) return;
+    btn.classList.toggle("active", this._currentNorthUp());
+  }
+
+  _toggleNorthUp() {
+    const next = !this._currentNorthUp();
+    this._saveNorthUpPref(next);
+    this._updateNorthUpButton();
+    // Re-apply the current frame so the camera rotation and marker
+    // arrow update immediately, without waiting for the next anim
+    // tick. _currentFracIndex is the precise position the playback
+    // is on right now.
+    if (this._currentFracIndex != null) {
+      try { this._applyIndex(this._currentFracIndex, true); } catch (_) {}
+    }
   }
 
   // Compute the geographic bounding box of the loaded track, padded by
@@ -6146,6 +6209,9 @@ class BoschEBike3DMapCard extends HTMLElement {
             </button>
           </span>
           <span class="map3d-terrain-progress" id="m3d-terrain-progress" style="display:none">…</span>
+          <button class="map3d-nu-btn" id="m3d-nu-btn" type="button" title="${this._t("map3d_btn_north_up")}" aria-label="${this._t("map3d_btn_north_up")}">
+            <ha-icon icon="mdi:compass-outline"></ha-icon>
+          </button>
           <button class="map3d-fs-btn" id="m3d-fs-btn" type="button" title="${this._t("btn_fullscreen")}" aria-label="${this._t("btn_fullscreen")}">
             <ha-icon icon="mdi:fullscreen" id="m3d-fs-ico"></ha-icon>
           </button>
@@ -6212,6 +6278,12 @@ class BoschEBike3DMapCard extends HTMLElement {
     if (fsBtn) {
       fsBtn.addEventListener("click", () => this._toggleFullscreen());
     }
+
+    const nuBtn = this._root.querySelector("#m3d-nu-btn");
+    if (nuBtn) {
+      nuBtn.addEventListener("click", () => this._toggleNorthUp());
+    }
+    this._updateNorthUpButton();
 
     const switchEl = this._root.querySelector("#m3d-mode-switch");
     if (switchEl) {
@@ -6809,7 +6881,7 @@ class BoschEBike3DMapCard extends HTMLElement {
         // direction instead. The relative arrow rotation = travel
         // bearing minus map bearing, which collapses to 0 in the
         // default mode and to the travel bearing in north-up mode.
-        const northUp = this._optionOn("north_up", false);
+        const northUp = this._currentNorthUp();
         const mapBearing = northUp ? 0 : travelBearing;
         const offY = this._chaseLookAhead != null ? this._chaseLookAhead : 30;
         const camera = {
