@@ -184,12 +184,19 @@ const I18N = {
     map3d_sun_label: "Sun",
     map3d_err_maplibre: "MapLibre could not be loaded.",
     map3d_err_style: "Map tiles unavailable (OpenFreeMap).",
-    map3d_terrain_on: "3D",
-    map3d_terrain_off: "2D",
-    map3d_terrain_loading: (done, total) => `Loading terrain… ${done}/${total}`,
-    map3d_terrain_failed: "Terrain tiles could not be loaded.",
+    map3d_mode_vector: "2D",
+    map3d_mode_terrain: "3D",
+    map3d_mode_satellite: "Sat",
+    map3d_tiles_loading: (kind, done, total) => `Loading ${kind}… ${done}/${total}`,
+    map3d_tiles_failed: (kind) => `${kind} tiles could not be loaded.`,
+    map3d_kind_terrain: "terrain",
+    map3d_kind_satellite: "satellite",
     map3d_editor_terrain_exag: "Terrain exaggeration (1.0-3.0)",
     map3d_editor_terrain_exag_hint: "1.0 = realistic relief. 1.5 (default) gently lifts mountains. 2.0+ becomes stylised.",
+    map3d_editor_sat_url: "Satellite tile URL template (optional)",
+    map3d_editor_sat_url_hint: "Override the default Esri World Imagery source. Use {z}, {x}, {y} placeholders. Leave empty for the free Esri default. Example MapTiler: https://api.maptiler.com/tiles/satellite-v2/{z}/{x}/{y}.jpg?key=YOUR_KEY",
+    map3d_editor_sat_maxzoom: "Satellite max preload zoom (12-15)",
+    map3d_editor_sat_maxzoom_hint: "Caps preload + source max zoom. 12 ≈ 14 MB, 13 (default) ≈ 40 MB, 14 ≈ 110 MB for a typical day tour. Higher = sharper when zoomed in but longer preload.",
     map3d_editor_title: "Title (optional)",
     map3d_editor_height: "Card height (px)",
     map3d_editor_account: "Pin to account (optional)",
@@ -394,12 +401,19 @@ const I18N = {
     map3d_sun_label: "Sonne",
     map3d_err_maplibre: "MapLibre konnte nicht geladen werden.",
     map3d_err_style: "Karten-Tiles nicht erreichbar (OpenFreeMap).",
-    map3d_terrain_on: "3D",
-    map3d_terrain_off: "2D",
-    map3d_terrain_loading: (done, total) => `Lade Geländedaten… ${done}/${total}`,
-    map3d_terrain_failed: "Geländedaten konnten nicht geladen werden.",
+    map3d_mode_vector: "2D",
+    map3d_mode_terrain: "3D",
+    map3d_mode_satellite: "Sat",
+    map3d_tiles_loading: (kind, done, total) => `Lade ${kind}… ${done}/${total}`,
+    map3d_tiles_failed: (kind) => `${kind}-Tiles konnten nicht geladen werden.`,
+    map3d_kind_terrain: "Geländedaten",
+    map3d_kind_satellite: "Satellitendaten",
     map3d_editor_terrain_exag: "Geländeüberhöhung (1.0-3.0)",
     map3d_editor_terrain_exag_hint: "1.0 = realistisches Höhenrelief. 1.5 (Default) hebt Berge dezent hervor. 2.0+ stilisiert.",
+    map3d_editor_sat_url: "Satelliten-Tile-URL-Template (optional)",
+    map3d_editor_sat_url_hint: "Überschreibt die Esri-World-Imagery-Default-Quelle. Platzhalter {z}, {x}, {y}. Leer = Esri-Default (frei). Beispiel MapTiler: https://api.maptiler.com/tiles/satellite-v2/{z}/{x}/{y}.jpg?key=DEIN_KEY",
+    map3d_editor_sat_maxzoom: "Satellit max. Preload-Zoom (12-15)",
+    map3d_editor_sat_maxzoom_hint: "Begrenzt Preload + Source-MaxZoom. 12 ≈ 14 MB, 13 (Default) ≈ 40 MB, 14 ≈ 110 MB für eine typische Tagestour. Höher = schärfer beim Reinzoomen, aber längerer Preload.",
     map3d_editor_title: "Titel (optional)",
     map3d_editor_height: "Karten-Höhe (px)",
     map3d_editor_account: "Auf Konto fixieren (optional)",
@@ -604,12 +618,19 @@ const I18N = {
     map3d_sun_label: "Zon",
     map3d_err_maplibre: "MapLibre kon niet worden geladen.",
     map3d_err_style: "Kaart-tiles niet beschikbaar (OpenFreeMap).",
-    map3d_terrain_on: "3D",
-    map3d_terrain_off: "2D",
-    map3d_terrain_loading: (done, total) => `Terrein laden… ${done}/${total}`,
-    map3d_terrain_failed: "Terrein-tiles konden niet worden geladen.",
+    map3d_mode_vector: "2D",
+    map3d_mode_terrain: "3D",
+    map3d_mode_satellite: "Sat",
+    map3d_tiles_loading: (kind, done, total) => `${kind} laden… ${done}/${total}`,
+    map3d_tiles_failed: (kind) => `${kind}-tiles konden niet worden geladen.`,
+    map3d_kind_terrain: "Terrein",
+    map3d_kind_satellite: "Satelliet",
     map3d_editor_terrain_exag: "Terrein-overdrijving (1.0-3.0)",
     map3d_editor_terrain_exag_hint: "1.0 = realistisch reliëf. 1.5 (default) tilt bergen subtiel op. 2.0+ wordt stilistisch.",
+    map3d_editor_sat_url: "Satelliet-tile-URL-template (optioneel)",
+    map3d_editor_sat_url_hint: "Overschrijft de Esri World Imagery default. Plaatshouders {z}, {x}, {y}. Leeg = Esri default (gratis). Voorbeeld MapTiler: https://api.maptiler.com/tiles/satellite-v2/{z}/{x}/{y}.jpg?key=JOUW_KEY",
+    map3d_editor_sat_maxzoom: "Satelliet max. preload-zoom (12-15)",
+    map3d_editor_sat_maxzoom_hint: "Cap voor preload + source maxzoom. 12 ≈ 14 MB, 13 (default) ≈ 40 MB, 14 ≈ 110 MB voor een typische dagrit. Hoger = scherper bij inzoomen maar langere preload.",
     map3d_editor_title: "Titel (optioneel)",
     map3d_editor_height: "Kaart-hoogte (px)",
     map3d_editor_account: "Account vastzetten (optioneel)",
@@ -800,10 +821,22 @@ const OPENFREEMAP_LIBERTY = "https://tiles.openfreemap.org/styles/liberty";
 const TERRARIUM_TILE_TEMPLATE =
   "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png";
 
-// Custom protocol scheme that intercepts MapLibre tile requests so we
+// Custom protocol schemes that intercept MapLibre tile requests so we
 // can serve them from IndexedDB. Tiles get into IDB either via the
 // up-front preloader (recommended) or lazily on first map use.
+// Same handler logic for DEM and satellite; only the scheme differs
+// so MapLibre can distinguish the sources.
 const EBIKE_DEM_PROTOCOL = "ebike-dem";
+const EBIKE_SAT_PROTOCOL = "ebike-sat";
+
+// Default satellite imagery: Esri World Imagery. Free, no API key,
+// global coverage. Slow CDN from EU but our preloader hides that.
+// User can override via the satellite_tile_url config option for
+// MapTiler / Mapbox keys if they want faster CDNs.
+// Note: Esri uses {z}/{y}/{x} order, opposite of OSM-style {z}/{x}/{y}.
+// Template placeholders are filled in by _preloadRasterTiles below.
+const DEFAULT_SATELLITE_TEMPLATE =
+  "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
 
 // IndexedDB for tile caching across sessions.
 const TILE_DB_NAME = "bosch-ebike-tiles";
@@ -883,30 +916,32 @@ function _tilesForBBox(west, south, east, north, zoom) {
   return out;
 }
 
-// Registers the ebike-dem:// MapLibre protocol exactly once per page
-// load. The protocol checks IDB first and only falls back to network
-// on miss. Network fetches are written through to IDB so the next
-// session of the same tour is served entirely offline.
-let _ebikeDemProtocolRegistered = false;
-function registerEbikeDemProtocol(mlib) {
-  if (_ebikeDemProtocolRegistered) return;
+// Registers the ebike-dem:// and ebike-sat:// MapLibre protocols
+// exactly once per page load. Both share the same handler - it checks
+// IDB first and only falls back to network on miss, writing through
+// to IDB so the next session is served entirely offline.
+const _ebikeProtocolsRegistered = new Set();
+function registerEbikeProtocols(mlib) {
   if (!mlib || typeof mlib.addProtocol !== "function") return;
-  mlib.addProtocol(EBIKE_DEM_PROTOCOL, async (params, abortController) => {
-    const url = "https://" + params.url.slice((EBIKE_DEM_PROTOCOL + "://").length);
-    let blob = await _tileCacheGet(url);
-    if (!blob) {
-      const resp = await fetch(url, {
-        mode: "cors",
-        signal: abortController?.signal,
-      });
-      if (!resp.ok) throw new Error("DEM tile " + resp.status);
-      blob = await resp.blob();
-      _tileCachePut(url, blob);   // fire-and-forget
-    }
-    const buf = await blob.arrayBuffer();
-    return { data: buf };
-  });
-  _ebikeDemProtocolRegistered = true;
+  for (const scheme of [EBIKE_DEM_PROTOCOL, EBIKE_SAT_PROTOCOL]) {
+    if (_ebikeProtocolsRegistered.has(scheme)) continue;
+    mlib.addProtocol(scheme, async (params, abortController) => {
+      const url = "https://" + params.url.slice((scheme + "://").length);
+      let blob = await _tileCacheGet(url);
+      if (!blob) {
+        const resp = await fetch(url, {
+          mode: "cors",
+          signal: abortController?.signal,
+        });
+        if (!resp.ok) throw new Error(scheme + " tile " + resp.status);
+        blob = await resp.blob();
+        _tileCachePut(url, blob);   // fire-and-forget
+      }
+      const buf = await blob.arrayBuffer();
+      return { data: buf };
+    });
+    _ebikeProtocolsRegistered.add(scheme);
+  }
 }
 
 function ensureMapLibre() {
@@ -5118,6 +5153,7 @@ class BoschEBike3DMapCard extends HTMLElement {
       height: 540, default_pitch: 55, chase_zoom: 17, chase_lookahead: 30,
       smooth_window: 15, track_smooth_window: 3, playback_speed: 60,
       terrain_exaggeration: 1.5,
+      satellite_tile_url: "", satellite_max_zoom: 13,
       show_date: 1, show_time: 1, show_sun: 1,
       show_speed: 1, show_distance: 1, show_elevation: 1,
       stats_as_chips: 0,
@@ -5249,21 +5285,28 @@ class BoschEBike3DMapCard extends HTMLElement {
       }
       .map3d-download-chip:hover { filter: brightness(1.1); }
       .map3d-download-chip ha-icon { color: #fff; }
-      .map3d-3d-toggle {
-        background: rgba(20,24,32,.78); color: #fff; backdrop-filter: blur(6px);
-        border: 1px solid rgba(255,255,255,.18);
-        padding: 4px 10px; border-radius: 999px; font-size: 12px;
+      .map3d-mode-switch {
+        display: inline-flex; align-items: center; gap: 0;
+        background: rgba(20,24,32,.78); backdrop-filter: blur(6px);
+        border: 1px solid rgba(255,255,255,.18); border-radius: 999px;
+        padding: 2px; pointer-events: auto;
+      }
+      .map3d-mode-pill {
+        background: transparent; color: #fff; border: 0;
+        padding: 3px 11px; border-radius: 999px; font-size: 12px;
         font-weight: 600; cursor: pointer; user-select: none;
-        display: inline-flex; align-items: center; gap: 5px;
-        pointer-events: auto;
+        display: inline-flex; align-items: center; gap: 4px;
+        transition: background-color .12s ease;
       }
-      .map3d-3d-toggle:hover { background: rgba(20,24,32,.92); }
-      .map3d-3d-toggle.active {
-        background: #1f6feb; border-color: #1f6feb;
-        box-shadow: 0 2px 10px rgba(31,111,235,.45);
+      .map3d-mode-pill:hover:not(.active):not(:disabled) {
+        background: rgba(255,255,255,.10);
       }
-      .map3d-3d-toggle:disabled { opacity: .55; cursor: progress; }
-      .map3d-3d-toggle ha-icon { --mdc-icon-size: 14px; }
+      .map3d-mode-pill.active {
+        background: #1f6feb;
+        box-shadow: 0 1px 6px rgba(31,111,235,.45);
+      }
+      .map3d-mode-pill:disabled { opacity: .45; cursor: progress; }
+      .map3d-mode-pill ha-icon { --mdc-icon-size: 13px; }
       .map3d-terrain-progress {
         background: rgba(20,24,32,.78); color: #fff; backdrop-filter: blur(6px);
         padding: 4px 10px; border-radius: 999px; font-size: 12px;
@@ -5466,36 +5509,49 @@ class BoschEBike3DMapCard extends HTMLElement {
   }
 
   // ===========================================================================
-  // 3D terrain toggle
+  // Map mode switch: vector | terrain | satellite
   // ---------------------------------------------------------------------------
-  // Reads/writes a single localStorage flag so the user's preference
-  // survives reloads. The actual terrain attach happens in
-  // _setTerrainEnabled after the map's style has loaded.
-  _loadTerrainPref() {
-    try { return localStorage.getItem("bosch-ebike-3d-terrain") === "1"; }
-    catch (_) { return false; }
+  // Modes are mutually exclusive. The currently applied one lives in
+  // this._mapMode; the persisted preference in localStorage survives
+  // reloads. A small migration step also picks up the legacy
+  // bosch-ebike-3d-terrain="1" flag from v1.16.0 builds.
+  _loadMapModePref() {
+    try {
+      const v = localStorage.getItem("bosch-ebike-3d-mode");
+      if (v === "vector" || v === "terrain" || v === "satellite") return v;
+      // Migration: earlier builds only had a terrain on/off flag.
+      if (localStorage.getItem("bosch-ebike-3d-terrain") === "1") return "terrain";
+    } catch (_) { /* ignore */ }
+    return "vector";
   }
-  _saveTerrainPref(on) {
-    try { localStorage.setItem("bosch-ebike-3d-terrain", on ? "1" : "0"); }
-    catch (_) { /* private mode, ignore */ }
+  _saveMapModePref(mode) {
+    try {
+      localStorage.setItem("bosch-ebike-3d-mode", mode);
+      // Clean up the legacy key so re-migrating cannot resurrect an
+      // old preference if the user has since switched modes.
+      localStorage.removeItem("bosch-ebike-3d-terrain");
+    } catch (_) { /* private mode, ignore */ }
   }
 
-  _updateTerrainToggleUI() {
-    const btn = this._root?.querySelector("#m3d-3d-toggle");
-    const lbl = this._root?.querySelector("#m3d-3d-toggle-lbl");
-    if (!btn || !lbl) return;
-    btn.classList.toggle("active", !!this._terrainEnabled);
-    // Label shows the state the button would switch TO on next click,
-    // so the user sees "3D" when the map is flat and "2D" when terrain
-    // is active. That matches the convention of most map apps.
-    lbl.textContent = this._t(this._terrainEnabled ? "map3d_terrain_off" : "map3d_terrain_on");
+  _updateModeUI() {
+    const sw = this._root?.querySelector("#m3d-mode-switch");
+    if (!sw) return;
+    for (const btn of sw.querySelectorAll(".map3d-mode-pill")) {
+      btn.classList.toggle("active", btn.dataset.mode === this._mapMode);
+    }
   }
 
-  _setTerrainProgress(msg) {
+  _setTilesProgress(msg) {
     const el = this._root?.querySelector("#m3d-terrain-progress");
     if (!el) return;
     if (!msg) { el.style.display = "none"; el.textContent = ""; return; }
     el.style.display = ""; el.textContent = msg;
+  }
+
+  _setSwitchDisabled(disabled) {
+    const sw = this._root?.querySelector("#m3d-mode-switch");
+    if (!sw) return;
+    for (const btn of sw.querySelectorAll(".map3d-mode-pill")) btn.disabled = !!disabled;
   }
 
   // Compute the geographic bounding box of the loaded track, padded by
@@ -5517,12 +5573,8 @@ class BoschEBike3DMapCard extends HTMLElement {
     };
   }
 
-  // Tile set for the preloader. We hit three zooms because MapLibre
-  // selects different DEM tiles depending on camera distance during
-  // playback: z=10 for far overviews, z=11 for the default chase-cam
-  // zoom, z=12 for occasional zoom-in. Three zooms keep the total
-  // count moderate (~30-90 tiles for a typical day tour) while
-  // covering every realistic camera state without runtime fetches.
+  // Tile set for the DEM preloader. Three zooms (10/11/12) cover every
+  // realistic chase-cam state for a typical day tour - ~30-90 tiles.
   _collectTerrainTiles(bbox) {
     const out = [];
     for (const z of [10, 11, 12]) {
@@ -5531,12 +5583,24 @@ class BoschEBike3DMapCard extends HTMLElement {
     return out;
   }
 
-  // Parallel-prime IDB + HTTP cache for the given tiles. Concurrency 8
-  // is a sweet spot: enough to saturate typical home connections,
-  // not enough to make AWS S3 throttle us. Failures are silently
-  // skipped — a single missing DEM tile only causes one flat patch,
-  // not a broken map, and the runtime fetcher will retry on demand.
-  async _preloadTerrainTiles(tiles, onProgress) {
+  // Tile set for the satellite preloader. Goes 12..maxZ to keep total
+  // size sane: z=12 alone ~14 MB, z=12+13 ~40 MB, z=12..14 ~110 MB
+  // for a typical day tour. The 'satellite_max_zoom' config caps the
+  // top end.
+  _collectSatelliteTiles(bbox, maxZ) {
+    const out = [];
+    for (let z = 12; z <= maxZ; z++) {
+      out.push(..._tilesForBBox(bbox.west, bbox.south, bbox.east, bbox.north, z));
+    }
+    return out;
+  }
+
+  // Generic parallel preloader. Same logic for DEM and satellite, only
+  // the URL template differs. Concurrency 8 saturates home connections
+  // without making AWS S3 / Esri throttle. Failures are silently
+  // skipped - one missing tile means one flat patch, not a broken map,
+  // and the runtime fetcher will retry on demand.
+  async _preloadRasterTiles(tiles, urlTemplate, onProgress) {
     const total = tiles.length;
     let done = 0;
     const concurrency = 8;
@@ -5544,7 +5608,7 @@ class BoschEBike3DMapCard extends HTMLElement {
     const worker = async () => {
       while (queue.length) {
         const t = queue.shift();
-        const url = TERRARIUM_TILE_TEMPLATE
+        const url = urlTemplate
           .replace("{z}", t.z).replace("{x}", t.x).replace("{y}", t.y);
         try {
           const cached = await _tileCacheGet(url);
@@ -5560,92 +5624,174 @@ class BoschEBike3DMapCard extends HTMLElement {
     await Promise.all(Array.from({ length: concurrency }, worker));
   }
 
-  // Enable / disable terrain on the live map. On enable we (1) preload
-  // the bbox into IDB so MapLibre never has to wait on tiles mid-pan,
-  // (2) add the DEM source via the ebike-dem:// protocol so future
-  // fetches hit IDB, and (3) call setTerrain with the configured
-  // exaggeration. Hillshade is intentionally NOT added: it would need
-  // a second DEM read per tile and previous experiments showed
-  // noticeable jank during playback. The lighting from sun position
-  // already gives the 3D mesh enough shading to look believable.
-  async _setTerrainEnabled(on, opts = {}) {
+  _satelliteTemplate() {
+    const cfg = String(this._config.satellite_tile_url || "").trim();
+    return cfg || DEFAULT_SATELLITE_TEMPLATE;
+  }
+
+  _satelliteMaxZoom() {
+    const raw = Number(this._config.satellite_max_zoom);
+    if (!Number.isFinite(raw)) return 13;
+    return Math.max(12, Math.min(15, Math.floor(raw)));
+  }
+
+  // ===========================================================================
+  // Mode switch core
+  // ---------------------------------------------------------------------------
+  // Transition from this._mapMode to the requested mode. All three
+  // mode-changes are funneled through one entry point so the tear-down
+  // of the previous mode (removing sources / layers, restoring base
+  // visibility) is always paired with the build-up of the new one.
+  async _setMapMode(mode, opts = {}) {
     const map = this._map;
     if (!map) return;
-    const btn = this._root?.querySelector("#m3d-3d-toggle");
-    if (on && !this._terrainEnabled) {
-      if (btn) btn.disabled = true;
-      try {
-        const pts = this._currentTrack;
-        if (!pts || !pts.length) return;
-        const bbox = this._bboxOfTrack(pts);
-        const tiles = this._collectTerrainTiles(bbox);
-        this._setTerrainProgress(this._t("map3d_terrain_loading", 0, tiles.length));
-        await this._preloadTerrainTiles(tiles, (d, t) => {
-          this._setTerrainProgress(this._t("map3d_terrain_loading", d, t));
-        });
+    if (mode !== "vector" && mode !== "terrain" && mode !== "satellite") return;
+    if (mode === this._mapMode) return;
+    this._setSwitchDisabled(true);
+    try {
+      // 1) Tear down the currently active non-vector mode.
+      if (this._mapMode === "terrain") this._teardownTerrain();
+      else if (this._mapMode === "satellite") this._teardownSatellite();
 
+      // 2) Apply the new mode (vector is the bare baseline).
+      if (mode === "terrain") {
+        await this._buildTerrain(map);
         if (this._map !== map) return;   // user navigated away mid-load
-        if (!map.getSource("ebike-dem")) {
-          // maxzoom: 12 caps the DEM tile pyramid so MapLibre never
-          // requests z=13/14/15 DEM tiles (which would multiply the
-          // tile count by 4x/16x/64x and crush playback). At the
-          // playback zoom of 17, MapLibre overzooms a z=12 tile by
-          // factor 32 - the terrain mesh becomes coarser but with
-          // exaggeration 1.5 the visible relief is essentially
-          // unchanged. This is the main performance lever for
-          // terrain playback.
-          map.addSource("ebike-dem", {
-            type: "raster-dem",
-            tiles: [EBIKE_DEM_PROTOCOL + "://" + TERRARIUM_TILE_TEMPLATE.replace(/^https?:\/\//, "")],
-            encoding: "terrarium",
-            tileSize: 256,
-            minzoom: 0,
-            maxzoom: 12,
-          });
-        }
-        const exag = Math.max(1.0, Math.min(3.0, Number(this._config.terrain_exaggeration) || 1.5));
-        map.setTerrain({ source: "ebike-dem", exaggeration: exag });
-
-        // Hide ALL building layers and the shadow layer while terrain
-        // is on. 3D fill-extrusion buildings + the 3D terrain mesh at
-        // pitch 55 are the two heaviest renderers in the style;
-        // combined they cause the playback lag. Cleared also the
-        // shadow layer because its content is recomputed from
-        // building features which we no longer query (see the early
-        // return in _updateShadows when _terrainEnabled is true).
-        for (const id of this._findBuildingLayers()) {
-          this._setLayerVisibility(id, false);
-        }
-        this._setLayerVisibility("ebike-buildings-3d", false);
-        this._setLayerVisibility("ebike-shadows", false);
-
-        this._terrainEnabled = true;
-        if (!opts.silent) this._saveTerrainPref(true);
-      } catch (e) {
-        console.warn("[Bosch eBike 3D] enable terrain failed", e);
-        this._setTerrainProgress(this._t("map3d_terrain_failed"));
-        setTimeout(() => this._setTerrainProgress(null), 3000);
-      } finally {
-        if (btn) btn.disabled = false;
-        this._setTerrainProgress(null);
-        this._updateTerrainToggleUI();
+      } else if (mode === "satellite") {
+        await this._buildSatellite(map);
+        if (this._map !== map) return;
       }
-    } else if (!on && this._terrainEnabled) {
-      try { map.setTerrain(null); } catch (_) {}
-      try { if (map.getSource("ebike-dem")) map.removeSource("ebike-dem"); } catch (_) {}
-      // Restore buildings + shadows that we hid on enable.
-      for (const id of this._findBuildingLayers()) {
-        this._setLayerVisibility(id, true);
-      }
-      this._setLayerVisibility("ebike-buildings-3d", true);
-      this._setLayerVisibility("ebike-shadows", true);
-      this._terrainEnabled = false;
-      if (!opts.silent) this._saveTerrainPref(false);
-      this._updateTerrainToggleUI();
-      // Shadows were stale while terrain was on; refresh now that the
-      // building footprints are visible again.
-      setTimeout(() => this._updateShadows(), 100);
+      this._mapMode = mode;
+      if (!opts.silent) this._saveMapModePref(mode);
+    } catch (e) {
+      console.warn("[Bosch eBike 3D] mode switch failed", e);
+      const kind = this._t(mode === "satellite" ? "map3d_kind_satellite" : "map3d_kind_terrain");
+      this._setTilesProgress(this._t("map3d_tiles_failed", kind));
+      setTimeout(() => this._setTilesProgress(null), 3000);
+    } finally {
+      this._setSwitchDisabled(false);
+      this._setTilesProgress(null);
+      this._updateModeUI();
     }
+  }
+
+  // --- Terrain build / teardown -----------------------------------------------
+  async _buildTerrain(map) {
+    const pts = this._currentTrack;
+    if (!pts || !pts.length) return;
+    const bbox = this._bboxOfTrack(pts);
+    const tiles = this._collectTerrainTiles(bbox);
+    const kind = this._t("map3d_kind_terrain");
+    this._setTilesProgress(this._t("map3d_tiles_loading", kind, 0, tiles.length));
+    await this._preloadRasterTiles(tiles, TERRARIUM_TILE_TEMPLATE, (d, t) => {
+      this._setTilesProgress(this._t("map3d_tiles_loading", kind, d, t));
+    });
+    if (this._map !== map) return;
+
+    if (!map.getSource("ebike-dem")) {
+      // maxzoom: 12 caps the DEM tile pyramid so MapLibre never
+      // overzooms higher levels - the mesh is coarser but with
+      // exaggeration 1.5 the visible relief looks essentially the
+      // same and playback stays smooth.
+      map.addSource("ebike-dem", {
+        type: "raster-dem",
+        tiles: [EBIKE_DEM_PROTOCOL + "://" + TERRARIUM_TILE_TEMPLATE.replace(/^https?:\/\//, "")],
+        encoding: "terrarium",
+        tileSize: 256, minzoom: 0, maxzoom: 12,
+      });
+    }
+    const exag = Math.max(1.0, Math.min(3.0, Number(this._config.terrain_exaggeration) || 1.5));
+    map.setTerrain({ source: "ebike-dem", exaggeration: exag });
+    this._hideBuildingsAndShadows();
+  }
+
+  _teardownTerrain() {
+    const map = this._map;
+    if (!map) return;
+    try { map.setTerrain(null); } catch (_) {}
+    try { if (map.getSource("ebike-dem")) map.removeSource("ebike-dem"); } catch (_) {}
+    this._restoreBuildingsAndShadows();
+  }
+
+  // --- Satellite build / teardown ---------------------------------------------
+  async _buildSatellite(map) {
+    const pts = this._currentTrack;
+    if (!pts || !pts.length) return;
+    const bbox = this._bboxOfTrack(pts);
+    const maxZ = this._satelliteMaxZoom();
+    const template = this._satelliteTemplate();
+    const tiles = this._collectSatelliteTiles(bbox, maxZ);
+    const kind = this._t("map3d_kind_satellite");
+    this._setTilesProgress(this._t("map3d_tiles_loading", kind, 0, tiles.length));
+    await this._preloadRasterTiles(tiles, template, (d, t) => {
+      this._setTilesProgress(this._t("map3d_tiles_loading", kind, d, t));
+    });
+    if (this._map !== map) return;
+
+    if (!map.getSource("ebike-sat")) {
+      // Tile URL for MapLibre goes through the ebike-sat:// protocol
+      // so the runtime fetcher hits IDB on every request. minzoom 0
+      // keeps coarse overview tiles available even at far-out zoom.
+      const tileUrl = EBIKE_SAT_PROTOCOL + "://" + template.replace(/^https?:\/\//, "");
+      map.addSource("ebike-sat", {
+        type: "raster",
+        tiles: [tileUrl],
+        tileSize: 256, minzoom: 0, maxzoom: maxZ,
+      });
+    }
+    if (!map.getLayer("ebike-sat-layer")) {
+      // Insert satellite ABOVE every existing fill / fill-extrusion /
+      // background layer of the OpenFreeMap style so the imagery
+      // shows through, but BELOW symbol layers (labels) so road
+      // names + POI icons stay visible. _firstSymbolLayer finds the
+      // first symbol id; if none, the layer goes on top.
+      const beforeId = this._firstSymbolLayer();
+      map.addLayer({
+        id: "ebike-sat-layer",
+        type: "raster",
+        source: "ebike-sat",
+        paint: { "raster-opacity": 1, "raster-fade-duration": 200 },
+      }, beforeId);
+    }
+    // Buildings + shadows hidden for the same reason as in terrain
+    // mode: 3D extrusions over satellite raster looks terrible at
+    // pitch 55 and the queryRenderedFeatures cost during playback is
+    // wasted. Labels and roads remain on top of the satellite.
+    this._hideBuildingsAndShadows();
+  }
+
+  _teardownSatellite() {
+    const map = this._map;
+    if (!map) return;
+    try { if (map.getLayer("ebike-sat-layer")) map.removeLayer("ebike-sat-layer"); } catch (_) {}
+    try { if (map.getSource("ebike-sat")) map.removeSource("ebike-sat"); } catch (_) {}
+    this._restoreBuildingsAndShadows();
+  }
+
+  // --- shared visibility helpers ----------------------------------------------
+  _hideBuildingsAndShadows() {
+    for (const id of this._findBuildingLayers()) this._setLayerVisibility(id, false);
+    this._setLayerVisibility("ebike-buildings-3d", false);
+    this._setLayerVisibility("ebike-shadows", false);
+  }
+  _restoreBuildingsAndShadows() {
+    for (const id of this._findBuildingLayers()) this._setLayerVisibility(id, true);
+    this._setLayerVisibility("ebike-buildings-3d", true);
+    this._setLayerVisibility("ebike-shadows", true);
+    // Refresh once now that footprints are visible again. Tiny delay
+    // gives MapLibre time to re-publish 'building' query results.
+    setTimeout(() => this._updateShadows(), 100);
+  }
+
+  // Returns the id of the first symbol layer in the current style or
+  // undefined. Used to insert satellite raster below labels while
+  // keeping it above all the opaque base fills.
+  _firstSymbolLayer() {
+    if (!this._map || !this._map.getStyle) return undefined;
+    const style = this._map.getStyle();
+    if (!style || !style.layers) return undefined;
+    const sym = style.layers.find((l) => l.type === "symbol");
+    return sym ? sym.id : undefined;
   }
 
   // Helper used by terrain toggle to flip 'visibility' on a layer
@@ -5762,9 +5908,17 @@ class BoschEBike3DMapCard extends HTMLElement {
           <span class="map3d-chip map3d-rec-badge" id="m3d-rec-badge" style="display:none">
             <ha-icon icon="mdi:record"></ha-icon><span>${this._t("map3d_record_active")}</span>
           </span>
-          <button class="map3d-3d-toggle" id="m3d-3d-toggle" type="button" title="${this._t("map3d_terrain_on")} / ${this._t("map3d_terrain_off")}">
-            <ha-icon icon="mdi:terrain"></ha-icon><span id="m3d-3d-toggle-lbl">${this._t("map3d_terrain_on")}</span>
-          </button>
+          <span class="map3d-mode-switch" id="m3d-mode-switch">
+            <button class="map3d-mode-pill" data-mode="vector" type="button">
+              <ha-icon icon="mdi:map-outline"></ha-icon>${this._t("map3d_mode_vector")}
+            </button>
+            <button class="map3d-mode-pill" data-mode="terrain" type="button">
+              <ha-icon icon="mdi:terrain"></ha-icon>${this._t("map3d_mode_terrain")}
+            </button>
+            <button class="map3d-mode-pill" data-mode="satellite" type="button">
+              <ha-icon icon="mdi:earth"></ha-icon>${this._t("map3d_mode_satellite")}
+            </button>
+          </span>
           <span class="map3d-terrain-progress" id="m3d-terrain-progress" style="display:none">…</span>
         </div>
         <div class="map3d-controls">
@@ -5824,18 +5978,21 @@ class BoschEBike3DMapCard extends HTMLElement {
       }
     }
 
-    const tdBtn = this._root.querySelector("#m3d-3d-toggle");
-    if (tdBtn) {
-      tdBtn.addEventListener("click", () => {
-        // _terrainEnabled is the current applied state. Flip and apply.
-        this._setTerrainEnabled(!this._terrainEnabled);
+    const switchEl = this._root.querySelector("#m3d-mode-switch");
+    if (switchEl) {
+      switchEl.addEventListener("click", (ev) => {
+        const btn = ev.target.closest(".map3d-mode-pill");
+        if (!btn) return;
+        const mode = btn.dataset.mode;
+        if (mode && mode !== this._mapMode) this._setMapMode(mode);
       });
     }
-    // Reflect persisted preference in the button BEFORE the map loads.
-    // Actual terrain activation happens after the map's 'load' event
-    // in _initMap so MapLibre has a stable style.
-    this._terrainEnabled = false;
-    this._updateTerrainToggleUI();
+    // _mapMode is the currently APPLIED mode on the map. Initial state
+    // is always 'vector' here; the actual activation of a persisted
+    // terrain/satellite preference happens after the map's 'load'
+    // event in _initMap, so MapLibre has a stable style first.
+    this._mapMode = "vector";
+    this._updateModeUI();
 
     this._initMap();
   }
@@ -5854,7 +6011,7 @@ class BoschEBike3DMapCard extends HTMLElement {
     }
     // Register the IDB-backed DEM protocol exactly once. Safe to call on
     // every init; the function is idempotent after the first call.
-    try { registerEbikeDemProtocol(mlib); } catch (_) {}
+    try { registerEbikeProtocols(mlib); } catch (_) {}
     if (myEpoch !== this._mapInitEpoch) {
       console.log("[Bosch eBike 3D] init skipped (newer epoch already running)");
       return;
@@ -5994,13 +6151,15 @@ class BoschEBike3DMapCard extends HTMLElement {
       this._updateTimeChips(0, startTime, altDeg, mood);
       this._updateRangeLabels();
 
-      // Restore persisted terrain preference. Done here, AFTER the base
-      // style finished loading, so addSource / setTerrain attach to a
-      // stable map. Failure (no internet, IDB blocked) silently falls
-      // back to plain 2D - we never block the map from rendering.
-      if (this._loadTerrainPref()) {
-        this._setTerrainEnabled(true, { silent: true }).catch((e) => {
-          console.warn("[Bosch eBike 3D] terrain auto-restore failed", e);
+      // Restore persisted map mode (vector / terrain / satellite). Done
+      // here, AFTER the base style finished loading, so the source +
+      // layer additions attach to a stable map. Failure (no internet,
+      // IDB blocked) silently falls back to plain vector - we never
+      // block the map from rendering.
+      const wantMode = this._loadMapModePref();
+      if (wantMode && wantMode !== "vector") {
+        this._setMapMode(wantMode, { silent: true }).catch((e) => {
+          console.warn("[Bosch eBike 3D] mode auto-restore failed", e);
         });
       }
     });
@@ -6175,12 +6334,12 @@ class BoschEBike3DMapCard extends HTMLElement {
   _updateShadows() {
     if (!this._map || !this._map.loaded()) return;
     // Shadows are computed by querying every visible building feature
-    // and projecting their footprints onto the ground. Combined with
-    // a 3D terrain mesh this is the dominant per-move cost during
-    // playback. When terrain is active we skip the work entirely;
-    // _setTerrainEnabled also hides the shadow layer so old shadows
-    // do not linger.
-    if (this._terrainEnabled) return;
+    // and projecting their footprints onto the ground. Combined with a
+    // 3D terrain mesh or satellite imagery this is the dominant
+    // per-move cost during playback. Skipped while we are NOT in plain
+    // vector mode; the layer itself is hidden by the mode switch so
+    // old shadows do not linger.
+    if (this._mapMode && this._mapMode !== "vector") return;
     const now = performance.now();
     if (this._shadowsThrottleUntil && now < this._shadowsThrottleUntil) {
       if (!this._shadowsPending) {
@@ -7042,6 +7201,8 @@ class BoschEBike3DMapCardEditor extends HTMLElement {
       track_smooth_window: mkText("track_smooth_window", "map3d_editor_track_smooth", "map3d_editor_track_smooth_hint", "number"),
       playback_speed: mkText("playback_speed", "map3d_editor_playback_speed", "map3d_editor_playback_speed_hint", "number"),
       terrain_exaggeration: mkText("terrain_exaggeration", "map3d_editor_terrain_exag", "map3d_editor_terrain_exag_hint", "number"),
+      satellite_tile_url: mkText("satellite_tile_url", "map3d_editor_sat_url", "map3d_editor_sat_url_hint", "text"),
+      satellite_max_zoom: mkText("satellite_max_zoom", "map3d_editor_sat_maxzoom", "map3d_editor_sat_maxzoom_hint", "number"),
       animate_seconds: mkText("animate_seconds", "map3d_editor_animate_seconds", "map3d_editor_animate_seconds_override_hint", "number"),
       account_id: mkText("account_id", "map3d_editor_account", null, "text"),
       bike_id: mkText("bike_id", "map3d_editor_bike", null, "text"),
