@@ -170,6 +170,36 @@ const I18N = {
     dash_editor_charge_switch: "Charger switch entity (optional)",
     dash_editor_target_soc: "Target SoC input_number entity (optional)",
     dash_editor_target_soc_hint: "When set, an HA automation can read this value and stop the smart plug when the battery reaches it.",
+    // Dashboard: maintenance + CO2/fuel
+    dash_section_maint: "Upcoming maintenance",
+    dash_maint_none: "No maintenance due in the next 30 days / 500 km.",
+    dash_maint_due_km: (km) => `${km <= 0 ? "Overdue by " + Math.abs(km) : "in " + km} km`,
+    dash_maint_due_days: (d) => `${d <= 0 ? "Overdue by " + Math.abs(d) : "in " + d} day(s)`,
+    dash_maint_overdue: "Overdue",
+    dash_section_co2: "Saved vs. car",
+    dash_co2_total: "Total",
+    dash_co2_last: "Last tour",
+    dash_co2_grams: " kg CO₂",
+    dash_co2_eur: " €",
+    dash_co2_compared: "Compared with",
+    dash_editor_section_maint: "Maintenance",
+    dash_editor_maint_hint: "Items appear on the dashboard when due within the next 30 days or 500 km. Pick a suggested task or type your own.",
+    dash_editor_maint_add: "Add maintenance",
+    dash_editor_maint_name: "Task",
+    dash_editor_maint_type: "Trigger",
+    dash_editor_maint_type_km: "Every X km",
+    dash_editor_maint_type_date: "Every X days",
+    dash_editor_maint_interval_km: "Interval (km)",
+    dash_editor_maint_interval_days: "Interval (days)",
+    dash_editor_maint_last_km: "Last done at (km, optional)",
+    dash_editor_maint_last_date: "Last done on (date, optional)",
+    dash_editor_maint_remove: "Remove",
+    dash_editor_maint_name_custom: "Custom…",
+    dash_editor_section_co2: "Vehicle comparison",
+    dash_editor_co2_hint: "Used to calculate CO₂ saved and fuel-cost equivalent compared to a car of this class.",
+    dash_editor_vehicle_type: "Vehicle type",
+    dash_editor_fuel_price: "Fuel price (€ / l, € / kWh)",
+    dash_editor_fuel_price_hint: "Override the default price. Leave blank to use 1.85 € / l for petrol, 1.75 € / l for diesel, 0.35 € / kWh for EV.",
     // 3D map card
     map3d_title: "Bosch eBike 3D Tours",
     map3d_loading: "Loading tours…",
@@ -393,6 +423,36 @@ const I18N = {
     dash_editor_charge_switch: "Charger-Switch-Entity (optional)",
     dash_editor_target_soc: "Ziel-SoC input_number-Entity (optional)",
     dash_editor_target_soc_hint: "Wenn gesetzt, kann eine HA-Automation diesen Wert lesen und die Steckdose abschalten, sobald der Akku ihn erreicht.",
+    // Dashboard: Wartung + CO2/Sprit
+    dash_section_maint: "Anstehende Wartung",
+    dash_maint_none: "Keine Wartung in den nächsten 30 Tagen / 500 km fällig.",
+    dash_maint_due_km: (km) => `${km <= 0 ? "Überfällig: " + Math.abs(km) : "in " + km} km`,
+    dash_maint_due_days: (d) => `${d <= 0 ? "Überfällig: " + Math.abs(d) : "in " + d} Tag(en)`,
+    dash_maint_overdue: "Überfällig",
+    dash_section_co2: "Gegenüber Auto gespart",
+    dash_co2_total: "Gesamt",
+    dash_co2_last: "Letzte Tour",
+    dash_co2_grams: " kg CO₂",
+    dash_co2_eur: " €",
+    dash_co2_compared: "Vergleich mit",
+    dash_editor_section_maint: "Wartung",
+    dash_editor_maint_hint: "Einträge erscheinen im Dashboard, wenn sie in den nächsten 30 Tagen oder 500 km fällig sind. Wähle einen Vorschlag oder tippe eigenen Text.",
+    dash_editor_maint_add: "Wartung hinzufügen",
+    dash_editor_maint_name: "Tätigkeit",
+    dash_editor_maint_type: "Auslöser",
+    dash_editor_maint_type_km: "Alle X km",
+    dash_editor_maint_type_date: "Alle X Tage",
+    dash_editor_maint_interval_km: "Intervall (km)",
+    dash_editor_maint_interval_days: "Intervall (Tage)",
+    dash_editor_maint_last_km: "Zuletzt erledigt bei (km, optional)",
+    dash_editor_maint_last_date: "Zuletzt erledigt am (Datum, optional)",
+    dash_editor_maint_remove: "Entfernen",
+    dash_editor_maint_name_custom: "Eigener Text…",
+    dash_editor_section_co2: "Fahrzeug-Vergleich",
+    dash_editor_co2_hint: "Wird zur Berechnung der CO₂-Ersparnis und Sprit-Kostenäquivalente im Vergleich zu einem Auto dieser Klasse benutzt.",
+    dash_editor_vehicle_type: "Fahrzeugtyp",
+    dash_editor_fuel_price: "Sprit-/Strom-Preis (€ / l, € / kWh)",
+    dash_editor_fuel_price_hint: "Überschreibt den Default-Preis. Leer = 1,85 €/l Benzin, 1,75 €/l Diesel, 0,35 €/kWh E-Auto.",
     // 3D map card
     map3d_title: "Bosch eBike 3D-Touren",
     map3d_loading: "Touren werden geladen…",
@@ -616,6 +676,36 @@ const I18N = {
     dash_editor_charge_switch: "Lader-schakelaar-entity (optioneel)",
     dash_editor_target_soc: "Doel-SoC input_number-entity (optioneel)",
     dash_editor_target_soc_hint: "Indien ingesteld kan een HA-automation deze waarde uitlezen en de stekker uitschakelen zodra de accu deze bereikt.",
+    // Dashboard: onderhoud + CO2/brandstof
+    dash_section_maint: "Aanstaand onderhoud",
+    dash_maint_none: "Geen onderhoud in de komende 30 dagen / 500 km.",
+    dash_maint_due_km: (km) => `${km <= 0 ? "Te laat met " + Math.abs(km) : "over " + km} km`,
+    dash_maint_due_days: (d) => `${d <= 0 ? "Te laat met " + Math.abs(d) : "over " + d} dag(en)`,
+    dash_maint_overdue: "Te laat",
+    dash_section_co2: "Bespaard vs. auto",
+    dash_co2_total: "Totaal",
+    dash_co2_last: "Laatste rit",
+    dash_co2_grams: " kg CO₂",
+    dash_co2_eur: " €",
+    dash_co2_compared: "Vergeleken met",
+    dash_editor_section_maint: "Onderhoud",
+    dash_editor_maint_hint: "Items verschijnen op het dashboard wanneer ze binnen 30 dagen of 500 km nodig zijn. Kies een voorstel of typ je eigen tekst.",
+    dash_editor_maint_add: "Onderhoud toevoegen",
+    dash_editor_maint_name: "Taak",
+    dash_editor_maint_type: "Trigger",
+    dash_editor_maint_type_km: "Elke X km",
+    dash_editor_maint_type_date: "Elke X dagen",
+    dash_editor_maint_interval_km: "Interval (km)",
+    dash_editor_maint_interval_days: "Interval (dagen)",
+    dash_editor_maint_last_km: "Laatst gedaan op (km, optioneel)",
+    dash_editor_maint_last_date: "Laatst gedaan op (datum, optioneel)",
+    dash_editor_maint_remove: "Verwijderen",
+    dash_editor_maint_name_custom: "Eigen tekst…",
+    dash_editor_section_co2: "Voertuigvergelijking",
+    dash_editor_co2_hint: "Wordt gebruikt om bespaarde CO₂ en brandstofkosten ten opzichte van een auto van deze klasse te berekenen.",
+    dash_editor_vehicle_type: "Voertuigtype",
+    dash_editor_fuel_price: "Brandstof-/stroomprijs (€ / l, € / kWh)",
+    dash_editor_fuel_price_hint: "Overschrijft de standaardprijs. Leeg = 1,85 €/l benzine, 1,75 €/l diesel, 0,35 €/kWh elektrisch.",
     // 3D map card
     map3d_title: "Bosch eBike 3D-tours",
     map3d_loading: "Tours worden geladen…",
@@ -829,6 +919,84 @@ function ensureLeaflet() {
 // ===========================================================================
 // MapLibre GL + OpenFreeMap helpers for the 3D Map card (lazy-loaded)
 // ===========================================================================
+// ===========================================================================
+// Dashboard-Card: Wartungs-Vorschläge + Fahrzeug-Vergleichswerte
+// ---------------------------------------------------------------------------
+// Vorschläge fürs Wartungs-Dropdown. Reine Templates; der User kann den
+// Text danach beliebig editieren oder einen ganz eigenen eingeben.
+// Die Labels werden je nach Sprache aus den i18n-Dicts geholt; die
+// englischen Defaults stehen hier inline, damit eine fehlende Locale-
+// Datei nicht den Dropdown leert.
+const MAINTENANCE_PRESETS = [
+  { id: "chain_clean",   label_de: "Kette reinigen und ölen",      label_en: "Clean and oil chain" },
+  { id: "chain_wax",     label_de: "Kette wachsen",                 label_en: "Wax chain" },
+  { id: "chain_replace", label_de: "Kette wechseln",                label_en: "Replace chain" },
+  { id: "brake_check",   label_de: "Bremsen prüfen und einstellen", label_en: "Check and adjust brakes" },
+  { id: "brake_pads",    label_de: "Bremsbeläge wechseln",          label_en: "Replace brake pads" },
+  { id: "tire_pressure", label_de: "Reifenluftdruck prüfen",         label_en: "Check tire pressure" },
+  { id: "tire_replace",  label_de: "Reifen wechseln",                label_en: "Replace tires" },
+  { id: "gear_check",    label_de: "Schaltung prüfen / einstellen",  label_en: "Check / adjust gears" },
+  { id: "service_large", label_de: "Großer Kundendienst",            label_en: "Major service" },
+  { id: "service_small", label_de: "Kleiner Kundendienst",           label_en: "Minor service" },
+  { id: "battery_contacts", label_de: "Akku-Kontakte reinigen",      label_en: "Clean battery contacts" },
+];
+
+// Fahrzeug-Vergleichswerte für die CO2/Sprit-Berechnung. CO2 in g/km
+// als Well-to-Wheel-Schätzung, Verbrauch in l/100km bzw. kWh/100km
+// (Elektroauto). Quellen: Umweltbundesamt 2024, ADAC-Mittelwerte.
+// fuel_kind unterscheidet Default-Preis und Einheit der Anzeige.
+const VEHICLE_PRESETS = {
+  none: {
+    label_de: "Kein Vergleich",
+    label_en: "No comparison",
+    co2_g_per_km: 0, consumption: 0, fuel_kind: "none",
+  },
+  small_petrol: {
+    label_de: "Kleinwagen Benzin",
+    label_en: "Small car (petrol)",
+    co2_g_per_km: 120, consumption: 5.5, fuel_kind: "petrol",
+  },
+  compact_petrol: {
+    label_de: "Mittelklasse Benzin",
+    label_en: "Mid-size (petrol)",
+    co2_g_per_km: 145, consumption: 7.0, fuel_kind: "petrol",
+  },
+  suv_petrol: {
+    label_de: "SUV / Van Benzin",
+    label_en: "SUV / van (petrol)",
+    co2_g_per_km: 180, consumption: 9.0, fuel_kind: "petrol",
+  },
+  small_diesel: {
+    label_de: "Kleinwagen Diesel",
+    label_en: "Small car (diesel)",
+    co2_g_per_km: 105, consumption: 4.5, fuel_kind: "diesel",
+  },
+  compact_diesel: {
+    label_de: "Mittelklasse Diesel",
+    label_en: "Mid-size (diesel)",
+    co2_g_per_km: 135, consumption: 6.0, fuel_kind: "diesel",
+  },
+  suv_diesel: {
+    label_de: "SUV / Van Diesel",
+    label_en: "SUV / van (diesel)",
+    co2_g_per_km: 165, consumption: 8.0, fuel_kind: "diesel",
+  },
+  ev_compact: {
+    label_de: "Elektroauto (Ökostrom)",
+    label_en: "Electric car (green energy)",
+    co2_g_per_km: 50, consumption: 18.0, fuel_kind: "ev",
+  },
+};
+
+// Default-Preise pro Treibstoff in EUR. Wird vom user-konfigurierten
+// fuel_price überschrieben, falls gesetzt.
+const FUEL_DEFAULT_PRICE = {
+  petrol: 1.85,
+  diesel: 1.75,
+  ev: 0.35,
+  none: 0,
+};
+
 const MAPLIBRE_JS = "https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.js";
 const MAPLIBRE_CSS = "https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.css";
 const OPENFREEMAP_LIBERTY = "https://tiles.openfreemap.org/styles/liberty";
@@ -4784,6 +4952,97 @@ class BoschEBikeDashboardCard extends HTMLElement {
         align-items: center; font-size: 13px; font-weight: 600;
         color: var(--primary-text-color);
       }
+      /* --- Wartung + CO2-Sektion --- */
+      .dash-section-head {
+        font-size: 13px; font-weight: 600; letter-spacing: .02em;
+        color: var(--secondary-text-color);
+        margin: 16px 0 8px 2px; text-transform: uppercase;
+      }
+      .dash-maint-list {
+        display: flex; flex-direction: column; gap: 8px;
+      }
+      .dash-maint-row {
+        display: flex; align-items: center; gap: 10px;
+        padding: 10px 12px; border-radius: 10px;
+        background: var(--secondary-background-color, #f4f6f8);
+        border-left: 4px solid var(--primary-color, #03a9f4);
+      }
+      .dash-maint-row.overdue {
+        background: rgba(229,57,53,.10);
+        border-left-color: #e53935;
+      }
+      .dash-maint-row.due-soon {
+        background: rgba(255,167,38,.12);
+        border-left-color: #fb8c00;
+      }
+      .dash-maint-row ha-icon { --mdc-icon-size: 22px; color: var(--secondary-text-color); flex-shrink: 0; }
+      .dash-maint-row.overdue ha-icon { color: #e53935; }
+      .dash-maint-row.due-soon ha-icon { color: #fb8c00; }
+      .dash-maint-row .name { flex: 1; font-size: 14px; color: var(--primary-text-color); }
+      .dash-maint-row .when {
+        font-size: 12px; font-weight: 600;
+        color: var(--secondary-text-color);
+        font-variant-numeric: tabular-nums;
+      }
+      .dash-maint-row.overdue .when { color: #e53935; }
+      .dash-maint-row.due-soon .when { color: #fb8c00; }
+      .dash-maint-empty {
+        padding: 10px 12px; font-size: 13px;
+        color: var(--secondary-text-color); font-style: italic;
+        text-align: center;
+      }
+      .dash-co2-grid {
+        display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+      }
+      .dash-co2-card {
+        padding: 12px; border-radius: 10px;
+        background: var(--secondary-background-color, #f4f6f8);
+        display: flex; flex-direction: column; gap: 4px;
+      }
+      .dash-co2-card .lbl {
+        font-size: 11px; color: var(--secondary-text-color);
+        text-transform: uppercase; letter-spacing: .04em;
+      }
+      .dash-co2-card .v1 { font-size: 16px; font-weight: 600; color: var(--primary-text-color); }
+      .dash-co2-card .v2 { font-size: 13px; color: var(--secondary-text-color); }
+      .dash-co2-compared {
+        font-size: 11px; color: var(--secondary-text-color);
+        margin-top: 4px; text-align: center; font-style: italic;
+      }
+      /* Editor: Wartungs-Liste */
+      .dash-ed-maint-row {
+        display: grid;
+        grid-template-columns: 1fr auto auto auto auto;
+        gap: 8px; align-items: end;
+        padding: 8px; border-radius: 8px;
+        background: var(--secondary-background-color, #f4f6f8);
+        margin-bottom: 6px;
+      }
+      .dash-ed-maint-row > div { display: flex; flex-direction: column; gap: 2px; }
+      .dash-ed-maint-row label {
+        font-size: 10px; color: var(--secondary-text-color);
+        text-transform: uppercase; letter-spacing: .04em;
+      }
+      .dash-ed-maint-row input, .dash-ed-maint-row select {
+        padding: 6px 8px; border-radius: 4px;
+        border: 1px solid var(--divider-color);
+        background: var(--card-background-color);
+        color: var(--primary-text-color); font-size: 13px;
+      }
+      .dash-ed-maint-row .interval { width: 90px; }
+      .dash-ed-maint-row .lastat { width: 130px; }
+      .dash-ed-maint-row button.remove {
+        background: transparent; border: 0; color: #e53935;
+        cursor: pointer; padding: 6px; align-self: end;
+      }
+      .dash-ed-add {
+        background: var(--primary-color, #03a9f4); color: #fff; border: 0;
+        padding: 8px 12px; border-radius: 6px; cursor: pointer;
+        font-size: 13px; align-self: flex-start;
+      }
+      @media (max-width: 600px) {
+        .dash-ed-maint-row { grid-template-columns: 1fr; }
+      }
     `;
     card.appendChild(style);
 
@@ -4805,6 +5064,15 @@ class BoschEBikeDashboardCard extends HTMLElement {
       <div class="dash-batbar-wrap" id="dash-batbar-wrap">
         <div class="dash-batbar" id="dash-batbar" style="width:0%"></div>
         <div class="dash-batbar-label" id="dash-batbar-label">--%</div>
+      </div>
+      <div id="dash-maint-section" style="display:none">
+        <div class="dash-section-head" id="dash-maint-head"></div>
+        <div class="dash-maint-list" id="dash-maint-list"></div>
+      </div>
+      <div id="dash-co2-section" style="display:none">
+        <div class="dash-section-head" id="dash-co2-head"></div>
+        <div class="dash-co2-grid" id="dash-co2-grid"></div>
+        <div class="dash-co2-compared" id="dash-co2-compared"></div>
       </div>
     `;
 
@@ -5008,6 +5276,172 @@ class BoschEBikeDashboardCard extends HTMLElement {
       barLbl.textContent = battery != null && Number.isFinite(battery)
         ? Math.round(battery) + " %" : "--%";
     }
+
+    // ---------- Wartung + CO2 ----------
+    this._renderMaintenance(odo);
+    this._renderCO2(odo, lastTour);
+  }
+
+  // ===========================================================================
+  // Wartung
+  // ---------------------------------------------------------------------------
+  // Filtert die konfigurierten Items nach Fälligkeit (km <= 500 oder
+  // Tage <= 30) und zeigt sie sortiert nach Dringlichkeit. Überfällige
+  // Einträge erscheinen rot, "in nächster Zeit fällige" gelb.
+  _renderMaintenance(currentOdo) {
+    const sec = this.querySelector("#dash-maint-section");
+    const head = this.querySelector("#dash-maint-head");
+    const list = this.querySelector("#dash-maint-list");
+    if (!sec || !head || !list) return;
+    const items = Array.isArray(this._config.maintenance) ? this._config.maintenance : [];
+    if (!items.length) { sec.style.display = "none"; return; }
+
+    head.textContent = this._t("dash_section_maint");
+    sec.style.display = "";
+    list.innerHTML = "";
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const due = [];
+    for (const m of items) {
+      const status = this._maintStatus(m, currentOdo, today);
+      if (!status) continue;
+      if (status.show) due.push({ m, status });
+    }
+    if (!due.length) {
+      const p = document.createElement("div");
+      p.className = "dash-maint-empty";
+      p.textContent = this._t("dash_maint_none");
+      list.appendChild(p);
+      return;
+    }
+    // Sortierung: überfällig zuerst (überfälligkeit absteigend), dann
+    // nach Restweg/Zeit aufsteigend.
+    due.sort((a, b) => {
+      const aPri = a.status.overdue ? -1 : 1;
+      const bPri = b.status.overdue ? -1 : 1;
+      if (aPri !== bPri) return aPri - bPri;
+      return a.status.sortKey - b.status.sortKey;
+    });
+    for (const { m, status } of due) {
+      const row = document.createElement("div");
+      row.className = "dash-maint-row " + (status.overdue ? "overdue" : "due-soon");
+      const icon = status.kind === "km" ? "mdi:wrench-cog" : "mdi:calendar-clock";
+      row.innerHTML = `
+        <ha-icon icon="${icon}"></ha-icon>
+        <div class="name">${this._escapeHtml(m.name || "")}</div>
+        <div class="when">${this._escapeHtml(status.label)}</div>
+      `;
+      list.appendChild(row);
+    }
+  }
+
+  // Berechnet Fälligkeitsstatus eines Wartungs-Items. Liefert null,
+  // falls nicht ausreichend konfiguriert. show=true bedeutet, dass das
+  // Item entweder überfällig oder innerhalb der nächsten 500 km / 30
+  // Tage ist - nur dann erscheint es im Dashboard.
+  _maintStatus(m, currentOdo, today) {
+    if (!m || !m.name) return null;
+    if (m.type === "km") {
+      const interval = Number(m.intervalKm);
+      if (!Number.isFinite(interval) || interval <= 0) return null;
+      const lastDone = Number.isFinite(Number(m.lastDoneKm)) ? Number(m.lastDoneKm) : 0;
+      const nextDue = lastDone + interval;
+      if (!Number.isFinite(currentOdo)) return null;
+      const remaining = Math.round(nextDue - currentOdo);
+      const show = remaining <= 500;
+      return {
+        kind: "km",
+        show,
+        overdue: remaining <= 0,
+        sortKey: remaining,
+        label: this._t("dash_maint_due_km", remaining),
+      };
+    }
+    if (m.type === "date") {
+      const interval = Number(m.intervalDays);
+      if (!Number.isFinite(interval) || interval <= 0) return null;
+      let last = null;
+      if (m.lastDoneDate) {
+        const d = new Date(m.lastDoneDate);
+        if (!isNaN(d.getTime())) { d.setHours(0, 0, 0, 0); last = d; }
+      }
+      const baseDate = last || today;   // ohne Last-Date: Intervall ab heute
+      const nextDue = new Date(baseDate.getTime() + interval * 86400000);
+      const days = Math.round((nextDue.getTime() - today.getTime()) / 86400000);
+      const show = days <= 30;
+      return {
+        kind: "date",
+        show,
+        overdue: days <= 0,
+        sortKey: days,
+        label: this._t("dash_maint_due_days", days),
+      };
+    }
+    return null;
+  }
+
+  _escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, (c) => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+    })[c]);
+  }
+
+  // ===========================================================================
+  // CO2 + Sprit-Equivalent
+  // ---------------------------------------------------------------------------
+  // Berechnet Gesamt- und Letzte-Tour-Werte basierend auf dem
+  // konfigurierten Fahrzeug-Preset. Wenn keine Vehicle ausgewählt ist,
+  // oder Odometer/letzte-Tour fehlen, wird die Sektion ausgeblendet.
+  _renderCO2(currentOdo, lastTourKm) {
+    const sec = this.querySelector("#dash-co2-section");
+    const head = this.querySelector("#dash-co2-head");
+    const grid = this.querySelector("#dash-co2-grid");
+    const cmp = this.querySelector("#dash-co2-compared");
+    if (!sec || !head || !grid || !cmp) return;
+    const vid = this._config.vehicle_comparison;
+    if (!vid || vid === "none") { sec.style.display = "none"; return; }
+    const preset = VEHICLE_PRESETS[vid];
+    if (!preset) { sec.style.display = "none"; return; }
+    sec.style.display = "";
+    head.textContent = this._t("dash_section_co2");
+
+    const fuelPrice = Number.isFinite(Number(this._config.fuel_price))
+      ? Number(this._config.fuel_price)
+      : FUEL_DEFAULT_PRICE[preset.fuel_kind] || 0;
+    const calc = (km) => {
+      if (!Number.isFinite(km) || km <= 0) return null;
+      const co2Kg = (km * preset.co2_g_per_km) / 1000;
+      // consumption ist l/100km (oder kWh/100km bei EV)
+      const eur = km * (preset.consumption / 100) * fuelPrice;
+      return { co2Kg, eur };
+    };
+    const total = calc(currentOdo);
+    const last = calc(lastTourKm);
+
+    grid.innerHTML = "";
+    const card = (label, vals) => {
+      const el = document.createElement("div");
+      el.className = "dash-co2-card";
+      if (!vals) {
+        el.innerHTML = `<div class="lbl">${label}</div><div class="v1">–</div>`;
+      } else {
+        const co2 = vals.co2Kg.toLocaleString(undefined, { maximumFractionDigits: vals.co2Kg < 10 ? 1 : 0 });
+        const eur = vals.eur.toLocaleString(undefined, { maximumFractionDigits: 2 });
+        el.innerHTML = `
+          <div class="lbl">${label}</div>
+          <div class="v1">${co2}${this._t("dash_co2_grams")}</div>
+          <div class="v2">${eur}${this._t("dash_co2_eur")}</div>
+        `;
+      }
+      grid.appendChild(el);
+    };
+    card(this._t("dash_co2_total"), total);
+    card(this._t("dash_co2_last"), last);
+
+    const lang = (this._hass && this._hass.language) ? this._hass.language.split("-")[0] : "en";
+    const vehLabel = preset["label_" + lang] || preset.label_en;
+    cmp.textContent = this._t("dash_co2_compared") + ": " + vehLabel;
   }
 
   _handleStop() {
@@ -5250,14 +5684,298 @@ class BoschEBikeDashboardCardEditor extends HTMLElement {
         (e) => e.startsWith("input_number.")),
     };
 
+    // --- CO2 / Fahrzeug-Vergleich --------------------------------------------
+    const co2Head = document.createElement("div");
+    co2Head.textContent = this._t("dash_editor_section_co2");
+    co2Head.style.cssText =
+      "margin-top:14px;padding-top:10px;border-top:1px solid var(--divider-color);" +
+      "color:var(--secondary-text-color);font-size:12px;line-height:1.4;font-weight:600;";
+    wrap.appendChild(co2Head);
+
+    const co2Hint = document.createElement("small");
+    co2Hint.textContent = this._t("dash_editor_co2_hint");
+    co2Hint.style.cssText = "color:var(--secondary-text-color);font-size:11px;";
+    wrap.appendChild(co2Hint);
+
+    // Vehicle dropdown
+    const lang = (this._hass && this._hass.language) ? this._hass.language.split("-")[0] : "en";
+    const vehicleSelect = mk(this._t("dash_editor_vehicle_type"), null, () => {
+      const sel = document.createElement("select");
+      sel.style.cssText = "padding:8px;border-radius:4px;border:1px solid var(--divider-color);background:var(--card-background-color);color:var(--primary-text-color);";
+      for (const [id, preset] of Object.entries(VEHICLE_PRESETS)) {
+        const o = document.createElement("option");
+        o.value = id;
+        o.textContent = preset["label_" + lang] || preset.label_en;
+        sel.appendChild(o);
+      }
+      return sel;
+    });
+    vehicleSelect.value = this._config.vehicle_comparison || "none";
+    vehicleSelect.addEventListener("change", () => {
+      if (vehicleSelect.value && vehicleSelect.value !== "none") {
+        this._config.vehicle_comparison = vehicleSelect.value;
+      } else {
+        delete this._config.vehicle_comparison;
+      }
+      this._emit();
+    });
+    this._fields.vehicle_comparison = vehicleSelect;
+
+    // Fuel price override
+    const fuelPriceInput = mk(this._t("dash_editor_fuel_price"), this._t("dash_editor_fuel_price_hint"), () => {
+      const i = document.createElement("input");
+      i.type = "number"; i.step = "0.01"; i.min = "0";
+      i.style.cssText = "padding:8px;border-radius:4px;border:1px solid var(--divider-color);background:var(--card-background-color);color:var(--primary-text-color);";
+      return i;
+    });
+    fuelPriceInput.value = this._config.fuel_price != null ? String(this._config.fuel_price) : "";
+    fuelPriceInput.addEventListener("input", () => {
+      const v = fuelPriceInput.value.trim();
+      if (v === "") delete this._config.fuel_price;
+      else if (Number.isFinite(Number(v))) this._config.fuel_price = Number(v);
+      this._emit();
+    });
+    this._fields.fuel_price = fuelPriceInput;
+
+    // --- Wartung -------------------------------------------------------------
+    const maintHead = document.createElement("div");
+    maintHead.textContent = this._t("dash_editor_section_maint");
+    maintHead.style.cssText =
+      "margin-top:14px;padding-top:10px;border-top:1px solid var(--divider-color);" +
+      "color:var(--secondary-text-color);font-size:12px;line-height:1.4;font-weight:600;";
+    wrap.appendChild(maintHead);
+
+    const maintHint = document.createElement("small");
+    maintHint.textContent = this._t("dash_editor_maint_hint");
+    maintHint.style.cssText = "color:var(--secondary-text-color);font-size:11px;display:block;margin-bottom:8px;";
+    wrap.appendChild(maintHint);
+
+    this._maintListWrap = document.createElement("div");
+    this._maintListWrap.id = "dash-ed-maint-list";
+    wrap.appendChild(this._maintListWrap);
+
+    const addBtn = document.createElement("button");
+    addBtn.type = "button";
+    addBtn.className = "dash-ed-add";
+    addBtn.textContent = this._t("dash_editor_maint_add");
+    addBtn.addEventListener("click", () => {
+      if (!Array.isArray(this._config.maintenance)) this._config.maintenance = [];
+      this._config.maintenance.push({
+        id: this._uuid(),
+        name: "",
+        type: "km",
+        intervalKm: 500,
+      });
+      this._emit();
+      this._renderMaintList();
+    });
+    wrap.appendChild(addBtn);
+
+    // Inline-style fürs Editor-Wartungs-Layout. Wir injecten in document
+    // head, weil der Editor in Lovelace selbst kein <style>-Element
+    // mit unserer DOM-Hierarchie hat - die Card-Styles existieren nur
+    // im Light-DOM der Card-Instanz, nicht hier.
+    if (!document.getElementById("dash-ed-maint-styles")) {
+      const ss = document.createElement("style");
+      ss.id = "dash-ed-maint-styles";
+      ss.textContent = `
+        .dash-ed-maint-row {
+          display: grid;
+          grid-template-columns: minmax(160px,1fr) 110px 100px 130px auto;
+          gap: 8px; align-items: end;
+          padding: 8px; border-radius: 8px;
+          background: var(--secondary-background-color, #f4f6f8);
+          margin-bottom: 6px;
+        }
+        .dash-ed-maint-row > div { display: flex; flex-direction: column; gap: 2px; }
+        .dash-ed-maint-row label {
+          font-size: 10px; color: var(--secondary-text-color);
+          text-transform: uppercase; letter-spacing: .04em;
+        }
+        .dash-ed-maint-row input, .dash-ed-maint-row select {
+          padding: 6px 8px; border-radius: 4px;
+          border: 1px solid var(--divider-color);
+          background: var(--card-background-color);
+          color: var(--primary-text-color); font-size: 13px;
+          width: 100%; box-sizing: border-box;
+        }
+        .dash-ed-maint-row button.remove {
+          background: transparent; border: 0; color: #e53935;
+          cursor: pointer; padding: 6px; font-size: 18px;
+          align-self: end;
+        }
+        @media (max-width: 600px) {
+          .dash-ed-maint-row { grid-template-columns: 1fr; }
+        }
+      `;
+      document.head.appendChild(ss);
+    }
+    this._renderMaintList();
+
     this._built = true;
+  }
+
+  // Generiert eine kompakte UUIDv4 für Maintenance-IDs. Reicht zur
+  // Identifikation in der Config, hat keine kryptographischen Ansprüche.
+  _uuid() {
+    return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+      const r = Math.random() * 16 | 0;
+      return (c === "x" ? r : (r & 0x3 | 0x8)).toString(16);
+    });
+  }
+
+  // Rendert die Wartungs-Liste komplett neu. Beim Editieren werden die
+  // Werte direkt ins this._config.maintenance-Array zurückgeschrieben
+  // und _emit() löst die config-changed-Event aus.
+  _renderMaintList() {
+    if (!this._maintListWrap) return;
+    this._maintListWrap.innerHTML = "";
+    const items = Array.isArray(this._config.maintenance) ? this._config.maintenance : [];
+    const lang = (this._hass && this._hass.language) ? this._hass.language.split("-")[0] : "en";
+    const presetLabel = (preset) => preset["label_" + lang] || preset.label_en;
+    items.forEach((m, idx) => {
+      const row = document.createElement("div");
+      row.className = "dash-ed-maint-row";
+
+      // -- Name (Dropdown + freier Text) --
+      const nameWrap = document.createElement("div");
+      nameWrap.innerHTML = `<label>${this._t("dash_editor_maint_name")}</label>`;
+      const nameSel = document.createElement("select");
+      const customOpt = document.createElement("option");
+      customOpt.value = "__custom__";
+      customOpt.textContent = this._t("dash_editor_maint_name_custom");
+      nameSel.appendChild(customOpt);
+      for (const preset of MAINTENANCE_PRESETS) {
+        const o = document.createElement("option");
+        o.value = preset["label_" + lang] || preset.label_en;
+        o.textContent = o.value;
+        nameSel.appendChild(o);
+      }
+      const matchingPreset = MAINTENANCE_PRESETS.find(p => presetLabel(p) === m.name);
+      nameSel.value = matchingPreset ? m.name : "__custom__";
+      const nameInput = document.createElement("input");
+      nameInput.type = "text";
+      nameInput.value = m.name || "";
+      nameInput.placeholder = this._t("dash_editor_maint_name");
+      nameInput.style.marginTop = "4px";
+      nameInput.style.display = matchingPreset ? "none" : "";
+      nameSel.addEventListener("change", () => {
+        if (nameSel.value === "__custom__") {
+          nameInput.style.display = "";
+          nameInput.focus();
+        } else {
+          m.name = nameSel.value;
+          nameInput.value = m.name;
+          nameInput.style.display = "none";
+          this._emit();
+        }
+      });
+      nameInput.addEventListener("input", () => { m.name = nameInput.value; this._emit(); });
+      nameWrap.appendChild(nameSel);
+      nameWrap.appendChild(nameInput);
+      row.appendChild(nameWrap);
+
+      // -- Typ --
+      const typeWrap = document.createElement("div");
+      typeWrap.innerHTML = `<label>${this._t("dash_editor_maint_type")}</label>`;
+      const typeSel = document.createElement("select");
+      const optKm = document.createElement("option");
+      optKm.value = "km"; optKm.textContent = this._t("dash_editor_maint_type_km");
+      typeSel.appendChild(optKm);
+      const optDate = document.createElement("option");
+      optDate.value = "date"; optDate.textContent = this._t("dash_editor_maint_type_date");
+      typeSel.appendChild(optDate);
+      typeSel.value = m.type === "date" ? "date" : "km";
+      typeSel.addEventListener("change", () => {
+        m.type = typeSel.value;
+        // Bei Typ-Wechsel die nicht passenden Felder leeren, damit alte
+        // Werte nicht heimlich in der Config bleiben.
+        if (m.type === "km") {
+          delete m.intervalDays; delete m.lastDoneDate;
+          if (!Number.isFinite(Number(m.intervalKm))) m.intervalKm = 500;
+        } else {
+          delete m.intervalKm; delete m.lastDoneKm;
+          if (!Number.isFinite(Number(m.intervalDays))) m.intervalDays = 30;
+        }
+        this._emit();
+        this._renderMaintList();
+      });
+      typeWrap.appendChild(typeSel);
+      row.appendChild(typeWrap);
+
+      // -- Interval --
+      const intWrap = document.createElement("div");
+      const intLabel = m.type === "date"
+        ? this._t("dash_editor_maint_interval_days")
+        : this._t("dash_editor_maint_interval_km");
+      intWrap.innerHTML = `<label>${intLabel}</label>`;
+      const intInput = document.createElement("input");
+      intInput.type = "number"; intInput.min = "1";
+      intInput.value = m.type === "date" ? (m.intervalDays || "") : (m.intervalKm || "");
+      intInput.addEventListener("input", () => {
+        const v = Number(intInput.value);
+        if (m.type === "date") m.intervalDays = Number.isFinite(v) ? v : undefined;
+        else m.intervalKm = Number.isFinite(v) ? v : undefined;
+        this._emit();
+      });
+      intWrap.appendChild(intInput);
+      row.appendChild(intWrap);
+
+      // -- Last done --
+      const lastWrap = document.createElement("div");
+      const lastLabel = m.type === "date"
+        ? this._t("dash_editor_maint_last_date")
+        : this._t("dash_editor_maint_last_km");
+      lastWrap.innerHTML = `<label>${lastLabel}</label>`;
+      const lastInput = document.createElement("input");
+      if (m.type === "date") {
+        lastInput.type = "date";
+        lastInput.value = m.lastDoneDate || "";
+        lastInput.addEventListener("change", () => {
+          m.lastDoneDate = lastInput.value || undefined; this._emit();
+        });
+      } else {
+        lastInput.type = "number"; lastInput.min = "0";
+        lastInput.value = m.lastDoneKm != null ? String(m.lastDoneKm) : "";
+        lastInput.addEventListener("input", () => {
+          const v = Number(lastInput.value);
+          m.lastDoneKm = Number.isFinite(v) ? v : undefined; this._emit();
+        });
+      }
+      lastWrap.appendChild(lastInput);
+      row.appendChild(lastWrap);
+
+      // -- Remove --
+      const rmBtn = document.createElement("button");
+      rmBtn.type = "button";
+      rmBtn.className = "remove";
+      rmBtn.title = this._t("dash_editor_maint_remove");
+      rmBtn.innerHTML = "&times;";
+      rmBtn.addEventListener("click", () => {
+        this._config.maintenance.splice(idx, 1);
+        this._emit();
+        this._renderMaintList();
+      });
+      row.appendChild(rmBtn);
+
+      this._maintListWrap.appendChild(row);
+    });
   }
 
   _sync() {
     if (!this._fields) return;
     for (const [key, input] of Object.entries(this._fields)) {
-      input.value = this._config[key] || "";
+      // vehicle_comparison/fuel_price brauchen Sonderfälle (Select-Default,
+      // leerer Wert bei fehlendem fuel_price-Override).
+      if (key === "vehicle_comparison") {
+        input.value = this._config.vehicle_comparison || "none";
+      } else if (key === "fuel_price") {
+        input.value = this._config.fuel_price != null ? String(this._config.fuel_price) : "";
+      } else {
+        input.value = this._config[key] || "";
+      }
     }
+    if (typeof this._renderMaintList === "function") this._renderMaintList();
   }
 
   _refreshPreview(container, url) {
