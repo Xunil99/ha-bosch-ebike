@@ -196,7 +196,7 @@ const I18N = {
     map3d_editor_sat_url: "Satellite tile URL template (optional)",
     map3d_editor_sat_url_hint: "Override the default Esri World Imagery source. Use {z}, {x}, {y} placeholders. Leave empty for the free Esri default. Example MapTiler: https://api.maptiler.com/tiles/satellite-v2/{z}/{x}/{y}.jpg?key=YOUR_KEY",
     map3d_editor_sat_maxzoom: "Satellite max preload zoom (12-15)",
-    map3d_editor_sat_maxzoom_hint: "Caps preload + source max zoom. 12 ≈ 14 MB, 13 (default) ≈ 40 MB, 14 ≈ 110 MB for a typical day tour. Higher = sharper when zoomed in but longer preload.",
+    map3d_editor_sat_maxzoom_hint: "Caps preload + source max zoom. 12 ≈ 14 MB, 13 ≈ 40 MB, 14 (default) ≈ 110 MB, 15 ≈ 400 MB for a typical day tour. Higher = sharper at chase-cam zoom but longer preload.",
     map3d_editor_title: "Title (optional)",
     map3d_editor_height: "Card height (px)",
     map3d_editor_account: "Pin to account (optional)",
@@ -413,7 +413,7 @@ const I18N = {
     map3d_editor_sat_url: "Satelliten-Tile-URL-Template (optional)",
     map3d_editor_sat_url_hint: "Überschreibt die Esri-World-Imagery-Default-Quelle. Platzhalter {z}, {x}, {y}. Leer = Esri-Default (frei). Beispiel MapTiler: https://api.maptiler.com/tiles/satellite-v2/{z}/{x}/{y}.jpg?key=DEIN_KEY",
     map3d_editor_sat_maxzoom: "Satellit max. Preload-Zoom (12-15)",
-    map3d_editor_sat_maxzoom_hint: "Begrenzt Preload + Source-MaxZoom. 12 ≈ 14 MB, 13 (Default) ≈ 40 MB, 14 ≈ 110 MB für eine typische Tagestour. Höher = schärfer beim Reinzoomen, aber längerer Preload.",
+    map3d_editor_sat_maxzoom_hint: "Begrenzt Preload + Source-MaxZoom. 12 ≈ 14 MB, 13 ≈ 40 MB, 14 (Default) ≈ 110 MB, 15 ≈ 400 MB für eine typische Tagestour. Höher = schärfer beim Chase-Cam-Zoom, aber längerer Preload.",
     map3d_editor_title: "Titel (optional)",
     map3d_editor_height: "Karten-Höhe (px)",
     map3d_editor_account: "Auf Konto fixieren (optional)",
@@ -630,7 +630,7 @@ const I18N = {
     map3d_editor_sat_url: "Satelliet-tile-URL-template (optioneel)",
     map3d_editor_sat_url_hint: "Overschrijft de Esri World Imagery default. Plaatshouders {z}, {x}, {y}. Leeg = Esri default (gratis). Voorbeeld MapTiler: https://api.maptiler.com/tiles/satellite-v2/{z}/{x}/{y}.jpg?key=JOUW_KEY",
     map3d_editor_sat_maxzoom: "Satelliet max. preload-zoom (12-15)",
-    map3d_editor_sat_maxzoom_hint: "Cap voor preload + source maxzoom. 12 ≈ 14 MB, 13 (default) ≈ 40 MB, 14 ≈ 110 MB voor een typische dagrit. Hoger = scherper bij inzoomen maar langere preload.",
+    map3d_editor_sat_maxzoom_hint: "Cap voor preload + source maxzoom. 12 ≈ 14 MB, 13 ≈ 40 MB, 14 (default) ≈ 110 MB, 15 ≈ 400 MB voor een typische dagrit. Hoger = scherper bij chase-cam zoom maar langere preload.",
     map3d_editor_title: "Titel (optioneel)",
     map3d_editor_height: "Kaart-hoogte (px)",
     map3d_editor_account: "Account vastzetten (optioneel)",
@@ -5153,7 +5153,7 @@ class BoschEBike3DMapCard extends HTMLElement {
       height: 540, default_pitch: 55, chase_zoom: 17, chase_lookahead: 30,
       smooth_window: 15, track_smooth_window: 3, playback_speed: 60,
       terrain_exaggeration: 1.5,
-      satellite_tile_url: "", satellite_max_zoom: 13,
+      satellite_tile_url: "", satellite_max_zoom: 14,
       show_date: 1, show_time: 1, show_sun: 1,
       show_speed: 1, show_distance: 1, show_elevation: 1,
       stats_as_chips: 0,
@@ -5631,7 +5631,7 @@ class BoschEBike3DMapCard extends HTMLElement {
 
   _satelliteMaxZoom() {
     const raw = Number(this._config.satellite_max_zoom);
-    if (!Number.isFinite(raw)) return 13;
+    if (!Number.isFinite(raw)) return 14;
     return Math.max(12, Math.min(15, Math.floor(raw)));
   }
 
