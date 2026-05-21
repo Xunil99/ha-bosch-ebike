@@ -3526,6 +3526,28 @@ class BoschEBikeHeatmapCard extends HTMLElement {
       bosch-ebike-heatmap-card:-webkit-full-screen .heat-map {
         height:100% !important; min-height:0 !important;
       }
+      /* iOS / WKWebView fallback: requestFullscreen rejects there, so
+         we pin the host with position:fixed. Same flex chain as the
+         native rules. */
+      bosch-ebike-heatmap-card.heat-pseudo-fs {
+        position:fixed !important; inset:0 !important;
+        z-index:9999 !important;
+        width:100vw !important; height:100vh !important;
+        max-width:100vw !important; max-height:100vh !important;
+        display:flex !important; flex-direction:column !important;
+        background: var(--card-background-color, #fff);
+      }
+      bosch-ebike-heatmap-card.heat-pseudo-fs ha-card {
+        flex:1; min-height:0; height:auto; max-height:none;
+        border-radius:0;
+        display:flex; flex-direction:column;
+      }
+      bosch-ebike-heatmap-card.heat-pseudo-fs .heat-map-wrap {
+        flex:1; min-height:0;
+      }
+      bosch-ebike-heatmap-card.heat-pseudo-fs .heat-map {
+        height:100% !important; min-height:0 !important;
+      }
     `;
     card.appendChild(style);
 
@@ -3612,25 +3634,68 @@ class BoschEBikeHeatmapCard extends HTMLElement {
     this._ensureFullscreenListener();
   }
 
-  // Native Fullscreen API. Same rationale as in the 3D card: a CSS
-  // position:fixed swap on a custom-element host briefly broke the
-  // child renderer's layout assumptions. The native path is rock-
-  // solid because the browser handles the transition.
+  // Native Fullscreen API with a CSS-pseudo-fullscreen fallback for
+  // iOS Safari / the HA Companion app's WKWebView, where the native
+  // API rejects silently or is missing entirely.
   _toggleFullscreen() {
     const target = this;
+    const nativeOn = document.fullscreenElement === target || document.webkitFullscreenElement === target;
+    const pseudoOn = !!this._heatPseudoFs;
+    if (nativeOn || pseudoOn) {
+      if (pseudoOn) this._exitHeatPseudoFullscreen();
+      else (document.exitFullscreen || document.webkitExitFullscreen)?.call(document);
+      return;
+    }
     try {
-      if (!document.fullscreenElement && !document.webkitFullscreenElement) {
-        const req = target.requestFullscreen || target.webkitRequestFullscreen;
-        if (req) req.call(target).catch((e) => {
-          console.warn("[Bosch eBike Heatmap] requestFullscreen failed", e);
+      const req = target.requestFullscreen || target.webkitRequestFullscreen;
+      if (!req) { this._enterHeatPseudoFullscreen(); return; }
+      const result = req.call(target);
+      if (result && typeof result.then === "function") {
+        result.catch((e) => {
+          console.warn("[Bosch eBike Heatmap] native fullscreen rejected, using fallback", e);
+          this._enterHeatPseudoFullscreen();
         });
-      } else {
-        const exit = document.exitFullscreen || document.webkitExitFullscreen;
-        if (exit) exit.call(document);
       }
     } catch (e) {
-      console.warn("[Bosch eBike Heatmap] fullscreen toggle failed", e);
+      console.warn("[Bosch eBike Heatmap] native fullscreen threw, using fallback", e);
+      this._enterHeatPseudoFullscreen();
     }
+  }
+
+  _enterHeatPseudoFullscreen() {
+    if (this._heatPseudoFs) return;
+    this._heatPseudoFs = true;
+    this.classList.add("heat-pseudo-fs");
+    document.body.style.overflow = "hidden";
+    const ico = this.querySelector("#heat-fs-ico");
+    if (ico) ico.setAttribute("icon", "mdi:fullscreen-exit");
+    if (!this._heatPseudoEscHandler) {
+      this._heatPseudoEscHandler = (ev) => {
+        if (ev.key === "Escape" && this._heatPseudoFs) this._exitHeatPseudoFullscreen();
+      };
+      document.addEventListener("keydown", this._heatPseudoEscHandler);
+    }
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      try { this._map?.invalidateSize(); } catch (_) {}
+      try { this._renderTracks(); } catch (_) {}
+    }));
+  }
+
+  _exitHeatPseudoFullscreen() {
+    if (!this._heatPseudoFs) return;
+    this._heatPseudoFs = false;
+    this.classList.remove("heat-pseudo-fs");
+    document.body.style.overflow = "";
+    const ico = this.querySelector("#heat-fs-ico");
+    if (ico) ico.setAttribute("icon", "mdi:fullscreen");
+    if (this._heatPseudoEscHandler) {
+      document.removeEventListener("keydown", this._heatPseudoEscHandler);
+      this._heatPseudoEscHandler = null;
+    }
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      try { this._map?.invalidateSize(); } catch (_) {}
+      try { this._renderTracks(); } catch (_) {}
+    }));
   }
 
   _ensureFullscreenListener() {
@@ -3654,6 +3719,15 @@ class BoschEBikeHeatmapCard extends HTMLElement {
       document.removeEventListener("fullscreenchange", this._heatFsChangeHandler);
       document.removeEventListener("webkitfullscreenchange", this._heatFsChangeHandler);
       this._heatFsChangeHandler = null;
+    }
+    if (this._heatPseudoEscHandler) {
+      document.removeEventListener("keydown", this._heatPseudoEscHandler);
+      this._heatPseudoEscHandler = null;
+    }
+    if (this._heatPseudoFs) {
+      this._heatPseudoFs = false;
+      this.classList.remove("heat-pseudo-fs");
+      document.body.style.overflow = "";
     }
   }
 
@@ -5308,15 +5382,22 @@ class BoschEBike3DMapCard extends HTMLElement {
     if (first) this._boot();
   }
 
-  // Detach the global fullscreenchange listener so multiple card
-  // instances do not pile up listeners over time. The browser exits
-  // fullscreen automatically when the element is removed from the
-  // DOM, so we don't need to call exitFullscreen() explicitly.
+  // Detach global listeners + release the scroll lock if the host is
+  // removed from the DOM while still in pseudo-fullscreen.
   disconnectedCallback() {
     if (this._fsChangeHandler) {
       document.removeEventListener("fullscreenchange", this._fsChangeHandler);
       document.removeEventListener("webkitfullscreenchange", this._fsChangeHandler);
       this._fsChangeHandler = null;
+    }
+    if (this._pseudoEscHandler) {
+      document.removeEventListener("keydown", this._pseudoEscHandler);
+      this._pseudoEscHandler = null;
+    }
+    if (this._pseudoFullscreen) {
+      this._pseudoFullscreen = false;
+      this.classList.remove("map3d-pseudo-fs");
+      document.body.style.overflow = "";
     }
   }
 
@@ -5564,6 +5645,33 @@ class BoschEBike3DMapCard extends HTMLElement {
       bosch-ebike-3d-map-card:-webkit-full-screen .map3d-canvas {
         height: 100% !important; max-height: none !important;
       }
+      /* CSS-pseudo-fullscreen fallback for iOS Safari + the HA mobile
+         app's WKWebView, where requestFullscreen() either rejects or
+         is missing entirely. Same flex chain as the native rules, just
+         pinned to the viewport via position:fixed. */
+      bosch-ebike-3d-map-card.map3d-pseudo-fs {
+        position: fixed !important; inset: 0 !important;
+        z-index: 9999 !important;
+        width: 100vw !important; height: 100vh !important;
+        max-width: 100vw !important; max-height: 100vh !important;
+        display: flex !important; flex-direction: column !important;
+        background: var(--card-background-color, #000);
+      }
+      bosch-ebike-3d-map-card.map3d-pseudo-fs ha-card {
+        flex: 1; min-height: 0; height: auto; max-height: none;
+        border-radius: 0;
+        display: flex; flex-direction: column;
+      }
+      bosch-ebike-3d-map-card.map3d-pseudo-fs .map3d-root {
+        flex: 1; min-height: 0;
+        display: flex; flex-direction: column;
+      }
+      bosch-ebike-3d-map-card.map3d-pseudo-fs .map3d-detail {
+        flex: 1; min-height: 0;
+      }
+      bosch-ebike-3d-map-card.map3d-pseudo-fs .map3d-canvas {
+        height: 100% !important; max-height: none !important;
+      }
       @keyframes ebike-rec-blink {
         0%, 49% { opacity: 1; }
         50%, 100% { opacity: 0.25; }
@@ -5809,44 +5917,86 @@ class BoschEBike3DMapCard extends HTMLElement {
   // ===========================================================================
   // Fullscreen toggle
   // ---------------------------------------------------------------------------
-  // Uses the native Fullscreen API instead of CSS position:fixed. The
-  // CSS approach was unreliable for a custom-element host that
-  // contains a WebGL canvas: layout reflow during the class swap
-  // briefly killed the GL context and produced black frames. The
-  // native API hands the element to the browser's compositor, which
-  // keeps the GL context alive across the transition.
+  // Two-track implementation: native Fullscreen API where available
+  // (desktop browsers, Android Chrome) and a CSS-pseudo-fullscreen
+  // fallback for environments where the native API rejects or is
+  // missing entirely (iOS Safari, the iOS HA Companion app's
+  // WKWebView). The fallback flips a host class that the stylesheet
+  // pins to position:fixed, with the same flex-chain layout fix that
+  // the native :fullscreen rules use so the canvas still fills the
+  // viewport.
   _toggleFullscreen() {
     const target = this;
+    const nativeOn = document.fullscreenElement === target || document.webkitFullscreenElement === target;
+    const pseudoOn = !!this._pseudoFullscreen;
+    if (nativeOn || pseudoOn) {
+      if (pseudoOn) this._exitPseudoFullscreen();
+      else (document.exitFullscreen || document.webkitExitFullscreen)?.call(document);
+      return;
+    }
     try {
-      if (!document.fullscreenElement && !document.webkitFullscreenElement) {
-        const req = target.requestFullscreen || target.webkitRequestFullscreen;
-        if (req) req.call(target).catch((e) => {
-          console.warn("[Bosch eBike 3D] requestFullscreen failed", e);
+      const req = target.requestFullscreen || target.webkitRequestFullscreen;
+      if (!req) { this._enterPseudoFullscreen(); return; }
+      const result = req.call(target);
+      if (result && typeof result.then === "function") {
+        result.catch((e) => {
+          console.warn("[Bosch eBike 3D] native fullscreen rejected, using fallback", e);
+          this._enterPseudoFullscreen();
         });
-      } else {
-        const exit = document.exitFullscreen || document.webkitExitFullscreen;
-        if (exit) exit.call(document);
       }
     } catch (e) {
-      console.warn("[Bosch eBike 3D] fullscreen toggle failed", e);
+      console.warn("[Bosch eBike 3D] native fullscreen threw, using fallback", e);
+      this._enterPseudoFullscreen();
     }
   }
 
-  // Document-level fullscreen state change. Updates the icon and
-  // forces a MapLibre resize at the new size. We attach this listener
-  // lazily on first _renderDetail so it stays a single global handler
-  // for the lifetime of this card instance.
+  // CSS-fallback path. Pins the host with position:fixed and listens
+  // for Escape so the user has a way out (the native API handles
+  // Escape automatically; here we own it).
+  _enterPseudoFullscreen() {
+    if (this._pseudoFullscreen) return;
+    this._pseudoFullscreen = true;
+    this.classList.add("map3d-pseudo-fs");
+    document.body.style.overflow = "hidden";
+    const ico = this._root?.querySelector("#m3d-fs-ico");
+    if (ico) ico.setAttribute("icon", "mdi:fullscreen-exit");
+    if (!this._pseudoEscHandler) {
+      this._pseudoEscHandler = (ev) => {
+        if (ev.key === "Escape" && this._pseudoFullscreen) this._exitPseudoFullscreen();
+      };
+      document.addEventListener("keydown", this._pseudoEscHandler);
+    }
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      try { this._map?.resize(); } catch (_) {}
+    }));
+  }
+
+  _exitPseudoFullscreen() {
+    if (!this._pseudoFullscreen) return;
+    this._pseudoFullscreen = false;
+    this.classList.remove("map3d-pseudo-fs");
+    document.body.style.overflow = "";
+    const ico = this._root?.querySelector("#m3d-fs-ico");
+    if (ico) ico.setAttribute("icon", "mdi:fullscreen");
+    if (this._pseudoEscHandler) {
+      document.removeEventListener("keydown", this._pseudoEscHandler);
+      this._pseudoEscHandler = null;
+    }
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      try { this._map?.resize(); } catch (_) {}
+    }));
+  }
+
+  // Document-level fullscreen state change for the native API path.
+  // Updates the icon and forces a MapLibre resize at the new size.
   _ensureFullscreenListener() {
     if (this._fsChangeHandler) return;
     this._fsChangeHandler = () => {
       const fsEl = document.fullscreenElement || document.webkitFullscreenElement;
       const on = fsEl === this;
       this._isFullscreen = on;
-      this.classList.toggle("map3d-fullscreen", on);
       const ico = this._root?.querySelector("#m3d-fs-ico");
       if (ico) ico.setAttribute("icon", on ? "mdi:fullscreen-exit" : "mdi:fullscreen");
-      // Two RAFs let the browser finish the layout transition before
-      // MapLibre measures the canvas.
       requestAnimationFrame(() => requestAnimationFrame(() => {
         try { this._map?.resize(); } catch (_) {}
       }));
