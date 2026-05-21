@@ -5996,10 +5996,16 @@ class BoschEBike3DMapCard extends HTMLElement {
 
     // Chase-cam: look-target sits ~60 m ahead of the bike along the
     // smoothed (and now also fractionally interpolated) bearing.
+    // IMPORTANT: feed the look-ahead the SAME EMA-smoothed position the
+    // marker uses, not the raw fractional p. Otherwise the camera tracks
+    // the wobbling raw position while the marker is rendered at the
+    // smoothed one, and the relative motion looks like the marker
+    // sliding back and forth along the path direction.
     if (this._map && this._map.loaded()) {
       try {
         const bearing = this._bearingAtFractional(clamped);
-        const lookAt = this._lookAheadCoord(p, bearing, this._chaseLookAhead != null ? this._chaseLookAhead : 30);
+        const dispP = { lat: this._dispLat, lon: this._dispLon };
+        const lookAt = this._lookAheadCoord(dispP, bearing, this._chaseLookAhead != null ? this._chaseLookAhead : 30);
         const camera = {
           center: lookAt,
           zoom: this._chaseZoom != null ? this._chaseZoom : 17,
