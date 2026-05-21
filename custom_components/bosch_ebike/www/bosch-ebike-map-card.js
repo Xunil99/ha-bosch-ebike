@@ -5425,6 +5425,28 @@ class BoschEBike3DMapCard extends HTMLElement {
         pointer-events: auto;
       }
       .map3d-chip ha-icon { --mdc-icon-size: 14px; }
+      /* Stable widths for the playback stat chips. Even with a fixed
+         decimal place, '9,5 km/h' and '11,5 km/h' have different
+         character counts and would otherwise push neighbouring chips
+         sideways every frame. tabular-nums aligns digit widths,
+         min-width pins the chip so it cannot shrink/grow with the
+         value. Min-width values are picked empirically to fit the
+         widest realistic content (e.g. '99,9 km/h'). */
+      #m3d-speed-chip, #m3d-stat-speed-wrap {
+        min-width: 92px;
+        font-variant-numeric: tabular-nums;
+      }
+      #m3d-dist-chip, #m3d-stat-dist-wrap {
+        min-width: 84px;
+        font-variant-numeric: tabular-nums;
+      }
+      #m3d-ele-chip, #m3d-stat-ele-wrap {
+        min-width: 72px;
+        font-variant-numeric: tabular-nums;
+      }
+      #m3d-stat-speed, #m3d-stat-dist, #m3d-stat-ele {
+        font-variant-numeric: tabular-nums;
+      }
       .map3d-controls {
         position: absolute; left: 8px; right: 8px; bottom: 8px;
         background: rgba(20,24,32,.78); color: #fff; backdrop-filter: blur(8px);
