@@ -3502,27 +3502,36 @@ class BoschEBikeHeatmapCard extends HTMLElement {
       }
       .heat-head .heat-fs-btn:hover { background:rgba(255,255,255,.28); }
       .heat-head .heat-fs-btn ha-icon { --mdc-icon-size:18px; color:#fff; }
-      /* Browser fullscreen: same chain treatment as the 3D card.
-         host -> ha-card -> heat-map-wrap -> heat-map all need to
-         participate in the flex cascade so the Leaflet canvas
-         actually expands to fill the viewport. */
-      bosch-ebike-heatmap-card:fullscreen,
+      /* Same flex chain as the 3D card. Pseudo-classes split into
+         separate rules to survive CSS-list parsing in Firefox - see
+         the long comment in the 3D card style block above. */
+      bosch-ebike-heatmap-card:fullscreen {
+        display:flex; flex-direction:column;
+        width:100%; height:100%;
+        background: var(--card-background-color, #fff);
+      }
       bosch-ebike-heatmap-card:-webkit-full-screen {
         display:flex; flex-direction:column;
         width:100%; height:100%;
         background: var(--card-background-color, #fff);
       }
-      bosch-ebike-heatmap-card:fullscreen ha-card,
+      bosch-ebike-heatmap-card:fullscreen ha-card {
+        flex:1; min-height:0; height:auto; max-height:none;
+        border-radius:0; display:flex; flex-direction:column;
+      }
       bosch-ebike-heatmap-card:-webkit-full-screen ha-card {
         flex:1; min-height:0; height:auto; max-height:none;
-        border-radius:0;
-        display:flex; flex-direction:column;
+        border-radius:0; display:flex; flex-direction:column;
       }
-      bosch-ebike-heatmap-card:fullscreen .heat-map-wrap,
+      bosch-ebike-heatmap-card:fullscreen .heat-map-wrap {
+        flex:1; min-height:0;
+      }
       bosch-ebike-heatmap-card:-webkit-full-screen .heat-map-wrap {
         flex:1; min-height:0;
       }
-      bosch-ebike-heatmap-card:fullscreen .heat-map,
+      bosch-ebike-heatmap-card:fullscreen .heat-map {
+        height:100% !important; min-height:0 !important;
+      }
       bosch-ebike-heatmap-card:-webkit-full-screen .heat-map {
         height:100% !important; min-height:0 !important;
       }
@@ -5613,35 +5622,52 @@ class BoschEBike3DMapCard extends HTMLElement {
         box-shadow: 0 1px 6px rgba(31,111,235,.45);
       }
       .map3d-nu-btn ha-icon { --mdc-icon-size: 16px; }
-      /* Browser fullscreen: the host fills the viewport, but EVERY
-         intermediate wrapper between the host and the canvas needs
-         to opt into flexible sizing or the canvas inherits 0 height
-         and MapLibre renders into a zero-sized framebuffer (black
-         viewport, no map). We turn the whole chain
+      /* Browser fullscreen: turn the whole chain
          host -> ha-card -> map3d-root -> map3d-detail -> canvas
-         into a column flex stack so the height cascades. */
-      bosch-ebike-3d-map-card:fullscreen,
+         into a column flex stack so the height cascades and the
+         WebGL canvas gets a real viewport size.
+
+         IMPORTANT: each pseudo-class lives in its OWN rule. CSS
+         drops an entire selector list if ANY selector in it is
+         invalid for the browser, and :-webkit-full-screen is
+         invalid in Firefox (and vice versa for :-moz-full-screen
+         in Chromium). Combining them was breaking the layout on
+         Firefox completely - the rule was discarded and the
+         canvas kept its 540px height while the rest of the
+         viewport stayed black. */
+      bosch-ebike-3d-map-card:fullscreen {
+        display: flex; flex-direction: column;
+        width: 100%; height: 100%;
+        background: var(--card-background-color, #000);
+      }
       bosch-ebike-3d-map-card:-webkit-full-screen {
         display: flex; flex-direction: column;
         width: 100%; height: 100%;
         background: var(--card-background-color, #000);
       }
-      bosch-ebike-3d-map-card:fullscreen ha-card,
+      bosch-ebike-3d-map-card:fullscreen ha-card {
+        flex: 1; min-height: 0; height: auto; max-height: none;
+        border-radius: 0; display: flex; flex-direction: column;
+      }
       bosch-ebike-3d-map-card:-webkit-full-screen ha-card {
         flex: 1; min-height: 0; height: auto; max-height: none;
-        border-radius: 0;
-        display: flex; flex-direction: column;
+        border-radius: 0; display: flex; flex-direction: column;
       }
-      bosch-ebike-3d-map-card:fullscreen .map3d-root,
+      bosch-ebike-3d-map-card:fullscreen .map3d-root {
+        flex: 1; min-height: 0; display: flex; flex-direction: column;
+      }
       bosch-ebike-3d-map-card:-webkit-full-screen .map3d-root {
-        flex: 1; min-height: 0;
-        display: flex; flex-direction: column;
+        flex: 1; min-height: 0; display: flex; flex-direction: column;
       }
-      bosch-ebike-3d-map-card:fullscreen .map3d-detail,
+      bosch-ebike-3d-map-card:fullscreen .map3d-detail {
+        flex: 1; min-height: 0;
+      }
       bosch-ebike-3d-map-card:-webkit-full-screen .map3d-detail {
         flex: 1; min-height: 0;
       }
-      bosch-ebike-3d-map-card:fullscreen .map3d-canvas,
+      bosch-ebike-3d-map-card:fullscreen .map3d-canvas {
+        height: 100% !important; max-height: none !important;
+      }
       bosch-ebike-3d-map-card:-webkit-full-screen .map3d-canvas {
         height: 100% !important; max-height: none !important;
       }
