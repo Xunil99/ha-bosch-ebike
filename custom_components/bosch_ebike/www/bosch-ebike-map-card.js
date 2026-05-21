@@ -3502,15 +3502,20 @@ class BoschEBikeHeatmapCard extends HTMLElement {
       }
       .heat-head .heat-fs-btn:hover { background:rgba(255,255,255,.28); }
       .heat-head .heat-fs-btn ha-icon { --mdc-icon-size:18px; color:#fff; }
-      /* Native :fullscreen pseudo-class so the layout fills 100vh
-         when the browser enters fullscreen on the host. */
+      /* Browser fullscreen: same chain treatment as the 3D card.
+         host -> ha-card -> heat-map-wrap -> heat-map all need to
+         participate in the flex cascade so the Leaflet canvas
+         actually expands to fill the viewport. */
       bosch-ebike-heatmap-card:fullscreen,
       bosch-ebike-heatmap-card:-webkit-full-screen {
+        display:flex; flex-direction:column;
+        width:100%; height:100%;
         background: var(--card-background-color, #fff);
       }
       bosch-ebike-heatmap-card:fullscreen ha-card,
       bosch-ebike-heatmap-card:-webkit-full-screen ha-card {
-        height:100vh; max-height:100vh; border-radius:0;
+        flex:1; min-height:0; height:auto; max-height:none;
+        border-radius:0;
         display:flex; flex-direction:column;
       }
       bosch-ebike-heatmap-card:fullscreen .heat-map-wrap,
@@ -5505,16 +5510,28 @@ class BoschEBike3DMapCard extends HTMLElement {
         box-shadow: 0 1px 6px rgba(31,111,235,.45);
       }
       .map3d-nu-btn ha-icon { --mdc-icon-size: 16px; }
-      /* While the host is in browser fullscreen the layout needs to
-         fill 100vh. The :fullscreen pseudo-class targets that state
-         natively, no class swap required. */
+      /* Browser fullscreen: the host fills the viewport, but EVERY
+         intermediate wrapper between the host and the canvas needs
+         to opt into flexible sizing or the canvas inherits 0 height
+         and MapLibre renders into a zero-sized framebuffer (black
+         viewport, no map). We turn the whole chain
+         host -> ha-card -> map3d-root -> map3d-detail -> canvas
+         into a column flex stack so the height cascades. */
       bosch-ebike-3d-map-card:fullscreen,
       bosch-ebike-3d-map-card:-webkit-full-screen {
+        display: flex; flex-direction: column;
+        width: 100%; height: 100%;
         background: var(--card-background-color, #000);
       }
       bosch-ebike-3d-map-card:fullscreen ha-card,
       bosch-ebike-3d-map-card:-webkit-full-screen ha-card {
-        height: 100vh; max-height: 100vh; border-radius: 0;
+        flex: 1; min-height: 0; height: auto; max-height: none;
+        border-radius: 0;
+        display: flex; flex-direction: column;
+      }
+      bosch-ebike-3d-map-card:fullscreen .map3d-root,
+      bosch-ebike-3d-map-card:-webkit-full-screen .map3d-root {
+        flex: 1; min-height: 0;
         display: flex; flex-direction: column;
       }
       bosch-ebike-3d-map-card:fullscreen .map3d-detail,
@@ -5523,7 +5540,7 @@ class BoschEBike3DMapCard extends HTMLElement {
       }
       bosch-ebike-3d-map-card:fullscreen .map3d-canvas,
       bosch-ebike-3d-map-card:-webkit-full-screen .map3d-canvas {
-        height: 100% !important;
+        height: 100% !important; max-height: none !important;
       }
       @keyframes ebike-rec-blink {
         0%, 49% { opacity: 1; }
