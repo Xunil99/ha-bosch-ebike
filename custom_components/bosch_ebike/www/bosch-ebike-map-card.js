@@ -5605,6 +5605,20 @@ class BoschEBike3DMapCard extends HTMLElement {
         }
         const exag = Math.max(1.0, Math.min(3.0, Number(this._config.terrain_exaggeration) || 1.5));
         map.setTerrain({ source: "ebike-dem", exaggeration: exag });
+
+        // Hide ALL building layers and the shadow layer while terrain
+        // is on. 3D fill-extrusion buildings + the 3D terrain mesh at
+        // pitch 55 are the two heaviest renderers in the style;
+        // combined they cause the playback lag. Cleared also the
+        // shadow layer because its content is recomputed from
+        // building features which we no longer query (see the early
+        // return in _updateShadows when _terrainEnabled is true).
+        for (const id of this._findBuildingLayers()) {
+          this._setLayerVisibility(id, false);
+        }
+        this._setLayerVisibility("ebike-buildings-3d", false);
+        this._setLayerVisibility("ebike-shadows", false);
+
         this._terrainEnabled = true;
         if (!opts.silent) this._saveTerrainPref(true);
       } catch (e) {
@@ -5619,10 +5633,31 @@ class BoschEBike3DMapCard extends HTMLElement {
     } else if (!on && this._terrainEnabled) {
       try { map.setTerrain(null); } catch (_) {}
       try { if (map.getSource("ebike-dem")) map.removeSource("ebike-dem"); } catch (_) {}
+      // Restore buildings + shadows that we hid on enable.
+      for (const id of this._findBuildingLayers()) {
+        this._setLayerVisibility(id, true);
+      }
+      this._setLayerVisibility("ebike-buildings-3d", true);
+      this._setLayerVisibility("ebike-shadows", true);
       this._terrainEnabled = false;
       if (!opts.silent) this._saveTerrainPref(false);
       this._updateTerrainToggleUI();
+      // Shadows were stale while terrain was on; refresh now that the
+      // building footprints are visible again.
+      setTimeout(() => this._updateShadows(), 100);
     }
+  }
+
+  // Helper used by terrain toggle to flip 'visibility' on a layer
+  // without crashing if the layer was never added (e.g. style without
+  // buildings, or shadow layer not yet initialised).
+  _setLayerVisibility(layerId, visible) {
+    if (!this._map) return;
+    try {
+      if (this._map.getLayer(layerId)) {
+        this._map.setLayoutProperty(layerId, "visibility", visible ? "visible" : "none");
+      }
+    } catch (_) { /* ignore */ }
   }
 
   _buildCumulativeDistances() {
@@ -6139,6 +6174,13 @@ class BoschEBike3DMapCard extends HTMLElement {
   // so a busy chase cam does not hammer it every frame.
   _updateShadows() {
     if (!this._map || !this._map.loaded()) return;
+    // Shadows are computed by querying every visible building feature
+    // and projecting their footprints onto the ground. Combined with
+    // a 3D terrain mesh this is the dominant per-move cost during
+    // playback. When terrain is active we skip the work entirely;
+    // _setTerrainEnabled also hides the shadow layer so old shadows
+    // do not linger.
+    if (this._terrainEnabled) return;
     const now = performance.now();
     if (this._shadowsThrottleUntil && now < this._shadowsThrottleUntil) {
       if (!this._shadowsPending) {
