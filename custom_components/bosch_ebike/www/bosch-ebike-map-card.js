@@ -5269,21 +5269,6 @@ class BoschEBike3DMapCard extends HTMLElement {
         padding: 4px 10px; border-radius: 999px; font-size: 12px;
         font-variant-numeric: tabular-nums; pointer-events: auto;
       }
-      /* Bike marker is rendered as a screen-fixed DOM overlay, NOT as a
-         MapLibre Marker. With terrain on, a maplibre Marker tied to
-         (lat, lon) jumps every time a new DEM tile loads, because the
-         projected 3D elevation of that lat/lon changes. The whole
-         point of chase-cam is that the bike stays at the same screen
-         spot anyway, so we just pin a div at that spot and let the
-         camera animate the tiles under it. */
-      .map3d-bike-overlay {
-        position: absolute; left: 50%; top: 62%;
-        transform: translate(-50%, -50%);
-        width: 18px; height: 18px; border-radius: 50%;
-        background: #42c76a; border: 5px solid #fff;
-        box-shadow: 0 0 0 6px rgba(66,199,106,.35), 0 4px 18px rgba(0,0,0,.65);
-        pointer-events: none; z-index: 5;
-      }
       @keyframes ebike-rec-blink {
         0%, 49% { opacity: 1; }
         50%, 100% { opacity: 0.25; }
@@ -5601,13 +5586,21 @@ class BoschEBike3DMapCard extends HTMLElement {
 
         if (this._map !== map) return;   // user navigated away mid-load
         if (!map.getSource("ebike-dem")) {
+          // maxzoom: 12 caps the DEM tile pyramid so MapLibre never
+          // requests z=13/14/15 DEM tiles (which would multiply the
+          // tile count by 4x/16x/64x and crush playback). At the
+          // playback zoom of 17, MapLibre overzooms a z=12 tile by
+          // factor 32 - the terrain mesh becomes coarser but with
+          // exaggeration 1.5 the visible relief is essentially
+          // unchanged. This is the main performance lever for
+          // terrain playback.
           map.addSource("ebike-dem", {
             type: "raster-dem",
             tiles: [EBIKE_DEM_PROTOCOL + "://" + TERRARIUM_TILE_TEMPLATE.replace(/^https?:\/\//, "")],
             encoding: "terrarium",
             tileSize: 256,
             minzoom: 0,
-            maxzoom: 15,
+            maxzoom: 12,
           });
         }
         const exag = Math.max(1.0, Math.min(3.0, Number(this._config.terrain_exaggeration) || 1.5));
@@ -5860,21 +5853,25 @@ class BoschEBike3DMapCard extends HTMLElement {
     // so the rendered bike sits in the lower part of the screen and the
     // upcoming road fills the rest.
     const initialBearing = this._bearingAt(0);
-    // Look-ahead distance: how many metres in front of the bike the
-    // camera target sits. Smaller value -> bike sits higher in the
-    // canvas. 30 m keeps the bike visible even on layouts where the
-    // card bottom is close to the viewport edge.
-    const lookAheadM = Math.max(0, Math.min(150, Number(this._config.chase_lookahead) || 30));
-    this._chaseLookAhead = lookAheadM;
-    const lookAt = this._lookAheadCoord(pts[0], initialBearing, lookAheadM);
+    // chase_lookahead is now interpreted as a PIXEL offset that pushes
+    // the rendered centre down on screen, so the bike (which is the
+    // map centre) appears in the lower part of the canvas. Larger
+    // value -> bike sits lower, more sky/road ahead visible. Range
+    // kept compatible with the previous metre-based config to avoid
+    // breaking existing user setups; 30 still works as a good default.
+    const lookAheadPx = Math.max(0, Math.min(200, Number(this._config.chase_lookahead) || 30));
+    this._chaseLookAhead = lookAheadPx;
     this._currentIndex = 0;
     // Local capture: 'myMap' is THIS init's map. Use it instead of
     // this._map inside async callbacks, so a later re-init that
     // overwrites this._map cannot pollute or hijack the wrong map.
+    // Initial centre is the bike's start position; the pixel offset
+    // is applied via the first _applyIndex(0, true) easeTo, which
+    // animates from no-offset to offset over 900 ms.
     const myMap = new mlib.Map({
       container: canvas,
       style: OPENFREEMAP_LIBERTY,
-      center: lookAt,
+      center: [pts[0].lon, pts[0].lat],
       zoom: chaseZoom,
       pitch: chasePitch,
       bearing: initialBearing,
@@ -5928,22 +5925,24 @@ class BoschEBike3DMapCard extends HTMLElement {
       this._addPointMarker(pts[0], "#ff9800", "S", myMap);
       this._addPointMarker(pts[pts.length - 1], "#e53935", "Z", myMap);
 
-      // Screen-fixed bike marker (NOT a MapLibre Marker). See the
-      // .map3d-bike-overlay comment in the stylesheet for why.
-      // We attach it to the canvas wrapper so its absolute positioning
-      // anchors against the map area, and the chase-cam animates the
-      // tiles under it instead of moving the marker around.
-      const canvasWrap = this._root.querySelector("#m3d-canvas");
-      if (canvasWrap && !canvasWrap.querySelector(".map3d-bike-overlay")) {
-        const overlay = document.createElement("div");
-        overlay.className = "map3d-bike-overlay";
-        canvasWrap.appendChild(overlay);
-        this._bikeOverlayEl = overlay;
-      }
-      // _marker is the legacy MapLibre Marker reference and stays null
-      // intentionally so the rest of the code (which guards with
-      // 'if (this._marker)') skips the lat/lon update path.
-      this._marker = null;
+      // Bike marker as a MapLibre Marker bound to (lat, lon). With the
+      // camera now centred ON the bike and an offset moving the screen
+      // origin down, the bike's projected pixel position is identical
+      // every frame regardless of terrain elevation under it. So the
+      // marker never drifts off the track, and MapLibre's render lag
+      // (if any) affects marker and world tiles equally - they stay
+      // visually locked.
+      const el = document.createElement("div");
+      el.className = "ebike-3d-marker";
+      el.style.cssText =
+        "position:absolute;top:0;left:0;" +
+        "width:18px;height:18px;border-radius:50%;" +
+        "background:#42c76a;border:5px solid #fff;" +
+        "box-shadow:0 0 0 6px rgba(66,199,106,.35),0 4px 18px rgba(0,0,0,.65);" +
+        "z-index:100;";
+      this._marker = new mlib.Marker({ element: el, anchor: "center" })
+        .setLngLat([pts[0].lon, pts[0].lat])
+        .addTo(myMap);
 
       // Diagnostic: verify marker placement and DOM visibility shortly
       // after creation. If the marker is in DOM but reports a
@@ -6324,14 +6323,11 @@ class BoschEBike3DMapCard extends HTMLElement {
     this._currentIndex = i0;       // for shadow snapping (integer-anchored)
     this._currentFracIndex = clamped;
 
-    // Second-stage temporal smoothing on the bike position used by the
-    // chase-cam (look-ahead origin). The Gaussian-smoothed track still
-    // carries ~30 cm residual GPS noise. The marker itself is now a
-    // screen-fixed DOM overlay so it cannot wobble, but the camera
-    // would still wobble if it followed raw fractional p directly,
-    // making the world slide back and forth under the fixed marker.
-    // An EMA on the camera origin absorbs that. Lag ~90 ms at 60 fps
-    // is imperceptible during smooth motion.
+    // Second-stage temporal smoothing on the bike position. Both the
+    // MapLibre marker and the chase-cam centre use the same EMA
+    // output, so they remain perfectly co-located in pixel space
+    // while small GPS residuals are damped. Lag ~90 ms at 60 fps is
+    // imperceptible during smooth motion.
     const ALPHA = 0.18;
     if (isInitial || this._dispLat == null || this._dispLon == null) {
       this._dispLat = p.lat;
@@ -6343,23 +6339,23 @@ class BoschEBike3DMapCard extends HTMLElement {
 
     if (this._marker) this._marker.setLngLat([this._dispLon, this._dispLat]);
 
-    // Chase-cam: look-target sits ~60 m ahead of the bike along the
-    // smoothed (and now also fractionally interpolated) bearing.
-    // IMPORTANT: feed the look-ahead the SAME EMA-smoothed position the
-    // marker uses, not the raw fractional p. Otherwise the camera tracks
-    // the wobbling raw position while the marker is rendered at the
-    // smoothed one, and the relative motion looks like the marker
-    // sliding back and forth along the path direction.
+    // Chase-cam: camera centred on the bike's smoothed position, with
+    // a pixel offset that pushes the rendered centre DOWN by
+    // chase_lookahead pixels. Net effect: bike sits in the lower part
+    // of the canvas (third-person feel) while the bike's lat/lon
+    // projects to the SAME pixel every frame - so the green marker
+    // stays glued to the rendered track, regardless of terrain
+    // elevation changes as DEM tiles refine.
     if (this._map && this._map.loaded()) {
       try {
         const bearing = this._bearingAtFractional(clamped);
-        const dispP = { lat: this._dispLat, lon: this._dispLon };
-        const lookAt = this._lookAheadCoord(dispP, bearing, this._chaseLookAhead != null ? this._chaseLookAhead : 30);
+        const offY = this._chaseLookAhead != null ? this._chaseLookAhead : 30;
         const camera = {
-          center: lookAt,
+          center: [this._dispLon, this._dispLat],
           zoom: this._chaseZoom != null ? this._chaseZoom : 17,
           pitch: this._chasePitch != null ? this._chasePitch : 55,
           bearing,
+          offset: [0, offY],
         };
         if (isInitial) {
           this._map.easeTo({ ...camera, duration: 900 });
@@ -6927,10 +6923,6 @@ class BoschEBike3DMapCard extends HTMLElement {
     }
     if (this._resizeObs) { try { this._resizeObs.disconnect(); } catch (_) {} this._resizeObs = null; }
     if (this._marker) { try { this._marker.remove(); } catch (_) {} this._marker = null; }
-    if (this._bikeOverlayEl) {
-      try { this._bikeOverlayEl.remove(); } catch (_) {}
-      this._bikeOverlayEl = null;
-    }
     if (this._map) { try { this._map.remove(); } catch (_) {} this._map = null; }
     // Reset displayed-position EMA so the next playback starts cleanly
     // on the new track's first sample instead of easing in from the old
