@@ -3475,6 +3475,33 @@ class BoschEBikeHeatmapCard extends HTMLElement {
       }
       .heat-stats { padding:8px 16px 12px; font-size:13px; color:var(--secondary-text-color,#666); display:flex; gap:16px; flex-wrap:wrap; }
       .heat-stats b { color:var(--primary-text-color,#333); }
+      .heat-head .heat-fs-btn {
+        margin-left:auto; background:rgba(255,255,255,.15); color:#fff; border:0;
+        width:28px; height:28px; border-radius:50%; cursor:pointer;
+        display:inline-flex; align-items:center; justify-content:center;
+      }
+      .heat-head .heat-fs-btn:hover { background:rgba(255,255,255,.28); }
+      .heat-head .heat-fs-btn ha-icon { --mdc-icon-size:18px; color:#fff; }
+      /* Host gets this class while fullscreen is active. Pins the card
+         to the entire viewport and stretches the Leaflet map to fill
+         the available height. invalidateSize() is called after the
+         transition so Leaflet recomputes its tile coverage. */
+      bosch-ebike-heatmap-card.heat-fullscreen {
+        position:fixed !important; inset:0 !important;
+        z-index:9999 !important;
+        width:100vw !important; height:100vh !important;
+        max-width:100vw !important; max-height:100vh !important;
+      }
+      bosch-ebike-heatmap-card.heat-fullscreen ha-card {
+        height:100vh; max-height:100vh; border-radius:0;
+        display:flex; flex-direction:column;
+      }
+      bosch-ebike-heatmap-card.heat-fullscreen .heat-map-wrap {
+        flex:1; min-height:0;
+      }
+      bosch-ebike-heatmap-card.heat-fullscreen .heat-map {
+        height:100% !important; min-height:0 !important;
+      }
     `;
     card.appendChild(style);
 
@@ -3484,6 +3511,9 @@ class BoschEBikeHeatmapCard extends HTMLElement {
       <div class="heat-head">
         <svg viewBox="0 0 24 24" width="22" height="22"><path fill="white" d="M3,3H21V5H3V3M3,7H21V9H3V7M3,11H21V13H3V11M3,15H21V17H3V15M3,19H21V21H3V19Z"/></svg>
         <span>${t("heatmap_title")}</span>
+        <button id="heat-fs-btn" class="heat-fs-btn" type="button" title="${t("btn_fullscreen")}" aria-label="${t("btn_fullscreen")}">
+          <ha-icon icon="mdi:fullscreen" id="heat-fs-ico"></ha-icon>
+        </button>
       </div>
       <div class="heat-filters">
         <span class="heat-filter-lbl">${t("heat_range_label")}</span>
@@ -3524,6 +3554,49 @@ class BoschEBikeHeatmapCard extends HTMLElement {
       this._filterBike = e.target.value;
       this._renderTracks();
     });
+
+    const fsBtn = this.querySelector("#heat-fs-btn");
+    if (fsBtn) fsBtn.addEventListener("click", () => this._toggleFullscreen());
+  }
+
+  // Toggle fullscreen via CSS class on the host. Leaflet needs an
+  // explicit invalidateSize() after the layout settles so its tile
+  // grid matches the new container size; we also call fitBounds again
+  // so the tracks recenter without forcing the user to pan.
+  _toggleFullscreen() {
+    const on = !this._heatFullscreen;
+    this._heatFullscreen = on;
+    this.classList.toggle("heat-fullscreen", on);
+    document.body.style.overflow = on ? "hidden" : "";
+    const ico = this.querySelector("#heat-fs-ico");
+    if (ico) ico.setAttribute("icon", on ? "mdi:fullscreen-exit" : "mdi:fullscreen");
+    if (on && !this._heatEscHandler) {
+      this._heatEscHandler = (ev) => {
+        if (ev.key === "Escape" && this._heatFullscreen) this._toggleFullscreen();
+      };
+      document.addEventListener("keydown", this._heatEscHandler);
+    } else if (!on && this._heatEscHandler) {
+      document.removeEventListener("keydown", this._heatEscHandler);
+      this._heatEscHandler = null;
+    }
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      try { this._map?.invalidateSize(); } catch (_) {}
+      try { this._renderTracks(); } catch (_) {}
+    }));
+  }
+
+  // Clean up scroll lock + Escape listener if the host is removed from
+  // the DOM mid-fullscreen.
+  disconnectedCallback() {
+    if (this._heatFullscreen) {
+      this._heatFullscreen = false;
+      this.classList.remove("heat-fullscreen");
+      document.body.style.overflow = "";
+    }
+    if (this._heatEscHandler) {
+      document.removeEventListener("keydown", this._heatEscHandler);
+      this._heatEscHandler = null;
+    }
   }
 
   async _fetchInstances() {
