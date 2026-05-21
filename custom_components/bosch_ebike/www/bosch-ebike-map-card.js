@@ -184,6 +184,12 @@ const I18N = {
     map3d_sun_label: "Sun",
     map3d_err_maplibre: "MapLibre could not be loaded.",
     map3d_err_style: "Map tiles unavailable (OpenFreeMap).",
+    map3d_terrain_on: "3D",
+    map3d_terrain_off: "2D",
+    map3d_terrain_loading: (done, total) => `Loading terrain… ${done}/${total}`,
+    map3d_terrain_failed: "Terrain tiles could not be loaded.",
+    map3d_editor_terrain_exag: "Terrain exaggeration (1.0-3.0)",
+    map3d_editor_terrain_exag_hint: "1.0 = realistic relief. 1.5 (default) gently lifts mountains. 2.0+ becomes stylised.",
     map3d_editor_title: "Title (optional)",
     map3d_editor_height: "Card height (px)",
     map3d_editor_account: "Pin to account (optional)",
@@ -388,6 +394,12 @@ const I18N = {
     map3d_sun_label: "Sonne",
     map3d_err_maplibre: "MapLibre konnte nicht geladen werden.",
     map3d_err_style: "Karten-Tiles nicht erreichbar (OpenFreeMap).",
+    map3d_terrain_on: "3D",
+    map3d_terrain_off: "2D",
+    map3d_terrain_loading: (done, total) => `Lade Geländedaten… ${done}/${total}`,
+    map3d_terrain_failed: "Geländedaten konnten nicht geladen werden.",
+    map3d_editor_terrain_exag: "Geländeüberhöhung (1.0-3.0)",
+    map3d_editor_terrain_exag_hint: "1.0 = realistisches Höhenrelief. 1.5 (Default) hebt Berge dezent hervor. 2.0+ stilisiert.",
     map3d_editor_title: "Titel (optional)",
     map3d_editor_height: "Karten-Höhe (px)",
     map3d_editor_account: "Auf Konto fixieren (optional)",
@@ -592,6 +604,12 @@ const I18N = {
     map3d_sun_label: "Zon",
     map3d_err_maplibre: "MapLibre kon niet worden geladen.",
     map3d_err_style: "Kaart-tiles niet beschikbaar (OpenFreeMap).",
+    map3d_terrain_on: "3D",
+    map3d_terrain_off: "2D",
+    map3d_terrain_loading: (done, total) => `Terrein laden… ${done}/${total}`,
+    map3d_terrain_failed: "Terrein-tiles konden niet worden geladen.",
+    map3d_editor_terrain_exag: "Terrein-overdrijving (1.0-3.0)",
+    map3d_editor_terrain_exag_hint: "1.0 = realistisch reliëf. 1.5 (default) tilt bergen subtiel op. 2.0+ wordt stilistisch.",
     map3d_editor_title: "Titel (optioneel)",
     map3d_editor_height: "Kaart-hoogte (px)",
     map3d_editor_account: "Account vastzetten (optioneel)",
@@ -775,6 +793,121 @@ function ensureLeaflet() {
 const MAPLIBRE_JS = "https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.js";
 const MAPLIBRE_CSS = "https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.css";
 const OPENFREEMAP_LIBERTY = "https://tiles.openfreemap.org/styles/liberty";
+
+// AWS Open Data terrain tiles, terrarium-encoded PNG DEM. Free, no key,
+// global coverage. Used both for the MapLibre raster-dem source and as
+// the URL pattern for the bbox preloader below.
+const TERRARIUM_TILE_TEMPLATE =
+  "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png";
+
+// Custom protocol scheme that intercepts MapLibre tile requests so we
+// can serve them from IndexedDB. Tiles get into IDB either via the
+// up-front preloader (recommended) or lazily on first map use.
+const EBIKE_DEM_PROTOCOL = "ebike-dem";
+
+// IndexedDB for tile caching across sessions.
+const TILE_DB_NAME = "bosch-ebike-tiles";
+const TILE_STORE = "tiles";
+
+let _tileDBPromise = null;
+function _tileDBOpen() {
+  if (_tileDBPromise) return _tileDBPromise;
+  _tileDBPromise = new Promise((resolve, reject) => {
+    try {
+      const req = indexedDB.open(TILE_DB_NAME, 1);
+      req.onupgradeneeded = () => {
+        try { req.result.createObjectStore(TILE_STORE); } catch (_) {}
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    } catch (e) {
+      reject(e);
+    }
+  }).catch((e) => {
+    // Browser blocked IDB (private mode etc). Fall back to no-op cache.
+    console.warn("[Bosch eBike 3D] tile cache disabled:", e?.message || e);
+    return null;
+  });
+  return _tileDBPromise;
+}
+
+async function _tileCacheGet(url) {
+  try {
+    const db = await _tileDBOpen();
+    if (!db) return null;
+    return await new Promise((resolve) => {
+      const tx = db.transaction(TILE_STORE, "readonly");
+      const r = tx.objectStore(TILE_STORE).get(url);
+      r.onsuccess = () => resolve(r.result || null);
+      r.onerror = () => resolve(null);
+    });
+  } catch (_) { return null; }
+}
+
+async function _tileCachePut(url, blob) {
+  try {
+    const db = await _tileDBOpen();
+    if (!db) return;
+    await new Promise((resolve) => {
+      const tx = db.transaction(TILE_STORE, "readwrite");
+      tx.objectStore(TILE_STORE).put(blob, url);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => resolve();
+    });
+  } catch (_) { /* best effort */ }
+}
+
+// Slippy-tile math. Converts (lon, lat) to the tile (x, y) containing
+// that coordinate at the given zoom. Standard Web-Mercator formula.
+function _lonLatToTile(lon, lat, z) {
+  const n = Math.pow(2, z);
+  const x = Math.floor((lon + 180) / 360 * n);
+  const latRad = lat * Math.PI / 180;
+  const y = Math.floor(
+    (1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * n,
+  );
+  const cap = n - 1;
+  return { x: Math.max(0, Math.min(cap, x)), y: Math.max(0, Math.min(cap, y)) };
+}
+
+// All tiles needed to cover [west,south,east,north] at the given zoom.
+function _tilesForBBox(west, south, east, north, zoom) {
+  const tl = _lonLatToTile(west, north, zoom);
+  const br = _lonLatToTile(east, south, zoom);
+  const out = [];
+  for (let x = tl.x; x <= br.x; x++) {
+    for (let y = tl.y; y <= br.y; y++) {
+      out.push({ z: zoom, x, y });
+    }
+  }
+  return out;
+}
+
+// Registers the ebike-dem:// MapLibre protocol exactly once per page
+// load. The protocol checks IDB first and only falls back to network
+// on miss. Network fetches are written through to IDB so the next
+// session of the same tour is served entirely offline.
+let _ebikeDemProtocolRegistered = false;
+function registerEbikeDemProtocol(mlib) {
+  if (_ebikeDemProtocolRegistered) return;
+  if (!mlib || typeof mlib.addProtocol !== "function") return;
+  mlib.addProtocol(EBIKE_DEM_PROTOCOL, async (params, abortController) => {
+    const url = "https://" + params.url.slice((EBIKE_DEM_PROTOCOL + "://").length);
+    let blob = await _tileCacheGet(url);
+    if (!blob) {
+      const resp = await fetch(url, {
+        mode: "cors",
+        signal: abortController?.signal,
+      });
+      if (!resp.ok) throw new Error("DEM tile " + resp.status);
+      blob = await resp.blob();
+      _tileCachePut(url, blob);   // fire-and-forget
+    }
+    const buf = await blob.arrayBuffer();
+    return { data: buf };
+  });
+  _ebikeDemProtocolRegistered = true;
+}
 
 function ensureMapLibre() {
   if (window.maplibregl) return Promise.resolve(window.maplibregl);
@@ -4984,6 +5117,7 @@ class BoschEBike3DMapCard extends HTMLElement {
     return {
       height: 540, default_pitch: 55, chase_zoom: 17, chase_lookahead: 30,
       smooth_window: 15, track_smooth_window: 3, playback_speed: 60,
+      terrain_exaggeration: 1.5,
       show_date: 1, show_time: 1, show_sun: 1,
       show_speed: 1, show_distance: 1, show_elevation: 1,
       stats_as_chips: 0,
@@ -5115,6 +5249,26 @@ class BoschEBike3DMapCard extends HTMLElement {
       }
       .map3d-download-chip:hover { filter: brightness(1.1); }
       .map3d-download-chip ha-icon { color: #fff; }
+      .map3d-3d-toggle {
+        background: rgba(20,24,32,.78); color: #fff; backdrop-filter: blur(6px);
+        border: 1px solid rgba(255,255,255,.18);
+        padding: 4px 10px; border-radius: 999px; font-size: 12px;
+        font-weight: 600; cursor: pointer; user-select: none;
+        display: inline-flex; align-items: center; gap: 5px;
+        pointer-events: auto;
+      }
+      .map3d-3d-toggle:hover { background: rgba(20,24,32,.92); }
+      .map3d-3d-toggle.active {
+        background: #1f6feb; border-color: #1f6feb;
+        box-shadow: 0 2px 10px rgba(31,111,235,.45);
+      }
+      .map3d-3d-toggle:disabled { opacity: .55; cursor: progress; }
+      .map3d-3d-toggle ha-icon { --mdc-icon-size: 14px; }
+      .map3d-terrain-progress {
+        background: rgba(20,24,32,.78); color: #fff; backdrop-filter: blur(6px);
+        padding: 4px 10px; border-radius: 999px; font-size: 12px;
+        font-variant-numeric: tabular-nums; pointer-events: auto;
+      }
       @keyframes ebike-rec-blink {
         0%, 49% { opacity: 1; }
         50%, 100% { opacity: 0.25; }
@@ -5311,6 +5465,158 @@ class BoschEBike3DMapCard extends HTMLElement {
     return out;
   }
 
+  // ===========================================================================
+  // 3D terrain toggle
+  // ---------------------------------------------------------------------------
+  // Reads/writes a single localStorage flag so the user's preference
+  // survives reloads. The actual terrain attach happens in
+  // _setTerrainEnabled after the map's style has loaded.
+  _loadTerrainPref() {
+    try { return localStorage.getItem("bosch-ebike-3d-terrain") === "1"; }
+    catch (_) { return false; }
+  }
+  _saveTerrainPref(on) {
+    try { localStorage.setItem("bosch-ebike-3d-terrain", on ? "1" : "0"); }
+    catch (_) { /* private mode, ignore */ }
+  }
+
+  _updateTerrainToggleUI() {
+    const btn = this._root?.querySelector("#m3d-3d-toggle");
+    const lbl = this._root?.querySelector("#m3d-3d-toggle-lbl");
+    if (!btn || !lbl) return;
+    btn.classList.toggle("active", !!this._terrainEnabled);
+    // Label shows the state the button would switch TO on next click,
+    // so the user sees "3D" when the map is flat and "2D" when terrain
+    // is active. That matches the convention of most map apps.
+    lbl.textContent = this._t(this._terrainEnabled ? "map3d_terrain_off" : "map3d_terrain_on");
+  }
+
+  _setTerrainProgress(msg) {
+    const el = this._root?.querySelector("#m3d-terrain-progress");
+    if (!el) return;
+    if (!msg) { el.style.display = "none"; el.textContent = ""; return; }
+    el.style.display = ""; el.textContent = msg;
+  }
+
+  // Compute the geographic bounding box of the loaded track, padded by
+  // ~0.5 km so terrain extends slightly beyond the track edges and the
+  // chase-cam never looks at a flat strip when panning sideways.
+  _bboxOfTrack(pts) {
+    let w = Infinity, e = -Infinity, s = Infinity, n = -Infinity;
+    for (const p of pts) {
+      if (p.lon < w) w = p.lon;
+      if (p.lon > e) e = p.lon;
+      if (p.lat < s) s = p.lat;
+      if (p.lat > n) n = p.lat;
+    }
+    const padLat = 0.005;   // ~550 m
+    const padLon = 0.005 / Math.max(0.1, Math.cos((s + n) / 2 * Math.PI / 180));
+    return {
+      west: w - padLon, east: e + padLon,
+      south: s - padLat, north: n + padLat,
+    };
+  }
+
+  // Tile set for the preloader. We hit three zooms because MapLibre
+  // selects different DEM tiles depending on camera distance during
+  // playback: z=10 for far overviews, z=11 for the default chase-cam
+  // zoom, z=12 for occasional zoom-in. Three zooms keep the total
+  // count moderate (~30-90 tiles for a typical day tour) while
+  // covering every realistic camera state without runtime fetches.
+  _collectTerrainTiles(bbox) {
+    const out = [];
+    for (const z of [10, 11, 12]) {
+      out.push(..._tilesForBBox(bbox.west, bbox.south, bbox.east, bbox.north, z));
+    }
+    return out;
+  }
+
+  // Parallel-prime IDB + HTTP cache for the given tiles. Concurrency 8
+  // is a sweet spot: enough to saturate typical home connections,
+  // not enough to make AWS S3 throttle us. Failures are silently
+  // skipped — a single missing DEM tile only causes one flat patch,
+  // not a broken map, and the runtime fetcher will retry on demand.
+  async _preloadTerrainTiles(tiles, onProgress) {
+    const total = tiles.length;
+    let done = 0;
+    const concurrency = 8;
+    const queue = tiles.slice();
+    const worker = async () => {
+      while (queue.length) {
+        const t = queue.shift();
+        const url = TERRARIUM_TILE_TEMPLATE
+          .replace("{z}", t.z).replace("{x}", t.x).replace("{y}", t.y);
+        try {
+          const cached = await _tileCacheGet(url);
+          if (!cached) {
+            const resp = await fetch(url, { mode: "cors" });
+            if (resp.ok) await _tileCachePut(url, await resp.blob());
+          }
+        } catch (_) { /* skip, runtime will retry */ }
+        done++;
+        try { onProgress?.(done, total); } catch (_) {}
+      }
+    };
+    await Promise.all(Array.from({ length: concurrency }, worker));
+  }
+
+  // Enable / disable terrain on the live map. On enable we (1) preload
+  // the bbox into IDB so MapLibre never has to wait on tiles mid-pan,
+  // (2) add the DEM source via the ebike-dem:// protocol so future
+  // fetches hit IDB, and (3) call setTerrain with the configured
+  // exaggeration. Hillshade is intentionally NOT added: it would need
+  // a second DEM read per tile and previous experiments showed
+  // noticeable jank during playback. The lighting from sun position
+  // already gives the 3D mesh enough shading to look believable.
+  async _setTerrainEnabled(on, opts = {}) {
+    const map = this._map;
+    if (!map) return;
+    const btn = this._root?.querySelector("#m3d-3d-toggle");
+    if (on && !this._terrainEnabled) {
+      if (btn) btn.disabled = true;
+      try {
+        const pts = this._currentTrack;
+        if (!pts || !pts.length) return;
+        const bbox = this._bboxOfTrack(pts);
+        const tiles = this._collectTerrainTiles(bbox);
+        this._setTerrainProgress(this._t("map3d_terrain_loading", 0, tiles.length));
+        await this._preloadTerrainTiles(tiles, (d, t) => {
+          this._setTerrainProgress(this._t("map3d_terrain_loading", d, t));
+        });
+
+        if (this._map !== map) return;   // user navigated away mid-load
+        if (!map.getSource("ebike-dem")) {
+          map.addSource("ebike-dem", {
+            type: "raster-dem",
+            tiles: [EBIKE_DEM_PROTOCOL + "://" + TERRARIUM_TILE_TEMPLATE.replace(/^https?:\/\//, "")],
+            encoding: "terrarium",
+            tileSize: 256,
+            minzoom: 0,
+            maxzoom: 15,
+          });
+        }
+        const exag = Math.max(1.0, Math.min(3.0, Number(this._config.terrain_exaggeration) || 1.5));
+        map.setTerrain({ source: "ebike-dem", exaggeration: exag });
+        this._terrainEnabled = true;
+        if (!opts.silent) this._saveTerrainPref(true);
+      } catch (e) {
+        console.warn("[Bosch eBike 3D] enable terrain failed", e);
+        this._setTerrainProgress(this._t("map3d_terrain_failed"));
+        setTimeout(() => this._setTerrainProgress(null), 3000);
+      } finally {
+        if (btn) btn.disabled = false;
+        this._setTerrainProgress(null);
+        this._updateTerrainToggleUI();
+      }
+    } else if (!on && this._terrainEnabled) {
+      try { map.setTerrain(null); } catch (_) {}
+      try { if (map.getSource("ebike-dem")) map.removeSource("ebike-dem"); } catch (_) {}
+      this._terrainEnabled = false;
+      if (!opts.silent) this._saveTerrainPref(false);
+      this._updateTerrainToggleUI();
+    }
+  }
+
   _buildCumulativeDistances() {
     const pts = this._currentTrack;
     const cum = [0];
@@ -5413,6 +5719,10 @@ class BoschEBike3DMapCard extends HTMLElement {
           <span class="map3d-chip map3d-rec-badge" id="m3d-rec-badge" style="display:none">
             <ha-icon icon="mdi:record"></ha-icon><span>${this._t("map3d_record_active")}</span>
           </span>
+          <button class="map3d-3d-toggle" id="m3d-3d-toggle" type="button" title="${this._t("map3d_terrain_on")} / ${this._t("map3d_terrain_off")}">
+            <ha-icon icon="mdi:terrain"></ha-icon><span id="m3d-3d-toggle-lbl">${this._t("map3d_terrain_on")}</span>
+          </button>
+          <span class="map3d-terrain-progress" id="m3d-terrain-progress" style="display:none">…</span>
         </div>
         <div class="map3d-controls">
           <div class="row1">
@@ -5471,6 +5781,19 @@ class BoschEBike3DMapCard extends HTMLElement {
       }
     }
 
+    const tdBtn = this._root.querySelector("#m3d-3d-toggle");
+    if (tdBtn) {
+      tdBtn.addEventListener("click", () => {
+        // _terrainEnabled is the current applied state. Flip and apply.
+        this._setTerrainEnabled(!this._terrainEnabled);
+      });
+    }
+    // Reflect persisted preference in the button BEFORE the map loads.
+    // Actual terrain activation happens after the map's 'load' event
+    // in _initMap so MapLibre has a stable style.
+    this._terrainEnabled = false;
+    this._updateTerrainToggleUI();
+
     this._initMap();
   }
 
@@ -5486,6 +5809,9 @@ class BoschEBike3DMapCard extends HTMLElement {
       this._showMessage(this._t("map3d_err_maplibre"));
       return;
     }
+    // Register the IDB-backed DEM protocol exactly once. Safe to call on
+    // every init; the function is idempotent after the first call.
+    try { registerEbikeDemProtocol(mlib); } catch (_) {}
     if (myEpoch !== this._mapInitEpoch) {
       console.log("[Bosch eBike 3D] init skipped (newer epoch already running)");
       return;
@@ -5620,6 +5946,16 @@ class BoschEBike3DMapCard extends HTMLElement {
       this._applyIndex(0, true);
       this._updateTimeChips(0, startTime, altDeg, mood);
       this._updateRangeLabels();
+
+      // Restore persisted terrain preference. Done here, AFTER the base
+      // style finished loading, so addSource / setTerrain attach to a
+      // stable map. Failure (no internet, IDB blocked) silently falls
+      // back to plain 2D - we never block the map from rendering.
+      if (this._loadTerrainPref()) {
+        this._setTerrainEnabled(true, { silent: true }).catch((e) => {
+          console.warn("[Bosch eBike 3D] terrain auto-restore failed", e);
+        });
+      }
     });
   }
 
@@ -6654,6 +6990,7 @@ class BoschEBike3DMapCardEditor extends HTMLElement {
       smooth_window: mkText("smooth_window", "map3d_editor_smooth_window", "map3d_editor_smooth_window_hint", "number"),
       track_smooth_window: mkText("track_smooth_window", "map3d_editor_track_smooth", "map3d_editor_track_smooth_hint", "number"),
       playback_speed: mkText("playback_speed", "map3d_editor_playback_speed", "map3d_editor_playback_speed_hint", "number"),
+      terrain_exaggeration: mkText("terrain_exaggeration", "map3d_editor_terrain_exag", "map3d_editor_terrain_exag_hint", "number"),
       animate_seconds: mkText("animate_seconds", "map3d_editor_animate_seconds", "map3d_editor_animate_seconds_override_hint", "number"),
       account_id: mkText("account_id", "map3d_editor_account", null, "text"),
       bike_id: mkText("bike_id", "map3d_editor_bike", null, "text"),
