@@ -5269,6 +5269,21 @@ class BoschEBike3DMapCard extends HTMLElement {
         padding: 4px 10px; border-radius: 999px; font-size: 12px;
         font-variant-numeric: tabular-nums; pointer-events: auto;
       }
+      /* Bike marker is rendered as a screen-fixed DOM overlay, NOT as a
+         MapLibre Marker. With terrain on, a maplibre Marker tied to
+         (lat, lon) jumps every time a new DEM tile loads, because the
+         projected 3D elevation of that lat/lon changes. The whole
+         point of chase-cam is that the bike stays at the same screen
+         spot anyway, so we just pin a div at that spot and let the
+         camera animate the tiles under it. */
+      .map3d-bike-overlay {
+        position: absolute; left: 50%; top: 62%;
+        transform: translate(-50%, -50%);
+        width: 18px; height: 18px; border-radius: 50%;
+        background: #42c76a; border: 5px solid #fff;
+        box-shadow: 0 0 0 6px rgba(66,199,106,.35), 0 4px 18px rgba(0,0,0,.65);
+        pointer-events: none; z-index: 5;
+      }
       @keyframes ebike-rec-blink {
         0%, 49% { opacity: 1; }
         50%, 100% { opacity: 0.25; }
@@ -5913,24 +5928,22 @@ class BoschEBike3DMapCard extends HTMLElement {
       this._addPointMarker(pts[0], "#ff9800", "S", myMap);
       this._addPointMarker(pts[pts.length - 1], "#e53935", "Z", myMap);
 
-      const el = document.createElement("div");
-      el.className = "ebike-3d-marker";
-      // Inline 'position:absolute;top:0;left:0' is REQUIRED because the
-      // MapLibre stylesheet does not penetrate HA's shadow-DOM boundary,
-      // so its '.maplibregl-marker { position: absolute }' rule is
-      // missing here. Without these the marker defaults to static, the
-      // transform translate is applied to its DOM flow position, and it
-      // ends up parked at the bottom of the canvas-container instead
-      // of where MapLibre thinks it should be.
-      el.style.cssText =
-        "position:absolute;top:0;left:0;" +
-        "width:18px;height:18px;border-radius:50%;" +
-        "background:#42c76a;border:5px solid #fff;" +
-        "box-shadow:0 0 0 6px rgba(66,199,106,.35),0 4px 18px rgba(0,0,0,.65);" +
-        "z-index:100;";
-      this._marker = new mlib.Marker({ element: el, anchor: "center" })
-        .setLngLat([pts[0].lon, pts[0].lat])
-        .addTo(myMap);
+      // Screen-fixed bike marker (NOT a MapLibre Marker). See the
+      // .map3d-bike-overlay comment in the stylesheet for why.
+      // We attach it to the canvas wrapper so its absolute positioning
+      // anchors against the map area, and the chase-cam animates the
+      // tiles under it instead of moving the marker around.
+      const canvasWrap = this._root.querySelector("#m3d-canvas");
+      if (canvasWrap && !canvasWrap.querySelector(".map3d-bike-overlay")) {
+        const overlay = document.createElement("div");
+        overlay.className = "map3d-bike-overlay";
+        canvasWrap.appendChild(overlay);
+        this._bikeOverlayEl = overlay;
+      }
+      // _marker is the legacy MapLibre Marker reference and stays null
+      // intentionally so the rest of the code (which guards with
+      // 'if (this._marker)') skips the lat/lon update path.
+      this._marker = null;
 
       // Diagnostic: verify marker placement and DOM visibility shortly
       // after creation. If the marker is in DOM but reports a
@@ -6311,14 +6324,14 @@ class BoschEBike3DMapCard extends HTMLElement {
     this._currentIndex = i0;       // for shadow snapping (integer-anchored)
     this._currentFracIndex = clamped;
 
-    // Second-stage temporal smoothing on the displayed marker position.
-    // The Gaussian-smoothed track still carries ~30 cm of residual GPS
-    // noise that becomes visible as wobble on the green dot at high
-    // playback FPS. An EMA with alpha=0.25 acts as a per-frame low-pass
-    // and absorbs that wobble. It does not affect the underlying track
-    // shape and therefore does not introduce extra corner cutting: when
-    // motion is uniform, the EMA settles to the true position within a
-    // few frames (lag ~50 ms at 60 fps - imperceptible).
+    // Second-stage temporal smoothing on the bike position used by the
+    // chase-cam (look-ahead origin). The Gaussian-smoothed track still
+    // carries ~30 cm residual GPS noise. The marker itself is now a
+    // screen-fixed DOM overlay so it cannot wobble, but the camera
+    // would still wobble if it followed raw fractional p directly,
+    // making the world slide back and forth under the fixed marker.
+    // An EMA on the camera origin absorbs that. Lag ~90 ms at 60 fps
+    // is imperceptible during smooth motion.
     const ALPHA = 0.18;
     if (isInitial || this._dispLat == null || this._dispLon == null) {
       this._dispLat = p.lat;
@@ -6914,6 +6927,10 @@ class BoschEBike3DMapCard extends HTMLElement {
     }
     if (this._resizeObs) { try { this._resizeObs.disconnect(); } catch (_) {} this._resizeObs = null; }
     if (this._marker) { try { this._marker.remove(); } catch (_) {} this._marker = null; }
+    if (this._bikeOverlayEl) {
+      try { this._bikeOverlayEl.remove(); } catch (_) {}
+      this._bikeOverlayEl = null;
+    }
     if (this._map) { try { this._map.remove(); } catch (_) {} this._map = null; }
     // Reset displayed-position EMA so the next playback starts cleanly
     // on the new track's first sample instead of easing in from the old
