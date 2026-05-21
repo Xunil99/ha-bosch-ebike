@@ -311,6 +311,8 @@ async def ws_get_track(
         vol.Required("type"): "bosch_ebike/get_all_tracks",
         vol.Optional("config_entry_id"): str,
         vol.Optional("max_age_days"): int,
+        vol.Optional("date_from"): str,   # YYYY-MM-DD inclusive
+        vol.Optional("date_to"): str,     # YYYY-MM-DD inclusive
     }
 )
 @websocket_api.async_response
@@ -321,14 +323,43 @@ async def ws_get_all_tracks(
 
     Heavy on first run (one API call per uncached activity, with concurrency
     limit). Subsequent calls return instantly from the in-memory cache.
+
+    Filtering: pass either ``max_age_days`` (relative window) OR
+    ``date_from`` / ``date_to`` (absolute range, ISO YYYY-MM-DD,
+    inclusive on both ends). If both are passed, the explicit date
+    range wins.
     """
     import asyncio
     from datetime import datetime, timedelta, timezone
 
     requested_entry = msg.get("config_entry_id")
     max_age_days = msg.get("max_age_days")
+    date_from_raw = msg.get("date_from")
+    date_to_raw = msg.get("date_to")
+
+    # Parse explicit date range first. A user-supplied range overrides
+    # max_age_days so the UI can offer both modes without juggling
+    # which one to send.
+    range_from: datetime | None = None
+    range_to: datetime | None = None
+
+    def _parse_date(value: str | None) -> datetime | None:
+        if not value:
+            return None
+        try:
+            return datetime.fromisoformat(value).replace(tzinfo=timezone.utc)
+        except (TypeError, ValueError):
+            return None
+
+    range_from = _parse_date(date_from_raw)
+    parsed_to = _parse_date(date_to_raw)
+    if parsed_to is not None:
+        # Inclusive: extend to end of the day so an activity that
+        # started at 22:00 on date_to is still included.
+        range_to = parsed_to + timedelta(days=1)
+
     cutoff: datetime | None = None
-    if isinstance(max_age_days, int) and max_age_days > 0:
+    if range_from is None and range_to is None and isinstance(max_age_days, int) and max_age_days > 0:
         cutoff = datetime.now(timezone.utc) - timedelta(days=max_age_days)
 
     coords = _all_coordinators(hass)
@@ -345,12 +376,16 @@ async def ws_get_all_tracks(
         aid = activity.get("id")
         if not aid:
             return
-        if cutoff is not None:
+        if cutoff is not None or range_from is not None or range_to is not None:
             try:
                 start = activity.get("startTime")
                 if start:
                     start_dt = start if isinstance(start, datetime) else datetime.fromisoformat(start.replace("Z", "+00:00"))
-                    if start_dt < cutoff:
+                    if cutoff is not None and start_dt < cutoff:
+                        return
+                    if range_from is not None and start_dt < range_from:
+                        return
+                    if range_to is not None and start_dt >= range_to:
                         return
             except (TypeError, ValueError):
                 return

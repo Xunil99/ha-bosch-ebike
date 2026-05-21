@@ -107,6 +107,9 @@ const I18N = {
     heat_range_90: "3 months",
     heat_range_365: "12 months",
     heat_range_all: "All",
+    heat_range_custom: "Custom range",
+    heat_date_from: "From",
+    heat_date_to: "to",
     heat_loading: "Loading rides …",
     heat_load_failed: "Error loading rides",
     heat_no_match: "No rides match this filter",
@@ -326,6 +329,9 @@ const I18N = {
     heat_range_90: "3 Monate",
     heat_range_365: "12 Monate",
     heat_range_all: "Alle",
+    heat_range_custom: "Eigener Zeitraum",
+    heat_date_from: "Von",
+    heat_date_to: "bis",
     heat_loading: "Lade Touren …",
     heat_load_failed: "Fehler beim Laden der Touren",
     heat_no_match: "Keine Touren in diesem Filter",
@@ -543,6 +549,9 @@ const I18N = {
     heat_range_90: "3 maanden",
     heat_range_365: "12 maanden",
     heat_range_all: "Alle",
+    heat_range_custom: "Eigen periode",
+    heat_date_from: "Van",
+    heat_date_to: "tot",
     heat_loading: "Ritten laden …",
     heat_load_failed: "Fout bij laden van ritten",
     heat_no_match: "Geen ritten voldoen aan dit filter",
@@ -3364,7 +3373,9 @@ class BoschEBikeHeatmapCard extends HTMLElement {
     this._instances = [];
     this._filterAccount = "all";
     this._filterBike = "all";
-    this._filterRange = "365"; // days; "all" for everything
+    this._filterRange = "365"; // days; "all" for everything, "custom" for date_from/date_to
+    this._filterDateFrom = "";   // YYYY-MM-DD, used when _filterRange === "custom"
+    this._filterDateTo = "";
     this._map = null;
     this._tracksGroup = null;
     this._baseLayer = null;
@@ -3461,7 +3472,7 @@ class BoschEBikeHeatmapCard extends HTMLElement {
         background:var(--secondary-background-color,#f5f5f5);
         border-bottom:1px solid var(--divider-color,#e0e0e0);
       }
-      .heat-filters select {
+      .heat-filters select, .heat-filters input[type="date"] {
         padding:5px 8px; border:1px solid var(--divider-color,#ccc);
         border-radius:6px; font-size:13px;
         background:var(--card-background-color,#fff); color:var(--primary-text-color,#333);
@@ -3522,7 +3533,12 @@ class BoschEBikeHeatmapCard extends HTMLElement {
           <option value="90">${t("heat_range_90")}</option>
           <option value="365" selected>${t("heat_range_365")}</option>
           <option value="all">${t("heat_range_all")}</option>
+          <option value="custom">${t("heat_range_custom")}</option>
         </select>
+        <span class="heat-filter-lbl" id="heat-from-lbl" style="display:none;">${t("heat_date_from")}</span>
+        <input type="date" id="heat-from" style="display:none;">
+        <span class="heat-filter-lbl" id="heat-to-lbl" style="display:none;">${t("heat_date_to")}</span>
+        <input type="date" id="heat-to" style="display:none;">
         <span class="heat-filter-lbl" id="heat-acc-lbl" style="display:none;">${t("heat_account_label")}</span>
         <select id="heat-account" style="display:none;">
           <option value="all">${t("all_accounts")}</option>
@@ -3542,9 +3558,32 @@ class BoschEBikeHeatmapCard extends HTMLElement {
 
     this.querySelector("#heat-range").addEventListener("change", async (e) => {
       this._filterRange = e.target.value;
+      this._updateCustomRangeUI();
+      // Skip the load when switching to "custom" without dates picked
+      // yet - the inputs need a value first or the backend would
+      // return everything, which is misleading.
+      if (this._filterRange === "custom" && !this._filterDateFrom && !this._filterDateTo) {
+        return;
+      }
       await this._loadTracks();
       this._renderTracks();
     });
+
+    const fromInp = this.querySelector("#heat-from");
+    const toInp = this.querySelector("#heat-to");
+    const onDateChange = async () => {
+      this._filterDateFrom = fromInp.value || "";
+      this._filterDateTo = toInp.value || "";
+      if (this._filterRange === "custom") {
+        await this._loadTracks();
+        this._renderTracks();
+      }
+    };
+    fromInp.addEventListener("change", onDateChange);
+    toInp.addEventListener("change", onDateChange);
+    // Initialise the custom-range visibility based on the current
+    // _filterRange (which is "365" on first render, so inputs hidden).
+    this._updateCustomRangeUI();
     this.querySelector("#heat-account").addEventListener("change", (e) => {
       this._filterAccount = e.target.value;
       this._populateBikeFilter();
@@ -3681,11 +3720,41 @@ class BoschEBikeHeatmapCard extends HTMLElement {
     this._tracksGroup = Leaflet.layerGroup().addTo(this._map);
   }
 
+  // Toggle the From/To inputs depending on whether the dropdown is on
+  // "custom". Kept as one helper so the change-listener and the
+  // initial _buildDOM call share exactly the same logic.
+  _updateCustomRangeUI() {
+    const isCustom = this._filterRange === "custom";
+    const ids = ["#heat-from-lbl", "#heat-from", "#heat-to-lbl", "#heat-to"];
+    for (const sel of ids) {
+      const el = this.querySelector(sel);
+      if (el) el.style.display = isCustom ? "" : "none";
+    }
+    // Pre-fill sensible defaults the first time the user switches
+    // to custom: last 30 days. They can adjust freely after that.
+    if (isCustom && !this._filterDateFrom && !this._filterDateTo) {
+      const today = new Date();
+      const monthAgo = new Date(today.getTime() - 30 * 86400000);
+      const iso = (d) => d.toISOString().slice(0, 10);
+      this._filterDateFrom = iso(monthAgo);
+      this._filterDateTo = iso(today);
+      const fromInp = this.querySelector("#heat-from");
+      const toInp = this.querySelector("#heat-to");
+      if (fromInp) fromInp.value = this._filterDateFrom;
+      if (toInp) toInp.value = this._filterDateTo;
+    }
+  }
+
   async _loadTracks() {
     const msg = this.querySelector("#heat-msg");
     if (msg) { msg.textContent = ebT(this._hass, "heat_loading"); msg.style.display = ""; }
     const params = { type: "bosch_ebike/get_all_tracks" };
-    if (this._filterRange !== "all") {
+    if (this._filterRange === "custom") {
+      // Send only the half-bounds that are actually set, so users can
+      // do "everything from X onwards" by leaving the To field empty.
+      if (this._filterDateFrom) params.date_from = this._filterDateFrom;
+      if (this._filterDateTo) params.date_to = this._filterDateTo;
+    } else if (this._filterRange !== "all") {
       params.max_age_days = parseInt(this._filterRange, 10);
     }
     try {
