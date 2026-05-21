@@ -176,6 +176,7 @@ const I18N = {
     dash_maint_due_km: (km) => `${km <= 0 ? "Overdue by " + Math.abs(km) : "in " + km} km`,
     dash_maint_due_days: (d) => `${d <= 0 ? "Overdue by " + Math.abs(d) : "in " + d} day(s)`,
     dash_maint_overdue: "Overdue",
+    dash_maint_done_btn: "Mark as done",
     dash_section_co2: "Saved vs. car",
     dash_co2_total: "Total",
     dash_co2_last: "Last tour",
@@ -429,6 +430,7 @@ const I18N = {
     dash_maint_due_km: (km) => `${km <= 0 ? "Überfällig: " + Math.abs(km) : "in " + km} km`,
     dash_maint_due_days: (d) => `${d <= 0 ? "Überfällig: " + Math.abs(d) : "in " + d} Tag(en)`,
     dash_maint_overdue: "Überfällig",
+    dash_maint_done_btn: "Als erledigt markieren",
     dash_section_co2: "Gegenüber Auto gespart",
     dash_co2_total: "Gesamt",
     dash_co2_last: "Letzte Tour",
@@ -682,6 +684,7 @@ const I18N = {
     dash_maint_due_km: (km) => `${km <= 0 ? "Te laat met " + Math.abs(km) : "over " + km} km`,
     dash_maint_due_days: (d) => `${d <= 0 ? "Te laat met " + Math.abs(d) : "over " + d} dag(en)`,
     dash_maint_overdue: "Te laat",
+    dash_maint_done_btn: "Markeer als gedaan",
     dash_section_co2: "Bespaard vs. auto",
     dash_co2_total: "Totaal",
     dash_co2_last: "Laatste rit",
@@ -4986,6 +4989,17 @@ class BoschEBikeDashboardCard extends HTMLElement {
       }
       .dash-maint-row.overdue .when { color: #e53935; }
       .dash-maint-row.due-soon .when { color: #fb8c00; }
+      .dash-maint-done {
+        background: #2e7d32; color: #fff; border: 0;
+        width: 32px; height: 32px; border-radius: 50%;
+        display: inline-flex; align-items: center; justify-content: center;
+        cursor: pointer; flex-shrink: 0;
+        box-shadow: 0 1px 4px rgba(0,0,0,.2);
+        transition: filter .15s ease, transform .15s ease;
+      }
+      .dash-maint-done:hover { filter: brightness(1.1); }
+      .dash-maint-done:active { transform: scale(0.92); }
+      .dash-maint-done ha-icon { --mdc-icon-size: 18px; color: #fff; }
       .dash-maint-empty {
         padding: 10px 12px; font-size: 13px;
         color: var(--secondary-text-color); font-style: italic;
@@ -5332,6 +5346,14 @@ class BoschEBikeDashboardCard extends HTMLElement {
         <div class="name">${this._escapeHtml(m.name || "")}</div>
         <div class="when">${this._escapeHtml(status.label)}</div>
       `;
+      const doneBtn = document.createElement("button");
+      doneBtn.type = "button";
+      doneBtn.className = "dash-maint-done";
+      doneBtn.title = this._t("dash_maint_done_btn");
+      doneBtn.setAttribute("aria-label", this._t("dash_maint_done_btn"));
+      doneBtn.innerHTML = `<ha-icon icon="mdi:check"></ha-icon>`;
+      doneBtn.addEventListener("click", () => this._maintMarkDone(m, currentOdo));
+      row.appendChild(doneBtn);
       list.appendChild(row);
     }
   }
@@ -5340,12 +5362,21 @@ class BoschEBikeDashboardCard extends HTMLElement {
   // falls nicht ausreichend konfiguriert. show=true bedeutet, dass das
   // Item entweder überfällig oder innerhalb der nächsten 500 km / 30
   // Tage ist - nur dann erscheint es im Dashboard.
+  //
+  // "Zuletzt erledigt"-Werte werden aus localStorage gelesen, falls
+  // dort ein neuerer Eintrag steht, sonst aus der Card-Config. So
+  // kann der User aufs grüne Häkchen tippen und den Zähler resetten,
+  // ohne die Lovelace-Config neu zu schreiben - das funktioniert
+  // auch im YAML-Mode, wo Cards die Config nicht zurückspeichern
+  // dürfen.
   _maintStatus(m, currentOdo, today) {
     if (!m || !m.name) return null;
     if (m.type === "km") {
       const interval = Number(m.intervalKm);
       if (!Number.isFinite(interval) || interval <= 0) return null;
-      const lastDone = Number.isFinite(Number(m.lastDoneKm)) ? Number(m.lastDoneKm) : 0;
+      const storedLast = this._maintReadLastKm(m.id);
+      const configLast = Number.isFinite(Number(m.lastDoneKm)) ? Number(m.lastDoneKm) : null;
+      const lastDone = storedLast != null ? storedLast : (configLast != null ? configLast : 0);
       const nextDue = lastDone + interval;
       if (!Number.isFinite(currentOdo)) return null;
       const remaining = Math.round(nextDue - currentOdo);
@@ -5362,8 +5393,10 @@ class BoschEBikeDashboardCard extends HTMLElement {
       const interval = Number(m.intervalDays);
       if (!Number.isFinite(interval) || interval <= 0) return null;
       let last = null;
-      if (m.lastDoneDate) {
-        const d = new Date(m.lastDoneDate);
+      const storedLast = this._maintReadLastDate(m.id);
+      const lastIso = storedLast || m.lastDoneDate;
+      if (lastIso) {
+        const d = new Date(lastIso);
         if (!isNaN(d.getTime())) { d.setHours(0, 0, 0, 0); last = d; }
       }
       const baseDate = last || today;   // ohne Last-Date: Intervall ab heute
@@ -5379,6 +5412,37 @@ class BoschEBikeDashboardCard extends HTMLElement {
       };
     }
     return null;
+  }
+
+  // LocalStorage-Helfer für die per-Tap-Reset-Funktion. Key ist pro
+  // Wartungs-ID, sodass jeder Posten unabhängig getrackt wird.
+  _maintReadLastKm(id) {
+    if (!id) return null;
+    try {
+      const v = localStorage.getItem(`bosch-ebike-maint-${id}-km`);
+      const n = Number(v);
+      return Number.isFinite(n) ? n : null;
+    } catch (_) { return null; }
+  }
+  _maintReadLastDate(id) {
+    if (!id) return null;
+    try { return localStorage.getItem(`bosch-ebike-maint-${id}-date`) || null; }
+    catch (_) { return null; }
+  }
+  _maintMarkDone(item, currentOdo) {
+    if (!item || !item.id) return;
+    try {
+      if (item.type === "km") {
+        if (Number.isFinite(currentOdo)) {
+          localStorage.setItem(`bosch-ebike-maint-${item.id}-km`, String(currentOdo));
+        }
+      } else if (item.type === "date") {
+        const today = new Date();
+        const iso = today.toISOString().slice(0, 10);
+        localStorage.setItem(`bosch-ebike-maint-${item.id}-date`, iso);
+      }
+    } catch (_) { /* private mode etc. */ }
+    this._render();
   }
 
   _escapeHtml(s) {
