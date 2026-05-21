@@ -196,6 +196,8 @@ const I18N = {
     map3d_kind_satellite: "satellite",
     map3d_editor_terrain_exag: "Terrain exaggeration (1.0-3.0)",
     map3d_editor_terrain_exag_hint: "1.0 = realistic relief. 1.5 (default) gently lifts mountains. 2.0+ becomes stylised.",
+    map3d_editor_north_up: "North-up mode (0 / 1)",
+    map3d_editor_north_up_hint: "When 1, the map stays oriented north and the bike marker rotates to show travel direction. Calmer to watch but loses the third-person 'flying behind the bike' feel. Default 0 (bearing follows travel).",
     map3d_editor_sat_url: "Satellite tile URL template (optional)",
     map3d_editor_sat_url_hint: "Override the default Esri World Imagery source. Use {z}, {x}, {y} placeholders. Leave empty for the free Esri default. Example MapTiler: https://api.maptiler.com/tiles/satellite-v2/{z}/{x}/{y}.jpg?key=YOUR_KEY",
     map3d_editor_sat_maxzoom: "Satellite max preload zoom (12-15)",
@@ -416,6 +418,8 @@ const I18N = {
     map3d_kind_satellite: "Satellitendaten",
     map3d_editor_terrain_exag: "Geländeüberhöhung (1.0-3.0)",
     map3d_editor_terrain_exag_hint: "1.0 = realistisches Höhenrelief. 1.5 (Default) hebt Berge dezent hervor. 2.0+ stilisiert.",
+    map3d_editor_north_up: "Nord-Fix-Modus (0 / 1)",
+    map3d_editor_north_up_hint: "Bei 1 bleibt die Karte nach Norden ausgerichtet und der Bike-Marker dreht sich mit der Fahrtrichtung. Ruhiger zu schauen, aber ohne den 'hinter dem Bike fliegenden' Third-Person-Effekt. Default 0 (Kamera dreht mit).",
     map3d_editor_sat_url: "Satelliten-Tile-URL-Template (optional)",
     map3d_editor_sat_url_hint: "Überschreibt die Esri-World-Imagery-Default-Quelle. Platzhalter {z}, {x}, {y}. Leer = Esri-Default (frei). Beispiel MapTiler: https://api.maptiler.com/tiles/satellite-v2/{z}/{x}/{y}.jpg?key=DEIN_KEY",
     map3d_editor_sat_maxzoom: "Satellit max. Preload-Zoom (12-15)",
@@ -636,6 +640,8 @@ const I18N = {
     map3d_kind_satellite: "Satelliet",
     map3d_editor_terrain_exag: "Terrein-overdrijving (1.0-3.0)",
     map3d_editor_terrain_exag_hint: "1.0 = realistisch reliëf. 1.5 (default) tilt bergen subtiel op. 2.0+ wordt stilistisch.",
+    map3d_editor_north_up: "Noord-vast modus (0 / 1)",
+    map3d_editor_north_up_hint: "Bij 1 blijft de kaart noord-gericht en de fiets-marker draait mee met de rijrichting. Rustiger om te bekijken maar zonder het 'achter de fiets vliegende' third-person gevoel. Default 0 (camera draait mee).",
     map3d_editor_sat_url: "Satelliet-tile-URL-template (optioneel)",
     map3d_editor_sat_url_hint: "Overschrijft de Esri World Imagery default. Plaatshouders {z}, {x}, {y}. Leeg = Esri default (gratis). Voorbeeld MapTiler: https://api.maptiler.com/tiles/satellite-v2/{z}/{x}/{y}.jpg?key=JOUW_KEY",
     map3d_editor_sat_maxzoom: "Satelliet max. preload-zoom (12-15)",
@@ -5311,6 +5317,7 @@ class BoschEBike3DMapCard extends HTMLElement {
       smooth_window: 15, track_smooth_window: 3, playback_speed: 60,
       terrain_exaggeration: 1.5,
       satellite_tile_url: "", satellite_max_zoom: 14,
+      north_up: 0,
       show_date: 1, show_time: 1, show_sun: 1,
       show_speed: 1, show_distance: 1, show_elevation: 1,
       stats_as_chips: 0,
@@ -6351,7 +6358,9 @@ class BoschEBike3DMapCard extends HTMLElement {
       // every frame regardless of terrain elevation under it. So the
       // marker never drifts off the track, and MapLibre's render lag
       // (if any) affects marker and world tiles equally - they stay
-      // visually locked.
+      // visually locked. A child arrow rotates in north-up mode to
+      // indicate travel direction; in bearing-follow mode the arrow
+      // stays at 0 (pointing screen-up = forward).
       const el = document.createElement("div");
       el.className = "ebike-3d-marker";
       el.style.cssText =
@@ -6360,6 +6369,23 @@ class BoschEBike3DMapCard extends HTMLElement {
         "background:#42c76a;border:5px solid #fff;" +
         "box-shadow:0 0 0 6px rgba(66,199,106,.35),0 4px 18px rgba(0,0,0,.65);" +
         "z-index:100;";
+      const arrow = document.createElement("div");
+      arrow.className = "ebike-3d-marker-arrow";
+      // White triangular pointer centred in the marker. transform-
+      // origin = centre so the arrow rotates around the bike's
+      // projected position, not its tip. translate(-50%,-58%) nudges
+      // the visual centre of mass up a hair so the tip lands on the
+      // green border, matching the bike's heading visually.
+      arrow.style.cssText =
+        "position:absolute;left:50%;top:50%;" +
+        "width:10px;height:10px;" +
+        "background:#fff;" +
+        "clip-path:polygon(50% 0%, 100% 100%, 50% 70%, 0% 100%);" +
+        "transform:translate(-50%,-58%) rotate(0deg);" +
+        "transform-origin:center;" +
+        "pointer-events:none;";
+      el.appendChild(arrow);
+      this._markerArrowEl = arrow;
       this._marker = new mlib.Marker({ element: el, anchor: "center" })
         .setLngLat([pts[0].lon, pts[0].lat])
         .addTo(myMap);
@@ -6777,19 +6803,30 @@ class BoschEBike3DMapCard extends HTMLElement {
     // elevation changes as DEM tiles refine.
     if (this._map && this._map.loaded()) {
       try {
-        const bearing = this._bearingAtFractional(clamped);
+        const travelBearing = this._bearingAtFractional(clamped);
+        // North-up mode: lock the map bearing to 0 (north stays up)
+        // and rotate the marker's arrow child to indicate travel
+        // direction instead. The relative arrow rotation = travel
+        // bearing minus map bearing, which collapses to 0 in the
+        // default mode and to the travel bearing in north-up mode.
+        const northUp = this._optionOn("north_up", false);
+        const mapBearing = northUp ? 0 : travelBearing;
         const offY = this._chaseLookAhead != null ? this._chaseLookAhead : 30;
         const camera = {
           center: [this._dispLon, this._dispLat],
           zoom: this._chaseZoom != null ? this._chaseZoom : 17,
           pitch: this._chasePitch != null ? this._chasePitch : 55,
-          bearing,
+          bearing: mapBearing,
           offset: [0, offY],
         };
         if (isInitial) {
           this._map.easeTo({ ...camera, duration: 900 });
         } else {
           this._map.jumpTo(camera);
+        }
+        if (this._markerArrowEl) {
+          const rel = ((travelBearing - mapBearing) % 360 + 360) % 360;
+          this._markerArrowEl.style.transform = `translate(-50%,-58%) rotate(${rel}deg)`;
         }
       } catch (e) { console.warn("[Bosch eBike 3D] chase-cam update failed", e); }
     }
@@ -7431,6 +7468,7 @@ class BoschEBike3DMapCardEditor extends HTMLElement {
       terrain_exaggeration: mkText("terrain_exaggeration", "map3d_editor_terrain_exag", "map3d_editor_terrain_exag_hint", "number"),
       satellite_tile_url: mkText("satellite_tile_url", "map3d_editor_sat_url", "map3d_editor_sat_url_hint", "text"),
       satellite_max_zoom: mkText("satellite_max_zoom", "map3d_editor_sat_maxzoom", "map3d_editor_sat_maxzoom_hint", "number"),
+      north_up: mkText("north_up", "map3d_editor_north_up", "map3d_editor_north_up_hint", "number"),
       animate_seconds: mkText("animate_seconds", "map3d_editor_animate_seconds", "map3d_editor_animate_seconds_override_hint", "number"),
       account_id: mkText("account_id", "map3d_editor_account", null, "text"),
       bike_id: mkText("bike_id", "map3d_editor_bike", null, "text"),
