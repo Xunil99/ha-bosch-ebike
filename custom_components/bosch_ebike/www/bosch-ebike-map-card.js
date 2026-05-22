@@ -3448,17 +3448,24 @@ ${trackPoints}
   }
 
   // Öffnet die aktuell selektierte Tour als Chase-Cam-Wiedergabe in
-  // einem Vollbild-Overlay. Bauen erzeugt eine bosch-ebike-3d-map-card-
+  // einem Vollbild-Overlay. Erzeugt eine bosch-ebike-3d-map-card-
   // Instanz, gibt ihr das passende Bike/Account-Filter mit (damit der
   // Back-Button die richtige Liste zeigt) und ruft openActivity() -
   // die Card skipt damit ihre List-View und geht direkt in den Detail-
-  // (Playback-)Modus. Alle Features der 3D-Card (2D/3D/Sat, Slider,
-  // Nord-Fix, Vollbild-Toggle) stehen darin zur Verfügung.
+  // (Playback-)Modus.
+  //
+  // Anschließend wird sofort die Browser-Fullscreen-API auf der Card
+  // angefordert: ihre interne Höhe ist auf var(--m3d-h, 540px)
+  // begrenzt, weil sie eigentlich als Lovelace-Card gebaut ist; erst
+  // der :fullscreen-Pfad triggert die Flex-Chain, die das Canvas auf
+  // 100vh ausdehnt. Der Call muss SYNCHRON im Klick-Event passieren,
+  // sonst lehnt Safari requestFullscreen ohne User-Gesture ab. Falls
+  // die native API nicht verfügbar ist (iOS WKWebView), springt der
+  // CSS-Pseudo-Fullscreen-Fallback der Card ein.
   _openChaseCam() {
     const activity = this._activities && this._activities[this._idx];
     if (!activity || !activity.id) return;
 
-    // Falls schon ein Overlay offen: erst altes schließen.
     this._closeChaseCam();
 
     const overlay = document.createElement("div");
@@ -3486,39 +3493,67 @@ ${trackPoints}
     const card = document.createElement("bosch-ebike-3d-map-card");
     card.style.cssText = "flex:1;min-height:0;display:block;";
 
-    // Filter durchreichen: wenn der User in der 2D-Card einen Account/
-    // Bike-Filter aktiv hat, soll die List-View dahinter ebenfalls
-    // gefiltert sein (Back-Button-Verhalten konsistent halten).
     const cfg = { height: 540 };
     if (this._filterAccount && this._filterAccount !== "all") cfg.account_id = this._filterAccount;
     if (this._filterBike && this._filterBike !== "all") cfg.bike_id = this._filterBike;
     card.setConfig(cfg);
-    card.hass = this._hass;
 
-    // Direkt in die Tour springen (skipt die List-View).
+    // Overlay zuerst in den DOM, damit die Card im Connect-Lifecycle
+    // schon weiß, wo sie hängt - der :fullscreen-Pfad inspectet
+    // die DOM-Position.
+    document.body.appendChild(overlay);
+    document.body.style.overflow = "hidden";
+    overlay.appendChild(card);
+
+    card.hass = this._hass;
     card.openActivity({ id: activity.id, accountId: activity.accountId });
 
-    // Escape schließt das Overlay zusätzlich zum eigenen X-Button.
+    // Listener für fullscreenchange installieren, BEVOR wir den
+    // Fullscreen-Request feuern - sonst kann der Card-interne Handler
+    // den 'wir sind jetzt FS'-Zustand verpassen, der u. a. das
+    // Icon-Update und map.resize() triggert.
+    try {
+      if (typeof card._ensureFullscreenListener === "function") {
+        card._ensureFullscreenListener();
+      }
+    } catch (_) { /* ignore */ }
+
+    // Auto-Fullscreen: SYNCHRON im Click-Handler, damit Safari den
+    // User-Gesture als gültig akzeptiert. _toggleFullscreen der Card
+    // wrapt requestFullscreen + CSS-Pseudo-Fallback.
+    try {
+      if (typeof card._toggleFullscreen === "function") {
+        card._toggleFullscreen();
+      }
+    } catch (e) {
+      console.warn("[Bosch eBike] chase-cam auto-fullscreen failed", e);
+    }
+
+    // Wenn der User per Escape den Browser-Fullscreen verlässt, soll
+    // NICHT direkt darauf das Overlay zugemacht werden (Escape hat
+    // schon einen Effekt). Wir tracken über den fullscreenchange-Event
+    // ein kurzes Zeitfenster, in dem der nachfolgende Escape-keydown
+    // ignoriert wird. Der zweite Escape schließt dann das Overlay.
+    this._chaseFsExitedAt = 0;
+    this._chaseFsChangeHandler = () => {
+      const inFs = document.fullscreenElement === card
+        || document.webkitFullscreenElement === card;
+      if (!inFs) this._chaseFsExitedAt = Date.now();
+    };
+    document.addEventListener("fullscreenchange", this._chaseFsChangeHandler);
+    document.addEventListener("webkitfullscreenchange", this._chaseFsChangeHandler);
+
     this._chaseEscHandler = (ev) => {
       if (ev.key !== "Escape") return;
-      // Wenn die 3D-Card gerade selbst im Fullscreen ist, NICHT
-      // doppelt schließen - der Escape geht dann an die Card und
-      // bringt sie aus dem Browser-Fullscreen. Erst beim zweiten
-      // Escape kommt das Overlay weg.
-      if (document.fullscreenElement || document.webkitFullscreenElement) return;
+      const inFs = document.fullscreenElement || document.webkitFullscreenElement;
+      if (inFs) return;   // Browser kümmert sich selbst um den FS-Exit
+      if (Date.now() - this._chaseFsExitedAt < 400) return;   // gerade erst FS verlassen
       this._closeChaseCam();
     };
     document.addEventListener("keydown", this._chaseEscHandler);
 
-    document.body.appendChild(overlay);
-    document.body.style.overflow = "hidden";
     this._chaseOverlay = overlay;
     this._chaseCard = card;
-
-    // Card erst NACH dem appendChild ans Overlay hängen, damit ihre
-    // Lifecycle-Hooks (connectedCallback, set hass) erst greifen, wenn
-    // die DOM-Position stabil ist.
-    overlay.appendChild(card);
   }
 
   _closeChaseCam() {
@@ -3526,6 +3561,23 @@ ${trackPoints}
       document.removeEventListener("keydown", this._chaseEscHandler);
       this._chaseEscHandler = null;
     }
+    if (this._chaseFsChangeHandler) {
+      document.removeEventListener("fullscreenchange", this._chaseFsChangeHandler);
+      document.removeEventListener("webkitfullscreenchange", this._chaseFsChangeHandler);
+      this._chaseFsChangeHandler = null;
+    }
+    // Falls die Card gerade noch im Browser-Fullscreen ist, zuerst
+    // ordentlich rausgehen - sonst meckert Chrome beim sofortigen
+    // DOM-Detach mit "fullscreen element removed".
+    try {
+      if (this._chaseCard && (
+        document.fullscreenElement === this._chaseCard
+        || document.webkitFullscreenElement === this._chaseCard
+      )) {
+        const exit = document.exitFullscreen || document.webkitExitFullscreen;
+        if (exit) exit.call(document);
+      }
+    } catch (_) { /* ignore */ }
     if (this._chaseOverlay) {
       try { this._chaseOverlay.remove(); } catch (_) {}
       this._chaseOverlay = null;
