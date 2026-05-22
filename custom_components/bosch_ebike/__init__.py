@@ -15,6 +15,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.storage import Store
 
 from .api import BoschEBikeAPI
 from .const import DOMAIN, CONF_CLIENT_ID
@@ -37,7 +38,21 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     websocket_api.async_register_command(hass, ws_update_maintenance)
     websocket_api.async_register_command(hass, ws_complete_maintenance)
     websocket_api.async_register_command(hass, ws_remove_maintenance)
+    websocket_api.async_register_command(hass, ws_get_card_settings)
+    websocket_api.async_register_command(hass, ws_set_card_settings)
     websocket_api.async_register_command(hass, ws_overpass_pois)
+
+    # Singleton Store für gemeinsame Darstellungs-Settings, die sowohl
+    # die 3D-Karte als auch die 2D-Karte (Chase-Cam-Overlay + Editor)
+    # verwenden. Ein Speicherort, beide Cards lesen + schreiben gegen
+    # diesen Store. Erspart YAML-Drift zwischen mehreren Card-Instanzen
+    # und macht 'Konfig einmal ändern, überall sichtbar' möglich.
+    domain_data = hass.data.setdefault(DOMAIN, {})
+    if "card_settings_store" not in domain_data:
+        store = Store(hass, 1, f"{DOMAIN}_card_settings")
+        loaded = await store.async_load() or {}
+        domain_data["card_settings_store"] = store
+        domain_data["card_settings"] = loaded if isinstance(loaded, dict) else {}
 
     _register_services(hass)
 
@@ -607,6 +622,67 @@ async def ws_remove_maintenance(
         connection.send_error(msg["id"], "not_found", f"Item {msg['item_id']} not found for bike {bike_id}")
         return
     connection.send_result(msg["id"], {"ok": True})
+
+
+@websocket_api.websocket_command(
+    {vol.Required("type"): "bosch_ebike/get_card_settings"}
+)
+@websocket_api.async_response
+async def ws_get_card_settings(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict
+) -> None:
+    """Return the shared card-settings dict (display + playback options)."""
+    settings = hass.data.get(DOMAIN, {}).get("card_settings", {}) or {}
+    connection.send_result(msg["id"], {"settings": settings})
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "bosch_ebike/set_card_settings",
+        # Accept arbitrary key/value pairs. We validate the keys against an
+        # allow-list below to keep the storage clean.
+        vol.Required("changes"): dict,
+    }
+)
+@websocket_api.async_response
+async def ws_set_card_settings(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict
+) -> None:
+    """Merge changes into the shared card-settings store.
+
+    Keys with a value of ``None`` are removed from the store; non-None
+    values are upserted. The allow-list constrains which keys may be
+    written so a misbehaving card cannot stuff arbitrary junk into the
+    file. Editor UIs always send keys from this list anyway.
+    """
+    allowed = {
+        "playback_speed", "animate_seconds",
+        "default_pitch", "chase_zoom", "chase_lookahead",
+        "smooth_window", "track_smooth_window",
+        "terrain_exaggeration", "satellite_tile_url", "satellite_max_zoom",
+        "north_up",
+        "show_date", "show_time", "show_sun",
+        "show_speed", "show_distance", "show_elevation",
+        "stats_as_chips",
+        # 2D-Card-spezifische gemeinsame Defaults (optional, derzeit
+        # nicht aktiv genutzt - Platzhalter für künftige Erweiterungen):
+        "default_map_style",
+    }
+    domain_data = hass.data.setdefault(DOMAIN, {})
+    settings = dict(domain_data.get("card_settings", {}) or {})
+    changes = msg.get("changes") or {}
+    for key, value in changes.items():
+        if key not in allowed:
+            continue
+        if value is None:
+            settings.pop(key, None)
+        else:
+            settings[key] = value
+    domain_data["card_settings"] = settings
+    store = domain_data.get("card_settings_store")
+    if store is not None:
+        await store.async_save(settings)
+    connection.send_result(msg["id"], {"settings": settings})
 
 
 # -- Service handlers --

@@ -33,6 +33,8 @@ const I18N = {
     btn_poi: "Charging stations, repair shops, drinking water, toilets",
     btn_gpx: "Download GPX",
     btn_chase: "Chase-cam playback",
+    editor_chase_section: "Chase-cam playback (shared)",
+    editor_chase_section_hint: "These settings are stored centrally in Home Assistant. Changing them here also affects the 3D map card and any chase-cam playback opened from this card.",
     btn_fullscreen: "Fullscreen",
     btn_prev: "Previous ride",
     btn_next: "Next ride",
@@ -301,6 +303,8 @@ const I18N = {
     btn_poi: "Ladestationen, Werkstätten, Trinkwasser, Toiletten",
     btn_gpx: "GPX herunterladen",
     btn_chase: "Chase-Cam-Wiedergabe",
+    editor_chase_section: "Chase-Cam-Wiedergabe (geteilt)",
+    editor_chase_section_hint: "Diese Einstellungen werden zentral in Home Assistant gespeichert. Änderungen hier wirken auch auf die 3D-Karte und jede Chase-Cam-Wiedergabe, die aus dieser Karte heraus geöffnet wird.",
     btn_fullscreen: "Vollbild",
     btn_prev: "Vorherige Fahrt",
     btn_next: "Nächste Fahrt",
@@ -559,6 +563,8 @@ const I18N = {
     btn_poi: "Laadstations, werkplaatsen, drinkwater, toiletten",
     btn_gpx: "GPX downloaden",
     btn_chase: "Chase-cam afspelen",
+    editor_chase_section: "Chase-cam afspelen (gedeeld)",
+    editor_chase_section_hint: "Deze instellingen worden centraal in Home Assistant opgeslagen. Wijzigingen hier zijn ook van toepassing op de 3D-kaart en elke chase-cam-afspeelweergave die vanuit deze kaart wordt geopend.",
     btn_fullscreen: "Volledig scherm",
     btn_prev: "Vorige rit",
     btn_next: "Volgende rit",
@@ -1011,6 +1017,75 @@ const FUEL_DEFAULT_PRICE = {
   ev: 0.35,
   none: 0,
 };
+
+// ===========================================================================
+// Geteilte Card-Settings (Single Source of Truth in HA-Storage)
+// ---------------------------------------------------------------------------
+// Beide Cards (2D-Map-Card und 3D-Map-Card) lesen die Playback-/Darstellungs-
+// Einstellungen aus EINEM HA-Storage-Slot. Schreiben über die Editor-UI gehen
+// per WebSocket zurück in den Store. Cache + EventTarget-Bus auf Modul-Ebene,
+// damit beide Card-Instanzen auf derselben Page sich Änderungen mitteilen,
+// ohne dass jeder ein eigenes WS-Polling braucht.
+//
+// Lese-Cascade pro Key:
+//   1. Shared Storage  (vom User per Editor gesetzt, gewinnt immer)
+//   2. Card-YAML       (Per-Instanz-Override, falls jemand YAML schreibt)
+//   3. Hardcoded-Default (vom Aufrufer übergeben)
+// ===========================================================================
+const SHARED_SETTING_KEYS = [
+  "playback_speed", "animate_seconds",
+  "default_pitch", "chase_zoom", "chase_lookahead",
+  "smooth_window", "track_smooth_window",
+  "terrain_exaggeration", "satellite_tile_url", "satellite_max_zoom",
+  "north_up",
+  "show_date", "show_time", "show_sun",
+  "show_speed", "show_distance", "show_elevation",
+  "stats_as_chips",
+];
+
+const _cardSettingsCache = { data: null };   // null = noch nicht geladen
+const _cardSettingsBus = new EventTarget();
+
+async function ensureCardSettingsLoaded(hass) {
+  if (_cardSettingsCache.data != null) return _cardSettingsCache.data;
+  if (!hass) return {};
+  try {
+    const res = await hass.callWS({ type: "bosch_ebike/get_card_settings" });
+    _cardSettingsCache.data = (res && res.settings) || {};
+  } catch (err) {
+    console.warn("[Bosch eBike] get_card_settings failed:", err?.message || err);
+    _cardSettingsCache.data = {};
+  }
+  return _cardSettingsCache.data;
+}
+
+async function saveCardSetting(hass, key, value) {
+  if (!hass || !SHARED_SETTING_KEYS.includes(key)) return;
+  try {
+    const res = await hass.callWS({
+      type: "bosch_ebike/set_card_settings",
+      changes: { [key]: value },
+    });
+    _cardSettingsCache.data = (res && res.settings) || _cardSettingsCache.data || {};
+    _cardSettingsBus.dispatchEvent(new Event("changed"));
+  } catch (err) {
+    console.warn("[Bosch eBike] set_card_settings failed:", err?.message || err);
+  }
+}
+
+// Lookup mit Cascade: shared store > local card config > fallback.
+// Wenn der shared store noch nicht geladen ist (data === null), liefert
+// der Helfer den Card-Config-Wert bzw. fallback - die Card wird einmal
+// neu gerendert, sobald ensureCardSettingsLoaded resolved und der Bus
+// fires.
+function readCardSetting(localConfig, key, fallback) {
+  const shared = _cardSettingsCache.data || {};
+  if (shared[key] != null && shared[key] !== "") return shared[key];
+  if (localConfig && localConfig[key] != null && localConfig[key] !== "") {
+    return localConfig[key];
+  }
+  return fallback;
+}
 
 const MAPLIBRE_JS = "https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.js";
 const MAPLIBRE_CSS = "https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.css";
@@ -4446,6 +4521,27 @@ class BoschEBikeMapCardEditor extends HTMLElement {
       <label style="${labelStyle}">${t("editor_poi_radius")}</label>
       <select id="poi-radius-in" style="${inputStyle}">${poiRadiusOpts}</select>
       <span style="${hintStyle}">${t("editor_poi_radius_hint")}</span>
+
+      <div style="margin-top:18px;padding-top:14px;border-top:1px solid var(--divider-color);">
+        <div style="font-weight:600;color:var(--primary-text-color);font-size:13px;">
+          ${t("editor_chase_section")}
+        </div>
+        <div style="font-size:11px;color:var(--secondary-text-color);margin-top:2px;line-height:1.4;">
+          ${t("editor_chase_section_hint")}
+        </div>
+      </div>
+
+      ${this._renderSharedField("playback_speed", "map3d_editor_playback_speed", "map3d_editor_playback_speed_hint", "number", inputStyle, labelStyle, hintStyle)}
+      ${this._renderSharedField("animate_seconds", "map3d_editor_animate_seconds", "map3d_editor_animate_seconds_override_hint", "number", inputStyle, labelStyle, hintStyle)}
+      ${this._renderSharedField("default_pitch", "map3d_editor_default_pitch", "map3d_editor_default_pitch_hint", "number", inputStyle, labelStyle, hintStyle)}
+      ${this._renderSharedField("chase_zoom", "map3d_editor_chase_zoom", "map3d_editor_chase_zoom_hint", "number", inputStyle, labelStyle, hintStyle)}
+      ${this._renderSharedField("chase_lookahead", "map3d_editor_chase_lookahead", "map3d_editor_chase_lookahead_hint", "number", inputStyle, labelStyle, hintStyle)}
+      ${this._renderSharedField("smooth_window", "map3d_editor_smooth_window", "map3d_editor_smooth_window_hint", "number", inputStyle, labelStyle, hintStyle)}
+      ${this._renderSharedField("track_smooth_window", "map3d_editor_track_smooth", "map3d_editor_track_smooth_hint", "number", inputStyle, labelStyle, hintStyle)}
+      ${this._renderSharedField("terrain_exaggeration", "map3d_editor_terrain_exag", "map3d_editor_terrain_exag_hint", "number", inputStyle, labelStyle, hintStyle)}
+      ${this._renderSharedField("satellite_max_zoom", "map3d_editor_sat_maxzoom", "map3d_editor_sat_maxzoom_hint", "number", inputStyle, labelStyle, hintStyle)}
+      ${this._renderSharedField("satellite_tile_url", "map3d_editor_sat_url", "map3d_editor_sat_url_hint", "text", inputStyle, labelStyle, hintStyle)}
+      ${this._renderSharedField("north_up", "map3d_editor_north_up", "map3d_editor_north_up_hint", "number", inputStyle, labelStyle, hintStyle)}
     </div>`;
 
     this.querySelector("#h-in").addEventListener("change", (e) => {
@@ -4490,6 +4586,76 @@ class BoschEBikeMapCardEditor extends HTMLElement {
       else delete this._config.poi_radius_m;
       this._emit();
     });
+
+    // Shared playback fields: einmal hass-Settings nachladen, dann
+    // Werte in die Inputs schreiben + Listener mit Debounce-Save.
+    this._wireSharedFields();
+    if (!this._sharedSettingsHandler) {
+      this._sharedSettingsHandler = () => this._syncSharedFields();
+      _cardSettingsBus.addEventListener("changed", this._sharedSettingsHandler);
+    }
+    ensureCardSettingsLoaded(this._hass).then(() => this._syncSharedFields()).catch(() => {});
+  }
+
+  disconnectedCallback() {
+    if (this._sharedSettingsHandler) {
+      _cardSettingsBus.removeEventListener("changed", this._sharedSettingsHandler);
+      this._sharedSettingsHandler = null;
+    }
+    if (this._sharedSaveTimers) {
+      for (const t of this._sharedSaveTimers.values()) clearTimeout(t);
+      this._sharedSaveTimers.clear();
+    }
+  }
+
+  // Baut einen Block <label> + <input> für ein Shared-Setting. Wird im
+  // _render-Template per Tag-Literal aufgerufen, daher reicht Markup
+  // ohne Listener-Binding - das passiert nach dem innerHTML in
+  // _wireSharedFields.
+  _renderSharedField(key, labelKey, hintKey, type, inputStyle, labelStyle, hintStyle) {
+    const t = (k) => ebT(this._hass, k);
+    const id = `cs-${key}`;
+    const hintHtml = hintKey ? `<span style="${hintStyle}">${this._escapeHtml(t(hintKey))}</span>` : "";
+    const step = type === "number" ? ' step="any"' : "";
+    return `
+      <label style="${labelStyle}">${this._escapeHtml(t(labelKey))}</label>
+      <input type="${type}"${step} id="${id}" data-shared-key="${key}" data-shared-type="${type}" style="${inputStyle}">
+      ${hintHtml}
+    `;
+  }
+
+  _wireSharedFields() {
+    if (!this._sharedSaveTimers) this._sharedSaveTimers = new Map();
+    const inputs = this.querySelectorAll("[data-shared-key]");
+    for (const input of inputs) {
+      const key = input.dataset.sharedKey;
+      const type = input.dataset.sharedType;
+      input.addEventListener("input", () => {
+        const v = input.value;
+        if (this._sharedSaveTimers.has(key)) clearTimeout(this._sharedSaveTimers.get(key));
+        this._sharedSaveTimers.set(key, setTimeout(() => {
+          this._sharedSaveTimers.delete(key);
+          const value = v === "" || v == null ? null
+            : (type === "number" ? Number(v) : v);
+          saveCardSetting(this._hass, key, value);
+        }, 400));
+      });
+    }
+    this._syncSharedFields();
+  }
+
+  // Werte aus dem Storage in die Shared-Inputs schreiben, ohne
+  // fokussierte Felder anzufassen (sonst springt der Cursor). Wird
+  // sowohl beim Initial-Load gerufen als auch vom Bus, wenn ein
+  // anderes Card-Setting-UI etwas geändert hat.
+  _syncSharedFields() {
+    const inputs = this.querySelectorAll("[data-shared-key]");
+    for (const input of inputs) {
+      if (document.activeElement === input) continue;
+      const key = input.dataset.sharedKey;
+      const v = readCardSetting(this._config, key, "");
+      input.value = v !== "" && v != null ? String(v) : "";
+    }
   }
 }
 
@@ -6659,6 +6825,10 @@ class BoschEBike3DMapCard extends HTMLElement {
       this.classList.remove("map3d-pseudo-fs");
       document.body.style.overflow = "";
     }
+    if (this._cardSettingsHandler) {
+      _cardSettingsBus.removeEventListener("changed", this._cardSettingsHandler);
+      this._cardSettingsHandler = null;
+    }
   }
 
   static getConfigElement() { return document.createElement("bosch-ebike-3d-map-card-editor"); }
@@ -6691,6 +6861,16 @@ class BoschEBike3DMapCard extends HTMLElement {
       this._ready = true;
       this._applyHeight();
       this._showMessage(this._t("map3d_loading"));
+      // Shared Card-Settings laden, BEVOR irgendwas gerendert wird -
+      // sonst kommt der erste Render mit YAML-Defaults und die Shared-
+      // Werte werden erst beim nächsten Bus-Event übernommen. Subscribe
+      // läuft so lange, wie die Card im DOM hängt.
+      try { await ensureCardSettingsLoaded(this._hass); } catch (_) {}
+      this._cardSettingsHandler = () => {
+        try { this._applyHeight(); } catch (_) {}
+        try { this._renderRoot(); } catch (_) {}
+      };
+      _cardSettingsBus.addEventListener("changed", this._cardSettingsHandler);
       try {
         const res = await this._hass.callWS({ type: "bosch_ebike/list_instances" });
         this._instances = res.instances || [];
@@ -7117,7 +7297,7 @@ class BoschEBike3DMapCard extends HTMLElement {
       // marker, bearings and distance counter use a smoothed copy to
       // damp GPS jitter and avoid motion sickness during playback.
       this._rawTrack = pts;
-      const wRaw = this._config.track_smooth_window;
+      const wRaw = readCardSetting(this._config, "track_smooth_window", undefined);
       const w = Number.isFinite(Number(wRaw)) && wRaw !== "" && wRaw !== null
         ? Math.max(0, Math.min(15, Number(wRaw))) : 3;
       this._currentTrack = this._smoothTrackPositions(pts, w);
@@ -7423,12 +7603,12 @@ class BoschEBike3DMapCard extends HTMLElement {
   }
 
   _satelliteTemplate() {
-    const cfg = String(this._config.satellite_tile_url || "").trim();
+    const cfg = String(readCardSetting(this._config, "satellite_tile_url", "") || "").trim();
     return cfg || DEFAULT_SATELLITE_TEMPLATE;
   }
 
   _satelliteMaxZoom() {
-    const raw = Number(this._config.satellite_max_zoom);
+    const raw = Number(readCardSetting(this._config, "satellite_max_zoom", undefined));
     if (!Number.isFinite(raw)) return 14;
     return Math.max(12, Math.min(15, Math.floor(raw)));
   }
@@ -7498,7 +7678,7 @@ class BoschEBike3DMapCard extends HTMLElement {
         tileSize: 256, minzoom: 0, maxzoom: 12,
       });
     }
-    const exag = Math.max(1.0, Math.min(3.0, Number(this._config.terrain_exaggeration) || 1.5));
+    const exag = Math.max(1.0, Math.min(3.0, Number(readCardSetting(this._config, "terrain_exaggeration", undefined)) || 1.5));
     map.setTerrain({ source: "ebike-dem", exaggeration: exag });
     this._hideBuildingsAndShadows();
   }
@@ -7645,10 +7825,11 @@ class BoschEBike3DMapCard extends HTMLElement {
     return 0;
   }
 
-  // Resolve an overlay-visibility flag from config. Truthy by default;
-  // only an explicit 0 / "0" / false / "false" / "off" disables.
+  // Resolve an overlay-visibility flag. Cascade: shared HA-Storage >
+  // card YAML > "default on". Truthy by default; only an explicit 0 /
+  // "0" / false / "false" / "off" disables.
   _showFlag(key) {
-    const v = this._config[key];
+    const v = readCardSetting(this._config, key, undefined);
     if (v === undefined || v === null || v === "") return true;
     return !(v === 0 || v === "0" || v === false || v === "false" || v === "off");
   }
@@ -7656,7 +7837,7 @@ class BoschEBike3DMapCard extends HTMLElement {
   // Like _showFlag but with an explicit default (used for options that
   // should be OFF unless the user opts in).
   _optionOn(key, defaultOn) {
-    const v = this._config[key];
+    const v = readCardSetting(this._config, key, undefined);
     if (v === undefined || v === null || v === "") return !!defaultOn;
     return !(v === 0 || v === "0" || v === false || v === "false" || v === "off");
   }
@@ -7849,8 +8030,8 @@ class BoschEBike3DMapCard extends HTMLElement {
     const canvas = this._root.querySelector("#m3d-canvas");
     // Chase-cam: pitch ~55° (looking forward over the bike) and zoom ~17
     // (about 100 m of road visible ahead). User can override via config.
-    const chasePitch = Math.max(20, Math.min(65, Number(this._config.default_pitch) || 55));
-    const chaseZoom = Math.max(14, Math.min(19, Number(this._config.chase_zoom) || 17));
+    const chasePitch = Math.max(20, Math.min(65, Number(readCardSetting(this._config, "default_pitch", undefined)) || 55));
+    const chaseZoom = Math.max(14, Math.min(19, Number(readCardSetting(this._config, "chase_zoom", undefined)) || 17));
     this._chasePitch = chasePitch;
     this._chaseZoom = chaseZoom;
 
@@ -7870,7 +8051,7 @@ class BoschEBike3DMapCard extends HTMLElement {
     // value -> bike sits lower, more sky/road ahead visible. Range
     // kept compatible with the previous metre-based config to avoid
     // breaking existing user setups; 30 still works as a good default.
-    const lookAheadPx = Math.max(0, Math.min(200, Number(this._config.chase_lookahead) || 30));
+    const lookAheadPx = Math.max(0, Math.min(200, Number(readCardSetting(this._config, "chase_lookahead", undefined)) || 30));
     this._chaseLookAhead = lookAheadPx;
     this._currentIndex = 0;
     // Local capture: 'myMap' is THIS init's map. Use it instead of
@@ -8025,7 +8206,7 @@ class BoschEBike3DMapCard extends HTMLElement {
     raw[pts.length - 1] = raw[pts.length - 2] != null ? raw[pts.length - 2] : 0;
 
     // Wider window = smoother camera but corners are taken wider.
-    const W = Math.max(1, Math.min(60, Number(this._config.smooth_window) || 15));
+    const W = Math.max(1, Math.min(60, Number(readCardSetting(this._config, "smooth_window", undefined)) || 15));
     const smoothed = new Array(raw.length);
     const rad = Math.PI / 180;
     for (let i = 0; i < raw.length; i++) {
@@ -8521,13 +8702,12 @@ class BoschEBike3DMapCard extends HTMLElement {
   //      means 1 h of riding becomes 1 min of playback. Clamped to
   //      [2 s, 10 min] so absurd configs do not produce unusable values.
   _playbackDurationMs() {
-    const cfg = this._config || {};
-    if (cfg.animate_seconds != null && cfg.animate_seconds !== "" &&
-        Number.isFinite(Number(cfg.animate_seconds))) {
-      const fixed = Math.max(2, Number(cfg.animate_seconds));
+    const animSec = readCardSetting(this._config, "animate_seconds", undefined);
+    if (animSec != null && animSec !== "" && Number.isFinite(Number(animSec))) {
+      const fixed = Math.max(2, Number(animSec));
       return fixed * 1000;
     }
-    const factor = Math.max(1, Number(cfg.playback_speed) || 60);
+    const factor = Math.max(1, Number(readCardSetting(this._config, "playback_speed", undefined)) || 60);
     const tourSec = this._tourDurationSec(this._currentActivity);
     const ms = tourSec > 0 ? (tourSec * 1000) / factor : 25000;
     return Math.max(2000, Math.min(600000, ms));
@@ -8993,9 +9173,34 @@ class BoschEBike3DMapCardEditor extends HTMLElement {
     this._hass = null;
     this._config = {};
     this._built = false;
+    // Debouncer-Timer pro Shared-Setting-Key, damit jeder Keystroke
+    // im Number-/Text-Field nicht direkt einen WebSocket-Call auslöst.
+    this._sharedSaveTimers = new Map();
   }
   setConfig(config) { this._config = { ...config }; if (this._built) this._sync(); }
-  set hass(hass) { this._hass = hass; if (!this._built) this._build(); }
+  set hass(hass) {
+    const first = !this._hass;
+    this._hass = hass;
+    if (!this._built) this._build();
+    if (first) {
+      // Shared Settings nachladen, sobald hass da ist - dann Inputs
+      // mit den richtigen Werten überschreiben.
+      ensureCardSettingsLoaded(hass).then(() => this._sync()).catch(() => {});
+    }
+    if (!this._sharedSettingsHandler) {
+      this._sharedSettingsHandler = () => this._sync();
+      _cardSettingsBus.addEventListener("changed", this._sharedSettingsHandler);
+    }
+  }
+
+  disconnectedCallback() {
+    if (this._sharedSettingsHandler) {
+      _cardSettingsBus.removeEventListener("changed", this._sharedSettingsHandler);
+      this._sharedSettingsHandler = null;
+    }
+    for (const t of this._sharedSaveTimers.values()) clearTimeout(t);
+    this._sharedSaveTimers.clear();
+  }
   _t(key) {
     const lang = (this._hass && this._hass.language) ? this._hass.language.split("-")[0] : "en";
     const dict = (I18N && I18N[lang]) || I18N.en;
@@ -9027,6 +9232,12 @@ class BoschEBike3DMapCardEditor extends HTMLElement {
       return input;
     };
 
+    // Shared-Keys schreiben ins HA-Storage statt in die Card-YAML,
+    // damit Änderungen in der 3D-Card-UI auch in der 2D-Card-Chase-Cam
+    // sichtbar werden. Non-Shared-Keys (title, height, account_id,
+    // bike_id) gehen wie gehabt per config-changed-Event an Lovelace.
+    const isShared = (k) => SHARED_SETTING_KEYS.includes(k);
+
     const mkText = (key, labelKey, hintKey, type) => {
       const i = mkLabeled(labelKey, hintKey, () => {
         const el = document.createElement("input");
@@ -9034,13 +9245,36 @@ class BoschEBike3DMapCardEditor extends HTMLElement {
         el.style.cssText = "padding:8px;border-radius:4px;border:1px solid var(--divider-color);background:var(--card-background-color);color:var(--primary-text-color);";
         return el;
       });
-      i.value = this._config[key] != null ? this._config[key] : "";
+      const initial = isShared(key)
+        ? readCardSetting(this._config, key, "")
+        : (this._config[key] != null ? this._config[key] : "");
+      i.value = initial !== "" && initial != null ? String(initial) : "";
       i.addEventListener("input", () => {
         const v = i.value;
-        if (v === "" || v == null) delete this._config[key];
-        else if (i.type === "number") this._config[key] = Number(v);
-        else this._config[key] = v;
-        this._emit();
+        if (isShared(key)) {
+          // Debounced WS-Save. 400 ms ist konsistent mit dem Maintenance-
+          // Editor; verhindert dass jeder Tastendruck ein WS-Roundtrip
+          // ist und gleichzeitig dass die UI träge wirkt.
+          if (this._sharedSaveTimers.has(key)) clearTimeout(this._sharedSaveTimers.get(key));
+          this._sharedSaveTimers.set(key, setTimeout(() => {
+            this._sharedSaveTimers.delete(key);
+            const value = v === "" || v == null ? null
+              : (type === "number" ? Number(v) : v);
+            // Zusätzlich aus der Card-YAML entfernen, damit das Lovelace-
+            // Editor nicht weiter die alten Werte als "Override" hält und
+            // keine Drift zwischen Storage und YAML entsteht.
+            if (this._config[key] != null) {
+              delete this._config[key];
+              this._emit();
+            }
+            saveCardSetting(this._hass, key, value);
+          }, 400));
+        } else {
+          if (v === "" || v == null) delete this._config[key];
+          else if (type === "number") this._config[key] = Number(v);
+          else this._config[key] = v;
+          this._emit();
+        }
       });
       return i;
     };
@@ -9086,7 +9320,13 @@ class BoschEBike3DMapCardEditor extends HTMLElement {
   _sync() {
     if (!this._fields) return;
     for (const [k, el] of Object.entries(this._fields)) {
-      el.value = this._config[k] != null ? this._config[k] : "";
+      // Fokussierte Eingaben nicht überschreiben - der User tippt
+      // gerade und der Bus-Echo würde den Cursor wegspringen lassen.
+      if (document.activeElement === el) continue;
+      const v = SHARED_SETTING_KEYS.includes(k)
+        ? readCardSetting(this._config, k, "")
+        : (this._config[k] != null ? this._config[k] : "");
+      el.value = v !== "" && v != null ? String(v) : "";
     }
   }
 }
