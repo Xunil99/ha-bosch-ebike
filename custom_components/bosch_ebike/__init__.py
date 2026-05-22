@@ -482,14 +482,22 @@ async def ws_list_maintenance(
             # lange wie sie zuletzt vom Coordinator-Refresh aktualisiert
             # wurden - nach add/complete/update sehen wir bis zum
             # nächsten Refresh veraltete Werte.
+            #
+            # WICHTIG: _compute_maintenance_remaining erwartet DREI
+            # Argumente (item, current_odo, now). Ohne now wirft sie
+            # TypeError - die ich vorher mit except: pass verschluckt
+            # habe, sodass _remaining_* immer None blieb und das
+            # Dashboard alle Items als "nichts fällig" filterte.
+            from homeassistant.util import dt as dt_util
+            now = dt_util.utcnow()
             drive = bike.get("driveUnit") or {}
             current_odo = drive.get("odometer")
             items = []
             for item in bs.get("items", []):
                 try:
-                    coord._compute_maintenance_remaining(item, current_odo)
-                except Exception:  # noqa: BLE001
-                    pass
+                    coord._compute_maintenance_remaining(item, current_odo, now)
+                except Exception as e:  # noqa: BLE001
+                    _LOGGER.warning("compute_maintenance_remaining failed for %s: %s", item.get("id"), e)
                 items.append({
                     "id": item.get("id"),
                     "name": item.get("name"),
