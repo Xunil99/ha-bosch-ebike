@@ -477,14 +477,26 @@ async def ws_list_maintenance(
             if not bike_id:
                 continue
             bs = maintenance.get(bike_id, {})
+            # current_odo (meters) für die On-the-Fly-Neuberechnung der
+            # Rest-km / Rest-Tage. Sonst gelten _remaining_* nur so
+            # lange wie sie zuletzt vom Coordinator-Refresh aktualisiert
+            # wurden - nach add/complete/update sehen wir bis zum
+            # nächsten Refresh veraltete Werte.
+            drive = bike.get("driveUnit") or {}
+            current_odo = drive.get("odometer")
             items = []
             for item in bs.get("items", []):
+                try:
+                    coord._compute_maintenance_remaining(item, current_odo)
+                except Exception:  # noqa: BLE001
+                    pass
                 items.append({
                     "id": item.get("id"),
                     "name": item.get("name"),
                     "interval_km": item.get("interval_km"),
                     "interval_days": item.get("interval_days"),
                     "last_done_at": item.get("last_done_at"),
+                    "last_done_odometer": item.get("last_done_odometer"),
                     "remaining_km": item.get("_remaining_km"),
                     "remaining_days": item.get("_remaining_days"),
                 })
@@ -549,6 +561,12 @@ async def ws_add_maintenance(
         # Pass null explicitly to clear; omit to leave the existing value.
         vol.Optional("interval_km"): vol.Any(vol.All(vol.Coerce(float), vol.Range(min=0.1)), None),
         vol.Optional("interval_days"): vol.Any(vol.All(vol.Coerce(float), vol.Range(min=0.1)), None),
+        # ISO-8601 date or datetime, gespeichert wie es kommt; das Backend
+        # parsed beim Compute mit dt_util.parse_datetime, der mit beidem
+        # zurechtkommt. Frontend schickt YYYY-MM-DD vom <input type="date">.
+        vol.Optional("last_done_at"): str,
+        # Odometer in METERS - die Frontend-UI rechnet km -> m vor dem Senden.
+        vol.Optional("last_done_odometer"): vol.All(vol.Coerce(float), vol.Range(min=0)),
     }
 )
 @websocket_api.async_response
@@ -570,6 +588,8 @@ async def ws_update_maintenance(
         name=msg.get("name"),
         interval_km=msg.get("interval_km") if not clear_km else None,
         interval_days=msg.get("interval_days") if not clear_days else None,
+        last_done_at=msg.get("last_done_at"),
+        last_done_odometer=msg.get("last_done_odometer"),
         clear_interval_km=clear_km,
         clear_interval_days=clear_days,
     )

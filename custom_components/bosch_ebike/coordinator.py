@@ -820,6 +820,8 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         name: str | None = None,
         interval_km: float | None = None,
         interval_days: float | None = None,
+        last_done_at: str | None = None,
+        last_done_odometer: float | None = None,
         clear_interval_km: bool = False,
         clear_interval_days: bool = False,
     ) -> bool:
@@ -830,6 +832,10 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         an item from km-trigger to date-trigger (or vice versa). Passing
         ``None`` for a field means "leave unchanged"; passing a value
         replaces it; passing the clear flag sets it to None.
+
+        ``last_done_at`` ISO-8601 string, ``last_done_odometer`` meters - both
+        optional, used by the editor when the user wants to record "I did
+        this maintenance last week at km X" instead of "I just did this".
         """
         bs = self._bike_state(bike_id)
         for item in bs["items"]:
@@ -845,6 +851,14 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 item["interval_days"] = float(interval_days)
             elif clear_interval_days:
                 item["interval_days"] = None
+            if last_done_at is not None:
+                item["last_done_at"] = last_done_at
+            if last_done_odometer is not None:
+                item["last_done_odometer"] = float(last_done_odometer)
+                # Reset the warned-flags so an item that was overdue does
+                # not stay flagged after the user records a fresh service.
+                item["warned_due_soon"] = False
+                item["warned_overdue"] = False
             self.hass.async_create_task(self._async_save_state())
             return True
         return False

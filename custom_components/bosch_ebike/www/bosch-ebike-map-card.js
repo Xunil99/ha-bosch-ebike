@@ -5790,10 +5790,24 @@ class BoschEBikeDashboardCard extends HTMLElement {
   // Status aus dem vom Backend gelieferten remaining_km / remaining_days.
   // Reine Anzeige-Logik; die eigentliche Restberechnung passiert in
   // coordinator.py:_compute_maintenance_remaining.
+  //
+  // Wichtig: Number(null) === 0 und Number.isFinite(0) === true. Wir
+  // MÜSSEN daher explizit auf != null prüfen, sonst wird für ein
+  // Datums-Item mit remaining_km: null fälschlich der km-Pfad gewählt
+  // und der User sieht "Überfällig: 0 km" statt "in X Tagen".
+  // Außerdem nehmen wir bevorzugt den vorhandenen Interval-Typ:
+  // wenn das Item interval_days hat (also datumsbasiert ist), zeigen
+  // wir Tage - auch wenn ein verirrtes remaining_km mitkommen sollte.
   _maintStatus(m) {
     if (!m || !m.name) return null;
-    if (Number.isFinite(Number(m.remaining_km))) {
-      const remaining = Math.round(Number(m.remaining_km));
+    const hasKmInterval = m.interval_km != null && Number.isFinite(Number(m.interval_km));
+    const hasDayInterval = m.interval_days != null && Number.isFinite(Number(m.interval_days));
+    const remKm = m.remaining_km;
+    const remDays = m.remaining_days;
+    const useKm = hasKmInterval && remKm != null && Number.isFinite(Number(remKm));
+    const useDays = hasDayInterval && remDays != null && Number.isFinite(Number(remDays));
+    if (useKm && !useDays) {
+      const remaining = Math.round(Number(remKm));
       return {
         kind: "km",
         show: remaining <= 500,
@@ -5802,8 +5816,8 @@ class BoschEBikeDashboardCard extends HTMLElement {
         label: this._t("dash_maint_due_km", remaining),
       };
     }
-    if (Number.isFinite(Number(m.remaining_days))) {
-      const days = Math.round(Number(m.remaining_days));
+    if (useDays) {
+      const days = Math.round(Number(remDays));
       return {
         kind: "date",
         show: days <= 30,
@@ -6364,7 +6378,7 @@ class BoschEBikeDashboardCardEditor extends HTMLElement {
       ss.textContent = `
         .dash-ed-maint-row {
           display: grid;
-          grid-template-columns: minmax(140px,1fr) 100px 90px auto auto;
+          grid-template-columns: minmax(140px,1fr) 100px 90px 140px auto auto;
           gap: 8px; align-items: end;
           padding: 8px; border-radius: 8px;
           background: var(--secondary-background-color, #f4f6f8);
@@ -6601,6 +6615,42 @@ class BoschEBikeDashboardCardEditor extends HTMLElement {
     });
     intWrap.appendChild(intInput);
     row.appendChild(intWrap);
+
+    // -- Last done (km bzw. Datum, je nach Typ) ---------------------------
+    // Beim Add ist der Wert vom Backend bereits auf "jetzt" gesetzt
+    // (km = current_odo, date = now). Der User kann hier eintragen,
+    // dass die Wartung in der Vergangenheit gemacht wurde.
+    const lastWrap = document.createElement("div");
+    const lastLabel = currentType === "date"
+      ? this._t("dash_editor_maint_last_date")
+      : this._t("dash_editor_maint_last_km");
+    lastWrap.innerHTML = `<label>${lastLabel}</label>`;
+    const lastInput = document.createElement("input");
+    if (currentType === "date") {
+      lastInput.type = "date";
+      const v = item.last_done_at;
+      lastInput.value = v ? String(v).slice(0, 10) : "";
+      lastInput.addEventListener("change", () => {
+        if (!lastInput.value) return;
+        // YYYY-MM-DD -> ISO mit T00:00:00Z, damit das Backend einen
+        // sauberen, zeitzonenstabilen Stempel speichert.
+        const iso = new Date(lastInput.value + "T00:00:00Z").toISOString();
+        this._debouncedUpdateMaint(item, { last_done_at: iso });
+      });
+    } else {
+      lastInput.type = "number"; lastInput.min = "0"; lastInput.step = "0.1";
+      // Backend speichert Meter, UI zeigt km. Umrechnung nur in eine
+      // Richtung; Anzeige rundet auf eine Nachkommastelle wenn nötig.
+      const m = item.last_done_odometer;
+      lastInput.value = (m != null && Number.isFinite(Number(m))) ? String(Number(m) / 1000) : "";
+      lastInput.addEventListener("input", () => {
+        const km = Number(lastInput.value);
+        if (!Number.isFinite(km) || km < 0) return;
+        this._debouncedUpdateMaint(item, { last_done_odometer: km * 1000 });
+      });
+    }
+    lastWrap.appendChild(lastInput);
+    row.appendChild(lastWrap);
 
     // -- Done --
     const doneBtn = document.createElement("button");
