@@ -159,7 +159,13 @@ light:
 # ---------------------------------------------------------------------------
 display:
   - platform: qspi_dbi
-    model: NV3041A
+    # JC4827W543 ist noch kein eigenes Preset in ESPHome 2026.5.0.
+    # JC4832W535 nutzt denselben NV3041A-Controllerchip, hat nur ein
+    # anderes Panel (480x320 statt 480x272). Init-Sequenz ist identisch,
+    # die abweichende Aufloesung wird unten ueber 'dimensions:' gesetzt.
+    # Falls Farben/Gamma sichtbar daneben sind: auf model: CUSTOM
+    # umstellen und eine JC4827W543-spezifische init_sequence eintragen.
+    model: JC4832W535
     id: main_display
     spi_id: qspi_bus
     cs_pin: GPIO45
