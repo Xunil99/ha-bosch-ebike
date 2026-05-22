@@ -5768,6 +5768,7 @@ class BoschEBikeDashboardCard extends HTMLElement {
     head.textContent = this._t("dash_section_maint");
     sec.style.display = "";
     list.innerHTML = "";
+    this._dumpMaintDiag();
 
     const due = [];
     for (const m of this._maintItems) {
@@ -5809,9 +5810,24 @@ class BoschEBikeDashboardCard extends HTMLElement {
     }
   }
 
+  // DIAGNOSTIC: dump dashboard maintenance state to the browser console.
+  // Helps figure out whether a missing item is filtered by _maintStatus
+  // (-> visible in this dump but absent from the rendered DOM) or never
+  // arrives from the backend (-> absent from this dump too).
+  _dumpMaintDiag() {
+    try {
+      console.log(
+        "[Bosch eBike DIAG] dashboard _maintItems:",
+        JSON.parse(JSON.stringify(this._maintItems || [])),
+        "config.bike_id=", this._config.bike_id,
+        "_maintLoadedFor=", this._maintLoadedFor,
+      );
+    } catch (_) { /* ignore */ }
+  }
+
   // Status aus dem vom Backend gelieferten remaining_km / remaining_days.
   // Reine Anzeige-Logik; die eigentliche Restberechnung passiert in
-  // coordinator.py:_compute_maintenance_remaining.
+  // coordinator.py:_evaluate_maintenance_item.
   //
   // Wichtig: Number(null) === 0 und Number.isFinite(0) === true. Wir
   // MÜSSEN daher explizit auf != null prüfen, sonst wird für ein
@@ -5848,6 +5864,17 @@ class BoschEBikeDashboardCard extends HTMLElement {
         label: this._t("dash_maint_due_days", days),
       };
     }
+    // DIAGNOSTIC: items that fall through the type detection. Most
+    // common reason: interval_days is set but remaining_days came
+    // back null from the backend (parse error in last_done_at, or
+    // type mismatch).
+    try {
+      console.log(
+        "[Bosch eBike DIAG] _maintStatus returned null for:",
+        JSON.parse(JSON.stringify(m)),
+        { hasKmInterval, hasDayInterval, useKm, useDays },
+      );
+    } catch (_) { /* ignore */ }
     return null;
   }
 
