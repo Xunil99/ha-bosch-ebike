@@ -490,8 +490,13 @@ async def ws_list_maintenance(
             # Dashboard alle Items als "nichts fällig" filterte.
             from homeassistant.util import dt as dt_util
             now = dt_util.utcnow()
-            drive = bike.get("driveUnit") or {}
-            current_odo = drive.get("odometer")
+            # Smart odometer reader (same as the coordinator's periodic
+            # refresh path uses): combines Bosch profile odometer with
+            # the derived end-odometer from the most recent activity.
+            # Falls back to whichever is available when the other is
+            # None - critical for users whose Bosch API does not
+            # consistently return driveUnit.odometer.
+            current_odo = coord._bike_current_odometer(bike)
             items = []
             for item in bs.get("items", []):
                 try:
@@ -528,11 +533,20 @@ async def ws_list_maintenance(
 
 
 def _get_current_odo(coord, bike_id: str) -> float | None:
-    """Helper: read current odometer (meters) from a coordinator's bike."""
+    """Helper: read current odometer (meters) from a coordinator's bike.
+
+    Uses ``_bike_current_odometer`` (smart reader: max of Bosch profile
+    odometer and the derived end-odometer of the most recent activity)
+    instead of the raw ``driveUnit.odometer`` field. The raw field is
+    sometimes None when the Bosch API returns the bike without a fresh
+    profile reading; the activity-derived value is then the only
+    accurate signal. Without this fallback, complete_maintenance on a
+    km-based item would skip the ``last_done_odometer`` update and the
+    counter would stay stuck at the old value.
+    """
     for bike in (coord.data.get("bikes", []) if coord.data else []):
         if bike.get("id") == bike_id:
-            drive = bike.get("driveUnit") or {}
-            return drive.get("odometer")
+            return coord._bike_current_odometer(bike)
     return None
 
 
