@@ -6500,10 +6500,13 @@ class BoschEBikeDashboardCardEditor extends HTMLElement {
 
     // Bestimmt den Typ aus den vorhandenen Intervallen. Das Backend
     // erlaubt beide gleichzeitig, der Editor zeigt aber nur einen.
-    const initialType =
-      Number.isFinite(Number(item.interval_km)) ? "km"
-      : Number.isFinite(Number(item.interval_days)) ? "date"
-      : "km";
+    // Wichtig: Number(null) ist 0 und Number.isFinite(0) ist true,
+    // daher MUSS hier explizit auf != null geprüft werden - sonst
+    // wird ein interval_km: null nach einem Typ-Wechsel zu "date"
+    // beim Re-Render trotzdem als "km" interpretiert.
+    const hasKm = item.interval_km != null && Number.isFinite(Number(item.interval_km));
+    const hasDays = item.interval_days != null && Number.isFinite(Number(item.interval_days));
+    const initialType = hasKm ? "km" : (hasDays ? "date" : "km");
     let currentType = initialType;
 
     // -- Name (Dropdown + freier Text) --
