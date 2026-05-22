@@ -4206,10 +4206,8 @@ class BoschEBikeHeatmapCard extends HTMLElement {
       };
       document.addEventListener("keydown", this._heatPseudoEscHandler);
     }
-    requestAnimationFrame(() => requestAnimationFrame(() => {
-      try { this._map?.invalidateSize(); } catch (_) {}
-      try { this._renderTracks(); } catch (_) {}
-    }));
+    this._refreshHeatmapSize("enter pseudo fullscreen");
+    setTimeout(() => { try { this._renderTracks(); } catch (_) {} }, 350);
   }
 
   _exitHeatPseudoFullscreen() {
@@ -4223,10 +4221,8 @@ class BoschEBikeHeatmapCard extends HTMLElement {
       document.removeEventListener("keydown", this._heatPseudoEscHandler);
       this._heatPseudoEscHandler = null;
     }
-    requestAnimationFrame(() => requestAnimationFrame(() => {
-      try { this._map?.invalidateSize(); } catch (_) {}
-      try { this._renderTracks(); } catch (_) {}
-    }));
+    this._refreshHeatmapSize("exit pseudo fullscreen");
+    setTimeout(() => { try { this._renderTracks(); } catch (_) {} }, 350);
   }
 
   _ensureFullscreenListener() {
@@ -4236,10 +4232,8 @@ class BoschEBikeHeatmapCard extends HTMLElement {
       const on = fsEl === this;
       const ico = this.querySelector("#heat-fs-ico");
       if (ico) ico.setAttribute("icon", on ? "mdi:fullscreen-exit" : "mdi:fullscreen");
-      requestAnimationFrame(() => requestAnimationFrame(() => {
-        try { this._map?.invalidateSize(); } catch (_) {}
-        try { this._renderTracks(); } catch (_) {}
-      }));
+      this._refreshHeatmapSize("native fullscreen change");
+      setTimeout(() => { try { this._renderTracks(); } catch (_) {} }, 350);
     };
     document.addEventListener("fullscreenchange", this._heatFsChangeHandler);
     document.addEventListener("webkitfullscreenchange", this._heatFsChangeHandler);
@@ -4259,6 +4253,10 @@ class BoschEBikeHeatmapCard extends HTMLElement {
       this._heatPseudoFs = false;
       this.classList.remove("heat-pseudo-fs");
       document.body.style.overflow = "";
+    }
+    if (this._heatResizeObserver) {
+      try { this._heatResizeObserver.disconnect(); } catch (_) {}
+      this._heatResizeObserver = null;
     }
   }
 
@@ -4342,6 +4340,68 @@ class BoschEBikeHeatmapCard extends HTMLElement {
     const def = MAP_STYLES.osm;
     this._baseLayer = Leaflet.tileLayer(def.url, def.options).addTo(this._map);
     this._tracksGroup = Leaflet.layerGroup().addTo(this._map);
+
+    // ResizeObserver auf den Wrapper: faengt jede spaetere Aenderung der
+    // verfuegbaren Hoehe ab (Sidebar-Toggle, Rotation, Vollbild-Layout
+    // stabilisiert sich verzoegert in Firefox/Companion-App). Wir
+    // rufen hier NUR invalidateSize - nicht _refreshHeatmapSize - damit
+    // die Wrapper-Hoehen-Mutation aus dem Refresh nicht den Observer
+    // erneut feuert (Endlosschleife). Die Hoehen-Mutation passiert nur
+    // ueber explizite _refreshHeatmapSize-Aufrufe bei Vollbild-Toggle.
+    if (!this._heatResizeObserver && typeof ResizeObserver !== "undefined") {
+      this._heatResizeObserver = new ResizeObserver(() => {
+        try { this._map?.invalidateSize({ animate: false, pan: false }); } catch (_) {}
+      });
+      const wrap = this.querySelector(".heat-map-wrap");
+      if (wrap) this._heatResizeObserver.observe(wrap);
+    }
+  }
+
+  // Vollbild-/Layoutwechsel sind in HA + Firefox/Opera/Companion-App
+  // oft erst nach 100-600 ms stabil. Statt einmalig nach zwei rAF-Ticks
+  // pumpen wir invalidateSize in einer kurzen Staffel durch - und
+  // setzen im Vollbild zusaetzlich eine explizite Pixelhoehe auf den
+  // Wrapper, falls die Flex-Kette durch ha-cards Shadow-DOM oder
+  // browserspezifisches Verhalten doch nicht greift. Die .heat-map
+  // selbst folgt automatisch via 'position:absolute; inset:0' aus dem
+  // CSS - wir muessen sie hier nicht direkt anfassen.
+  _refreshHeatmapSize(reason = "") {
+    if (!this._map) return;
+    const apply = () => {
+      try {
+        const wrap = this.querySelector(".heat-map-wrap");
+        const fsOn =
+          document.fullscreenElement === this ||
+          document.webkitFullscreenElement === this ||
+          this._heatPseudoFs;
+        if (wrap) {
+          if (fsOn) {
+            const head = this.querySelector(".heat-head");
+            const filters = this.querySelector(".heat-filters");
+            const stats = this.querySelector(".heat-stats");
+            const used =
+              (head?.offsetHeight || 0) +
+              (filters?.offsetHeight || 0) +
+              (stats?.offsetHeight || 0);
+            const h = Math.max(200, window.innerHeight - used);
+            wrap.style.height = `${h}px`;
+          } else {
+            wrap.style.height = "";
+          }
+        }
+        this._map.invalidateSize({ animate: false, pan: false });
+      } catch (e) {
+        console.warn("[Bosch eBike Heatmap] resize refresh failed", reason, e);
+      }
+    };
+    // Vier Wellen: sofort nach dem naechsten Doppel-rAF (Standard-Layout-
+    // Tick), plus drei spaetere setTimeouts fuer langsam stabilisierende
+    // Browser-Fullscreen-Wechsel. Mehr setTimeouts (wie ChatGPT 5x)
+    // bringen erfahrungsgemaess nichts ueber 700 ms hinaus.
+    requestAnimationFrame(() => requestAnimationFrame(apply));
+    setTimeout(apply, 100);
+    setTimeout(apply, 350);
+    setTimeout(apply, 700);
   }
 
   // Toggle the From/To inputs depending on whether the dropdown is on
