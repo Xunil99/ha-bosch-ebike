@@ -3492,7 +3492,13 @@ ${trackPoints}
     overlay.appendChild(closeBtn);
 
     const card = document.createElement("bosch-ebike-3d-map-card");
-    const cfg = { height: 540 };
+    // Playback- und Darstellungs-Settings aus einer auf der Seite
+    // existierenden bosch-ebike-3d-map-card übernehmen. Sonst würde
+    // der Overlay-Klon mit Default-Werten laufen (playback_speed: 60
+    // etc.) und die Chase-Cam-Geschwindigkeit wäre nicht konsistent
+    // mit dem, was der User auf seinem Dashboard eingestellt hat.
+    const inherited = this._inherit3DMapCardConfig();
+    const cfg = { ...inherited, height: 540 };
     if (this._filterAccount && this._filterAccount !== "all") cfg.account_id = this._filterAccount;
     if (this._filterBike && this._filterBike !== "all") cfg.bike_id = this._filterBike;
     card.setConfig(cfg);
@@ -3538,6 +3544,64 @@ ${trackPoints}
 
     this._chaseOverlay = overlay;
     this._chaseCard = card;
+  }
+
+  // Sucht im DOM nach einer vom User konfigurierten
+  // bosch-ebike-3d-map-card und übernimmt deren Playback- und
+  // Darstellungs-relevante Konfigurations-Keys. Geht durch Shadow-
+  // Roots, weil HA Lovelace-Cards in eigenen Shadow-DOMs einkapselt
+  // und document.querySelector sonst nichts finden würde. Bei
+  // mehreren Cards gewinnt die erste gefundene. Wenn keine vorhanden:
+  // leeres Objekt -> die Overlay-Card nutzt ihre internen Defaults.
+  _inherit3DMapCardConfig() {
+    const PLAYBACK_KEYS = [
+      "playback_speed", "animate_seconds",
+      "default_pitch", "chase_zoom", "chase_lookahead",
+      "smooth_window", "track_smooth_window",
+      "terrain_exaggeration", "satellite_tile_url", "satellite_max_zoom",
+      "north_up",
+      "show_date", "show_time", "show_sun",
+      "show_speed", "show_distance", "show_elevation",
+      "stats_as_chips",
+    ];
+    const found = this._findCardsAcrossShadow("bosch-ebike-3d-map-card");
+    for (const c of found) {
+      if (c === this._chaseCard) continue;   // niemals von uns selbst klonen
+      const src = c._config;
+      if (!src) continue;
+      const out = {};
+      for (const k of PLAYBACK_KEYS) {
+        if (src[k] != null && src[k] !== "") out[k] = src[k];
+      }
+      // Wenn die gefundene Card wenigstens EINEN playback-relevanten
+      // Wert hatte, nehmen wir sie. Sonst weiter suchen.
+      if (Object.keys(out).length > 0) return out;
+    }
+    return {};
+  }
+
+  // BFS durch document.* + shadowRoots, gibt alle Custom-Elements mit
+  // dem angegebenen Tag-Namen zurück. Notwendig weil HA Lovelace
+  // Cards in geschachtelten Shadow-DOMs hostet (hui-view, hui-card,
+  // ha-card etc.) und ein flaches document.querySelectorAll die nicht
+  // findet.
+  _findCardsAcrossShadow(tagName) {
+    const out = [];
+    const tag = tagName.toLowerCase();
+    const visited = new WeakSet();
+    const queue = [document];
+    while (queue.length) {
+      const root = queue.shift();
+      if (!root || visited.has(root)) continue;
+      visited.add(root);
+      let nodes = [];
+      try { nodes = root.querySelectorAll("*"); } catch (_) { continue; }
+      for (const n of nodes) {
+        if (n.tagName && n.tagName.toLowerCase() === tag) out.push(n);
+        if (n.shadowRoot && !visited.has(n.shadowRoot)) queue.push(n.shadowRoot);
+      }
+    }
+    return out;
   }
 
   // Injectet einmalig ein <style>-Element in document.head, das die
