@@ -7294,6 +7294,18 @@ class BoschEBike3DMapCard extends HTMLElement {
         box-shadow: 0 1px 6px rgba(31,111,235,.45);
       }
       .map3d-nu-btn ha-icon { --mdc-icon-size: 16px; }
+      /* Close button: bigger hit area so it works well on tablets,
+         which have no ESC key to exit fullscreen / chase-cam mode.
+         Slight red tint so it stands out from the neutral chip row. */
+      .map3d-close-btn {
+        background: rgba(180,32,40,.82); color: #fff;
+        backdrop-filter: blur(6px); border: 1px solid rgba(255,255,255,.22);
+        width: 34px; height: 34px; border-radius: 50%;
+        display: inline-flex; align-items: center; justify-content: center;
+        cursor: pointer; pointer-events: auto;
+      }
+      .map3d-close-btn:hover { background: rgba(200,40,48,.95); }
+      .map3d-close-btn ha-icon { --mdc-icon-size: 20px; }
       /* Browser fullscreen: turn the whole chain
          host -> ha-card -> map3d-root -> map3d-detail -> canvas
          into a column flex stack so the height cascades and the
@@ -8121,6 +8133,9 @@ class BoschEBike3DMapCard extends HTMLElement {
           <button class="map3d-fs-btn" id="m3d-fs-btn" type="button" title="${this._t("btn_fullscreen")}" aria-label="${this._t("btn_fullscreen")}">
             <ha-icon icon="mdi:fullscreen" id="m3d-fs-ico"></ha-icon>
           </button>
+          <button class="map3d-close-btn" id="m3d-close-btn" type="button" title="${this._t("btn_close")}" aria-label="${this._t("btn_close")}">
+            <ha-icon icon="mdi:close"></ha-icon>
+          </button>
         </div>
         <div class="map3d-controls">
           <div class="row1">
@@ -8145,17 +8160,22 @@ class BoschEBike3DMapCard extends HTMLElement {
       </div>
     `;
 
-    this._root.querySelector(".map3d-back-btn").addEventListener("click", () => {
+    const exitDetail = () => {
       if (document.fullscreenElement === this || document.webkitFullscreenElement === this) {
         (document.exitFullscreen || document.webkitExitFullscreen)?.call(document);
       }
+      // CSS pseudo-fullscreen fallback (iOS WKWebView, etc.)
+      this.classList.remove("map3d-pseudo-fs");
       this._stopAnim();
       this._destroyMap();
       this._mode = "list";
       this._currentActivity = null;
       this._currentTrack = null;
       this._renderRoot();
-    });
+    };
+    this._root.querySelector(".map3d-back-btn").addEventListener("click", exitDetail);
+    const closeBtn = this._root.querySelector("#m3d-close-btn");
+    if (closeBtn) closeBtn.addEventListener("click", exitDetail);
 
     const slider = this._root.querySelector("#m3d-slider");
     slider.max = String(this._currentTrack.length - 1);
