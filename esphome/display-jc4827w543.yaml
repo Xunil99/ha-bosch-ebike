@@ -169,7 +169,10 @@ display:
     id: main_display
     spi_id: qspi_bus
     cs_pin: GPIO45
-    reset_pin: GPIO -1  # tied high on most JC4827W543 revisions; set to a GPIO if your variant exposes it
+    # Kein reset_pin: Auf den meisten JC4827W543-Revisionen ist Reset
+    # hardware-tied. ESPHome erlaubt kein 'GPIO -1' als Platzhalter -
+    # der Key muss komplett weg. Wenn deine Boardrevision einen Reset
+    # auf einem GPIO exponiert, hier 'reset_pin: GPIOxx' eintragen.
     dimensions:
       width: 480
       height: 272
