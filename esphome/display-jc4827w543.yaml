@@ -71,11 +71,16 @@ esphome:
 esp32:
   board: esp32-s3-devkitc-1
   variant: esp32s3
-  flash_size: 16MB
+  # JC4827W543 gibt es in mehreren Flash-Varianten (4/8/16 MB).
+  # Diagnose aus dem Boot-Log: "Detected size(4096k) smaller than
+  # the size in the binary image header(16384k). Probe failed." -
+  # die User-Variante hat 4 MB. Wenn jemand mit der 16-MB-Variante
+  # baut, hier auf 16MB hochstellen.
+  flash_size: 4MB
   framework:
     type: esp-idf
     sdkconfig_options:
-      CONFIG_ESPTOOLPY_FLASHSIZE_16MB: y
+      CONFIG_ESPTOOLPY_FLASHSIZE_4MB: y
       CONFIG_PARTITION_TABLE_CUSTOM: y
       CONFIG_ESP32S3_DEFAULT_CPU_FREQ_240: y
       CONFIG_FREERTOS_HZ: "1000"
