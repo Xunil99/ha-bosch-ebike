@@ -44,12 +44,16 @@ substitutions:
   bike_a_last_seen_entity: sensor.ebike_last_seen
 
   # ----- Bike B (optional, leave empty for single-bike mode) -----------
+  # Defaults zeigen auf NICHT existierende Entities mit korrekter Domain.
+  # ESPHome validiert nur das Format (genau ein Punkt), HA liefert zur
+  # Laufzeit NaN/unknown. Die UI blendet die Bike-B-Panels ueber das
+  # 'bike_b_configured'-Global aus (true wenn bike_b_name nicht leer).
   bike_b_name: ""
-  bike_b_soc_entity: ""
-  bike_b_odo_entity: ""
-  bike_b_charging_entity: ""
-  bike_b_connected_entity: ""
-  bike_b_last_seen_entity: ""
+  bike_b_soc_entity: sensor.bike_b_unconfigured
+  bike_b_odo_entity: sensor.bike_b_unconfigured
+  bike_b_charging_entity: binary_sensor.bike_b_unconfigured
+  bike_b_connected_entity: binary_sensor.bike_b_unconfigured
+  bike_b_last_seen_entity: sensor.bike_b_unconfigured
 
 esphome:
   name: ${device_name}
