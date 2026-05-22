@@ -3586,7 +3586,12 @@ ${trackPoints}
     overlay.appendChild(card);
 
     card.hass = this._hass;
-    card.openActivity({ id: activity.id, accountId: activity.accountId });
+    // GANZES Activity-Objekt durchreichen, nicht nur { id, accountId }:
+    // das 3D-Card liest später a.startTime, a.endTime, a.title etc.
+    // Ohne diese Felder fällt _applyIndex auf `new Date()` (aktueller
+    // Zeitpunkt) zurück und die Datum-/Uhrzeit-Chips zeigen jetzt
+    // statt der echten Tour-Zeit.
+    card.openActivity(activity);
 
     // MapLibre misst seine Canvas-Größe direkt nach dem Mounting.
     // Da die Flex-Chain dann gerade erst greift, kommt der erste
@@ -5902,18 +5907,42 @@ class BoschEBikeDashboardCard extends HTMLElement {
   // "Erledigt"-Klick: ruft ws_complete_maintenance. Backend setzt
   // last_done_at + last_done_odometer aus dem Bosch-API-Odometer und
   // speichert in HA-Storage. Nach Erfolg neu vom Backend laden.
+  //
+  // Fehler-Sichtbarkeit: alte Version war stillschweigend (`console.warn`),
+  // der User dachte der Button reagiere nicht. Jetzt zeigen wir ein
+  // sichtbares Flash + bei Fehler ein alert(), damit man weiß woran man
+  // ist.
   async _maintMarkDone(item) {
-    if (!item || !item.id || !this._config.bike_id || !this._hass) return;
+    if (!item || !item.id) return;
+    // Fallback auf die Bike-ID, mit der wir das Item geladen haben,
+    // falls this._config.bike_id zwischenzeitlich gelöscht/leer ist.
+    const bikeId = this._config.bike_id || this._maintLoadedFor;
+    if (!bikeId) {
+      alert("Bitte ein Bike in den Card-Einstellungen wählen.");
+      return;
+    }
+    if (!this._hass) return;
     try {
       await this._hass.callWS({
         type: "bosch_ebike/complete_maintenance",
-        bike_id: this._config.bike_id,
+        bike_id: bikeId,
         item_id: item.id,
       });
+      // Kurzes visuelles Feedback
+      const flash = document.createElement("div");
+      flash.textContent = "✓";
+      flash.style.cssText =
+        "position:fixed;top:20px;left:50%;transform:translateX(-50%);" +
+        "background:#2e7d32;color:#fff;padding:8px 24px;border-radius:999px;" +
+        "font-size:22px;z-index:99999;box-shadow:0 2px 12px rgba(0,0,0,.3);" +
+        "pointer-events:none;";
+      document.body.appendChild(flash);
+      setTimeout(() => flash.remove(), 800);
       this._maintLoadedFor = null;
-      this._loadMaintenance(this._config.bike_id);
+      this._loadMaintenance(bikeId);
     } catch (err) {
       console.warn("[Bosch eBike Dashboard] complete_maintenance failed:", err?.message || err);
+      alert("Wartung konnte nicht als erledigt markiert werden: " + (err?.message || err));
     }
   }
 
@@ -6335,7 +6364,7 @@ class BoschEBikeDashboardCardEditor extends HTMLElement {
       ss.textContent = `
         .dash-ed-maint-row {
           display: grid;
-          grid-template-columns: minmax(160px,1fr) 110px 100px auto;
+          grid-template-columns: minmax(140px,1fr) 100px 90px auto auto;
           gap: 8px; align-items: end;
           padding: 8px; border-radius: 8px;
           background: var(--secondary-background-color, #f4f6f8);
@@ -6400,28 +6429,27 @@ class BoschEBikeDashboardCardEditor extends HTMLElement {
       .catch(() => { /* ignore - selector bleibt mit "—" */ });
   }
 
-  // Lädt die Wartungs-Items vom Backend für die aktuell gewählte Bike-ID.
-  // Wird beim ersten Render, nach Bike-Wechsel und nach Mutationen
-  // aufgerufen. Render-Logik (DOM-Bau) sitzt in _renderMaintRowsFromCache.
+  // Lädt ALLE Wartungen aller Bikes für den Editor. Macht die Liste
+  // unabhängig vom Bike-Picker oben - der wird nur noch für "Add"
+  // gebraucht. So kann der User Wartungen bearbeiten/löschen/erledigen
+  // auch ohne die Card-Config umzukonfigurieren.
   async _reloadMaintList() {
     if (!this._maintListWrap) return;
-    const bikeId = this._config.bike_id;
-    if (!bikeId) {
-      this._maintListWrap.innerHTML = "";
-      const p = document.createElement("div");
-      p.className = "dash-ed-maint-empty";
-      p.textContent = this._t("dash_editor_maint_pick_bike");
-      this._maintListWrap.appendChild(p);
-      if (this._maintAddBtn) this._maintAddBtn.disabled = true;
-      return;
-    }
     if (this._maintAddBtn) this._maintAddBtn.disabled = !this._hass;
     if (!this._hass) return;
     try {
       const res = await this._hass.callWS({ type: "bosch_ebike/list_maintenance" });
-      const myBike = (res?.bikes || []).find(b => b.bike_id === bikeId);
-      this._maintItemsCache = myBike?.items || [];
-      this._maintListLoadedFor = bikeId;
+      const bikes = res?.bikes || [];
+      // Flach mit bike_id + bike_label pro Item, damit Mutationen die
+      // richtige Bike-Zuordnung haben.
+      this._maintItemsCache = bikes.flatMap((b) =>
+        (b.items || []).map((i) => ({
+          ...i,
+          bike_id: b.bike_id,
+          bike_label: b.bike_label || b.bike_id,
+        }))
+      );
+      this._allBikes = bikes;
       this._renderMaintRowsFromCache();
     } catch (err) {
       console.warn("[Bosch eBike Dashboard-Editor] list_maintenance failed:", err?.message || err);
@@ -6456,6 +6484,19 @@ class BoschEBikeDashboardCardEditor extends HTMLElement {
     const row = document.createElement("div");
     row.className = "dash-ed-maint-row";
     row.dataset.itemId = item.id;
+    row.dataset.bikeId = item.bike_id || "";
+
+    // Bike-Label, falls mehr als ein Bike konfiguriert ist - hilft
+    // dem User, Wartungen verschiedener Bikes auseinanderzuhalten.
+    const multipleBikes = Array.isArray(this._allBikes) && this._allBikes.length > 1;
+    if (multipleBikes && item.bike_label) {
+      const bikeBadge = document.createElement("div");
+      bikeBadge.style.cssText =
+        "grid-column: 1 / -1; font-size: 11px; color: var(--secondary-text-color);" +
+        "font-weight: 500; text-transform: uppercase; letter-spacing: .04em;";
+      bikeBadge.textContent = item.bike_label;
+      row.appendChild(bikeBadge);
+    }
 
     // Bestimmt den Typ aus den vorhandenen Intervallen. Das Backend
     // erlaubt beide gleichzeitig, der Editor zeigt aber nur einen.
@@ -6494,11 +6535,11 @@ class BoschEBikeDashboardCardEditor extends HTMLElement {
       } else {
         nameInput.value = nameSel.value;
         nameInput.style.display = "none";
-        this._debouncedUpdateMaint(item.id, { name: nameSel.value });
+        this._debouncedUpdateMaint(item, { name: nameSel.value });
       }
     });
     nameInput.addEventListener("input", () => {
-      this._debouncedUpdateMaint(item.id, { name: nameInput.value });
+      this._debouncedUpdateMaint(item, { name: nameInput.value });
     });
     nameWrap.appendChild(nameSel);
     nameWrap.appendChild(nameInput);
@@ -6527,7 +6568,7 @@ class BoschEBikeDashboardCardEditor extends HTMLElement {
         patch.interval_days = Number.isFinite(Number(item.interval_days)) ? Number(item.interval_days) : 30;
         patch.interval_km = null;
       }
-      this._sendUpdateMaint(item.id, patch);
+      this._sendUpdateMaint(item, patch);
       // Update lokales Item + die Interval-Row neu rendern (nur diese
       // Zeile, nicht die ganze Liste -> kein Fokus-Verlust bei den
       // anderen Reihen).
@@ -6552,11 +6593,29 @@ class BoschEBikeDashboardCardEditor extends HTMLElement {
     intInput.addEventListener("input", () => {
       const v = Number(intInput.value);
       if (!Number.isFinite(v) || v <= 0) return;
-      if (currentType === "date") this._debouncedUpdateMaint(item.id, { interval_days: v });
-      else this._debouncedUpdateMaint(item.id, { interval_km: v });
+      if (currentType === "date") this._debouncedUpdateMaint(item, { interval_days: v });
+      else this._debouncedUpdateMaint(item, { interval_km: v });
     });
     intWrap.appendChild(intInput);
     row.appendChild(intWrap);
+
+    // -- Done --
+    const doneBtn = document.createElement("button");
+    doneBtn.type = "button";
+    doneBtn.className = "ed-maint-done";
+    doneBtn.title = this._t("dash_maint_done_btn");
+    doneBtn.setAttribute("aria-label", this._t("dash_maint_done_btn"));
+    doneBtn.innerHTML =
+      '<svg viewBox="0 0 24 24" width="18" height="18">' +
+      '<path fill="currentColor" d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>' +
+      "</svg>";
+    doneBtn.style.cssText =
+      "background:#2e7d32;color:#fff;border:0;width:30px;height:30px;" +
+      "border-radius:50%;cursor:pointer;display:inline-flex;" +
+      "align-items:center;justify-content:center;align-self:end;" +
+      "box-shadow:0 1px 4px rgba(0,0,0,.2);";
+    doneBtn.addEventListener("click", () => this._handleCompleteMaintenance(item));
+    row.appendChild(doneBtn);
 
     // -- Remove --
     const rmBtn = document.createElement("button");
@@ -6564,7 +6623,7 @@ class BoschEBikeDashboardCardEditor extends HTMLElement {
     rmBtn.className = "remove";
     rmBtn.title = this._t("dash_editor_maint_remove");
     rmBtn.innerHTML = "&times;";
-    rmBtn.addEventListener("click", () => this._handleRemoveMaintenance(item.id, row));
+    rmBtn.addEventListener("click", () => this._handleRemoveMaintenance(item, row));
     row.appendChild(rmBtn);
 
     return row;
@@ -6573,9 +6632,24 @@ class BoschEBikeDashboardCardEditor extends HTMLElement {
   // Anlegen via WS + DOM appendOnly (kein Re-Render). Item-Defaults:
   // leerer Name, km-Trigger, 500 km Intervall. Der Backend gibt uns
   // die neue ID zurück.
+  // Findet die Bike-ID für eine neue Wartung. Bevorzugt das im Editor
+  // gewählte Bike. Wenn das leer ist und genau ein Bike existiert,
+  // nimmt automatisch das. Sonst null - Caller zeigt eine kurze
+  // Fehlermeldung an, damit der User den Picker setzt.
+  _resolveAddBikeId() {
+    if (this._config.bike_id) return this._config.bike_id;
+    const bikes = Array.isArray(this._allBikes) ? this._allBikes : [];
+    if (bikes.length === 1 && bikes[0].bike_id) return bikes[0].bike_id;
+    return null;
+  }
+
   async _handleAddMaintenance() {
-    const bikeId = this._config.bike_id;
-    if (!bikeId || !this._hass) return;
+    const bikeId = this._resolveAddBikeId();
+    if (!bikeId) {
+      alert(this._t("dash_editor_maint_pick_bike"));
+      return;
+    }
+    if (!this._hass) return;
     try {
       const res = await this._hass.callWS({
         type: "bosch_ebike/add_maintenance",
@@ -6583,75 +6657,103 @@ class BoschEBikeDashboardCardEditor extends HTMLElement {
         name: "",
         interval_km: 500,
       });
+      const bikeLabel = (this._allBikes || []).find((b) => b.bike_id === bikeId)?.bike_label
+        || bikeId;
       const newItem = {
         id: res.id, name: "", interval_km: 500, interval_days: null,
+        bike_id: bikeId, bike_label: bikeLabel,
       };
       if (!Array.isArray(this._maintItemsCache)) this._maintItemsCache = [];
       this._maintItemsCache.push(newItem);
-      // Falls die Liste vorher leer war, zeigen wir gerade den "noch
-      // keine Items"-Placeholder; den entfernen und nur die neue Row
-      // appenden.
       const placeholder = this._maintListWrap.querySelector(".dash-ed-maint-empty");
       if (placeholder) placeholder.remove();
       this._maintListWrap.appendChild(this._buildMaintRow(newItem));
     } catch (err) {
       console.warn("[Bosch eBike Dashboard-Editor] add_maintenance failed:", err?.message || err);
+      alert("add_maintenance failed: " + (err?.message || err));
     }
   }
 
-  async _handleRemoveMaintenance(itemId, rowEl) {
-    const bikeId = this._config.bike_id;
-    if (!bikeId || !this._hass) return;
+  async _handleRemoveMaintenance(item, rowEl) {
+    if (!item || !item.bike_id || !this._hass) return;
     try {
       await this._hass.callWS({
         type: "bosch_ebike/remove_maintenance",
-        bike_id: bikeId,
-        item_id: itemId,
+        bike_id: item.bike_id,
+        item_id: item.id,
       });
-      this._maintItemsCache = (this._maintItemsCache || []).filter(i => i.id !== itemId);
+      this._maintItemsCache = (this._maintItemsCache || []).filter((i) => i.id !== item.id);
       rowEl.remove();
       if (!this._maintItemsCache.length) this._renderMaintRowsFromCache();
     } catch (err) {
       console.warn("[Bosch eBike Dashboard-Editor] remove_maintenance failed:", err?.message || err);
+      alert("remove_maintenance failed: " + (err?.message || err));
+    }
+  }
+
+  // "Erledigt"-Knopf im Editor: setzt last_done_at/odometer für das
+  // Item. Der Backend liest current_odo automatisch aus dem Coordinator;
+  // wir müssen nur bike_id + item_id schicken.
+  async _handleCompleteMaintenance(item) {
+    if (!item || !item.bike_id || !this._hass) return;
+    try {
+      await this._hass.callWS({
+        type: "bosch_ebike/complete_maintenance",
+        bike_id: item.bike_id,
+        item_id: item.id,
+      });
+      // Visuelles Feedback - Bus-Echo lädt die Liste, aber der Klick
+      // soll sich sofort bestätigt anfühlen.
+      const flash = document.createElement("div");
+      flash.textContent = "✓";
+      flash.style.cssText =
+        "position:fixed;top:20px;left:50%;transform:translateX(-50%);" +
+        "background:#2e7d32;color:#fff;padding:8px 24px;border-radius:999px;" +
+        "font-size:22px;z-index:99999;box-shadow:0 2px 12px rgba(0,0,0,.3);" +
+        "pointer-events:none;";
+      document.body.appendChild(flash);
+      setTimeout(() => flash.remove(), 800);
+      // Neuladen, damit die Werte (last_done_*, remaining_*) frisch
+      // angezeigt werden. Bus-Echo benachrichtigt die Dashboard-Card,
+      // sofern sie auf der gleichen Page lebt.
+      this._reloadMaintList();
+      _cardSettingsBus.dispatchEvent(new Event("changed"));
+    } catch (err) {
+      console.warn("[Bosch eBike Dashboard-Editor] complete_maintenance failed:", err?.message || err);
+      alert("complete_maintenance failed: " + (err?.message || err));
     }
   }
 
   // Debouncer pro Item, damit jeder Keystroke nicht direkt einen
-  // WebSocket-Call auslöst. 400 ms ist ein guter Kompromiss zwischen
-  // "spürbar live" und "nicht zu chatty".
-  _debouncedUpdateMaint(itemId, patch) {
+  // WebSocket-Call auslöst.
+  _debouncedUpdateMaint(item, patch) {
     if (!this._maintDebounceTimers) this._maintDebounceTimers = new Map();
     if (!this._maintDebouncePending) this._maintDebouncePending = new Map();
-    // Patch-Updates mergen, damit aufeinanderfolgende Tasten nicht
-    // gegenseitig die letzten Felder überschreiben.
-    const merged = Object.assign(this._maintDebouncePending.get(itemId) || {}, patch);
-    this._maintDebouncePending.set(itemId, merged);
-    if (this._maintDebounceTimers.has(itemId)) {
-      clearTimeout(this._maintDebounceTimers.get(itemId));
+    const key = item.id;
+    const merged = Object.assign(this._maintDebouncePending.get(key) || {}, patch);
+    this._maintDebouncePending.set(key, merged);
+    if (this._maintDebounceTimers.has(key)) {
+      clearTimeout(this._maintDebounceTimers.get(key));
     }
-    this._maintDebounceTimers.set(itemId, setTimeout(() => {
-      const finalPatch = this._maintDebouncePending.get(itemId) || {};
-      this._maintDebouncePending.delete(itemId);
-      this._maintDebounceTimers.delete(itemId);
-      this._sendUpdateMaint(itemId, finalPatch);
+    this._maintDebounceTimers.set(key, setTimeout(() => {
+      const finalPatch = this._maintDebouncePending.get(key) || {};
+      this._maintDebouncePending.delete(key);
+      this._maintDebounceTimers.delete(key);
+      this._sendUpdateMaint(item, finalPatch);
     }, 400));
   }
 
-  async _sendUpdateMaint(itemId, patch) {
-    const bikeId = this._config.bike_id;
-    if (!bikeId || !this._hass) return;
+  async _sendUpdateMaint(item, patch) {
+    if (!item || !item.bike_id || !this._hass) return;
     try {
       await this._hass.callWS({
         type: "bosch_ebike/update_maintenance",
-        bike_id: bikeId,
-        item_id: itemId,
+        bike_id: item.bike_id,
+        item_id: item.id,
         ...patch,
       });
-      // Lokalen Cache aktualisieren, damit eine Bike-Wechsel-Reload
-      // den richtigen Zustand zeigt. NICHT die Liste neu rendern,
-      // sonst geht der Input-Fokus verloren.
-      const item = (this._maintItemsCache || []).find(i => i.id === itemId);
-      if (item) Object.assign(item, patch);
+      const cached = (this._maintItemsCache || []).find((i) => i.id === item.id);
+      if (cached) Object.assign(cached, patch);
     } catch (err) {
       console.warn("[Bosch eBike Dashboard-Editor] update_maintenance failed:", err?.message || err);
     }
