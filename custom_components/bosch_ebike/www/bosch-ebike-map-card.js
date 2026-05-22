@@ -5991,10 +5991,18 @@ class BoschEBikeDashboardCard extends HTMLElement {
         "pointer-events:none;";
       document.body.appendChild(flash);
       setTimeout(() => flash.remove(), 800);
+      // DIAGNOSTIC v1.16.9: zeige in der Browser-Konsole, was der
+      // Backend nach dem Done-Klick liefert. So sehen wir, ob
+      // last_done_* / remaining_* aktualisiert wurden.
+      try {
+        const after = await this._hass.callWS({ type: "bosch_ebike/list_maintenance" });
+        const allItems = (after?.bikes || []).flatMap((b) => (b.items || []));
+        const updated = allItems.find((i) => i.id === item.id);
+        console.log("[Bosch eBike DIAG] After done-click, backend says:", updated);
+      } catch (e) {
+        console.warn("[Bosch eBike DIAG] post-done list_maintenance failed", e);
+      }
       this._maintLoadedFor = null;
-      // Reload mit dem CONFIG-Bike (auch null = Auto-Discover), nicht
-      // dem aufgelösten Item-Bike - sonst weicht _maintLoadedFor vom
-      // scopeKey im Render ab und es triggert einen zweiten Reload.
       this._loadMaintenance(this._config.bike_id || null);
     } catch (err) {
       console.warn("[Bosch eBike Dashboard] complete_maintenance failed:", err?.message || err);

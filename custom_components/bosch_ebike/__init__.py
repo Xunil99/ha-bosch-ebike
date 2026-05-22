@@ -492,12 +492,28 @@ async def ws_list_maintenance(
             now = dt_util.utcnow()
             drive = bike.get("driveUnit") or {}
             current_odo = drive.get("odometer")
+            _LOGGER.info(
+                "DIAG ws_list_maintenance: bike=%s current_odo=%s items_count=%d",
+                bike_id, current_odo, len(bs.get("items", [])),
+            )
             items = []
             for item in bs.get("items", []):
                 try:
                     coord._compute_maintenance_remaining(item, current_odo, now)
                 except Exception as e:  # noqa: BLE001
-                    _LOGGER.warning("compute_maintenance_remaining failed for %s: %s", item.get("id"), e)
+                    _LOGGER.warning(
+                        "DIAG ws_list_maintenance: compute failed for %s: %s",
+                        item.get("id"), e,
+                    )
+                _LOGGER.info(
+                    "DIAG ws_list_maintenance: item=%s name=%r last_done_at=%s "
+                    "last_done_odometer=%s interval_km=%s interval_days=%s "
+                    "-> remaining_km=%s remaining_days=%s",
+                    item.get("id"), item.get("name"),
+                    item.get("last_done_at"), item.get("last_done_odometer"),
+                    item.get("interval_km"), item.get("interval_days"),
+                    item.get("_remaining_km"), item.get("_remaining_days"),
+                )
                 items.append({
                     "id": item.get("id"),
                     "name": item.get("name"),
@@ -646,14 +662,46 @@ async def ws_complete_maintenance(
     hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict
 ) -> None:
     bike_id = msg["bike_id"]
+    item_id = msg["item_id"]
+    _LOGGER.info(
+        "DIAG ws_complete_maintenance ENTRY bike_id=%s item_id=%s", bike_id, item_id,
+    )
     coord = _coordinator_for_bike(hass, bike_id)
     if not coord:
+        _LOGGER.warning("DIAG ws_complete_maintenance: bike %s not found in any coord", bike_id)
         connection.send_error(msg["id"], "not_found", f"Bike {bike_id} not found")
         return
     current_odo = _get_current_odo(coord, bike_id)
-    if not coord.complete_maintenance_item(bike_id, msg["item_id"], current_odo):
-        connection.send_error(msg["id"], "not_found", f"Item {msg['item_id']} not found for bike {bike_id}")
+    _LOGGER.info(
+        "DIAG ws_complete_maintenance: current_odo=%s (None means odometer not in coord.data)",
+        current_odo,
+    )
+    # Snapshot des Items VOR der Mutation, damit wir vergleichen können.
+    pre = {}
+    for it in coord._maintenance.get(bike_id, {}).get("items", []):
+        if it.get("id") == item_id:
+            pre = {
+                "last_done_at": it.get("last_done_at"),
+                "last_done_odometer": it.get("last_done_odometer"),
+                "interval_km": it.get("interval_km"),
+                "interval_days": it.get("interval_days"),
+            }
+            break
+    _LOGGER.info("DIAG ws_complete_maintenance: pre-state=%s", pre)
+    if not coord.complete_maintenance_item(bike_id, item_id, current_odo):
+        _LOGGER.warning("DIAG ws_complete_maintenance: item %s not found", item_id)
+        connection.send_error(msg["id"], "not_found", f"Item {item_id} not found for bike {bike_id}")
         return
+    # Snapshot NACH der Mutation
+    post = {}
+    for it in coord._maintenance.get(bike_id, {}).get("items", []):
+        if it.get("id") == item_id:
+            post = {
+                "last_done_at": it.get("last_done_at"),
+                "last_done_odometer": it.get("last_done_odometer"),
+            }
+            break
+    _LOGGER.info("DIAG ws_complete_maintenance: post-state=%s", post)
     connection.send_result(msg["id"], {"ok": True})
 
 
