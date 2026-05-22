@@ -5262,7 +5262,27 @@ class BoschEBikeDashboardCard extends HTMLElement {
   set hass(hass) {
     this._hass = hass;
     if (!this._built) this._build();
+    if (!this._maintBusHandler) {
+      // Wartungs-Änderungen aus einem offenen Editor (oder einer
+      // zweiten Dashboard-Card) bekommen wir per _cardSettingsBus
+      // mit. Wir invalidieren den lokalen Cache und ziehen die
+      // aktuelle Liste vom Backend. Ohne diese Subscription blieben
+      // hinzugefügte / geänderte Items unsichtbar bis zum nächsten
+      // Bike-Wechsel oder Page-Reload.
+      this._maintBusHandler = () => {
+        this._maintLoadedFor = null;
+        if (this._config.bike_id) this._loadMaintenance(this._config.bike_id);
+      };
+      _cardSettingsBus.addEventListener("changed", this._maintBusHandler);
+    }
     this._render();
+  }
+
+  disconnectedCallback() {
+    if (this._maintBusHandler) {
+      _cardSettingsBus.removeEventListener("changed", this._maintBusHandler);
+      this._maintBusHandler = null;
+    }
   }
 
   static getConfigElement() { return document.createElement("bosch-ebike-dashboard-card-editor"); }
@@ -6721,9 +6741,12 @@ class BoschEBikeDashboardCardEditor extends HTMLElement {
       const placeholder = this._maintListWrap.querySelector(".dash-ed-maint-empty");
       if (placeholder) placeholder.remove();
       this._maintListWrap.appendChild(this._buildMaintRow(newItem));
+      _cardSettingsBus.dispatchEvent(new Event("changed"));
     } catch (err) {
       console.warn("[Bosch eBike Dashboard-Editor] add_maintenance failed:", err?.message || err);
-      alert("add_maintenance failed: " + (err?.message || err));
+      alert("add_maintenance failed: " + (err?.message || err)
+        + "\n\nTipp: Wenn du die Integration gerade aktualisiert hast,"
+        + " starte Home Assistant einmal neu.");
     }
   }
 
@@ -6738,6 +6761,7 @@ class BoschEBikeDashboardCardEditor extends HTMLElement {
       this._maintItemsCache = (this._maintItemsCache || []).filter((i) => i.id !== item.id);
       rowEl.remove();
       if (!this._maintItemsCache.length) this._renderMaintRowsFromCache();
+      _cardSettingsBus.dispatchEvent(new Event("changed"));
     } catch (err) {
       console.warn("[Bosch eBike Dashboard-Editor] remove_maintenance failed:", err?.message || err);
       alert("remove_maintenance failed: " + (err?.message || err));
@@ -6807,8 +6831,14 @@ class BoschEBikeDashboardCardEditor extends HTMLElement {
       });
       const cached = (this._maintItemsCache || []).find((i) => i.id === item.id);
       if (cached) Object.assign(cached, patch);
+      // Bus-Echo, damit eine offene Dashboard-Card (oder eine zweite
+      // Editor-Instanz) ihre Items frisch nachlaedt.
+      _cardSettingsBus.dispatchEvent(new Event("changed"));
     } catch (err) {
       console.warn("[Bosch eBike Dashboard-Editor] update_maintenance failed:", err?.message || err);
+      alert("update_maintenance failed: " + (err?.message || err)
+        + "\n\nTipp: Wenn du die Integration gerade aktualisiert hast,"
+        + " starte Home Assistant einmal neu.");
     }
   }
 
