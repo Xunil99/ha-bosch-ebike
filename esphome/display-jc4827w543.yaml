@@ -294,8 +294,10 @@ globals:
   - id: bike_b_configured
     type: bool
     restore_value: no
-    initial_value: ${bike_b_name:+"true"}${bike_b_name:-"false"}
+    initial_value: ${"true" if bike_b_name else "false"}
     # Evaluates to "true" if bike_b_name is non-empty, "false" otherwise.
+    # Frueher mit Bash-Syntax ${var:+...}${var:-...} - die kennt ESPHome
+    # nicht, dort sind ${...}-Substitutionen Jinja2-Ausdruecke.
 
 # Hinweis: Das frueher hier stehende interval: fuer das Backlight-
 # Idle-Dimming wurde in den groesseren interval:-Block weiter unten
