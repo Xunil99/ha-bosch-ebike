@@ -613,12 +613,27 @@ interval:
   - interval: 1s
     then:
       # ---------- Date + time ----------
+      # ESPTime::to_c_tm() liefert struct tm per Value zurueck, daher
+      # MUSS das Ergebnis in eine lokale Variable. '&t.to_c_tm()' war
+      # 'taking address of rvalue' und kippte den C++-Compile.
       - lvgl.label.update:
           id: lbl_date
-          text: !lambda 'char b[24]; auto t = id(ha_time).now(); if (!t.is_valid()) return std::string("..."); strftime(b, sizeof(b), "%a %d. %b", &t.to_c_tm()); return std::string(b);'
+          text: !lambda |-
+            char b[24];
+            auto t = id(ha_time).now();
+            if (!t.is_valid()) return std::string("...");
+            auto ct = t.to_c_tm();
+            strftime(b, sizeof(b), "%a %d. %b", &ct);
+            return std::string(b);
       - lvgl.label.update:
           id: lbl_time
-          text: !lambda 'char b[8]; auto t = id(ha_time).now(); if (!t.is_valid()) return std::string("--:--"); strftime(b, sizeof(b), "%H:%M", &t.to_c_tm()); return std::string(b);'
+          text: !lambda |-
+            char b[8];
+            auto t = id(ha_time).now();
+            if (!t.is_valid()) return std::string("--:--");
+            auto ct = t.to_c_tm();
+            strftime(b, sizeof(b), "%H:%M", &ct);
+            return std::string(b);
 
   - interval: 10s
     then:
