@@ -744,6 +744,9 @@ async def ws_set_card_settings(
         "show_date", "show_time", "show_sun",
         "show_speed", "show_distance", "show_elevation",
         "stats_as_chips",
+        # Wartungs-Warnschwellen (Dashboard-Card): ab wann ein Item als
+        # bald-fällig angezeigt wird. Defaults im Frontend: 500 km / 30 Tage.
+        "maint_warn_km", "maint_warn_days",
         # 2D-Card-spezifische gemeinsame Defaults (optional, derzeit
         # nicht aktiv genutzt - Platzhalter für künftige Erweiterungen):
         "default_map_style",

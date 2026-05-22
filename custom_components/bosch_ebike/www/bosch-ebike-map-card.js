@@ -175,7 +175,7 @@ const I18N = {
     dash_editor_target_soc_hint: "When set, an HA automation can read this value and stop the smart plug when the battery reaches it.",
     // Dashboard: maintenance + CO2/fuel
     dash_section_maint: "Upcoming maintenance",
-    dash_maint_none: "No maintenance due in the next 30 days / 500 km.",
+    dash_maint_none: (days, km) => `No maintenance due in the next ${days} days / ${km} km.`,
     dash_maint_due_km: (km) => `${km <= 0 ? "Overdue by " + Math.abs(km) : "in " + km} km`,
     dash_maint_due_days: (d) => `${d <= 0 ? "Overdue by " + Math.abs(d) : "in " + d} day(s)`,
     dash_maint_overdue: "Overdue",
@@ -187,7 +187,11 @@ const I18N = {
     dash_co2_eur: " €",
     dash_co2_compared: "Compared with",
     dash_editor_section_maint: "Maintenance",
-    dash_editor_maint_hint: "Items appear on the dashboard when due within the next 30 days or 500 km. Pick a suggested task or type your own.",
+    dash_editor_maint_hint: (days, km) => `Items appear on the dashboard when due within the next ${days} days or ${km} km. Pick a suggested task or type your own.`,
+    dash_editor_maint_warn_km: "Show items due within (km)",
+    dash_editor_maint_warn_km_hint: "Items appear on the dashboard when their next maintenance lies within this distance. Default: 500. Useful range: 50-2000.",
+    dash_editor_maint_warn_days: "Show items due within (days)",
+    dash_editor_maint_warn_days_hint: "Items appear on the dashboard when their next service date lies within this many days. Default: 30. Useful range: 1-365.",
     dash_editor_maint_add: "Add maintenance",
     dash_editor_maint_name: "Task",
     dash_editor_maint_type: "Trigger",
@@ -435,7 +439,7 @@ const I18N = {
     dash_editor_target_soc_hint: "Wenn gesetzt, kann eine HA-Automation diesen Wert lesen und die Steckdose abschalten, sobald der Akku ihn erreicht.",
     // Dashboard: Wartung + CO2/Sprit
     dash_section_maint: "Anstehende Wartung",
-    dash_maint_none: "Keine Wartung in den nächsten 30 Tagen / 500 km fällig.",
+    dash_maint_none: (days, km) => `Keine Wartung in den nächsten ${days} Tagen / ${km} km fällig.`,
     dash_maint_due_km: (km) => `${km <= 0 ? "Überfällig: " + Math.abs(km) : "in " + km} km`,
     dash_maint_due_days: (d) => `${d <= 0 ? "Überfällig: " + Math.abs(d) : "in " + d} Tag(en)`,
     dash_maint_overdue: "Überfällig",
@@ -447,7 +451,11 @@ const I18N = {
     dash_co2_eur: " €",
     dash_co2_compared: "Vergleich mit",
     dash_editor_section_maint: "Wartung",
-    dash_editor_maint_hint: "Einträge erscheinen im Dashboard, wenn sie in den nächsten 30 Tagen oder 500 km fällig sind. Wähle einen Vorschlag oder tippe eigenen Text.",
+    dash_editor_maint_hint: (days, km) => `Einträge erscheinen im Dashboard, wenn sie in den nächsten ${days} Tagen oder ${km} km fällig sind. Wähle einen Vorschlag oder tippe eigenen Text.`,
+    dash_editor_maint_warn_km: "Anzeigen ab Restdistanz (km)",
+    dash_editor_maint_warn_km_hint: "Wartungen erscheinen im Dashboard, sobald die nächste Fälligkeit innerhalb dieser Distanz liegt. Standard: 500. Sinnvoll: 50-2000.",
+    dash_editor_maint_warn_days: "Anzeigen ab Restzeit (Tage)",
+    dash_editor_maint_warn_days_hint: "Wartungen erscheinen im Dashboard, sobald der nächste Service innerhalb so vieler Tage fällig ist. Standard: 30. Sinnvoll: 1-365.",
     dash_editor_maint_add: "Wartung hinzufügen",
     dash_editor_maint_name: "Tätigkeit",
     dash_editor_maint_type: "Auslöser",
@@ -695,7 +703,7 @@ const I18N = {
     dash_editor_target_soc_hint: "Indien ingesteld kan een HA-automation deze waarde uitlezen en de stekker uitschakelen zodra de accu deze bereikt.",
     // Dashboard: onderhoud + CO2/brandstof
     dash_section_maint: "Aanstaand onderhoud",
-    dash_maint_none: "Geen onderhoud in de komende 30 dagen / 500 km.",
+    dash_maint_none: (days, km) => `Geen onderhoud in de komende ${days} dagen / ${km} km.`,
     dash_maint_due_km: (km) => `${km <= 0 ? "Te laat met " + Math.abs(km) : "over " + km} km`,
     dash_maint_due_days: (d) => `${d <= 0 ? "Te laat met " + Math.abs(d) : "over " + d} dag(en)`,
     dash_maint_overdue: "Te laat",
@@ -707,7 +715,11 @@ const I18N = {
     dash_co2_eur: " €",
     dash_co2_compared: "Vergeleken met",
     dash_editor_section_maint: "Onderhoud",
-    dash_editor_maint_hint: "Items verschijnen op het dashboard wanneer ze binnen 30 dagen of 500 km nodig zijn. Kies een voorstel of typ je eigen tekst.",
+    dash_editor_maint_hint: (days, km) => `Items verschijnen op het dashboard wanneer ze binnen ${days} dagen of ${km} km nodig zijn. Kies een voorstel of typ je eigen tekst.`,
+    dash_editor_maint_warn_km: "Tonen bij resterende afstand (km)",
+    dash_editor_maint_warn_km_hint: "Items verschijnen op het dashboard zodra de volgende onderhoudsbeurt binnen deze afstand valt. Standaard: 500. Bruikbaar: 50-2000.",
+    dash_editor_maint_warn_days: "Tonen bij resterende tijd (dagen)",
+    dash_editor_maint_warn_days_hint: "Items verschijnen op het dashboard zodra de volgende servicedatum binnen zoveel dagen valt. Standaard: 30. Bruikbaar: 1-365.",
     dash_editor_maint_add: "Onderhoud toevoegen",
     dash_editor_maint_name: "Taak",
     dash_editor_maint_type: "Trigger",
@@ -1041,7 +1053,13 @@ const SHARED_SETTING_KEYS = [
   "show_date", "show_time", "show_sun",
   "show_speed", "show_distance", "show_elevation",
   "stats_as_chips",
+  // Wartungs-Warnschwellen (Dashboard-Card)
+  "maint_warn_km", "maint_warn_days",
 ];
+
+// Defaults, wenn weder Shared-Store noch Card-YAML einen Wert haben.
+const MAINT_WARN_KM_DEFAULT = 500;
+const MAINT_WARN_DAYS_DEFAULT = 30;
 
 const _cardSettingsCache = { data: null };   // null = noch nicht geladen
 const _cardSettingsBus = new EventTarget();
@@ -5791,7 +5809,7 @@ class BoschEBikeDashboardCard extends HTMLElement {
     if (!due.length) {
       const p = document.createElement("div");
       p.className = "dash-maint-empty";
-      p.textContent = this._t("dash_maint_none");
+      p.textContent = this._t("dash_maint_none", this._maintWarnDays(), this._maintWarnKm());
       list.appendChild(p);
       return;
     }
@@ -5841,11 +5859,13 @@ class BoschEBikeDashboardCard extends HTMLElement {
     const remDays = m.remaining_days;
     const useKm = hasKmInterval && remKm != null && Number.isFinite(Number(remKm));
     const useDays = hasDayInterval && remDays != null && Number.isFinite(Number(remDays));
+    const warnKm = this._maintWarnKm();
+    const warnDays = this._maintWarnDays();
     if (useKm && !useDays) {
       const remaining = Math.round(Number(remKm));
       return {
         kind: "km",
-        show: remaining <= 500,
+        show: remaining <= warnKm,
         overdue: remaining <= 0,
         sortKey: remaining,
         label: this._t("dash_maint_due_km", remaining),
@@ -5855,13 +5875,31 @@ class BoschEBikeDashboardCard extends HTMLElement {
       const days = Math.round(Number(remDays));
       return {
         kind: "date",
-        show: days <= 30,
+        show: days <= warnDays,
         overdue: days <= 0,
         sortKey: days,
         label: this._t("dash_maint_due_days", days),
       };
     }
     return null;
+  }
+
+  // Warnschwellen in einem Helper kapseln, damit alle Stellen (Status-
+  // Eval, "keine Wartung fällig"-Text) garantiert denselben Wert sehen.
+  // Cascade: Shared-Store > Card-YAML > Hardcoded-Default. Werte aus
+  // dem Store kommen als Number oder String je nach Browser; coerce
+  // hier einmal und klemme auf einen vernuenftigen Bereich.
+  _maintWarnKm() {
+    const raw = readCardSetting(this._config, "maint_warn_km", MAINT_WARN_KM_DEFAULT);
+    const n = Number(raw);
+    if (!Number.isFinite(n) || n < 0) return MAINT_WARN_KM_DEFAULT;
+    return Math.max(0, Math.min(100000, Math.round(n)));
+  }
+  _maintWarnDays() {
+    const raw = readCardSetting(this._config, "maint_warn_days", MAINT_WARN_DAYS_DEFAULT);
+    const n = Number(raw);
+    if (!Number.isFinite(n) || n < 0) return MAINT_WARN_DAYS_DEFAULT;
+    return Math.max(0, Math.min(3650, Math.round(n)));
   }
 
   // Lädt die Wartungs-Items vom Backend (ws_list_maintenance). Wird
@@ -6380,10 +6418,66 @@ class BoschEBikeDashboardCardEditor extends HTMLElement {
       "color:var(--secondary-text-color);font-size:12px;line-height:1.4;font-weight:600;";
     wrap.appendChild(bikeHead);
 
+    // Hilfsfunktionen: lesen die aktuell wirksamen Warnschwellen aus
+    // dem Shared-Store (mit Cascade). Werden auch fuer den live-aktuali-
+    // sierten Hint-Text und die Initialwerte der beiden Inputs genutzt.
+    const readWarnKm = () => {
+      const raw = readCardSetting(this._config, "maint_warn_km", MAINT_WARN_KM_DEFAULT);
+      const n = Number(raw);
+      return Number.isFinite(n) && n >= 0 ? Math.round(n) : MAINT_WARN_KM_DEFAULT;
+    };
+    const readWarnDays = () => {
+      const raw = readCardSetting(this._config, "maint_warn_days", MAINT_WARN_DAYS_DEFAULT);
+      const n = Number(raw);
+      return Number.isFinite(n) && n >= 0 ? Math.round(n) : MAINT_WARN_DAYS_DEFAULT;
+    };
+
     const maintHint = document.createElement("small");
-    maintHint.textContent = this._t("dash_editor_maint_hint");
+    const refreshMaintHint = () => {
+      maintHint.textContent = this._t("dash_editor_maint_hint", readWarnDays(), readWarnKm());
+    };
+    refreshMaintHint();
     maintHint.style.cssText = "color:var(--secondary-text-color);font-size:11px;display:block;margin-bottom:8px;";
     wrap.appendChild(maintHint);
+
+    // Warnschwellen (km / Tage). Number-Inputs, debouncetes Schreiben
+    // in den Shared-Store - selbe Pattern wie der 3D-Card-Editor. Beim
+    // Aendern wird der maintHint sofort lokal aktualisiert, der Bus
+    // benachrichtigt parallel andere offene Dashboards.
+    if (!this._sharedSaveTimers) this._sharedSaveTimers = new Map();
+    const mkWarnInput = (key, labelKey, hintKey, defaultVal, min, max) => {
+      const input = mk(this._t(labelKey), this._t(hintKey), () => {
+        const i = document.createElement("input");
+        i.type = "number"; i.step = "1";
+        i.min = String(min); i.max = String(max);
+        i.style.cssText = "padding:8px;border-radius:4px;border:1px solid var(--divider-color);background:var(--card-background-color);color:var(--primary-text-color);";
+        return i;
+      });
+      const current = readCardSetting(this._config, key, defaultVal);
+      input.value = current != null && current !== "" ? String(current) : String(defaultVal);
+      input.addEventListener("input", () => {
+        const v = input.value;
+        if (this._sharedSaveTimers.has(key)) clearTimeout(this._sharedSaveTimers.get(key));
+        this._sharedSaveTimers.set(key, setTimeout(() => {
+          this._sharedSaveTimers.delete(key);
+          // Leer / unsinnig -> Default wiederherstellen (null im Store)
+          const num = v === "" ? null : Number(v);
+          const safe = num == null || !Number.isFinite(num) || num < 0
+            ? null
+            : Math.max(min, Math.min(max, Math.round(num)));
+          // Card-YAML-Override entfernen, damit der Shared-Wert gewinnt
+          if (this._config[key] != null) {
+            delete this._config[key];
+            this._emit();
+          }
+          saveCardSetting(this._hass, key, safe);
+          refreshMaintHint();
+        }, 400));
+      });
+      return input;
+    };
+    mkWarnInput("maint_warn_km", "dash_editor_maint_warn_km", "dash_editor_maint_warn_km_hint", MAINT_WARN_KM_DEFAULT, 0, 100000);
+    mkWarnInput("maint_warn_days", "dash_editor_maint_warn_days", "dash_editor_maint_warn_days_hint", MAINT_WARN_DAYS_DEFAULT, 0, 3650);
 
     const bikeSelect = mk(this._t("dash_editor_bike_id"), null, () => {
       const sel = document.createElement("select");
