@@ -5768,7 +5768,6 @@ class BoschEBikeDashboardCard extends HTMLElement {
     head.textContent = this._t("dash_section_maint");
     sec.style.display = "";
     list.innerHTML = "";
-    this._dumpMaintDiag();
 
     const due = [];
     for (const m of this._maintItems) {
@@ -5810,21 +5809,6 @@ class BoschEBikeDashboardCard extends HTMLElement {
     }
   }
 
-  // DIAGNOSTIC: dump dashboard maintenance state to the browser console.
-  // Helps figure out whether a missing item is filtered by _maintStatus
-  // (-> visible in this dump but absent from the rendered DOM) or never
-  // arrives from the backend (-> absent from this dump too).
-  _dumpMaintDiag() {
-    try {
-      console.log(
-        "[Bosch eBike DIAG] dashboard _maintItems:",
-        JSON.parse(JSON.stringify(this._maintItems || [])),
-        "config.bike_id=", this._config.bike_id,
-        "_maintLoadedFor=", this._maintLoadedFor,
-      );
-    } catch (_) { /* ignore */ }
-  }
-
   // Status aus dem vom Backend gelieferten remaining_km / remaining_days.
   // Reine Anzeige-Logik; die eigentliche Restberechnung passiert in
   // coordinator.py:_evaluate_maintenance_item.
@@ -5864,17 +5848,6 @@ class BoschEBikeDashboardCard extends HTMLElement {
         label: this._t("dash_maint_due_days", days),
       };
     }
-    // DIAGNOSTIC: items that fall through the type detection. Most
-    // common reason: interval_days is set but remaining_days came
-    // back null from the backend (parse error in last_done_at, or
-    // type mismatch).
-    try {
-      console.log(
-        "[Bosch eBike DIAG] _maintStatus returned null for:",
-        JSON.parse(JSON.stringify(m)),
-        { hasKmInterval, hasDayInterval, useKm, useDays },
-      );
-    } catch (_) { /* ignore */ }
     return null;
   }
 
@@ -6581,12 +6554,24 @@ class BoschEBikeDashboardCardEditor extends HTMLElement {
     // Bestimmt den Typ aus den vorhandenen Intervallen. Das Backend
     // erlaubt beide gleichzeitig, der Editor zeigt aber nur einen.
     // Wichtig: Number(null) ist 0 und Number.isFinite(0) ist true,
-    // daher MUSS hier explizit auf != null geprüft werden - sonst
-    // wird ein interval_km: null nach einem Typ-Wechsel zu "date"
-    // beim Re-Render trotzdem als "km" interpretiert.
+    // daher MUSS hier explizit auf != null geprüft werden.
     const hasKm = item.interval_km != null && Number.isFinite(Number(item.interval_km));
     const hasDays = item.interval_days != null && Number.isFinite(Number(item.interval_days));
-    const initialType = hasKm ? "km" : (hasDays ? "date" : "km");
+    // Self-Repair: wenn beide Intervalle gesetzt sind, ist das ein
+    // inkonsistenter Zustand. Frühere Bugs (Debouncer-Races beim
+    // Typ-Switch) konnten dazu führen, dass der "alte" Wert nach dem
+    // Wechsel wieder ins Backend lief. Auflösung: beim Render die
+    // Datumsseite bevorzugen (typisch für 'Kundendienst alle X Tage')
+    // und silently einen Patch senden, der interval_km löscht. Das
+    // ist non-destruktiv: der User kann jederzeit per Typ-Dropdown
+    // zurück auf km wechseln; das setzt dann einen frischen Default.
+    if (hasKm && hasDays) {
+      this._sendUpdateMaint(item, { interval_km: null });
+      item.interval_km = null;
+    }
+    const cleanHasKm = item.interval_km != null && Number.isFinite(Number(item.interval_km));
+    const cleanHasDays = item.interval_days != null && Number.isFinite(Number(item.interval_days));
+    const initialType = cleanHasKm ? "km" : (cleanHasDays ? "date" : "km");
     let currentType = initialType;
 
     // -- Name (Dropdown + freier Text) --
