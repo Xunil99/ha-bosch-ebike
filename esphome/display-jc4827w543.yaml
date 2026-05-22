@@ -193,13 +193,16 @@ display:
     # hardware-tied. ESPHome erlaubt kein 'GPIO -1' als Platzhalter -
     # der Key muss komplett weg. Wenn deine Boardrevision einen Reset
     # auf einem GPIO exponiert, hier 'reset_pin: GPIOxx' eintragen.
+    # Hochformat: Panel ist physikalisch 480x272, wir drehen es per
+    # swap_xy auf 272x480 (Hochformat-Gehaeuse). LVGL sieht 272x480.
     dimensions:
-      width: 480
-      height: 272
+      width: 272
+      height: 480
     color_order: rgb
     invert_colors: false
     transform:
-      mirror_x: true
+      swap_xy: true
+      mirror_x: false
       mirror_y: false
     update_interval: never
     auto_clear_enabled: false
@@ -211,8 +214,11 @@ touchscreen:
   - platform: gt911
     id: gt911_touch
     display: main_display
+    # Touch muss dieselbe Rotation mitmachen wie das Display, sonst
+    # liegen die Touch-Koordinaten in einer um 90 Grad verdrehten Welt.
     transform:
-      mirror_x: true
+      swap_xy: true
+      mirror_x: false
       mirror_y: false
     interrupt_pin: GPIO3
     reset_pin: GPIO38
@@ -352,14 +358,17 @@ lvgl:
 
   pages:
     # ------------------------------ Bike A -------------------------------
+    # Hochformat-Layout: 272 breit, 480 hoch. Header oben, Wetter darunter
+    # (zwei Zeilen weil 272 zu schmal fuer beide Tage nebeneinander),
+    # Bike-Karte zentral, Page-Dots ganz unten.
     - id: page_bike_a
       bg_color: 0x101418
       widgets:
-        # ---------- Header ----------
+        # ---------- Header (Datum links, Zeit rechts) ----------
         - obj:
             x: 0
             y: 0
-            width: 480
+            width: 272
             height: 32
             bg_color: 0x1E2530
             bg_opa: COVER
@@ -375,9 +384,9 @@ lvgl:
                   text: "..."
               - label:
                   id: lbl_time
-                  x: 380
+                  x: 180
                   y: 0
-                  width: 92
+                  width: 84
                   height: 28
                   long_mode: clip
                   text_align: RIGHT
@@ -385,11 +394,11 @@ lvgl:
                   text_font: font_big
                   text: "--:--"
 
-        # ---------- Weather strip ----------
+        # ---------- Wetter heute ----------
         - obj:
             x: 0
-            y: 36
-            width: 480
+            y: 40
+            width: 272
             height: 40
             bg_color: 0x182030
             bg_opa: COVER
@@ -410,16 +419,28 @@ lvgl:
                   text_font: font_small
                   text_color: 0xFFFFFF
                   text: "Heute --/-- C"
+
+        # ---------- Wetter morgen ----------
+        - obj:
+            x: 0
+            y: 84
+            width: 272
+            height: 40
+            bg_color: 0x182030
+            bg_opa: COVER
+            border_width: 0
+            pad_all: 4
+            widgets:
               - label:
                   id: lbl_weather_tomorrow_icon
-                  x: 250
+                  x: 8
                   y: 0
                   text_font: font_icons
                   text_color: 0xFFD060
                   text: "\U0000E2BD"
               - label:
                   id: lbl_weather_tomorrow
-                  x: 290
+                  x: 50
                   y: 8
                   text_font: font_small
                   text_color: 0xCCCCCC
@@ -429,44 +450,44 @@ lvgl:
         - label:
             id: lbl_bike_a_name
             x: 20
-            y: 90
+            y: 140
             text_font: font_big
             text_color: 0xFFFFFF
             text: ${bike_a_name}
         - label:
             id: lbl_bike_a_odo_label
             x: 20
-            y: 130
+            y: 195
             text_font: font_med
             text_color: 0x9AA8B8
             text: "Tachostand"
         - label:
             id: lbl_bike_a_odo
-            x: 240
-            y: 128
+            x: 160
+            y: 193
             text_font: font_med
             text_color: 0xFFFFFF
             text: "--- km"
         - label:
             id: lbl_bike_a_soc_label
             x: 20
-            y: 160
+            y: 230
             text_font: font_med
             text_color: 0x9AA8B8
             text: "Akku"
         - label:
             id: lbl_bike_a_soc
-            x: 240
-            y: 158
+            x: 160
+            y: 228
             text_font: font_med
             text_color: 0xFFFFFF
             text: "-- %"
         - bar:
             id: bar_bike_a_soc
             x: 20
-            y: 190
-            width: 440
-            height: 12
+            y: 265
+            width: 232
+            height: 14
             min_value: 0
             max_value: 100
             value: 0
@@ -476,29 +497,29 @@ lvgl:
         - label:
             id: lbl_bike_a_status
             x: 20
-            y: 212
+            y: 300
             text_font: font_med
             text_color: 0xFFFFFF
             text: "Status: --"
         - label:
             id: lbl_bike_a_last_seen
             x: 20
-            y: 240
+            y: 340
             text_font: font_small
             text_color: 0x9AA8B8
             text: "Zuletzt gesehen: --"
 
-        # ---------- Page indicator ----------
+        # ---------- Page indicator (unten zentriert) ----------
         - led:
             id: led_dot_a_left
-            x: 224
-            y: 258
+            x: 124
+            y: 455
             color: 0xFFFFFF
             brightness: 100%
         - led:
             id: led_dot_a_right
-            x: 246
-            y: 258
+            x: 142
+            y: 455
             color: 0x555555
             brightness: 40%
 
@@ -509,42 +530,42 @@ lvgl:
         - label:
             id: lbl_bike_b_name
             x: 20
-            y: 90
+            y: 140
             text_font: font_big
             text_color: 0xFFFFFF
             text: ${bike_b_name}
         - label:
             x: 20
-            y: 130
+            y: 195
             text_font: font_med
             text_color: 0x9AA8B8
             text: "Tachostand"
         - label:
             id: lbl_bike_b_odo
-            x: 240
-            y: 128
+            x: 160
+            y: 193
             text_font: font_med
             text_color: 0xFFFFFF
             text: "--- km"
         - label:
             x: 20
-            y: 160
+            y: 230
             text_font: font_med
             text_color: 0x9AA8B8
             text: "Akku"
         - label:
             id: lbl_bike_b_soc
-            x: 240
-            y: 158
+            x: 160
+            y: 228
             text_font: font_med
             text_color: 0xFFFFFF
             text: "-- %"
         - bar:
             id: bar_bike_b_soc
             x: 20
-            y: 190
-            width: 440
-            height: 12
+            y: 265
+            width: 232
+            height: 14
             min_value: 0
             max_value: 100
             value: 0
@@ -554,28 +575,28 @@ lvgl:
         - label:
             id: lbl_bike_b_status
             x: 20
-            y: 212
+            y: 300
             text_font: font_med
             text_color: 0xFFFFFF
             text: "Status: --"
         - label:
             id: lbl_bike_b_last_seen
             x: 20
-            y: 240
+            y: 340
             text_font: font_small
             text_color: 0x9AA8B8
             text: "Zuletzt gesehen: --"
 
         - led:
             id: led_dot_b_left
-            x: 224
-            y: 258
+            x: 124
+            y: 455
             color: 0x555555
             brightness: 40%
         - led:
             id: led_dot_b_right
-            x: 246
-            y: 258
+            x: 142
+            y: 455
             color: 0xFFFFFF
             brightness: 100%
 
