@@ -557,46 +557,73 @@ async def ws_add_maintenance(
         vol.Required("type"): "bosch_ebike/update_maintenance",
         vol.Required("bike_id"): str,
         vol.Required("item_id"): str,
+        # All optional fields are loosely typed and validated inside the
+        # handler. Strict voluptuous schemas here have repeatedly produced
+        # opaque "Unknown error" responses when the JS sent edge values
+        # (empty string from a date input that was just cleared, integer
+        # 0 from a number input, etc.) - so we coerce + bounds-check in
+        # Python instead and return precise error messages to the UI.
         vol.Optional("name"): str,
-        # Pass null explicitly to clear; omit to leave the existing value.
-        vol.Optional("interval_km"): vol.Any(vol.All(vol.Coerce(float), vol.Range(min=0.1)), None),
-        vol.Optional("interval_days"): vol.Any(vol.All(vol.Coerce(float), vol.Range(min=0.1)), None),
-        # ISO-8601 date or datetime, gespeichert wie es kommt; das Backend
-        # parsed beim Compute mit dt_util.parse_datetime, der mit beidem
-        # zurechtkommt. Frontend schickt YYYY-MM-DD vom <input type="date">.
+        vol.Optional("interval_km"): vol.Any(int, float, None),
+        vol.Optional("interval_days"): vol.Any(int, float, None),
         vol.Optional("last_done_at"): str,
-        # Odometer in METERS - die Frontend-UI rechnet km -> m vor dem Senden.
-        vol.Optional("last_done_odometer"): vol.All(vol.Coerce(float), vol.Range(min=0)),
+        vol.Optional("last_done_odometer"): vol.Any(int, float, None),
     }
 )
 @websocket_api.async_response
 async def ws_update_maintenance(
     hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict
 ) -> None:
-    bike_id = msg["bike_id"]
-    coord = _coordinator_for_bike(hass, bike_id)
-    if not coord:
-        connection.send_error(msg["id"], "not_found", f"Bike {bike_id} not found")
-        return
-    # Translate "null" payload into the clear_* flags the coordinator
-    # uses to distinguish "don't touch" from "set to None".
-    clear_km = "interval_km" in msg and msg["interval_km"] is None
-    clear_days = "interval_days" in msg and msg["interval_days"] is None
-    ok = coord.update_maintenance_item(
-        bike_id,
-        msg["item_id"],
-        name=msg.get("name"),
-        interval_km=msg.get("interval_km") if not clear_km else None,
-        interval_days=msg.get("interval_days") if not clear_days else None,
-        last_done_at=msg.get("last_done_at"),
-        last_done_odometer=msg.get("last_done_odometer"),
-        clear_interval_km=clear_km,
-        clear_interval_days=clear_days,
-    )
-    if not ok:
-        connection.send_error(msg["id"], "not_found", f"Item {msg['item_id']} not found for bike {bike_id}")
-        return
-    connection.send_result(msg["id"], {"ok": True})
+    try:
+        bike_id = msg["bike_id"]
+        coord = _coordinator_for_bike(hass, bike_id)
+        if not coord:
+            connection.send_error(msg["id"], "not_found", f"Bike {bike_id} not found")
+            return
+
+        # Coerce + validate every field here so a buggy frontend value
+        # surfaces as a clear error instead of an "Unknown error" 500.
+        kwargs = {}
+        if "name" in msg and msg["name"] is not None:
+            kwargs["name"] = str(msg["name"])
+
+        # Interval fields: null means "clear it" (used by the type switch);
+        # a positive number sets the new interval; missing means "leave it".
+        clear_km = "interval_km" in msg and msg["interval_km"] is None
+        clear_days = "interval_days" in msg and msg["interval_days"] is None
+        if "interval_km" in msg and msg["interval_km"] is not None:
+            v = float(msg["interval_km"])
+            if v <= 0:
+                connection.send_error(msg["id"], "invalid_format", "interval_km must be > 0")
+                return
+            kwargs["interval_km"] = v
+        if "interval_days" in msg and msg["interval_days"] is not None:
+            v = float(msg["interval_days"])
+            if v <= 0:
+                connection.send_error(msg["id"], "invalid_format", "interval_days must be > 0")
+                return
+            kwargs["interval_days"] = v
+
+        if "last_done_at" in msg and msg["last_done_at"]:
+            kwargs["last_done_at"] = str(msg["last_done_at"])
+        if "last_done_odometer" in msg and msg["last_done_odometer"] is not None:
+            v = float(msg["last_done_odometer"])
+            if v < 0:
+                connection.send_error(msg["id"], "invalid_format", "last_done_odometer must be >= 0")
+                return
+            kwargs["last_done_odometer"] = v
+
+        kwargs["clear_interval_km"] = clear_km
+        kwargs["clear_interval_days"] = clear_days
+
+        ok = coord.update_maintenance_item(bike_id, msg["item_id"], **kwargs)
+        if not ok:
+            connection.send_error(msg["id"], "not_found", f"Item {msg['item_id']} not found for bike {bike_id}")
+            return
+        connection.send_result(msg["id"], {"ok": True})
+    except Exception as err:  # noqa: BLE001
+        _LOGGER.exception("ws_update_maintenance failed: msg=%s", msg)
+        connection.send_error(msg["id"], "internal_error", f"{type(err).__name__}: {err}")
 
 
 @websocket_api.websocket_command(
