@@ -82,12 +82,23 @@ esp32:
       # Octal PSRAM (8 MB) for LVGL frame buffers
       CONFIG_SPIRAM_MODE_OCT: y
       CONFIG_SPIRAM_SPEED_80M: y
+      # Konsolen-Ausgabe ueber USB Serial JTAG (Native USB), nicht UART0.
+      # JC4827W543 fuehrt UART0 nirgendwo nach aussen.
+      CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG: y
+      CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG_ENABLED: y
 
 psram:
   mode: octal
   speed: 80MHz
 
 logger:
+  # JC4827W543 hat KEINEN UART-USB-Bridge-Chip - die USB-C-Buchse
+  # haengt direkt am Native USB des ESP32-S3 (GPIO19/20). Der
+  # Default-Logger geht auf UART0, der hier nirgendwo nach aussen
+  # gefuehrt ist - Folge: komplett leerer Webflasher-Log obwohl das
+  # Board laeuft. USB_SERIAL_JTAG ist der ROM-built-in Debug-Port,
+  # liegt auf denselben Pins und ist immer aktiv.
+  hardware_uart: USB_SERIAL_JTAG
   level: INFO
   logs:
     sensor: WARN
