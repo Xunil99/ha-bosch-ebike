@@ -297,18 +297,9 @@ globals:
     initial_value: ${bike_b_name:+"true"}${bike_b_name:-"false"}
     # Evaluates to "true" if bike_b_name is non-empty, "false" otherwise.
 
-interval:
-  - interval: 5s
-    then:
-      - lambda: |-
-          uint32_t idle_ms = millis() - id(last_touch_ms);
-          float target = 1.0f;
-          if (idle_ms > 5 * 60 * 1000) target = 0.05f;
-          else if (idle_ms > 60 * 1000) target = 0.30f;
-          auto call = id(backlight).turn_on();
-          call.set_brightness(target);
-          call.set_transition_length(500);
-          call.perform();
+# Hinweis: Das frueher hier stehende interval: fuer das Backlight-
+# Idle-Dimming wurde in den groesseren interval:-Block weiter unten
+# verschoben - ESPHome erlaubt nur EINEN Top-Level-interval:-Key.
 
 # ---------------------------------------------------------------------------
 # LVGL UI
@@ -589,6 +580,21 @@ script:
             return std::string("\U0000E2BD");
 
 interval:
+  # ---------- Backlight idle dimming (frueher als eigener Top-Level-
+  # interval:-Block weiter oben - ESPHome erlaubt nur einen). Dimmt nach
+  # 60 s Idle auf 30 %, nach 5 min auf 5 %, kehrt bei Touch zu 100 %. ----
+  - interval: 5s
+    then:
+      - lambda: |-
+          uint32_t idle_ms = millis() - id(last_touch_ms);
+          float target = 1.0f;
+          if (idle_ms > 5 * 60 * 1000) target = 0.05f;
+          else if (idle_ms > 60 * 1000) target = 0.30f;
+          auto call = id(backlight).turn_on();
+          call.set_brightness(target);
+          call.set_transition_length(500);
+          call.perform();
+
   - interval: 1s
     then:
       # ---------- Date + time ----------
