@@ -5271,7 +5271,10 @@ class BoschEBikeDashboardCard extends HTMLElement {
       // Bike-Wechsel oder Page-Reload.
       this._maintBusHandler = () => {
         this._maintLoadedFor = null;
-        if (this._config.bike_id) this._loadMaintenance(this._config.bike_id);
+        // Reload auch im Auto-Discover-Fall (keine bike_id konfiguriert)
+        // - _loadMaintenance entscheidet selbst, ob es matched oder
+        // automatisch das einzige Bike mit Items nimmt.
+        this._loadMaintenance(this._config.bike_id || null);
       };
       _cardSettingsBus.addEventListener("changed", this._maintBusHandler);
     }
@@ -5748,14 +5751,13 @@ class BoschEBikeDashboardCard extends HTMLElement {
     const list = this.querySelector("#dash-maint-list");
     if (!sec || !head || !list) return;
 
-    const bikeId = this._config.bike_id;
-    if (!bikeId) { sec.style.display = "none"; return; }
+    const bikeId = this._config.bike_id || null;
 
     // Async-Loader anstossen, falls wir noch keine Items haben oder
-    // sich die Bike-ID geändert hat. Beim erfolgreichen Laden ruft
-    // dieser Pfad _render() erneut auf -> wir kommen wieder hier vorbei,
-    // diesmal mit Daten.
-    if (this._maintItems == null || this._maintLoadedFor !== bikeId) {
+    // sich der Bike-Scope (oder das "auto"-Flag) geändert hat. Beim
+    // erfolgreichen Laden ruft dieser Pfad _render() erneut auf.
+    const scopeKey = bikeId || "__auto__";
+    if (this._maintItems == null || this._maintLoadedFor !== scopeKey) {
       this._loadMaintenance(bikeId);
       sec.style.display = "none";
       return;
@@ -5856,28 +5858,42 @@ class BoschEBikeDashboardCard extends HTMLElement {
   // gelöscht, sobald der Backend-Pfad einmal funktioniert hat.
   async _loadMaintenance(bikeId) {
     if (this._maintLoading) return;
-    if (!this._hass || !bikeId) return;
+    if (!this._hass) return;
     this._maintLoading = true;
     try {
       const res = await this._hass.callWS({ type: "bosch_ebike/list_maintenance" });
-      const myBike = (res?.bikes || []).find(b => b.bike_id === bikeId);
-      this._maintItems = myBike?.items || [];
-      this._maintLoadedFor = bikeId;
-      // Einmalige Migration aus localStorage: alte v1.16.5-Reset-Marker
-      // wegräumen, sobald wir mindestens einmal Items aus dem Backend
-      // bekommen haben. Wir können sie nicht sinnvoll zuordnen, also
-      // ist das nur ein Cleanup - der User hat den "erledigt"-Klick
-      // jetzt direkt im Backend.
+      const bikes = res?.bikes || [];
+      let resolvedBikeId = bikeId;
+      let items = null;
+      if (bikeId) {
+        const myBike = bikes.find((b) => b.bike_id === bikeId);
+        items = myBike?.items || null;
+      }
+      // Auto-Discover: bei fehlender oder nicht-matchender bike_id
+      // nimm das Bike, das überhaupt Items hat. Häufiger Fall:
+      // Single-Bike-Setup, und der User hat in den Editor-Settings
+      // nichts explizit gewählt.
+      if (items == null) {
+        const bikesWithItems = bikes.filter((b) => (b.items || []).length > 0);
+        if (bikesWithItems.length === 1) {
+          items = bikesWithItems[0].items;
+          resolvedBikeId = bikesWithItems[0].bike_id;
+        } else {
+          items = [];
+        }
+      }
+      // bike_id pro Item annotieren, damit der Done-Button die
+      // richtige Bike-Zuordnung hat - auch im Auto-Discover-Fall,
+      // wo this._config.bike_id leer ist.
+      this._maintItems = items.map((i) => ({ ...i, bike_id: resolvedBikeId }));
+      this._maintLoadedFor = bikeId || "__auto__";
       this._cleanupLegacyLocalStorage();
-      // Auto-Migration: Items aus der alten card.config.maintenance
-      // einmal ins Backend pushen, dann das Feld leeren und emit.
-      // Nur wenn der Editor das nicht selbst schon macht.
-      this._tryConfigMaintenanceMigration(bikeId).catch(() => {});
+      this._tryConfigMaintenanceMigration(resolvedBikeId).catch(() => {});
       this._render();
     } catch (err) {
       console.warn("[Bosch eBike Dashboard] list_maintenance failed:", err?.message || err);
       this._maintItems = [];
-      this._maintLoadedFor = bikeId;
+      this._maintLoadedFor = bikeId || "__auto__";
     } finally {
       this._maintLoading = false;
     }
@@ -5948,11 +5964,14 @@ class BoschEBikeDashboardCard extends HTMLElement {
   // ist.
   async _maintMarkDone(item) {
     if (!item || !item.id) return;
-    // Fallback auf die Bike-ID, mit der wir das Item geladen haben,
-    // falls this._config.bike_id zwischenzeitlich gelöscht/leer ist.
-    const bikeId = this._config.bike_id || this._maintLoadedFor;
+    // Bike-ID-Auflösung in dieser Reihenfolge: das Item selbst (das
+    // wir in _loadMaintenance mit bike_id annotieren) -> Card-Config
+    // -> der zuletzt geladene Scope. So funktioniert "erledigt" auch
+    // im Auto-Discover-Fall, wo this._config.bike_id leer ist.
+    const bikeId = item.bike_id || this._config.bike_id
+      || (this._maintLoadedFor !== "__auto__" ? this._maintLoadedFor : null);
     if (!bikeId) {
-      alert("Bitte ein Bike in den Card-Einstellungen wählen.");
+      alert("Keine Bike-ID gefunden. Bitte ein Bike in den Card-Einstellungen wählen.");
       return;
     }
     if (!this._hass) return;
@@ -5973,7 +5992,10 @@ class BoschEBikeDashboardCard extends HTMLElement {
       document.body.appendChild(flash);
       setTimeout(() => flash.remove(), 800);
       this._maintLoadedFor = null;
-      this._loadMaintenance(bikeId);
+      // Reload mit dem CONFIG-Bike (auch null = Auto-Discover), nicht
+      // dem aufgelösten Item-Bike - sonst weicht _maintLoadedFor vom
+      // scopeKey im Render ab und es triggert einen zweiten Reload.
+      this._loadMaintenance(this._config.bike_id || null);
     } catch (err) {
       console.warn("[Bosch eBike Dashboard] complete_maintenance failed:", err?.message || err);
       alert("Wartung konnte nicht als erledigt markiert werden: " + (err?.message || err));
