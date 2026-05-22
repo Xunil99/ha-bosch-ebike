@@ -3454,19 +3454,20 @@ ${trackPoints}
   // die Card skipt damit ihre List-View und geht direkt in den Detail-
   // (Playback-)Modus.
   //
-  // Anschließend wird sofort die Browser-Fullscreen-API auf der Card
-  // angefordert: ihre interne Höhe ist auf var(--m3d-h, 540px)
-  // begrenzt, weil sie eigentlich als Lovelace-Card gebaut ist; erst
-  // der :fullscreen-Pfad triggert die Flex-Chain, die das Canvas auf
-  // 100vh ausdehnt. Der Call muss SYNCHRON im Klick-Event passieren,
-  // sonst lehnt Safari requestFullscreen ohne User-Gesture ab. Falls
-  // die native API nicht verfügbar ist (iOS WKWebView), springt der
-  // CSS-Pseudo-Fullscreen-Fallback der Card ein.
+  // Layout-Fix: die 3D-Card ist intern als Lovelace-Card gebaut und
+  // begrenzt ihr Canvas auf var(--m3d-h, 540px). Damit das Overlay
+  // auf jedem Bildschirmrand sauber ausfüllt (Map oben, Play-Leiste
+  // unten am Rand), injecten wir scoped CSS-Regeln, die dieselbe
+  // Flex-Chain wie der :fullscreen-Pfad anwenden - jedoch
+  // unkonditional, sobald die Card in einem .eb-chase-overlay sitzt.
+  // Dadurch funktioniert die Anzeige sowohl im Browser-Fullscreen als
+  // auch im non-FS-Overlay-Zustand.
   _openChaseCam() {
     const activity = this._activities && this._activities[this._idx];
     if (!activity || !activity.id) return;
 
     this._closeChaseCam();
+    this._ensureChaseCamStyles();
 
     const overlay = document.createElement("div");
     overlay.className = "eb-chase-overlay";
@@ -3491,16 +3492,14 @@ ${trackPoints}
     overlay.appendChild(closeBtn);
 
     const card = document.createElement("bosch-ebike-3d-map-card");
-    card.style.cssText = "flex:1;min-height:0;display:block;";
-
     const cfg = { height: 540 };
     if (this._filterAccount && this._filterAccount !== "all") cfg.account_id = this._filterAccount;
     if (this._filterBike && this._filterBike !== "all") cfg.bike_id = this._filterBike;
     card.setConfig(cfg);
 
-    // Overlay zuerst in den DOM, damit die Card im Connect-Lifecycle
-    // schon weiß, wo sie hängt - der :fullscreen-Pfad inspectet
-    // die DOM-Position.
+    // Overlay zuerst in den DOM, dann die Card. Reihenfolge wichtig,
+    // damit die Card im connectedCallback schon ihre DOM-Position
+    // kennt.
     document.body.appendChild(overlay);
     document.body.style.overflow = "hidden";
     overlay.appendChild(card);
@@ -3508,32 +3507,17 @@ ${trackPoints}
     card.hass = this._hass;
     card.openActivity({ id: activity.id, accountId: activity.accountId });
 
-    // Listener für fullscreenchange installieren, BEVOR wir den
-    // Fullscreen-Request feuern - sonst kann der Card-interne Handler
-    // den 'wir sind jetzt FS'-Zustand verpassen, der u. a. das
-    // Icon-Update und map.resize() triggert.
-    try {
-      if (typeof card._ensureFullscreenListener === "function") {
-        card._ensureFullscreenListener();
-      }
-    } catch (_) { /* ignore */ }
+    // MapLibre misst seine Canvas-Größe direkt nach dem Mounting.
+    // Da die Flex-Chain dann gerade erst greift, kommt der erste
+    // resize() noch mit der alten Höhe. Zwei RAFs später hat sich
+    // das Layout settled - dann explizit map.resize() triggern.
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      try { card._map && card._map.resize(); } catch (_) {}
+    }));
 
-    // Auto-Fullscreen: SYNCHRON im Click-Handler, damit Safari den
-    // User-Gesture als gültig akzeptiert. _toggleFullscreen der Card
-    // wrapt requestFullscreen + CSS-Pseudo-Fallback.
-    try {
-      if (typeof card._toggleFullscreen === "function") {
-        card._toggleFullscreen();
-      }
-    } catch (e) {
-      console.warn("[Bosch eBike] chase-cam auto-fullscreen failed", e);
-    }
-
-    // Wenn der User per Escape den Browser-Fullscreen verlässt, soll
-    // NICHT direkt darauf das Overlay zugemacht werden (Escape hat
-    // schon einen Effekt). Wir tracken über den fullscreenchange-Event
-    // ein kurzes Zeitfenster, in dem der nachfolgende Escape-keydown
-    // ignoriert wird. Der zweite Escape schließt dann das Overlay.
+    // Falls der User später manuell den Browser-Fullscreen verlässt,
+    // soll Escape NICHT direkt das Overlay zumachen - zweiter Escape
+    // schließt es.
     this._chaseFsExitedAt = 0;
     this._chaseFsChangeHandler = () => {
       const inFs = document.fullscreenElement === card
@@ -3546,14 +3530,46 @@ ${trackPoints}
     this._chaseEscHandler = (ev) => {
       if (ev.key !== "Escape") return;
       const inFs = document.fullscreenElement || document.webkitFullscreenElement;
-      if (inFs) return;   // Browser kümmert sich selbst um den FS-Exit
-      if (Date.now() - this._chaseFsExitedAt < 400) return;   // gerade erst FS verlassen
+      if (inFs) return;
+      if (Date.now() - this._chaseFsExitedAt < 400) return;
       this._closeChaseCam();
     };
     document.addEventListener("keydown", this._chaseEscHandler);
 
     this._chaseOverlay = overlay;
     this._chaseCard = card;
+  }
+
+  // Injectet einmalig ein <style>-Element in document.head, das die
+  // Flex-Chain für die 3D-Card im Chase-Cam-Overlay aktiviert.
+  // Idempotent über die ID.
+  _ensureChaseCamStyles() {
+    if (document.getElementById("eb-chase-style")) return;
+    const ss = document.createElement("style");
+    ss.id = "eb-chase-style";
+    ss.textContent = `
+      .eb-chase-overlay bosch-ebike-3d-map-card {
+        flex: 1; min-height: 0;
+        display: flex; flex-direction: column;
+        width: 100%; height: 100%;
+      }
+      .eb-chase-overlay bosch-ebike-3d-map-card ha-card {
+        flex: 1; min-height: 0; height: auto; max-height: none;
+        border-radius: 0;
+        display: flex; flex-direction: column;
+      }
+      .eb-chase-overlay bosch-ebike-3d-map-card .map3d-root {
+        flex: 1; min-height: 0;
+        display: flex; flex-direction: column;
+      }
+      .eb-chase-overlay bosch-ebike-3d-map-card .map3d-detail {
+        flex: 1; min-height: 0;
+      }
+      .eb-chase-overlay bosch-ebike-3d-map-card .map3d-canvas {
+        height: 100% !important; max-height: none !important;
+      }
+    `;
+    document.head.appendChild(ss);
   }
 
   _closeChaseCam() {
