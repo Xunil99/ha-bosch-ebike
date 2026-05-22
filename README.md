@@ -188,6 +188,7 @@ Die Integration enthält eine interaktive Lovelace-Karte zur Anzeige deiner GPS-
 - Start-Marker (grün) und Ziel-Marker (rot)
 - Fahrtinformationen (Distanz, Dauer, Ø/Max Speed, Höhenmeter, Kalorien)
 - **◀ Prev / Next ▶** Buttons und **Date-Picker** zum Durchblättern aller Fahrten
+- **▶ Chase-Cam-Button** öffnet die aktuell sichtbare Tour in einem Vollbild-Overlay mit der kompletten 3D-Card-Wiedergabe (2D / 3D / Satellit, Slider, Nord-Fix-Toggle, Vollbild). Schließen via X-Button oder Escape.
 
 > **Hinweis:** Wenn die Karte nach einem Update nicht korrekt angezeigt wird, leere den Browser-Cache mit `Ctrl+Shift+R` (Hard Reload).
 
@@ -671,6 +672,7 @@ The integration includes an interactive Lovelace card for displaying your GPS tr
 - Start marker (green) and end marker (red)
 - Ride information (distance, duration, avg/max speed, elevation, calories)
 - **◀ Prev / Next ▶** buttons and **date picker** for browsing all rides
+- **▶ Chase-cam button** opens the currently shown ride in a fullscreen overlay with the full 3D-card playback experience (2D / 3D / Satellite, slider, north-up toggle, fullscreen). Close via the × button or Escape.
 
 > **Note:** If the card doesn't display correctly after an update, clear your browser cache with `Ctrl+Shift+R` (hard reload).
 

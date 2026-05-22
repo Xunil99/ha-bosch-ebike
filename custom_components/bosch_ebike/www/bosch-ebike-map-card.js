@@ -32,6 +32,7 @@ const I18N = {
     btn_wiki: "Wikipedia articles",
     btn_poi: "Charging stations, repair shops, drinking water, toilets",
     btn_gpx: "Download GPX",
+    btn_chase: "Chase-cam playback",
     btn_fullscreen: "Fullscreen",
     btn_prev: "Previous ride",
     btn_next: "Next ride",
@@ -299,6 +300,7 @@ const I18N = {
     btn_wiki: "Wikipedia-Artikel",
     btn_poi: "Ladestationen, Werkstätten, Trinkwasser, Toiletten",
     btn_gpx: "GPX herunterladen",
+    btn_chase: "Chase-Cam-Wiedergabe",
     btn_fullscreen: "Vollbild",
     btn_prev: "Vorherige Fahrt",
     btn_next: "Nächste Fahrt",
@@ -556,6 +558,7 @@ const I18N = {
     btn_wiki: "Wikipedia-artikelen",
     btn_poi: "Laadstations, werkplaatsen, drinkwater, toiletten",
     btn_gpx: "GPX downloaden",
+    btn_chase: "Chase-cam afspelen",
     btn_fullscreen: "Volledig scherm",
     btn_prev: "Vorige rit",
     btn_next: "Volgende rit",
@@ -1681,6 +1684,9 @@ class BoschEBikeMapCard extends HTMLElement {
           <button id="eb-wiki" class="eb-icon-btn" title="${t("btn_wiki")}" aria-label="${t("btn_wiki")}">📚</button>
           <button id="eb-poi" class="eb-icon-btn" title="${t("btn_poi")}" aria-label="${t("btn_poi")}">📍</button>
           <button id="eb-gpx" class="eb-icon-btn" title="${t("btn_gpx")}" aria-label="${t("btn_gpx")}">GPX</button>
+          <button id="eb-chase" class="eb-icon-btn" title="${t("btn_chase")}" aria-label="${t("btn_chase")}">
+            <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M8 5v14l11-7z"/></svg>
+          </button>
           <button id="eb-fullscreen" class="eb-icon-btn" title="${t("btn_fullscreen")}" aria-label="${t("btn_fullscreen")}">
             <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M7,14H5V19H10V17H7V14M5,10H7V7H10V5H5V10M17,17H14V19H19V14H17V17M14,5V7H17V10H19V5H14Z"/></svg>
           </button>
@@ -1704,6 +1710,9 @@ class BoschEBikeMapCard extends HTMLElement {
             <button id="eb-full-wiki" class="eb-icon-btn" title="${t("btn_wiki")}" aria-label="${t("btn_wiki")}">📚</button>
             <button id="eb-full-poi" class="eb-icon-btn" title="${t("btn_poi")}" aria-label="${t("btn_poi")}">📍</button>
             <button id="eb-full-gpx" class="eb-icon-btn" title="${t("btn_gpx")}" aria-label="${t("btn_gpx")}">GPX</button>
+            <button id="eb-full-chase" class="eb-icon-btn" title="${t("btn_chase")}" aria-label="${t("btn_chase")}">
+              <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M8 5v14l11-7z"/></svg>
+            </button>
             <button id="eb-fit" class="eb-icon-btn" title="${t("btn_fit")}" aria-label="${t("btn_fit")}">
               <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M4,4H10V6H6V10H4V4M14,4H20V10H18V6H14V4M4,14H6V18H10V20H4V14M18,14H20V20H14V18H18V14Z"/></svg>
             </button>
@@ -1729,8 +1738,11 @@ class BoschEBikeMapCard extends HTMLElement {
     this._$("eb-style").addEventListener("click", () => this._cycleMapStyle());
     this._$("eb-gpx").addEventListener("click", () => this._downloadCurrentGpx());
     this._$("eb-fullscreen").addEventListener("click", () => this._openFullscreen());
+    this._$("eb-chase").addEventListener("click", () => this._openChaseCam());
     this._$("eb-full-style").addEventListener("click", () => this._cycleMapStyle());
     this._$("eb-full-gpx").addEventListener("click", () => this._downloadCurrentGpx());
+    const fullChase = this._$("eb-full-chase");
+    if (fullChase) fullChase.addEventListener("click", () => this._openChaseCam());
     this._$("eb-full-close").addEventListener("click", () => this._closeFullscreen());
     this._$("eb-wiki").addEventListener("click", () => this._toggleWikipedia());
     const fullWiki = this._$("eb-full-wiki");
@@ -3433,6 +3445,93 @@ ${trackPoints}
     document.body.style.overflow = "hidden";
     this._setFullscreenTab(this._fullscreenTab || "map");
     this._scheduleFullscreenSync("open");
+  }
+
+  // Öffnet die aktuell selektierte Tour als Chase-Cam-Wiedergabe in
+  // einem Vollbild-Overlay. Bauen erzeugt eine bosch-ebike-3d-map-card-
+  // Instanz, gibt ihr das passende Bike/Account-Filter mit (damit der
+  // Back-Button die richtige Liste zeigt) und ruft openActivity() -
+  // die Card skipt damit ihre List-View und geht direkt in den Detail-
+  // (Playback-)Modus. Alle Features der 3D-Card (2D/3D/Sat, Slider,
+  // Nord-Fix, Vollbild-Toggle) stehen darin zur Verfügung.
+  _openChaseCam() {
+    const activity = this._activities && this._activities[this._idx];
+    if (!activity || !activity.id) return;
+
+    // Falls schon ein Overlay offen: erst altes schließen.
+    this._closeChaseCam();
+
+    const overlay = document.createElement("div");
+    overlay.className = "eb-chase-overlay";
+    overlay.style.cssText =
+      "position:fixed;inset:0;z-index:10000;background:#000;" +
+      "display:flex;flex-direction:column;";
+
+    const closeBtn = document.createElement("button");
+    closeBtn.type = "button";
+    closeBtn.setAttribute("aria-label", "Close");
+    closeBtn.style.cssText =
+      "position:absolute;top:calc(env(safe-area-inset-top,0px) + 8px);" +
+      "right:8px;z-index:10001;width:36px;height:36px;border:0;border-radius:50%;" +
+      "background:rgba(20,24,32,.85);color:#fff;cursor:pointer;" +
+      "display:inline-flex;align-items:center;justify-content:center;" +
+      "box-shadow:0 2px 8px rgba(0,0,0,.5);";
+    closeBtn.innerHTML =
+      '<svg viewBox="0 0 24 24" width="20" height="20">' +
+      '<path fill="currentColor" d="M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z"/>' +
+      '</svg>';
+    closeBtn.addEventListener("click", () => this._closeChaseCam());
+    overlay.appendChild(closeBtn);
+
+    const card = document.createElement("bosch-ebike-3d-map-card");
+    card.style.cssText = "flex:1;min-height:0;display:block;";
+
+    // Filter durchreichen: wenn der User in der 2D-Card einen Account/
+    // Bike-Filter aktiv hat, soll die List-View dahinter ebenfalls
+    // gefiltert sein (Back-Button-Verhalten konsistent halten).
+    const cfg = { height: 540 };
+    if (this._filterAccount && this._filterAccount !== "all") cfg.account_id = this._filterAccount;
+    if (this._filterBike && this._filterBike !== "all") cfg.bike_id = this._filterBike;
+    card.setConfig(cfg);
+    card.hass = this._hass;
+
+    // Direkt in die Tour springen (skipt die List-View).
+    card.openActivity({ id: activity.id, accountId: activity.accountId });
+
+    // Escape schließt das Overlay zusätzlich zum eigenen X-Button.
+    this._chaseEscHandler = (ev) => {
+      if (ev.key !== "Escape") return;
+      // Wenn die 3D-Card gerade selbst im Fullscreen ist, NICHT
+      // doppelt schließen - der Escape geht dann an die Card und
+      // bringt sie aus dem Browser-Fullscreen. Erst beim zweiten
+      // Escape kommt das Overlay weg.
+      if (document.fullscreenElement || document.webkitFullscreenElement) return;
+      this._closeChaseCam();
+    };
+    document.addEventListener("keydown", this._chaseEscHandler);
+
+    document.body.appendChild(overlay);
+    document.body.style.overflow = "hidden";
+    this._chaseOverlay = overlay;
+    this._chaseCard = card;
+
+    // Card erst NACH dem appendChild ans Overlay hängen, damit ihre
+    // Lifecycle-Hooks (connectedCallback, set hass) erst greifen, wenn
+    // die DOM-Position stabil ist.
+    overlay.appendChild(card);
+  }
+
+  _closeChaseCam() {
+    if (this._chaseEscHandler) {
+      document.removeEventListener("keydown", this._chaseEscHandler);
+      this._chaseEscHandler = null;
+    }
+    if (this._chaseOverlay) {
+      try { this._chaseOverlay.remove(); } catch (_) {}
+      this._chaseOverlay = null;
+    }
+    this._chaseCard = null;
+    document.body.style.overflow = "";
   }
 
   _closeFullscreen() {
@@ -6469,12 +6568,37 @@ class BoschEBike3DMapCard extends HTMLElement {
         (a, b) => new Date(b.startTime) - new Date(a.startTime)
       );
       this._applyFilter();
-      this._renderRoot();
+      // External callers (z. B. die 2D-Card via Chase-Cam-Button) können
+      // openActivity() schon vor dem Boot rufen. Die Aktivität wird
+      // gepuffert und sobald die Liste steht hier eingespielt - skipt
+      // das List-View komplett.
+      if (this._pendingOpenActivity) {
+        const a = this._pendingOpenActivity;
+        this._pendingOpenActivity = null;
+        this._openTour(a);
+      } else {
+        this._renderRoot();
+      }
     } catch (err) {
       console.error("[Bosch eBike 3D] boot error", err);
       this._showMessage("Fehler: " + (err?.message || err));
     } finally {
       this._booting = false;
+    }
+  }
+
+  // Public entry: vom 2D-Card-Toolbar-Button gerufen. Öffnet direkt die
+  // Detail-Wiedergabe einer Tour, ohne die List-View dazwischen. Wenn
+  // die Card noch nicht gebootet ist, wird die Aktivität in
+  // _pendingOpenActivity zwischengespeichert und am Ende von _boot()
+  // automatisch aufgerufen. Erwartet { id, accountId } analog zu den
+  // List-View-Activity-Objekten.
+  openActivity(activity) {
+    if (!activity || !activity.id) return;
+    if (this._ready) {
+      this._openTour(activity);
+    } else {
+      this._pendingOpenActivity = activity;
     }
   }
 
