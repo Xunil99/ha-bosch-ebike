@@ -4014,17 +4014,28 @@ class BoschEBikeHeatmapCard extends HTMLElement {
         flex:1; min-height:0; height:auto; max-height:none;
         border-radius:0; display:flex; flex-direction:column;
       }
+      /* Firefox / Opera honor :fullscreen and the flex chain, but
+         percentage heights on a flex child whose parent has
+         min-height:0 don't always resolve there (Chromium is more
+         lenient). Result: .heat-map kept its baseline ${h}px height
+         and a big white area appeared below. Fix: in fullscreen we
+         pin .heat-map absolutely inside the already-relative
+         wrapper - inset:0 needs no resolved parent height. */
       bosch-ebike-heatmap-card:fullscreen .heat-map-wrap {
-        flex:1; min-height:0;
+        flex:1; min-height:0; position:relative;
       }
       bosch-ebike-heatmap-card:-webkit-full-screen .heat-map-wrap {
-        flex:1; min-height:0;
+        flex:1; min-height:0; position:relative;
       }
       bosch-ebike-heatmap-card:fullscreen .heat-map {
-        height:100% !important; min-height:0 !important;
+        position:absolute !important; inset:0 !important;
+        width:auto !important; height:auto !important;
+        min-height:0 !important;
       }
       bosch-ebike-heatmap-card:-webkit-full-screen .heat-map {
-        height:100% !important; min-height:0 !important;
+        position:absolute !important; inset:0 !important;
+        width:auto !important; height:auto !important;
+        min-height:0 !important;
       }
       /* iOS / WKWebView fallback: requestFullscreen rejects there, so
          we pin the host with position:fixed. Same flex chain as the
@@ -4043,10 +4054,12 @@ class BoschEBikeHeatmapCard extends HTMLElement {
         display:flex; flex-direction:column;
       }
       bosch-ebike-heatmap-card.heat-pseudo-fs .heat-map-wrap {
-        flex:1; min-height:0;
+        flex:1; min-height:0; position:relative;
       }
       bosch-ebike-heatmap-card.heat-pseudo-fs .heat-map {
-        height:100% !important; min-height:0 !important;
+        position:absolute !important; inset:0 !important;
+        width:auto !important; height:auto !important;
+        min-height:0 !important;
       }
     `;
     card.appendChild(style);
