@@ -33,6 +33,10 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     websocket_api.async_register_command(hass, ws_get_track)
     websocket_api.async_register_command(hass, ws_get_all_tracks)
     websocket_api.async_register_command(hass, ws_list_maintenance)
+    websocket_api.async_register_command(hass, ws_add_maintenance)
+    websocket_api.async_register_command(hass, ws_update_maintenance)
+    websocket_api.async_register_command(hass, ws_complete_maintenance)
+    websocket_api.async_register_command(hass, ws_remove_maintenance)
     websocket_api.async_register_command(hass, ws_overpass_pois)
 
     _register_services(hass)
@@ -478,6 +482,133 @@ async def ws_list_maintenance(
     connection.send_result(msg["id"], {"bikes": out})
 
 
+def _get_current_odo(coord, bike_id: str) -> float | None:
+    """Helper: read current odometer (meters) from a coordinator's bike."""
+    for bike in (coord.data.get("bikes", []) if coord.data else []):
+        if bike.get("id") == bike_id:
+            drive = bike.get("driveUnit") or {}
+            return drive.get("odometer")
+    return None
+
+
+# Frontend-facing CRUD over WebSocket. Mirrors the integration-level
+# services but returns useful payloads (created IDs, updated state) so
+# the dashboard card can avoid an extra list-roundtrip after every
+# mutation. Same per-bike scoping as ws_list_maintenance.
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "bosch_ebike/add_maintenance",
+        vol.Required("bike_id"): str,
+        vol.Required("name"): str,
+        vol.Optional("interval_km"): vol.Any(vol.All(vol.Coerce(float), vol.Range(min=0.1)), None),
+        vol.Optional("interval_days"): vol.Any(vol.All(vol.Coerce(float), vol.Range(min=0.1)), None),
+    }
+)
+@websocket_api.async_response
+async def ws_add_maintenance(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict
+) -> None:
+    bike_id = msg["bike_id"]
+    interval_km = msg.get("interval_km")
+    interval_days = msg.get("interval_days")
+    if interval_km is None and interval_days is None:
+        connection.send_error(msg["id"], "invalid_format", "Either interval_km or interval_days must be provided")
+        return
+    coord = _coordinator_for_bike(hass, bike_id)
+    if not coord:
+        connection.send_error(msg["id"], "not_found", f"Bike {bike_id} not found")
+        return
+    current_odo = _get_current_odo(coord, bike_id)
+    item_id = coord.add_maintenance_item(
+        bike_id, msg["name"], interval_km, interval_days, current_odo
+    )
+    connection.send_result(msg["id"], {"id": item_id})
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "bosch_ebike/update_maintenance",
+        vol.Required("bike_id"): str,
+        vol.Required("item_id"): str,
+        vol.Optional("name"): str,
+        # Pass null explicitly to clear; omit to leave the existing value.
+        vol.Optional("interval_km"): vol.Any(vol.All(vol.Coerce(float), vol.Range(min=0.1)), None),
+        vol.Optional("interval_days"): vol.Any(vol.All(vol.Coerce(float), vol.Range(min=0.1)), None),
+    }
+)
+@websocket_api.async_response
+async def ws_update_maintenance(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict
+) -> None:
+    bike_id = msg["bike_id"]
+    coord = _coordinator_for_bike(hass, bike_id)
+    if not coord:
+        connection.send_error(msg["id"], "not_found", f"Bike {bike_id} not found")
+        return
+    # Translate "null" payload into the clear_* flags the coordinator
+    # uses to distinguish "don't touch" from "set to None".
+    clear_km = "interval_km" in msg and msg["interval_km"] is None
+    clear_days = "interval_days" in msg and msg["interval_days"] is None
+    ok = coord.update_maintenance_item(
+        bike_id,
+        msg["item_id"],
+        name=msg.get("name"),
+        interval_km=msg.get("interval_km") if not clear_km else None,
+        interval_days=msg.get("interval_days") if not clear_days else None,
+        clear_interval_km=clear_km,
+        clear_interval_days=clear_days,
+    )
+    if not ok:
+        connection.send_error(msg["id"], "not_found", f"Item {msg['item_id']} not found for bike {bike_id}")
+        return
+    connection.send_result(msg["id"], {"ok": True})
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "bosch_ebike/complete_maintenance",
+        vol.Required("bike_id"): str,
+        vol.Required("item_id"): str,
+    }
+)
+@websocket_api.async_response
+async def ws_complete_maintenance(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict
+) -> None:
+    bike_id = msg["bike_id"]
+    coord = _coordinator_for_bike(hass, bike_id)
+    if not coord:
+        connection.send_error(msg["id"], "not_found", f"Bike {bike_id} not found")
+        return
+    current_odo = _get_current_odo(coord, bike_id)
+    if not coord.complete_maintenance_item(bike_id, msg["item_id"], current_odo):
+        connection.send_error(msg["id"], "not_found", f"Item {msg['item_id']} not found for bike {bike_id}")
+        return
+    connection.send_result(msg["id"], {"ok": True})
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "bosch_ebike/remove_maintenance",
+        vol.Required("bike_id"): str,
+        vol.Required("item_id"): str,
+    }
+)
+@websocket_api.async_response
+async def ws_remove_maintenance(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict
+) -> None:
+    bike_id = msg["bike_id"]
+    coord = _coordinator_for_bike(hass, bike_id)
+    if not coord:
+        connection.send_error(msg["id"], "not_found", f"Bike {bike_id} not found")
+        return
+    if not coord.remove_maintenance_item(bike_id, msg["item_id"]):
+        connection.send_error(msg["id"], "not_found", f"Item {msg['item_id']} not found for bike {bike_id}")
+        return
+    connection.send_result(msg["id"], {"ok": True})
+
+
 # -- Service handlers --
 
 def _register_services(hass: HomeAssistant) -> None:
@@ -517,6 +648,25 @@ def _register_services(hass: HomeAssistant) -> None:
         if not coord.complete_maintenance_item(bike_id, item_id, current_odo):
             raise vol.Invalid(f"Maintenance item {item_id} not found for bike {bike_id}")
 
+    async def update_maintenance(call):
+        bike_id = call.data["bike_id"]
+        item_id = call.data["item_id"]
+        coord = _coordinator_for_bike(hass, bike_id)
+        if not coord:
+            raise vol.Invalid(f"Bike {bike_id} not found in any configured account")
+        # Service signature uses None to mean "leave unchanged", matching
+        # the coordinator's update_maintenance_item. To clear a field via
+        # a service call, omit it from the request - this is consistent
+        # with HA service conventions.
+        if not coord.update_maintenance_item(
+            bike_id,
+            item_id,
+            name=call.data.get("name"),
+            interval_km=call.data.get("interval_km"),
+            interval_days=call.data.get("interval_days"),
+        ):
+            raise vol.Invalid(f"Maintenance item {item_id} not found for bike {bike_id}")
+
     async def remove_maintenance(call):
         bike_id = call.data["bike_id"]
         item_id = call.data["item_id"]
@@ -547,6 +697,16 @@ def _register_services(hass: HomeAssistant) -> None:
         schema=vol.Schema({
             vol.Required("bike_id"): str,
             vol.Required("item_id"): str,
+        })
+    )
+    hass.services.async_register(
+        DOMAIN, "update_maintenance", update_maintenance,
+        schema=vol.Schema({
+            vol.Required("bike_id"): str,
+            vol.Required("item_id"): str,
+            vol.Optional("name"): str,
+            vol.Optional("interval_km"): vol.All(vol.Coerce(float), vol.Range(min=0.1)),
+            vol.Optional("interval_days"): vol.All(vol.Coerce(float), vol.Range(min=0.1)),
         })
     )
 

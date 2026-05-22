@@ -196,6 +196,9 @@ const I18N = {
     dash_editor_maint_last_date: "Last done on (date, optional)",
     dash_editor_maint_remove: "Remove",
     dash_editor_maint_name_custom: "Custom…",
+    dash_editor_bike_id: "Bike",
+    dash_editor_maint_pick_bike: "Pick a bike above to manage its maintenance items.",
+    dash_editor_maint_none_yet: "No maintenance items yet. Click 'Add maintenance' to create one.",
     dash_editor_section_co2: "Vehicle comparison",
     dash_editor_co2_hint: "Used to calculate CO₂ saved and fuel-cost equivalent compared to a car of this class.",
     dash_editor_vehicle_type: "Vehicle type",
@@ -450,6 +453,9 @@ const I18N = {
     dash_editor_maint_last_date: "Zuletzt erledigt am (Datum, optional)",
     dash_editor_maint_remove: "Entfernen",
     dash_editor_maint_name_custom: "Eigener Text…",
+    dash_editor_bike_id: "Bike",
+    dash_editor_maint_pick_bike: "Wähle oben ein Bike, um dessen Wartungen zu verwalten.",
+    dash_editor_maint_none_yet: 'Noch keine Wartungen angelegt. Klick auf „Wartung hinzufügen" zum Anlegen.',
     dash_editor_section_co2: "Fahrzeug-Vergleich",
     dash_editor_co2_hint: "Wird zur Berechnung der CO₂-Ersparnis und Sprit-Kostenäquivalente im Vergleich zu einem Auto dieser Klasse benutzt.",
     dash_editor_vehicle_type: "Fahrzeugtyp",
@@ -704,6 +710,9 @@ const I18N = {
     dash_editor_maint_last_date: "Laatst gedaan op (datum, optioneel)",
     dash_editor_maint_remove: "Verwijderen",
     dash_editor_maint_name_custom: "Eigen tekst…",
+    dash_editor_bike_id: "Bike",
+    dash_editor_maint_pick_bike: "Kies hierboven een bike om diens onderhoud te beheren.",
+    dash_editor_maint_none_yet: 'Nog geen onderhoudsitems. Klik op „Onderhoud toevoegen" om er een aan te maken.',
     dash_editor_section_co2: "Voertuigvergelijking",
     dash_editor_co2_hint: "Wordt gebruikt om bespaarde CO₂ en brandstofkosten ten opzichte van een auto van deze klasse te berekenen.",
     dash_editor_vehicle_type: "Voertuigtype",
@@ -4832,6 +4841,14 @@ class BoschEBikeDashboardCard extends HTMLElement {
     this._built = false;
     this._pendingStop = false;
     this._pendingStopTimer = null;
+    // Maintenance items live in HA storage now (was localStorage +
+    // card-config in v1.16.5). Backend is the source of truth, this
+    // is a local cache to avoid a WebSocket roundtrip on every
+    // _render(). Invalidated by mutations and reloaded on demand.
+    this._maintItems = null;
+    this._maintLoadedFor = null;
+    this._maintLoading = false;
+    this._maintMigrated = false;
   }
 
   setConfig(config) {
@@ -5292,33 +5309,45 @@ class BoschEBikeDashboardCard extends HTMLElement {
     }
 
     // ---------- Wartung + CO2 ----------
-    this._renderMaintenance(odo);
+    this._renderMaintenance();
     this._renderCO2(odo, lastTour);
   }
 
   // ===========================================================================
-  // Wartung
-  // ---------------------------------------------------------------------------
-  // Filtert die konfigurierten Items nach Fälligkeit (km <= 500 oder
-  // Tage <= 30) und zeigt sie sortiert nach Dringlichkeit. Überfällige
-  // Einträge erscheinen rot, "in nächster Zeit fällige" gelb.
-  _renderMaintenance(currentOdo) {
+  // Wartung - liest Items aus HA-Storage (per-bike), nicht mehr aus der
+  // Card-Config oder localStorage. Backend liefert remaining_km +
+  // remaining_days bereits ausgerechnet. Anzeige zeigt nur Items, die
+  // in den nächsten 500 km oder 30 Tagen fällig sind; überfällig rot,
+  // bald fällig gelb, sortiert nach Dringlichkeit.
+  // ===========================================================================
+  _renderMaintenance() {
     const sec = this.querySelector("#dash-maint-section");
     const head = this.querySelector("#dash-maint-head");
     const list = this.querySelector("#dash-maint-list");
     if (!sec || !head || !list) return;
-    const items = Array.isArray(this._config.maintenance) ? this._config.maintenance : [];
-    if (!items.length) { sec.style.display = "none"; return; }
+
+    const bikeId = this._config.bike_id;
+    if (!bikeId) { sec.style.display = "none"; return; }
+
+    // Async-Loader anstossen, falls wir noch keine Items haben oder
+    // sich die Bike-ID geändert hat. Beim erfolgreichen Laden ruft
+    // dieser Pfad _render() erneut auf -> wir kommen wieder hier vorbei,
+    // diesmal mit Daten.
+    if (this._maintItems == null || this._maintLoadedFor !== bikeId) {
+      this._loadMaintenance(bikeId);
+      sec.style.display = "none";
+      return;
+    }
+
+    if (!this._maintItems.length) { sec.style.display = "none"; return; }
 
     head.textContent = this._t("dash_section_maint");
     sec.style.display = "";
     list.innerHTML = "";
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
     const due = [];
-    for (const m of items) {
-      const status = this._maintStatus(m, currentOdo, today);
+    for (const m of this._maintItems) {
+      const status = this._maintStatus(m);
       if (!status) continue;
       if (status.show) due.push({ m, status });
     }
@@ -5329,8 +5358,6 @@ class BoschEBikeDashboardCard extends HTMLElement {
       list.appendChild(p);
       return;
     }
-    // Sortierung: überfällig zuerst (überfälligkeit absteigend), dann
-    // nach Restweg/Zeit aufsteigend.
     due.sort((a, b) => {
       const aPri = a.status.overdue ? -1 : 1;
       const bPri = b.status.overdue ? -1 : 1;
@@ -5352,60 +5379,32 @@ class BoschEBikeDashboardCard extends HTMLElement {
       doneBtn.title = this._t("dash_maint_done_btn");
       doneBtn.setAttribute("aria-label", this._t("dash_maint_done_btn"));
       doneBtn.innerHTML = `<ha-icon icon="mdi:check"></ha-icon>`;
-      doneBtn.addEventListener("click", () => this._maintMarkDone(m, currentOdo));
+      doneBtn.addEventListener("click", () => this._maintMarkDone(m));
       row.appendChild(doneBtn);
       list.appendChild(row);
     }
   }
 
-  // Berechnet Fälligkeitsstatus eines Wartungs-Items. Liefert null,
-  // falls nicht ausreichend konfiguriert. show=true bedeutet, dass das
-  // Item entweder überfällig oder innerhalb der nächsten 500 km / 30
-  // Tage ist - nur dann erscheint es im Dashboard.
-  //
-  // "Zuletzt erledigt"-Werte werden aus localStorage gelesen, falls
-  // dort ein neuerer Eintrag steht, sonst aus der Card-Config. So
-  // kann der User aufs grüne Häkchen tippen und den Zähler resetten,
-  // ohne die Lovelace-Config neu zu schreiben - das funktioniert
-  // auch im YAML-Mode, wo Cards die Config nicht zurückspeichern
-  // dürfen.
-  _maintStatus(m, currentOdo, today) {
+  // Status aus dem vom Backend gelieferten remaining_km / remaining_days.
+  // Reine Anzeige-Logik; die eigentliche Restberechnung passiert in
+  // coordinator.py:_compute_maintenance_remaining.
+  _maintStatus(m) {
     if (!m || !m.name) return null;
-    if (m.type === "km") {
-      const interval = Number(m.intervalKm);
-      if (!Number.isFinite(interval) || interval <= 0) return null;
-      const storedLast = this._maintReadLastKm(m.id);
-      const configLast = Number.isFinite(Number(m.lastDoneKm)) ? Number(m.lastDoneKm) : null;
-      const lastDone = storedLast != null ? storedLast : (configLast != null ? configLast : 0);
-      const nextDue = lastDone + interval;
-      if (!Number.isFinite(currentOdo)) return null;
-      const remaining = Math.round(nextDue - currentOdo);
-      const show = remaining <= 500;
+    if (Number.isFinite(Number(m.remaining_km))) {
+      const remaining = Math.round(Number(m.remaining_km));
       return {
         kind: "km",
-        show,
+        show: remaining <= 500,
         overdue: remaining <= 0,
         sortKey: remaining,
         label: this._t("dash_maint_due_km", remaining),
       };
     }
-    if (m.type === "date") {
-      const interval = Number(m.intervalDays);
-      if (!Number.isFinite(interval) || interval <= 0) return null;
-      let last = null;
-      const storedLast = this._maintReadLastDate(m.id);
-      const lastIso = storedLast || m.lastDoneDate;
-      if (lastIso) {
-        const d = new Date(lastIso);
-        if (!isNaN(d.getTime())) { d.setHours(0, 0, 0, 0); last = d; }
-      }
-      const baseDate = last || today;   // ohne Last-Date: Intervall ab heute
-      const nextDue = new Date(baseDate.getTime() + interval * 86400000);
-      const days = Math.round((nextDue.getTime() - today.getTime()) / 86400000);
-      const show = days <= 30;
+    if (Number.isFinite(Number(m.remaining_days))) {
+      const days = Math.round(Number(m.remaining_days));
       return {
         kind: "date",
-        show,
+        show: days <= 30,
         overdue: days <= 0,
         sortKey: days,
         label: this._t("dash_maint_due_days", days),
@@ -5414,35 +5413,111 @@ class BoschEBikeDashboardCard extends HTMLElement {
     return null;
   }
 
-  // LocalStorage-Helfer für die per-Tap-Reset-Funktion. Key ist pro
-  // Wartungs-ID, sodass jeder Posten unabhängig getrackt wird.
-  _maintReadLastKm(id) {
-    if (!id) return null;
+  // Lädt die Wartungs-Items vom Backend (ws_list_maintenance). Wird
+  // einmal beim ersten Render gerufen sowie nach jeder Mutation
+  // (mark-done, etc.) zum Refresh. Cleanup-Migration aus localStorage
+  // ist hier eingebaut: alte v1.16.5-Keys werden bei jedem Load
+  // gelöscht, sobald der Backend-Pfad einmal funktioniert hat.
+  async _loadMaintenance(bikeId) {
+    if (this._maintLoading) return;
+    if (!this._hass || !bikeId) return;
+    this._maintLoading = true;
     try {
-      const v = localStorage.getItem(`bosch-ebike-maint-${id}-km`);
-      const n = Number(v);
-      return Number.isFinite(n) ? n : null;
-    } catch (_) { return null; }
+      const res = await this._hass.callWS({ type: "bosch_ebike/list_maintenance" });
+      const myBike = (res?.bikes || []).find(b => b.bike_id === bikeId);
+      this._maintItems = myBike?.items || [];
+      this._maintLoadedFor = bikeId;
+      // Einmalige Migration aus localStorage: alte v1.16.5-Reset-Marker
+      // wegräumen, sobald wir mindestens einmal Items aus dem Backend
+      // bekommen haben. Wir können sie nicht sinnvoll zuordnen, also
+      // ist das nur ein Cleanup - der User hat den "erledigt"-Klick
+      // jetzt direkt im Backend.
+      this._cleanupLegacyLocalStorage();
+      // Auto-Migration: Items aus der alten card.config.maintenance
+      // einmal ins Backend pushen, dann das Feld leeren und emit.
+      // Nur wenn der Editor das nicht selbst schon macht.
+      this._tryConfigMaintenanceMigration(bikeId).catch(() => {});
+      this._render();
+    } catch (err) {
+      console.warn("[Bosch eBike Dashboard] list_maintenance failed:", err?.message || err);
+      this._maintItems = [];
+      this._maintLoadedFor = bikeId;
+    } finally {
+      this._maintLoading = false;
+    }
   }
-  _maintReadLastDate(id) {
-    if (!id) return null;
-    try { return localStorage.getItem(`bosch-ebike-maint-${id}-date`) || null; }
-    catch (_) { return null; }
-  }
-  _maintMarkDone(item, currentOdo) {
-    if (!item || !item.id) return;
+
+  _cleanupLegacyLocalStorage() {
     try {
-      if (item.type === "km") {
-        if (Number.isFinite(currentOdo)) {
-          localStorage.setItem(`bosch-ebike-maint-${item.id}-km`, String(currentOdo));
-        }
-      } else if (item.type === "date") {
-        const today = new Date();
-        const iso = today.toISOString().slice(0, 10);
-        localStorage.setItem(`bosch-ebike-maint-${item.id}-date`, iso);
+      const keys = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith("bosch-ebike-maint-")) keys.push(k);
       }
+      for (const k of keys) localStorage.removeItem(k);
     } catch (_) { /* private mode etc. */ }
-    this._render();
+  }
+
+  // Verschiebt Items aus card.config.maintenance einmalig ins Backend.
+  // Wir machen das beim Card-Render, weil im YAML-Mode der User den
+  // Editor evtl. gar nicht öffnet. Idempotent: läuft maximal einmal
+  // pro Card-Instanz und nur wenn beim ersten Pull noch keine Items
+  // im Backend lagen (sonst würden wir Duplikate erzeugen).
+  async _tryConfigMaintenanceMigration(bikeId) {
+    if (this._maintMigrated) return;
+    const legacy = Array.isArray(this._config.maintenance) ? this._config.maintenance : [];
+    if (!legacy.length) { this._maintMigrated = true; return; }
+    // Schutz vor Duplikat-Import: nur wenn das Backend für dieses Bike
+    // noch keine Items hat. Sonst lassen wir die alte Liste in der
+    // Card-Config liegen - der User muss dann einmalig im Editor
+    // entscheiden, was bleiben soll.
+    if ((this._maintItems || []).length > 0) { this._maintMigrated = true; return; }
+    this._maintMigrated = true;
+    for (const m of legacy) {
+      const payload = {
+        type: "bosch_ebike/add_maintenance",
+        bike_id: bikeId,
+        name: m.name || "",
+      };
+      if (m.type === "km" && Number.isFinite(Number(m.intervalKm))) {
+        payload.interval_km = Number(m.intervalKm);
+      } else if (m.type === "date" && Number.isFinite(Number(m.intervalDays))) {
+        payload.interval_days = Number(m.intervalDays);
+      } else {
+        continue;
+      }
+      if (!payload.name) continue;
+      try { await this._hass.callWS(payload); } catch (_) { /* skip */ }
+    }
+    // Card-Config patchen: maintenance-Feld leeren, damit es bei
+    // späterem Re-Migration-Check nicht wieder triggert. Das funktio-
+    // niert nur, wenn die Lovelace-Config im UI-Mode ist; im YAML-Mode
+    // bleibt das Feld stehen, aber die Migration läuft trotzdem nur
+    // einmal pro Sitzung (siehe _maintMigrated-Flag oben).
+    if (this._config.maintenance) {
+      delete this._config.maintenance;
+    }
+    // Items neu laden, damit die Anzeige stimmt.
+    this._maintLoadedFor = null;
+    await this._loadMaintenance(bikeId);
+  }
+
+  // "Erledigt"-Klick: ruft ws_complete_maintenance. Backend setzt
+  // last_done_at + last_done_odometer aus dem Bosch-API-Odometer und
+  // speichert in HA-Storage. Nach Erfolg neu vom Backend laden.
+  async _maintMarkDone(item) {
+    if (!item || !item.id || !this._config.bike_id || !this._hass) return;
+    try {
+      await this._hass.callWS({
+        type: "bosch_ebike/complete_maintenance",
+        bike_id: this._config.bike_id,
+        item_id: item.id,
+      });
+      this._maintLoadedFor = null;
+      this._loadMaintenance(this._config.bike_id);
+    } catch (err) {
+      console.warn("[Bosch eBike Dashboard] complete_maintenance failed:", err?.message || err);
+    }
   }
 
   _escapeHtml(s) {
@@ -5801,19 +5876,47 @@ class BoschEBikeDashboardCardEditor extends HTMLElement {
     });
     this._fields.fuel_price = fuelPriceInput;
 
-    // --- Wartung -------------------------------------------------------------
-    const maintHead = document.createElement("div");
-    maintHead.textContent = this._t("dash_editor_section_maint");
-    maintHead.style.cssText =
+    // --- Bike-Picker (für Wartung) -------------------------------------------
+    // Wartung lebt jetzt in HA-Storage und ist per Bike gescopt. Wenn
+    // hier kein Bike gewählt ist, blendet die Card die Wartungs-Sektion
+    // aus. Wir laden die Bike-Liste asynchron - der Picker bleibt
+    // sichtbar (mit nur "—" als Option), bis list_instances kommt.
+    const bikeHead = document.createElement("div");
+    bikeHead.textContent = this._t("dash_editor_section_maint");
+    bikeHead.style.cssText =
       "margin-top:14px;padding-top:10px;border-top:1px solid var(--divider-color);" +
       "color:var(--secondary-text-color);font-size:12px;line-height:1.4;font-weight:600;";
-    wrap.appendChild(maintHead);
+    wrap.appendChild(bikeHead);
 
     const maintHint = document.createElement("small");
     maintHint.textContent = this._t("dash_editor_maint_hint");
     maintHint.style.cssText = "color:var(--secondary-text-color);font-size:11px;display:block;margin-bottom:8px;";
     wrap.appendChild(maintHint);
 
+    const bikeSelect = mk(this._t("dash_editor_bike_id"), null, () => {
+      const sel = document.createElement("select");
+      sel.style.cssText = "padding:8px;border-radius:4px;border:1px solid var(--divider-color);background:var(--card-background-color);color:var(--primary-text-color);";
+      const opt0 = document.createElement("option");
+      opt0.value = ""; opt0.textContent = "—";
+      sel.appendChild(opt0);
+      return sel;
+    });
+    this._bikeSelect = bikeSelect;
+    this._fields.bike_id = bikeSelect;
+    bikeSelect.value = this._config.bike_id || "";
+    bikeSelect.addEventListener("change", () => {
+      if (bikeSelect.value) this._config.bike_id = bikeSelect.value;
+      else delete this._config.bike_id;
+      this._emit();
+      // Bei Bike-Wechsel: Liste komplett neu laden
+      this._maintItemsCache = null;
+      this._maintListLoadedFor = null;
+      this._reloadMaintList();
+    });
+    // Asynchron Bike-Liste reinstreuen, sobald hass verfügbar.
+    this._populateBikeSelect();
+
+    // Liste der Wartungen + Add-Button
     this._maintListWrap = document.createElement("div");
     this._maintListWrap.id = "dash-ed-maint-list";
     wrap.appendChild(this._maintListWrap);
@@ -5822,30 +5925,20 @@ class BoschEBikeDashboardCardEditor extends HTMLElement {
     addBtn.type = "button";
     addBtn.className = "dash-ed-add";
     addBtn.textContent = this._t("dash_editor_maint_add");
-    addBtn.addEventListener("click", () => {
-      if (!Array.isArray(this._config.maintenance)) this._config.maintenance = [];
-      this._config.maintenance.push({
-        id: this._uuid(),
-        name: "",
-        type: "km",
-        intervalKm: 500,
-      });
-      this._emit();
-      this._renderMaintList();
-    });
+    addBtn.addEventListener("click", () => this._handleAddMaintenance());
+    this._maintAddBtn = addBtn;
     wrap.appendChild(addBtn);
 
-    // Inline-style fürs Editor-Wartungs-Layout. Wir injecten in document
-    // head, weil der Editor in Lovelace selbst kein <style>-Element
-    // mit unserer DOM-Hierarchie hat - die Card-Styles existieren nur
-    // im Light-DOM der Card-Instanz, nicht hier.
+    // Inline-style fürs Editor-Wartungs-Layout. Editor läuft im Lovelace-
+    // Editor-DOM und hat keinen eigenen <style>-Block; deshalb in den
+    // document head injecten (idempotent über die ID).
     if (!document.getElementById("dash-ed-maint-styles")) {
       const ss = document.createElement("style");
       ss.id = "dash-ed-maint-styles";
       ss.textContent = `
         .dash-ed-maint-row {
           display: grid;
-          grid-template-columns: minmax(160px,1fr) 110px 100px 130px auto;
+          grid-template-columns: minmax(160px,1fr) 110px 100px auto;
           gap: 8px; align-items: end;
           padding: 8px; border-radius: 8px;
           background: var(--secondary-background-color, #f4f6f8);
@@ -5868,162 +5961,303 @@ class BoschEBikeDashboardCardEditor extends HTMLElement {
           cursor: pointer; padding: 6px; font-size: 18px;
           align-self: end;
         }
+        .dash-ed-maint-empty {
+          padding: 10px 12px; font-size: 12px;
+          color: var(--secondary-text-color); font-style: italic;
+        }
         @media (max-width: 600px) {
           .dash-ed-maint-row { grid-template-columns: 1fr; }
         }
       `;
       document.head.appendChild(ss);
     }
-    this._renderMaintList();
+    this._reloadMaintList();
 
     this._built = true;
   }
 
-  // Generiert eine kompakte UUIDv4 für Maintenance-IDs. Reicht zur
-  // Identifikation in der Config, hat keine kryptographischen Ansprüche.
-  _uuid() {
-    return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
-      const r = Math.random() * 16 | 0;
-      return (c === "x" ? r : (r & 0x3 | 0x8)).toString(16);
-    });
+  // Bike-Dropdown asynchron mit list_instances befüllen. Wartet via
+  // setInterval auf hass, falls dieses später ankommt - der Editor
+  // wird manchmal vor dem set hass() vom Lovelace-Editor gemounted.
+  _populateBikeSelect() {
+    if (!this._bikeSelect) return;
+    if (!this._hass) { setTimeout(() => this._populateBikeSelect(), 200); return; }
+    this._hass.callWS({ type: "bosch_ebike/list_instances" })
+      .then((res) => {
+        const sel = this._bikeSelect;
+        if (!sel) return;
+        // Bestehende non-"—" Optionen entfernen, damit ein erneutes
+        // Befüllen (z. B. nach Reconnect) keine Duplikate erzeugt.
+        for (let i = sel.options.length - 1; i >= 1; i--) sel.remove(i);
+        for (const inst of (res?.instances || [])) {
+          for (const bike of (inst.bikes || [])) {
+            const o = document.createElement("option");
+            o.value = bike.id;
+            const accLabel = inst.label && res.instances.length > 1 ? `${inst.label} — ` : "";
+            o.textContent = `${accLabel}${bike.label || bike.id}`;
+            sel.appendChild(o);
+          }
+        }
+        sel.value = this._config.bike_id || "";
+      })
+      .catch(() => { /* ignore - selector bleibt mit "—" */ });
   }
 
-  // Rendert die Wartungs-Liste komplett neu. Beim Editieren werden die
-  // Werte direkt ins this._config.maintenance-Array zurückgeschrieben
-  // und _emit() löst die config-changed-Event aus.
-  _renderMaintList() {
+  // Lädt die Wartungs-Items vom Backend für die aktuell gewählte Bike-ID.
+  // Wird beim ersten Render, nach Bike-Wechsel und nach Mutationen
+  // aufgerufen. Render-Logik (DOM-Bau) sitzt in _renderMaintRowsFromCache.
+  async _reloadMaintList() {
+    if (!this._maintListWrap) return;
+    const bikeId = this._config.bike_id;
+    if (!bikeId) {
+      this._maintListWrap.innerHTML = "";
+      const p = document.createElement("div");
+      p.className = "dash-ed-maint-empty";
+      p.textContent = this._t("dash_editor_maint_pick_bike");
+      this._maintListWrap.appendChild(p);
+      if (this._maintAddBtn) this._maintAddBtn.disabled = true;
+      return;
+    }
+    if (this._maintAddBtn) this._maintAddBtn.disabled = !this._hass;
+    if (!this._hass) return;
+    try {
+      const res = await this._hass.callWS({ type: "bosch_ebike/list_maintenance" });
+      const myBike = (res?.bikes || []).find(b => b.bike_id === bikeId);
+      this._maintItemsCache = myBike?.items || [];
+      this._maintListLoadedFor = bikeId;
+      this._renderMaintRowsFromCache();
+    } catch (err) {
+      console.warn("[Bosch eBike Dashboard-Editor] list_maintenance failed:", err?.message || err);
+    }
+  }
+
+  // Renders alle Rows aus this._maintItemsCache neu. Wird gerufen
+  // nach Bike-Wechsel oder Type-Switch innerhalb einer Row; NICHT bei
+  // jedem Keystroke (das würde die alten Inputs wegwerfen und den
+  // Fokus killen - exakt der Bug aus v1.16.5).
+  _renderMaintRowsFromCache() {
     if (!this._maintListWrap) return;
     this._maintListWrap.innerHTML = "";
-    const items = Array.isArray(this._config.maintenance) ? this._config.maintenance : [];
+    const items = Array.isArray(this._maintItemsCache) ? this._maintItemsCache : [];
+    if (!items.length) {
+      const p = document.createElement("div");
+      p.className = "dash-ed-maint-empty";
+      p.textContent = this._t("dash_editor_maint_none_yet");
+      this._maintListWrap.appendChild(p);
+      return;
+    }
+    for (const item of items) this._maintListWrap.appendChild(this._buildMaintRow(item));
+  }
+
+  // Erstellt EINE Row für ein Item. Inputs binden direkt an
+  // debouncedUpdate (KEIN this._emit()) - das ist der Hauptgrund,
+  // warum der Fokus jetzt erhalten bleibt: keine Lovelace-Roundtrips
+  // bei Maintenance-Edits.
+  _buildMaintRow(item) {
     const lang = (this._hass && this._hass.language) ? this._hass.language.split("-")[0] : "en";
-    const presetLabel = (preset) => preset["label_" + lang] || preset.label_en;
-    items.forEach((m, idx) => {
-      const row = document.createElement("div");
-      row.className = "dash-ed-maint-row";
+    const presetLabel = (p) => p["label_" + lang] || p.label_en;
+    const row = document.createElement("div");
+    row.className = "dash-ed-maint-row";
+    row.dataset.itemId = item.id;
 
-      // -- Name (Dropdown + freier Text) --
-      const nameWrap = document.createElement("div");
-      nameWrap.innerHTML = `<label>${this._t("dash_editor_maint_name")}</label>`;
-      const nameSel = document.createElement("select");
-      const customOpt = document.createElement("option");
-      customOpt.value = "__custom__";
-      customOpt.textContent = this._t("dash_editor_maint_name_custom");
-      nameSel.appendChild(customOpt);
-      for (const preset of MAINTENANCE_PRESETS) {
-        const o = document.createElement("option");
-        o.value = preset["label_" + lang] || preset.label_en;
-        o.textContent = o.value;
-        nameSel.appendChild(o);
-      }
-      const matchingPreset = MAINTENANCE_PRESETS.find(p => presetLabel(p) === m.name);
-      nameSel.value = matchingPreset ? m.name : "__custom__";
-      const nameInput = document.createElement("input");
-      nameInput.type = "text";
-      nameInput.value = m.name || "";
-      nameInput.placeholder = this._t("dash_editor_maint_name");
-      nameInput.style.marginTop = "4px";
-      nameInput.style.display = matchingPreset ? "none" : "";
-      nameSel.addEventListener("change", () => {
-        if (nameSel.value === "__custom__") {
-          nameInput.style.display = "";
-          nameInput.focus();
-        } else {
-          m.name = nameSel.value;
-          nameInput.value = m.name;
-          nameInput.style.display = "none";
-          this._emit();
-        }
-      });
-      nameInput.addEventListener("input", () => { m.name = nameInput.value; this._emit(); });
-      nameWrap.appendChild(nameSel);
-      nameWrap.appendChild(nameInput);
-      row.appendChild(nameWrap);
+    // Bestimmt den Typ aus den vorhandenen Intervallen. Das Backend
+    // erlaubt beide gleichzeitig, der Editor zeigt aber nur einen.
+    const initialType =
+      Number.isFinite(Number(item.interval_km)) ? "km"
+      : Number.isFinite(Number(item.interval_days)) ? "date"
+      : "km";
+    let currentType = initialType;
 
-      // -- Typ --
-      const typeWrap = document.createElement("div");
-      typeWrap.innerHTML = `<label>${this._t("dash_editor_maint_type")}</label>`;
-      const typeSel = document.createElement("select");
-      const optKm = document.createElement("option");
-      optKm.value = "km"; optKm.textContent = this._t("dash_editor_maint_type_km");
-      typeSel.appendChild(optKm);
-      const optDate = document.createElement("option");
-      optDate.value = "date"; optDate.textContent = this._t("dash_editor_maint_type_date");
-      typeSel.appendChild(optDate);
-      typeSel.value = m.type === "date" ? "date" : "km";
-      typeSel.addEventListener("change", () => {
-        m.type = typeSel.value;
-        // Bei Typ-Wechsel die nicht passenden Felder leeren, damit alte
-        // Werte nicht heimlich in der Config bleiben.
-        if (m.type === "km") {
-          delete m.intervalDays; delete m.lastDoneDate;
-          if (!Number.isFinite(Number(m.intervalKm))) m.intervalKm = 500;
-        } else {
-          delete m.intervalKm; delete m.lastDoneKm;
-          if (!Number.isFinite(Number(m.intervalDays))) m.intervalDays = 30;
-        }
-        this._emit();
-        this._renderMaintList();
-      });
-      typeWrap.appendChild(typeSel);
-      row.appendChild(typeWrap);
-
-      // -- Interval --
-      const intWrap = document.createElement("div");
-      const intLabel = m.type === "date"
-        ? this._t("dash_editor_maint_interval_days")
-        : this._t("dash_editor_maint_interval_km");
-      intWrap.innerHTML = `<label>${intLabel}</label>`;
-      const intInput = document.createElement("input");
-      intInput.type = "number"; intInput.min = "1";
-      intInput.value = m.type === "date" ? (m.intervalDays || "") : (m.intervalKm || "");
-      intInput.addEventListener("input", () => {
-        const v = Number(intInput.value);
-        if (m.type === "date") m.intervalDays = Number.isFinite(v) ? v : undefined;
-        else m.intervalKm = Number.isFinite(v) ? v : undefined;
-        this._emit();
-      });
-      intWrap.appendChild(intInput);
-      row.appendChild(intWrap);
-
-      // -- Last done --
-      const lastWrap = document.createElement("div");
-      const lastLabel = m.type === "date"
-        ? this._t("dash_editor_maint_last_date")
-        : this._t("dash_editor_maint_last_km");
-      lastWrap.innerHTML = `<label>${lastLabel}</label>`;
-      const lastInput = document.createElement("input");
-      if (m.type === "date") {
-        lastInput.type = "date";
-        lastInput.value = m.lastDoneDate || "";
-        lastInput.addEventListener("change", () => {
-          m.lastDoneDate = lastInput.value || undefined; this._emit();
-        });
+    // -- Name (Dropdown + freier Text) --
+    const nameWrap = document.createElement("div");
+    nameWrap.innerHTML = `<label>${this._t("dash_editor_maint_name")}</label>`;
+    const nameSel = document.createElement("select");
+    const customOpt = document.createElement("option");
+    customOpt.value = "__custom__";
+    customOpt.textContent = this._t("dash_editor_maint_name_custom");
+    nameSel.appendChild(customOpt);
+    for (const preset of MAINTENANCE_PRESETS) {
+      const o = document.createElement("option");
+      o.value = preset["label_" + lang] || preset.label_en;
+      o.textContent = o.value;
+      nameSel.appendChild(o);
+    }
+    const matchingPreset = MAINTENANCE_PRESETS.find(p => presetLabel(p) === item.name);
+    nameSel.value = matchingPreset ? item.name : "__custom__";
+    const nameInput = document.createElement("input");
+    nameInput.type = "text";
+    nameInput.value = item.name || "";
+    nameInput.placeholder = this._t("dash_editor_maint_name");
+    nameInput.style.marginTop = "4px";
+    nameInput.style.display = matchingPreset ? "none" : "";
+    nameSel.addEventListener("change", () => {
+      if (nameSel.value === "__custom__") {
+        nameInput.style.display = "";
+        nameInput.focus();
       } else {
-        lastInput.type = "number"; lastInput.min = "0";
-        lastInput.value = m.lastDoneKm != null ? String(m.lastDoneKm) : "";
-        lastInput.addEventListener("input", () => {
-          const v = Number(lastInput.value);
-          m.lastDoneKm = Number.isFinite(v) ? v : undefined; this._emit();
-        });
+        nameInput.value = nameSel.value;
+        nameInput.style.display = "none";
+        this._debouncedUpdateMaint(item.id, { name: nameSel.value });
       }
-      lastWrap.appendChild(lastInput);
-      row.appendChild(lastWrap);
-
-      // -- Remove --
-      const rmBtn = document.createElement("button");
-      rmBtn.type = "button";
-      rmBtn.className = "remove";
-      rmBtn.title = this._t("dash_editor_maint_remove");
-      rmBtn.innerHTML = "&times;";
-      rmBtn.addEventListener("click", () => {
-        this._config.maintenance.splice(idx, 1);
-        this._emit();
-        this._renderMaintList();
-      });
-      row.appendChild(rmBtn);
-
-      this._maintListWrap.appendChild(row);
     });
+    nameInput.addEventListener("input", () => {
+      this._debouncedUpdateMaint(item.id, { name: nameInput.value });
+    });
+    nameWrap.appendChild(nameSel);
+    nameWrap.appendChild(nameInput);
+    row.appendChild(nameWrap);
+
+    // -- Typ --
+    const typeWrap = document.createElement("div");
+    typeWrap.innerHTML = `<label>${this._t("dash_editor_maint_type")}</label>`;
+    const typeSel = document.createElement("select");
+    const optKm = document.createElement("option");
+    optKm.value = "km"; optKm.textContent = this._t("dash_editor_maint_type_km");
+    typeSel.appendChild(optKm);
+    const optDate = document.createElement("option");
+    optDate.value = "date"; optDate.textContent = this._t("dash_editor_maint_type_date");
+    typeSel.appendChild(optDate);
+    typeSel.value = initialType;
+    typeSel.addEventListener("change", () => {
+      currentType = typeSel.value;
+      // Beim Typ-Wechsel: Interval umstellen (eines clearen, anderes
+      // mit Default belegen). Wir senden das in einem Call.
+      const patch = {};
+      if (currentType === "km") {
+        patch.interval_km = Number.isFinite(Number(item.interval_km)) ? Number(item.interval_km) : 500;
+        patch.interval_days = null;
+      } else {
+        patch.interval_days = Number.isFinite(Number(item.interval_days)) ? Number(item.interval_days) : 30;
+        patch.interval_km = null;
+      }
+      this._sendUpdateMaint(item.id, patch);
+      // Update lokales Item + die Interval-Row neu rendern (nur diese
+      // Zeile, nicht die ganze Liste -> kein Fokus-Verlust bei den
+      // anderen Reihen).
+      Object.assign(item, patch);
+      const newRow = this._buildMaintRow(item);
+      row.replaceWith(newRow);
+    });
+    typeWrap.appendChild(typeSel);
+    row.appendChild(typeWrap);
+
+    // -- Interval --
+    const intWrap = document.createElement("div");
+    const intLabel = currentType === "date"
+      ? this._t("dash_editor_maint_interval_days")
+      : this._t("dash_editor_maint_interval_km");
+    intWrap.innerHTML = `<label>${intLabel}</label>`;
+    const intInput = document.createElement("input");
+    intInput.type = "number"; intInput.min = "1";
+    intInput.value = currentType === "date"
+      ? (item.interval_days != null ? String(item.interval_days) : "")
+      : (item.interval_km != null ? String(item.interval_km) : "");
+    intInput.addEventListener("input", () => {
+      const v = Number(intInput.value);
+      if (!Number.isFinite(v) || v <= 0) return;
+      if (currentType === "date") this._debouncedUpdateMaint(item.id, { interval_days: v });
+      else this._debouncedUpdateMaint(item.id, { interval_km: v });
+    });
+    intWrap.appendChild(intInput);
+    row.appendChild(intWrap);
+
+    // -- Remove --
+    const rmBtn = document.createElement("button");
+    rmBtn.type = "button";
+    rmBtn.className = "remove";
+    rmBtn.title = this._t("dash_editor_maint_remove");
+    rmBtn.innerHTML = "&times;";
+    rmBtn.addEventListener("click", () => this._handleRemoveMaintenance(item.id, row));
+    row.appendChild(rmBtn);
+
+    return row;
+  }
+
+  // Anlegen via WS + DOM appendOnly (kein Re-Render). Item-Defaults:
+  // leerer Name, km-Trigger, 500 km Intervall. Der Backend gibt uns
+  // die neue ID zurück.
+  async _handleAddMaintenance() {
+    const bikeId = this._config.bike_id;
+    if (!bikeId || !this._hass) return;
+    try {
+      const res = await this._hass.callWS({
+        type: "bosch_ebike/add_maintenance",
+        bike_id: bikeId,
+        name: "",
+        interval_km: 500,
+      });
+      const newItem = {
+        id: res.id, name: "", interval_km: 500, interval_days: null,
+      };
+      if (!Array.isArray(this._maintItemsCache)) this._maintItemsCache = [];
+      this._maintItemsCache.push(newItem);
+      // Falls die Liste vorher leer war, zeigen wir gerade den "noch
+      // keine Items"-Placeholder; den entfernen und nur die neue Row
+      // appenden.
+      const placeholder = this._maintListWrap.querySelector(".dash-ed-maint-empty");
+      if (placeholder) placeholder.remove();
+      this._maintListWrap.appendChild(this._buildMaintRow(newItem));
+    } catch (err) {
+      console.warn("[Bosch eBike Dashboard-Editor] add_maintenance failed:", err?.message || err);
+    }
+  }
+
+  async _handleRemoveMaintenance(itemId, rowEl) {
+    const bikeId = this._config.bike_id;
+    if (!bikeId || !this._hass) return;
+    try {
+      await this._hass.callWS({
+        type: "bosch_ebike/remove_maintenance",
+        bike_id: bikeId,
+        item_id: itemId,
+      });
+      this._maintItemsCache = (this._maintItemsCache || []).filter(i => i.id !== itemId);
+      rowEl.remove();
+      if (!this._maintItemsCache.length) this._renderMaintRowsFromCache();
+    } catch (err) {
+      console.warn("[Bosch eBike Dashboard-Editor] remove_maintenance failed:", err?.message || err);
+    }
+  }
+
+  // Debouncer pro Item, damit jeder Keystroke nicht direkt einen
+  // WebSocket-Call auslöst. 400 ms ist ein guter Kompromiss zwischen
+  // "spürbar live" und "nicht zu chatty".
+  _debouncedUpdateMaint(itemId, patch) {
+    if (!this._maintDebounceTimers) this._maintDebounceTimers = new Map();
+    if (!this._maintDebouncePending) this._maintDebouncePending = new Map();
+    // Patch-Updates mergen, damit aufeinanderfolgende Tasten nicht
+    // gegenseitig die letzten Felder überschreiben.
+    const merged = Object.assign(this._maintDebouncePending.get(itemId) || {}, patch);
+    this._maintDebouncePending.set(itemId, merged);
+    if (this._maintDebounceTimers.has(itemId)) {
+      clearTimeout(this._maintDebounceTimers.get(itemId));
+    }
+    this._maintDebounceTimers.set(itemId, setTimeout(() => {
+      const finalPatch = this._maintDebouncePending.get(itemId) || {};
+      this._maintDebouncePending.delete(itemId);
+      this._maintDebounceTimers.delete(itemId);
+      this._sendUpdateMaint(itemId, finalPatch);
+    }, 400));
+  }
+
+  async _sendUpdateMaint(itemId, patch) {
+    const bikeId = this._config.bike_id;
+    if (!bikeId || !this._hass) return;
+    try {
+      await this._hass.callWS({
+        type: "bosch_ebike/update_maintenance",
+        bike_id: bikeId,
+        item_id: itemId,
+        ...patch,
+      });
+      // Lokalen Cache aktualisieren, damit eine Bike-Wechsel-Reload
+      // den richtigen Zustand zeigt. NICHT die Liste neu rendern,
+      // sonst geht der Input-Fokus verloren.
+      const item = (this._maintItemsCache || []).find(i => i.id === itemId);
+      if (item) Object.assign(item, patch);
+    } catch (err) {
+      console.warn("[Bosch eBike Dashboard-Editor] update_maintenance failed:", err?.message || err);
+    }
   }
 
   _sync() {
@@ -6039,7 +6273,11 @@ class BoschEBikeDashboardCardEditor extends HTMLElement {
         input.value = this._config[key] || "";
       }
     }
-    if (typeof this._renderMaintList === "function") this._renderMaintList();
+    // Maintenance-Liste NICHT mehr hier rendern - sie lebt im Backend,
+    // nicht in der card config, und ein Re-Render nach jedem
+    // config-changed-Roundtrip (siehe v1.16.5-Bug) hat den Eingabe-
+    // Fokus weggeschossen. Beim Bike-Wechsel via Picker triggern wir
+    // _reloadMaintList explizit dort.
   }
 
   _refreshPreview(container, url) {

@@ -813,6 +813,42 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 return True
         return False
 
+    def update_maintenance_item(
+        self,
+        bike_id: str,
+        item_id: str,
+        name: str | None = None,
+        interval_km: float | None = None,
+        interval_days: float | None = None,
+        clear_interval_km: bool = False,
+        clear_interval_days: bool = False,
+    ) -> bool:
+        """Update fields of an existing item. Returns True if found+updated.
+
+        ``clear_interval_km`` / ``clear_interval_days`` flags explicitly null
+        out the respective field, used by the editor when the user switches
+        an item from km-trigger to date-trigger (or vice versa). Passing
+        ``None`` for a field means "leave unchanged"; passing a value
+        replaces it; passing the clear flag sets it to None.
+        """
+        bs = self._bike_state(bike_id)
+        for item in bs["items"]:
+            if item["id"] != item_id:
+                continue
+            if name is not None:
+                item["name"] = name
+            if interval_km is not None:
+                item["interval_km"] = float(interval_km)
+            elif clear_interval_km:
+                item["interval_km"] = None
+            if interval_days is not None:
+                item["interval_days"] = float(interval_days)
+            elif clear_interval_days:
+                item["interval_days"] = None
+            self.hass.async_create_task(self._async_save_state())
+            return True
+        return False
+
     def remove_maintenance_item(self, bike_id: str, item_id: str) -> bool:
         bs = self._bike_state(bike_id)
         before = len(bs["items"])
