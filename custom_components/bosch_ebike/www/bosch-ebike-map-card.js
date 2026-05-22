@@ -5366,8 +5366,21 @@ class BoschEBikeDashboardCard extends HTMLElement {
         // - _loadMaintenance entscheidet selbst, ob es matched oder
         // automatisch das einzige Bike mit Items nimmt.
         this._loadMaintenance(this._config.bike_id || null);
+        // Re-Render der "fällige Wartung"-Sektion: die Warnschwellen
+        // koennen sich geaendert haben, auch wenn die Items selbst
+        // gleich blieben.
+        this._render();
       };
       _cardSettingsBus.addEventListener("changed", this._maintBusHandler);
+    }
+    // Shared-Card-Settings einmalig nachladen. Enthaelt u.a. die
+    // Warnschwellen maint_warn_km / maint_warn_days. Ohne diesen
+    // Call laefe _maintStatus nach jedem Browser-Reload auf die
+    // Defaults 500/30 zurueck - der Bus feuert nur bei Writes von
+    // anderen Cards/Editoren, nicht beim initialen Mount.
+    if (!this._sharedSettingsRequested) {
+      this._sharedSettingsRequested = true;
+      ensureCardSettingsLoaded(hass).then(() => this._render()).catch(() => {});
     }
     this._render();
   }
@@ -6214,6 +6227,42 @@ class BoschEBikeDashboardCardEditor extends HTMLElement {
   set hass(hass) {
     this._hass = hass;
     if (!this._built) this._build();
+    // Shared-Settings einmalig laden + Bus abonnieren. Sonst zeigt der
+    // Editor nach Browser-Reload die hartcodierten Defaults statt der
+    // im Backend gespeicherten Werte - und ein nachfolgendes Tippen
+    // wuerde den Backend-Wert mit dem versehentlichen Default ueber-
+    // schreiben.
+    if (!this._sharedSettingsRequested) {
+      this._sharedSettingsRequested = true;
+      ensureCardSettingsLoaded(hass).then(() => this._syncSharedFields()).catch(() => {});
+    }
+    if (!this._sharedSettingsHandler) {
+      this._sharedSettingsHandler = () => this._syncSharedFields();
+      _cardSettingsBus.addEventListener("changed", this._sharedSettingsHandler);
+    }
+  }
+
+  disconnectedCallback() {
+    if (this._sharedSettingsHandler) {
+      _cardSettingsBus.removeEventListener("changed", this._sharedSettingsHandler);
+      this._sharedSettingsHandler = null;
+    }
+  }
+
+  // Ueberschreibt die Werte der Warn-Inputs aus dem gerade geladenen
+  // Shared-Store. NICHT aufrufen, waehrend der User tippt - sonst
+  // wuerde unser eigener Save-Debounce sich selbst stoeren. Wir
+  // ueberspringen Inputs, deren _saveTimer gerade laeuft.
+  _syncSharedFields() {
+    if (!this._warnInputs) return;
+    for (const { key, input, defaultVal } of this._warnInputs) {
+      if (this._sharedSaveTimers && this._sharedSaveTimers.has(key)) continue;
+      const raw = readCardSetting(this._config, key, defaultVal);
+      const n = Number(raw);
+      const value = Number.isFinite(n) && n >= 0 ? String(Math.round(n)) : String(defaultVal);
+      if (input.value !== value) input.value = value;
+    }
+    if (typeof this._refreshMaintHint === "function") this._refreshMaintHint();
   }
 
   _t(key) {
@@ -6493,18 +6542,21 @@ class BoschEBikeDashboardCardEditor extends HTMLElement {
     };
 
     const maintHint = document.createElement("small");
-    const refreshMaintHint = () => {
+    this._refreshMaintHint = () => {
       maintHint.textContent = this._t("dash_editor_maint_hint", readWarnDays(), readWarnKm());
     };
-    refreshMaintHint();
+    this._refreshMaintHint();
     maintHint.style.cssText = "color:var(--secondary-text-color);font-size:11px;display:block;margin-bottom:8px;";
     wrap.appendChild(maintHint);
 
     // Warnschwellen (km / Tage). Number-Inputs, debouncetes Schreiben
     // in den Shared-Store - selbe Pattern wie der 3D-Card-Editor. Beim
     // Aendern wird der maintHint sofort lokal aktualisiert, der Bus
-    // benachrichtigt parallel andere offene Dashboards.
+    // benachrichtigt parallel andere offene Dashboards. Refs werden in
+    // this._warnInputs gesammelt, damit _syncSharedFields() sie nach
+    // dem asynchronen Cache-Load nachziehen kann.
     if (!this._sharedSaveTimers) this._sharedSaveTimers = new Map();
+    this._warnInputs = [];
     const mkWarnInput = (key, labelKey, hintKey, defaultVal, min, max) => {
       const input = mk(this._t(labelKey), this._t(hintKey), () => {
         const i = document.createElement("input");
@@ -6531,9 +6583,10 @@ class BoschEBikeDashboardCardEditor extends HTMLElement {
             this._emit();
           }
           saveCardSetting(this._hass, key, safe);
-          refreshMaintHint();
+          this._refreshMaintHint();
         }, 400));
       });
+      this._warnInputs.push({ key, input, defaultVal });
       return input;
     };
     mkWarnInput("maint_warn_km", "dash_editor_maint_warn_km", "dash_editor_maint_warn_km_hint", MAINT_WARN_KM_DEFAULT, 0, 100000);
