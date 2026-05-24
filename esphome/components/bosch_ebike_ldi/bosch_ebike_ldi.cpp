@@ -83,11 +83,7 @@ static void log_hex(const char *prefix, const uint8_t *buf, size_t len) {
     snprintf(&hex[i * 3], 4, "%02x ", buf[i]);
   }
   hex[to_print > 0 ? (to_print * 3 - 1) : 0] = '\0';
-  if (len > 64) {
-    ESP_LOGD(TAG, "%s len=%u: %s …", prefix, (unsigned) len, hex);
-  } else {
-    ESP_LOGD(TAG, "%s len=%u: %s", prefix, (unsigned) len, hex);
-  }
+  ESP_LOGD(TAG, "%s len=%u: %s%s", prefix, (unsigned) len, hex, len > 64 ? " …" : "");
 }
 
 // Build raw advertising payload including Service Solicitation 128-bit (AD 0x15).
