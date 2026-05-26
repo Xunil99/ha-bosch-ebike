@@ -6525,23 +6525,47 @@ class BoschEBikeDashboardCard extends HTMLElement {
     const cfg = this._config;
 
     // ---------- Image ----------
+    // WICHTIG: NICHT bei jedem _render() das <img> neu erzeugen.
+    // Jedes neue <img> triggert einen frischen HTTP-Request – bei
+    // hochfrequenten State-Updates (z.B. *_live-Sensoren) entstand
+    // damit eine sub-sekündliche Fetch-Schleife auf
+    // /api/image/serve/<id>/original, die das UI zum Flackern oder
+    // Einfrieren brachte (Issue #19). Wir aktualisieren stattdessen
+    // nur src/alt, wenn sich die Werte tatsächlich geändert haben.
     const imgWrap = this.querySelector("#dash-image-wrap");
     if (imgWrap) {
-      imgWrap.innerHTML = "";
+      let img = imgWrap.querySelector("img");
+      let placeholder = imgWrap.querySelector(".dash-no-image");
+      const wantedAlt = cfg.bike_name || "eBike";
+
       if (cfg.bike_image) {
-        const img = document.createElement("img");
-        img.src = cfg.bike_image;
-        img.alt = cfg.bike_name || "eBike";
-        imgWrap.appendChild(img);
+        if (placeholder) { placeholder.remove(); placeholder = null; }
+        if (!img) {
+          img = document.createElement("img");
+          img.src = cfg.bike_image;
+          img.alt = wantedAlt;
+          imgWrap.appendChild(img);
+        } else {
+          // src nur überschreiben, wenn sich der URL-String wirklich
+          // ändert – sonst (je nach Browser und Cache-Header) erneuter
+          // Netzwerk-Roundtrip trotz identischer URL.
+          if (img.getAttribute("src") !== cfg.bike_image) {
+            img.src = cfg.bike_image;
+          }
+          if (img.alt !== wantedAlt) img.alt = wantedAlt;
+        }
       } else {
-        const placeholder = document.createElement("div");
-        placeholder.className = "dash-no-image";
-        placeholder.innerHTML = `
-          <ha-icon class="ico" icon="mdi:bicycle-electric" style="--mdc-icon-size:48px"></ha-icon>
-          <div>${this._t("dash_no_image")}</div>
-          <div style="opacity:.6;margin-top:4px">${this._t("dash_no_image_hint")}</div>
-        `;
-        imgWrap.appendChild(placeholder);
+        if (img) { img.remove(); img = null; }
+        if (!placeholder) {
+          placeholder = document.createElement("div");
+          placeholder.className = "dash-no-image";
+          placeholder.innerHTML = `
+            <ha-icon class="ico" icon="mdi:bicycle-electric" style="--mdc-icon-size:48px"></ha-icon>
+            <div>${this._t("dash_no_image")}</div>
+            <div style="opacity:.6;margin-top:4px">${this._t("dash_no_image_hint")}</div>
+          `;
+          imgWrap.appendChild(placeholder);
+        }
       }
     }
 
