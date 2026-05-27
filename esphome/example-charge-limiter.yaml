@@ -41,9 +41,6 @@ esp32:
       CONFIG_BT_NIMBLE_NVS_PERSIST: y
       CONFIG_BT_NIMBLE_ATT_PREFERRED_MTU: "247"
 
-# Would not boot with the stock ESP32-C3 ESPHome 2023.9 default YAML config until I added/change the settings above for ESP32C3
-# web_server:
-
 mdns:
 
 logger:
