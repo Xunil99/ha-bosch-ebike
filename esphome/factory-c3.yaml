@@ -115,3 +115,16 @@ button:
       then:
         - lambda: |-
             id(ebike_bridge).clear_bonding();
+
+# Vorsorglicher Reboot alle 6 Stunden. Haelt den NimBLE-Stack frisch
+# und beugt seltenen Edge-Cases (Memory-Fragmentation, haengende BLE-
+# Connections, WiFi-Driver-Glitches) vor. Im Idle-Fall unauffaellig,
+# der Reboot dauert wenige Sekunden.
+interval:
+  - interval: 6h
+    then:
+      - logger.log:
+          level: WARN
+          format: "Scheduled 6h reboot"
+      - delay: 5s
+      - lambda: 'App.safe_reboot();'
