@@ -62,10 +62,22 @@ external_components:
   - source: github://Xunil99/ha-bosch-ebike@main
     components: [bosch_ebike_ldi]
     refresh: 1d
-
+    
 bosch_ebike_ldi:
   id: ebike_bridge
   device_name: ${device_name}
+
+number:
+  - platform: template
+    name: "Charge Limit"
+    id: charge_limit
+    optimistic: true
+    restore_value: true
+    min_value: 50
+    max_value: 100
+    step: 1
+    initial_value: 80
+    mode: slider
 
 switch:
   - platform: gpio
@@ -85,10 +97,14 @@ sensor:
     bosch_ebike_ldi_id: ebike_bridge
     battery_soc:
       name: "eBike Battery"
-      on_value_range:
-        - above: 79
-          then:
-            - switch.turn_off: switch_1
+      on_value:
+        then:
+          - if:
+              condition:
+                lambda: |-
+                  return x >= id(charge_limit).state;
+              then:
+                - switch.turn_off: switch_1
     odometer:
       name: "eBike Odometer"
 
