@@ -49,6 +49,33 @@ logger:
 
 api:
 
+# Optional: MQTT zusaetzlich zur Native-API.
+#
+# Bestehende Setups muessen NICHTS aendern - dieser Block ist
+# auskommentiert und rein opt-in. Die Native-API (oben) bleibt der
+# Standard.
+#
+# Wann MQTT sinnvoll ist: beim mobilen Einsatz (ESP roamt zwischen
+# Heim-WLAN und Handy-Hotspot, z.B. an einer Powerbank in der
+# Fahrradtasche). Bei der Native-API baut HOME ASSISTANT die Verbindung
+# zum ESP auf und muss dessen IP kennen - die wechselt aber unterwegs
+# (Hotspot-DHCP / WireGuard-Tunnel-IP), wodurch HA das Geraet nicht mehr
+# erreicht. Bei MQTT PUSHT der ESP seine Daten aktiv an den Broker,
+# daher ist die wechselnde IP egal.
+#
+# Voraussetzung: MQTT-Broker in HA (z.B. das Mosquitto-Add-on).
+#
+# Hinweis: Wenn api: aktiv bleibt UND mqtt: an ist, kann das Geraet in
+# HA doppelt auftauchen (einmal ueber die ESPHome-Integration, einmal
+# ueber MQTT-Discovery). Fuer reinen Roaming-Betrieb daher ggf. das
+# api:-Schluesselwort oben auskommentieren.
+#
+# mqtt:
+#   broker: 192.168.2.10           # IP des HA-/Mosquitto-Brokers
+#   username: !secret mqtt_user
+#   password: !secret mqtt_password
+#   # discovery: true ist Default - Entities erscheinen automatisch in HA
+
 ota:
   - platform: esphome
 
