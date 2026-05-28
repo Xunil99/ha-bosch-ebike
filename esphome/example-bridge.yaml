@@ -64,20 +64,66 @@ wifi:
   #     password: !secret hotspot_password
 
 # Optional: WireGuard-Tunnel zum Heim-Home-Assistant, wenn die Bridge
-# unterwegs am Handy-Hotspot haengt. Damit bleibt das Geraet fuer HA
-# erreichbar, als waere es im Heimnetz.
-# Voraussetzung: WireGuard-Server zuhause (z.B. HA-Add-on) +
-# Port-Forwarding/DynDNS. peer_allowed_ips bewusst nur auf das
-# VPN-Subnetz, damit normaler Internet-Traffic (NTP etc.) lokal bleibt.
+# unterwegs am Handy-Hotspot haengt (z.B. ESP mit Powerbank in der
+# Fahrradtasche). Damit bleibt das Geraet fuer HA erreichbar, als waere
+# es im Heimnetz.
+#
+# Voraussetzung: WireGuard-Server zuhause (HA-Add-on oder direkt in der
+# FritzBox) + Port-Forwarding/DynDNS. Bei der FritzBox liefert die
+# WireGuard-Konfiguration alle Werte (Endpoint via *.myfritz.net,
+# PublicKey, PresharedKey, zugewiesene Address).
+#
+# WICHTIG:
+#  - WireGuard braucht zwingend eine 'time:'-Komponente (sonst
+#    Config-Fehler "Component wireguard requires component time").
+#    Darum den time:-Block unten mit einkommentieren.
+#  - peer_allowed_ips bewusst nur auf das Heim-Subnetz beschraenken,
+#    damit normaler Internet-Traffic (NTP, Open-Meteo etc.) am Hotspot
+#    bleibt und nur HA-Verkehr durch den Tunnel geht.
+#  - Wenn die FritzBox dem ESP eine Tunnel-IP IM Heim-Subnetz zuweist
+#    (z.B. 192.168.2.x), darf der Tunnel zuhause NICHT aktiv sein, sonst
+#    Routing-Konflikt. Loesung: per wifi_info-ssid den Tunnel nur am
+#    Hotspot einschalten (siehe text_sensor-Beispiel weiter unten).
+
+# time:
+#   - platform: sntp
+#     id: sntp_time
+#     servers:
+#       - 0.pool.ntp.org
+#       - 1.pool.ntp.org
+
 # wireguard:
-#   address: 10.6.0.2
+#   address: 192.168.2.203            # vom WireGuard-Server zugewiesen
 #   private_key: !secret wg_private_key
-#   peer_endpoint: dein-host.duckdns.org
+#   peer_endpoint: dein-host.myfritz.net
 #   peer_port: 51820
 #   peer_public_key: !secret wg_peer_public_key
+#   peer_preshared_key: !secret wg_preshared_key   # FritzBox liefert das
 #   peer_allowed_ips:
-#     - 10.6.0.0/24
+#     - 192.168.2.0/24                # nur Heim-Subnetz (Split-Tunnel)
 #   peer_persistent_keepalive: 25s
+
+# Tunnel nur am Hotspot aktivieren, zuhause aus (verhindert
+# Subnetz-Konflikt). SSID exakt wie im wifi.networks-Block oben.
+# text_sensor:
+#   - platform: wifi_info
+#     ssid:
+#       name: "WLAN SSID"
+#       on_value:
+#         then:
+#           - if:
+#               condition:
+#                 lambda: 'return x == "Mein-Hotspot-Name";'
+#               then:
+#                 - wireguard.enable:
+#               else:
+#                 - wireguard.disable:
+
+# Optional: Tunnel-Status (an/aus) als Sensor in HA.
+# binary_sensor:
+#   - platform: wireguard
+#     status:
+#       name: "WireGuard Status"
 
 web_server:
   port: 80
