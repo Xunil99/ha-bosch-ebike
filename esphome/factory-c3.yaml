@@ -53,8 +53,36 @@ logger:
     bosch_ebike_ldi: DEBUG
 
 wifi:
+  # Diese Factory-Variante provisioniert WLAN zur Laufzeit ueber den
+  # Captive-Portal/Improv-Flow (kein hardcoded WLAN noetig).
+  #
+  # Optional: stattdessen feste WLANs hinterlegen, z.B. Zuhause +
+  # Handy-Hotspot fuer den mobilen Einsatz in der Fahrradtasche.
+  # Mit mehreren Netzen KEIN fast_connect verwenden (sonst wird nur
+  # das erste Netz probiert).
+  # networks:
+  #   - ssid: !secret wifi_ssid
+  #     password: !secret wifi_password
+  #   - ssid: !secret hotspot_ssid
+  #     password: !secret hotspot_password
   ap:
     ssid: "eBike Bridge Setup"
+
+# Optional: WireGuard-Tunnel zum Heim-Home-Assistant, wenn die Bridge
+# unterwegs am Handy-Hotspot haengt. Damit bleibt das Geraet fuer HA
+# erreichbar, als waere es im Heimnetz.
+# Voraussetzung: WireGuard-Server zuhause (z.B. HA-Add-on) +
+# Port-Forwarding/DynDNS. peer_allowed_ips bewusst nur auf das
+# VPN-Subnetz, damit normaler Internet-Traffic (NTP etc.) lokal bleibt.
+# wireguard:
+#   address: 10.6.0.2
+#   private_key: !secret wg_private_key
+#   peer_endpoint: dein-host.duckdns.org
+#   peer_port: 51820
+#   peer_public_key: !secret wg_peer_public_key
+#   peer_allowed_ips:
+#     - 10.6.0.0/24
+#   peer_persistent_keepalive: 25s
 
 captive_portal:
 
