@@ -53,6 +53,8 @@ Zusätzlich zur Cloud-Integration findest du im Unterordner [`esphome/`](esphome
 
 Komplette Anleitung: **[esphome/README.md](esphome/README.md)**
 
+> **Verwandte Projekte:** Kein ESP32 zur Hand, aber ein Raspberry Pi? [ha-bosch-ebike-pibridge](https://github.com/possm/ha-bosch-ebike-pibridge) von [@possm](https://github.com/possm) ist eine Community-Portierung in Python (BlueZ + MQTT), die direkt auf dem Pi läuft, **zwei Bikes gleichzeitig** unterstützt und ein eigenes Web-Dashboard mitbringt.
+
 #### Live-Werte für exakte Tour-Berechnung verwenden (optional, ab v1.10.0)
 
 Wenn die Bridge läuft, kannst du in den **Integrations-Einstellungen** (HA → *Einstellungen → Geräte & Dienste → Bosch eBike → Konfigurieren*) zwei Sensoren hinterlegen:
@@ -536,6 +538,8 @@ In addition to the cloud integration, the [`esphome/`](esphome/) subfolder conta
 🚀 **Fastest path without ESPHome experience**: plug an ESP32 into your computer, open **https://xunil99.github.io/ha-bosch-ebike/** in Chrome / Edge and click *Install*. Firmware flash and WiFi setup run entirely in the browser, no ESPHome installation required on your side.
 
 Full guide: **[esphome/README.md](esphome/README.md)**
+
+> **Related projects:** No ESP32 on hand but a spare Raspberry Pi? [ha-bosch-ebike-pibridge](https://github.com/possm/ha-bosch-ebike-pibridge) by [@possm](https://github.com/possm) is a community Python port (BlueZ + MQTT) that runs straight on the Pi, handles **two bikes simultaneously** and ships its own web dashboard.
 
 #### Use live values for exact tour math (optional, from v1.10.0)
 
