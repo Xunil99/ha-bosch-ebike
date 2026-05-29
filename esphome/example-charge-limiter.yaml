@@ -1,0 +1,136 @@
+---
+
+# Based on Sonoff BASICR4
+
+substitutions:
+  device_name: "Bosch eBike Charge Limiter"
+
+esphome:
+  name: bosch-ebike-charge-limit
+  name_add_mac_suffix: True
+  friendly_name: ${device_name}
+  platformio_options:
+    board_build.mcu: esp32c3
+    board_build.variant: esp32c3
+
+esp32:
+  toolchain: esp-idf
+  variant: esp32c3
+  framework:
+    type: esp-idf
+    sdkconfig_options:
+      # NimBLE host stack with peripheral + GATT-client roles.
+      # Bluedroid is disabled because the two stacks are mutually exclusive.
+      CONFIG_BT_ENABLED: y
+      CONFIG_BT_NIMBLE_ENABLED: y
+      CONFIG_BT_BLUEDROID_ENABLED: n
+      CONFIG_BT_CONTROLLER_ENABLED: y
+      CONFIG_BTDM_CTRL_MODE_BLE_ONLY: y
+      CONFIG_BTDM_CTRL_MODE_BR_EDR_ONLY: n
+      CONFIG_BTDM_CTRL_MODE_BTDM: n
+      CONFIG_BT_NIMBLE_MAX_CONNECTIONS: "1"
+      CONFIG_BT_NIMBLE_ROLE_PERIPHERAL: y
+      CONFIG_BT_NIMBLE_ROLE_BROADCASTER: y
+      # Central role enables the GATT client API (ble_gattc_*).
+      # The eBike connects to us as Central, but on that connection we act as
+      # GATT *client* against the eBike's GATT *server* on the Live Data Service.
+      CONFIG_BT_NIMBLE_ROLE_CENTRAL: y
+      CONFIG_BT_NIMBLE_ROLE_OBSERVER: y
+      CONFIG_BT_NIMBLE_SM_LEGACY: n
+      CONFIG_BT_NIMBLE_SM_SC: y
+      CONFIG_BT_NIMBLE_NVS_PERSIST: y
+      CONFIG_BT_NIMBLE_ATT_PREFERRED_MTU: "247"
+
+mdns:
+
+logger:
+
+api:
+
+ota:
+  - platform: esphome
+
+wifi:
+  ap:
+    ssid: ${device_name} Setup
+
+web_server:
+  port: 80
+  version: 3
+
+external_components:
+  - source: github://Xunil99/ha-bosch-ebike@main
+    components: [bosch_ebike_ldi]
+    refresh: 1d
+    
+bosch_ebike_ldi:
+  id: ebike_bridge
+  device_name: ${device_name}
+
+number:
+  - platform: template
+    name: "Charge Limit"
+    id: charge_limit
+    optimistic: true
+    restore_value: true
+    min_value: 50
+    max_value: 100
+    step: 1
+    initial_value: 80
+    mode: slider
+
+switch:
+  - platform: gpio
+    name: "Enable charging"
+    id: switch_1
+    pin:
+      number: 04
+    restore_mode: ALWAYS_OFF
+
+status_led:
+  pin:
+    number: GPIO6
+    inverted: yes
+
+sensor:
+  - platform: bosch_ebike_ldi
+    bosch_ebike_ldi_id: ebike_bridge
+    battery_soc:
+      name: "eBike Battery"
+      on_value:
+        then:
+          - if:
+              condition:
+                lambda: |-
+                  return x >= id(charge_limit).state;
+              then:
+                - switch.turn_off: switch_1
+    odometer:
+      name: "eBike Odometer"
+
+binary_sensor:
+  - platform: gpio
+    pin:
+      number: GPIO9
+      mode:
+        input: true
+        pullup: true
+      inverted: true
+    id: button_1
+    on_press:
+      then:
+        - switch.toggle: switch_1
+  - platform: bosch_ebike_ldi
+    bosch_ebike_ldi_id: ebike_bridge
+    connected:
+      name: "eBike Connected"
+    charger_connected:
+      name: "eBike Charger Connected"
+
+button:
+  - platform: template
+    name: "eBike Clear Bonding"
+    on_press:
+      then:
+        - lambda: |-
+            id(ebike_bridge).clear_bonding();
