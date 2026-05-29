@@ -1,0 +1,224 @@
+# Mobile / roaming Bosch eBike LDI bridge: MQTT + multi-WiFi + WireGuard.
+#
+# This is an ADDITION to the standard example-bridge.yaml (which uses the
+# native API). Use this variant only if you want to take the bridge ALONG on
+# a ride (e.g. an ESP32-C3 on a powerbank in the frame bag) and still get the
+# data into your Home Assistant at home.
+#
+# How it works on the road:
+#   eBike --BLE--> ESP --WiFi(phone hotspot)--> Internet --WireGuard--> home
+#   --MQTT--> Home Assistant
+#
+# Why MQTT and not the native API:
+#   With the native API, HOME ASSISTANT opens the connection to the ESP and
+#   must know its IP. On the road that IP keeps changing (hotspot DHCP /
+#   tunnel IP), so HA loses the device. With MQTT the ESP PUSHES its data to
+#   the broker, so a changing IP no longer matters.
+#
+# Full setup guide (FritzBox WireGuard, iPhone hotspot setting, entity
+# changes when moving from API to MQTT): see MOBILE.md next to this file.
+#
+# All personal values (WiFi, hotspot, MQTT, WireGuard incl. the assigned IP)
+# live in secrets.yaml. Copy secrets.yaml.example to secrets.yaml and fill it
+# in. Never commit secrets.yaml.
+
+substitutions:
+  # Used inside the SSID-gating lambda further down. A lambda cannot read
+  # !secret directly, so we pull the hotspot SSID into a substitution here.
+  # This MUST match your hotspot SSID exactly.
+  hotspot_ssid: !secret hotspot_ssid
+
+esphome:
+  name: ebike-bridge-mobile
+  friendly_name: eBike Bridge Mobile
+  min_version: 2025.11.0
+  # Set to true if you run more than one bridge, so the node name / MQTT
+  # client id stay unique.
+  name_add_mac_suffix: false
+
+esp32:
+  # This example targets the ESP32-C3 (small, cheap, ideal for a powerbank
+  # build). For a classic dual-core ESP32, copy the esp32: block from
+  # factory.yaml instead (variant: esp32 / board: esp32dev).
+  variant: esp32c3
+  board: esp32-c3-devkitm-1
+  framework:
+    type: esp-idf
+    sdkconfig_options:
+      CONFIG_BT_ENABLED: y
+      CONFIG_BT_NIMBLE_ENABLED: y
+      CONFIG_BT_BLUEDROID_ENABLED: n
+      CONFIG_BT_CONTROLLER_ENABLED: y
+      CONFIG_BT_NIMBLE_MAX_CONNECTIONS: "1"
+      CONFIG_BT_NIMBLE_ROLE_PERIPHERAL: y
+      CONFIG_BT_NIMBLE_ROLE_BROADCASTER: y
+      CONFIG_BT_NIMBLE_ROLE_CENTRAL: y
+      CONFIG_BT_NIMBLE_ROLE_OBSERVER: y
+      CONFIG_BT_NIMBLE_SM_LEGACY: n
+      CONFIG_BT_NIMBLE_SM_SC: y
+      CONFIG_BT_NIMBLE_NVS_PERSIST: y
+      CONFIG_BT_NIMBLE_ATT_PREFERRED_MTU: "247"
+
+logger:
+  level: INFO
+  logs:
+    bosch_ebike_ldi: INFO
+    wireguard: INFO
+    mqtt: INFO
+
+ota:
+  - platform: esphome
+
+# --- MQTT (replaces the native api:) ----------------------------------------
+# IMPORTANT: do NOT enable api: at the same time, or the device shows up
+# twice in HA (once via the ESPHome integration, once via MQTT discovery).
+# For roaming, MQTT is the one to keep.
+#
+# NOTE: do NOT add `idf_send_async: true` on the ESP32-C3. In testing it
+# caused the MQTT client to disconnect and reconnect roughly every 30 s.
+mqtt:
+  id: mqtt_client
+  broker: !secret mqtt_broker
+  username: !secret mqtt_user
+  password: !secret mqtt_password
+  discovery: true
+  discovery_prefix: homeassistant
+  # Let only the WiFi reboot_timeout below trigger reboots, not MQTT.
+  reboot_timeout: 0s
+
+wifi:
+  power_save_mode: none
+  # With multiple networks, do NOT use fast_connect (it would only ever try
+  # the first network and never fall back).
+  # Reboot if there is no WiFi at all for 5 min, to recover from hangs.
+  reboot_timeout: 5min
+
+  networks:
+    - ssid: !secret wifi_ssid
+      password: !secret wifi_password
+      priority: 10
+    - ssid: !secret hotspot_ssid
+      password: !secret hotspot_password
+      priority: 5
+
+  ap:
+    ssid: "eBike Bridge Mobile Setup"
+
+captive_portal:
+
+web_server:
+  port: 80
+  version: 3
+
+# WireGuard requires a time source.
+time:
+  - platform: sntp
+    id: sntp_time
+    servers:
+      - 0.pool.ntp.org
+      - 1.pool.ntp.org
+
+# --- WireGuard tunnel back to the home network ------------------------------
+# All values come from the WireGuard connection you create in your router
+# (e.g. a FritzBox). See MOBILE.md for the step-by-step and where each value
+# maps to. Pitfalls we hit (already handled here):
+#   - `address` MUST equal the IP the router assigned to this peer.
+#   - `netmask: 255.255.255.0` is what actually routes the home subnet
+#     through the tunnel (do not omit it).
+#   - `require_connection_to_proceed: false` is required, because at home we
+#     disable the tunnel (see below); requiring it would block startup.
+wireguard:
+  id: wg_tunnel
+  address: !secret wg_address
+  netmask: 255.255.255.0
+  private_key: !secret wg_private_key
+  peer_endpoint: !secret wg_endpoint
+  peer_port: !secret wg_port
+  peer_public_key: !secret wg_peer_public_key
+  peer_preshared_key: !secret wg_preshared_key
+  peer_allowed_ips:
+    - !secret wg_allowed_subnet
+  peer_persistent_keepalive: 25s
+  reboot_timeout: 0s
+  require_connection_to_proceed: false
+
+# Turn the tunnel ON only on the phone hotspot, and OFF at home. At home the
+# router assigns the peer an IP inside the home subnet, so an active tunnel
+# there would create a routing conflict.
+text_sensor:
+  - platform: wifi_info
+    ssid:
+      name: "WLAN SSID"
+      id: current_ssid
+      on_value:
+        then:
+          - if:
+              condition:
+                lambda: 'return x == "${hotspot_ssid}";'
+              then:
+                - logger.log: "Hotspot detected -> enabling WireGuard"
+                - wireguard.enable:
+                    id: wg_tunnel
+              else:
+                - logger.log: "Home network detected -> disabling WireGuard"
+                - wireguard.disable:
+                    id: wg_tunnel
+
+external_components:
+  - source: github://Xunil99/ha-bosch-ebike@main
+    components: [bosch_ebike_ldi]
+    refresh: 1d
+
+bosch_ebike_ldi:
+  id: ebike_bridge
+  device_name: "HA eBike Bridge"
+
+sensor:
+  - platform: bosch_ebike_ldi
+    bosch_ebike_ldi_id: ebike_bridge
+    speed:
+      name: "eBike Speed"
+    cadence:
+      name: "eBike Cadence"
+    rider_power:
+      name: "eBike Rider Power"
+    ambient_brightness:
+      name: "eBike Ambient Brightness"
+      # This value updates ~2x per second. Throttle it to one (averaged)
+      # value per 30 s to spare WiFi, MQTT and the WireGuard tunnel.
+      filters:
+        - throttle_average: 30s
+    battery_soc:
+      name: "eBike Battery SoC (Live)"
+    odometer:
+      name: "eBike Odometer (Live)"
+
+binary_sensor:
+  - platform: wireguard
+    status:
+      name: "WireGuard Status"
+      id: wg_status
+  - platform: bosch_ebike_ldi
+    bosch_ebike_ldi_id: ebike_bridge
+    connected:
+      name: "eBike Connected"
+    light:
+      name: "eBike Light"
+    system_locked:
+      name: "eBike System Locked"
+    charger_connected:
+      name: "eBike Charger Connected"
+    light_reserve:
+      name: "eBike Light Reserve"
+    diagnosis_active:
+      name: "eBike Diagnosis Active"
+    in_motion:
+      name: "eBike In Motion"
+
+button:
+  - platform: template
+    name: "eBike Clear Bonding"
+    on_press:
+      then:
+        - lambda: |-
+            id(ebike_bridge).clear_bonding();

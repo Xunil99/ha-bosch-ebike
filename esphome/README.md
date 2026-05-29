@@ -43,6 +43,16 @@ The page is bilingual (DE/EN) and walks through the full flow including the Flow
 | `binary_sensor.ebike_diagnosis_active` | bool | – |
 | `binary_sensor.ebike_in_motion` | bool | motion |
 
+### Taking the bridge on a ride (MQTT + WireGuard)
+
+Want to take the ESP along on a ride and still get the data home? There is an
+optional mobile setup using a phone hotspot, a WireGuard tunnel built by the
+ESP itself (no VPN app on the phone needed), and MQTT. See
+**[MOBILE.md](MOBILE.md)** and
+[`example-bridge-mobile.yaml`](example-bridge-mobile.yaml). Note that it uses
+MQTT instead of the native API, which changes your entity ids in Home
+Assistant.
+
 ### Prerequisites
 
 - **eBike**: Bosch smart system with control unit firmware **v19 or newer**.
@@ -222,6 +232,16 @@ included).
 | `binary_sensor.ebike_light_reserve` | bool | problem |
 | `binary_sensor.ebike_diagnosis_active` | bool | – |
 | `binary_sensor.ebike_in_motion` | bool | motion |
+
+### Bridge mit auf die Fahrt nehmen (MQTT + WireGuard)
+
+Du willst den ESP mitnehmen und die Daten trotzdem nach Hause bringen? Dafür
+gibt es ein optionales Mobil-Setup mit Handy-Hotspot, einem WireGuard-Tunnel,
+den der ESP selbst aufbaut (keine VPN-App am Handy nötig), und MQTT. Siehe
+**[MOBILE.md](MOBILE.md)** und
+[`example-bridge-mobile.yaml`](example-bridge-mobile.yaml). Achtung: Es nutzt
+MQTT statt der nativen API, wodurch sich deine Entity-IDs in Home Assistant
+ändern.
 
 ### Voraussetzungen
 
