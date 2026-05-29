@@ -1,0 +1,166 @@
+# Factory firmware for the Bosch eBike Charge Limiter on a Sonoff BASICR4.
+#
+# Produces ebike-charge-limiter.factory.bin, offered via ESP Web Tools at
+# https://xunil99.github.io/ha-bosch-ebike/ as a SEPARATE product from the
+# generic LDI bridge.
+#
+# HARDWARE-SPECIFIC: this firmware switches MAINS VOLTAGE via the BASICR4
+# relay (GPIO4). Only flash it onto a Sonoff BASICR4. The GPIO map (relay
+# GPIO4, status LED GPIO6, button GPIO9) is specific to that device.
+#
+# What it does: the bridge reads the eBike's live battery SoC over BLE and
+# cuts the charger relay once the configurable charge limit is reached, fully
+# on-device (no Home Assistant required). Press the device button to (re)start
+# charging.
+#
+# Original example and idea contributed by @henri98 (PR #22). Thanks!
+# Based on esphome/factory-c3.yaml (proven C3 build block) plus the charge
+# limiter logic from esphome/example-charge-limiter.yaml.
+
+esphome:
+  name: ebike-charge-limiter
+  friendly_name: eBike Charge Limiter
+  min_version: 2025.11.0
+  name_add_mac_suffix: true
+  project:
+    name: "xunil99.bosch_ebike_charge_limiter"
+    version: "1.0.0"
+
+esp32:
+  variant: esp32c3
+  # Sonoff BASICR4 uses an ESP32-C3. The DevKitM-1 defaults match its flash
+  # configuration; the relay/LED/button pins below are BASICR4-specific.
+  board: esp32-c3-devkitm-1
+  framework:
+    type: esp-idf
+    sdkconfig_options:
+      CONFIG_BT_ENABLED: y
+      CONFIG_BT_NIMBLE_ENABLED: y
+      CONFIG_BT_BLUEDROID_ENABLED: n
+      CONFIG_BT_CONTROLLER_ENABLED: y
+      CONFIG_BT_NIMBLE_MAX_CONNECTIONS: "1"
+      CONFIG_BT_NIMBLE_ROLE_PERIPHERAL: y
+      CONFIG_BT_NIMBLE_ROLE_BROADCASTER: y
+      CONFIG_BT_NIMBLE_ROLE_CENTRAL: y
+      CONFIG_BT_NIMBLE_ROLE_OBSERVER: y
+      CONFIG_BT_NIMBLE_SM_LEGACY: n
+      CONFIG_BT_NIMBLE_SM_SC: y
+      CONFIG_BT_NIMBLE_NVS_PERSIST: y
+      CONFIG_BT_NIMBLE_ATT_PREFERRED_MTU: "247"
+
+logger:
+  level: DEBUG
+  logs:
+    bosch_ebike_ldi: DEBUG
+
+# No baked-in WiFi credentials. The end user supplies them via Improv-Serial
+# (same browser session that flashed) or the AP fallback plus captive portal.
+wifi:
+  ap:
+    ssid: "eBike Charge Limiter Setup"
+
+captive_portal:
+
+improv_serial:
+
+api:
+
+ota:
+  - platform: esphome
+
+web_server:
+  port: 80
+  version: 3
+
+external_components:
+  - source: github://Xunil99/ha-bosch-ebike@main
+    components: [bosch_ebike_ldi]
+    refresh: 1d
+
+bosch_ebike_ldi:
+  id: ebike_bridge
+  device_name: "eBike Charge Limiter"
+
+number:
+  - platform: template
+    name: "Charge Limit"
+    id: charge_limit
+    optimistic: true
+    restore_value: true
+    min_value: 50
+    max_value: 100
+    step: 1
+    initial_value: 80
+    mode: slider
+
+switch:
+  - platform: gpio
+    name: "Enable charging"
+    id: switch_1
+    # BASICR4 relay.
+    pin:
+      number: 4
+    restore_mode: ALWAYS_OFF
+
+status_led:
+  pin:
+    number: GPIO6
+    inverted: yes
+
+# Safety watchdog: a restart-mode timer that is re-armed by every incoming
+# SoC value. If SoC stops arriving for 15 min while the relay is on (BLE link
+# dropped mid-charge), the relay is cut so charging cannot silently run past
+# the limit. It only ever arms once SoC values are received, so using the
+# plug as a plain charger for a non-Bosch bike (no LDI SoC) is unaffected.
+script:
+  - id: soc_watchdog
+    mode: restart
+    then:
+      - delay: 15min
+      - logger.log: "No SoC update for 15 min, cutting charge as a safety measure"
+      - switch.turn_off: switch_1
+
+sensor:
+  - platform: bosch_ebike_ldi
+    bosch_ebike_ldi_id: ebike_bridge
+    battery_soc:
+      name: "eBike Battery"
+      on_value:
+        then:
+          - script.execute: soc_watchdog
+          - if:
+              condition:
+                lambda: |-
+                  return x >= id(charge_limit).state;
+              then:
+                - switch.turn_off: switch_1
+    odometer:
+      name: "eBike Odometer"
+
+binary_sensor:
+  - platform: gpio
+    # BASICR4 push button.
+    pin:
+      number: GPIO9
+      mode:
+        input: true
+        pullup: true
+      inverted: true
+    id: button_1
+    on_press:
+      then:
+        - switch.toggle: switch_1
+  - platform: bosch_ebike_ldi
+    bosch_ebike_ldi_id: ebike_bridge
+    connected:
+      name: "eBike Connected"
+    charger_connected:
+      name: "eBike Charger Connected"
+
+button:
+  - platform: template
+    name: "eBike Clear Bonding"
+    on_press:
+      then:
+        - lambda: |-
+            id(ebike_bridge).clear_bonding();

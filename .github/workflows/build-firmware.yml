@@ -34,6 +34,13 @@ jobs:
           yaml-file: esphome/factory-c3.yaml
           version: latest
 
+      - name: Build Charge Limiter firmware (Sonoff BASICR4)
+        id: esphome-build-charge-limiter
+        uses: esphome/build-action@v6
+        with:
+          yaml-file: esphome/factory-charge-limiter.yaml
+          version: latest
+
       - name: Collect firmware artifacts
         run: |
           set -euo pipefail
@@ -50,6 +57,12 @@ jobs:
           ls -la "$OUT_C3"
           cp "$OUT_C3"/*.factory.bin firmware-output/ebike-bridge-c3.factory.bin
           cp "$OUT_C3"/*.ota.bin     firmware-output/ebike-bridge-c3.ota.bin || true
+
+          OUT_CL="${{ steps.esphome-build-charge-limiter.outputs.name }}"
+          echo "Charge Limiter build output dir: $OUT_CL"
+          ls -la "$OUT_CL"
+          cp "$OUT_CL"/*.factory.bin firmware-output/ebike-charge-limiter.factory.bin
+          cp "$OUT_CL"/*.ota.bin     firmware-output/ebike-charge-limiter.ota.bin || true
 
           ls -la firmware-output/
 
@@ -95,6 +108,8 @@ jobs:
             firmware-output/ebike-bridge.ota.bin
             firmware-output/ebike-bridge-c3.factory.bin
             firmware-output/ebike-bridge-c3.ota.bin
+            firmware-output/ebike-charge-limiter.factory.bin
+            firmware-output/ebike-charge-limiter.ota.bin
             firmware-output/manifest.json
 
       - name: Publish firmware to GitHub Pages (same-origin, CORS-safe)
@@ -108,12 +123,16 @@ jobs:
           cp firmware-output/ebike-bridge.ota.bin        docs/firmware/ebike-bridge.ota.bin || true
           cp firmware-output/ebike-bridge-c3.factory.bin docs/firmware/ebike-bridge-c3.factory.bin
           cp firmware-output/ebike-bridge-c3.ota.bin     docs/firmware/ebike-bridge-c3.ota.bin || true
+          cp firmware-output/ebike-charge-limiter.factory.bin docs/firmware/ebike-charge-limiter.factory.bin
+          cp firmware-output/ebike-charge-limiter.ota.bin     docs/firmware/ebike-charge-limiter.ota.bin || true
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add docs/firmware/ebike-bridge.factory.bin \
                   docs/firmware/ebike-bridge.ota.bin \
                   docs/firmware/ebike-bridge-c3.factory.bin \
-                  docs/firmware/ebike-bridge-c3.ota.bin
+                  docs/firmware/ebike-bridge-c3.ota.bin \
+                  docs/firmware/ebike-charge-limiter.factory.bin \
+                  docs/firmware/ebike-charge-limiter.ota.bin
           if git diff --cached --quiet; then
             echo "No firmware changes to commit."
           else

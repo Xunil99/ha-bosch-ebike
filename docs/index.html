@@ -250,6 +250,40 @@
       </a>
     </div>
 
+    <div class="install-card">
+      <h2 style="margin-top:0;font-size:1.15rem;">
+        <span class="lang-de">eBike-Ladebegrenzer (Sonoff BASICR4)</span>
+        <span class="lang-en">eBike Charge Limiter (Sonoff BASICR4)</span>
+      </h2>
+      <p class="subtitle" style="margin:.25rem 0 1rem;">
+        <span class="lang-de"><strong>Nur für Sonoff BASICR4.</strong> Stoppt das Laden des eBike-Akkus bei einem einstellbaren Grenzwert (z. B. 80 %) anhand des echten Akkustands per BLE, komplett auf dem Gerät, ohne Home Assistant. Achtung: Dieses Gerät schaltet Netzspannung. Nicht auf andere ESP32-C3-Boards flashen.</span>
+        <span class="lang-en"><strong>Sonoff BASICR4 only.</strong> Stops eBike charging at a configurable limit (e.g. 80 %) using the real battery SoC over BLE, fully on-device, no Home Assistant required. Note: this device switches mains voltage. Do not flash it onto other ESP32-C3 boards.</span>
+      </p>
+      <esp-web-install-button manifest="manifest-charge-limiter.json">
+        <button slot="activate" type="button">
+          <span class="lang-de">Ladebegrenzer auf BASICR4 flashen</span>
+          <span class="lang-en">Install charge limiter onto BASICR4</span>
+        </button>
+        <span slot="unsupported" class="unsupported">
+          <span class="lang-de">Dein Browser unterstützt kein Web Serial. Bitte Chrome oder Edge auf einem Desktop verwenden.</span>
+          <span class="lang-en">Your browser does not support Web Serial. Please use Chrome or Edge on a desktop computer.</span>
+        </span>
+        <span slot="not-allowed" class="not-allowed">
+          <span class="lang-de">Diese Seite muss über HTTPS aufgerufen werden.</span>
+          <span class="lang-en">This page must be opened over HTTPS.</span>
+        </span>
+      </esp-web-install-button>
+      <a class="fallback-link"
+         href="./firmware/ebike-charge-limiter.factory.bin">
+        <span class="lang-de">Alternativ: Ladebegrenzer-factory.bin manuell herunterladen und mit esptool flashen</span>
+        <span class="lang-en">Alternatively: download the charge limiter factory.bin and flash it manually with esptool</span>
+      </a>
+      <p class="subtitle" style="margin:.75rem 0 0;font-size:.85rem;">
+        <span class="lang-de">Beigetragen von <a href="https://github.com/henri98">@henri98</a>. Danke!</span>
+        <span class="lang-en">Contributed by <a href="https://github.com/henri98">@henri98</a>. Thanks!</span>
+      </p>
+    </div>
+
     <section class="lang-de">
       <h2>Voraussetzungen</h2>
       <ul class="hw-list">

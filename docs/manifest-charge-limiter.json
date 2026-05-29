@@ -1,0 +1,19 @@
+{
+  "name": "Bosch eBike Charge Limiter (Sonoff BASICR4)",
+  "version": "latest",
+  "home_assistant_domain": "esphome",
+  "funding_url": "https://github.com/Xunil99/ha-bosch-ebike",
+  "new_install_prompt_erase": true,
+  "builds": [
+    {
+      "chipFamily": "ESP32-C3",
+      "improv": true,
+      "parts": [
+        {
+          "path": "./firmware/ebike-charge-limiter.factory.bin",
+          "offset": 0
+        }
+      ]
+    }
+  ]
+}
