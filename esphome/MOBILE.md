@@ -101,6 +101,41 @@ normal home routing. The example therefore enables the tunnel only when the
 connected SSID is your hotspot, and disables it otherwise (a `wifi_info`
 text sensor drives `wireguard.enable` / `wireguard.disable`).
 
+### WireGuard troubleshooting
+
+If the tunnel comes up (handshake OK, you can even ping the ESP) but MQTT never
+connects (`select() timeout`, `esp-tls error 0x8006`, and nothing from the ESP
+on the server's `wg0`), it is almost always one of these:
+
+- **The ESP tunnel IP must be in the same subnet as the MQTT broker.**
+  ESPHome's WireGuard (lwIP-based, via `esp_wireguard` / `wireguard-lwip`) does
+  NOT do policy routing for `peer_allowed_ips` the way a full OS client does. It
+  routes by on-link subnet plus the default route. So the broker only goes
+  through the tunnel if it is **on-link** on the WG interface, i.e. the ESP's
+  `address` is in the broker's subnet (with `netmask: 255.255.255.0`). A FritzBox
+  WireGuard does exactly that automatically (it assigns the peer a home-subnet
+  IP), which is why FritzBox setups just work.
+  - Own WireGuard server with a **separate** tunnel subnet (e.g. `10.6.0.0/24`)
+    while the broker is on `192.168.x.0/24`? Then the broker is off-link, and the
+    ESP sends its packets out the WiFi default route, never into the tunnel
+    (handshake and ping still work, because those are the reverse path). Fix:
+    either give the ESP a free tunnel IP **inside the broker's subnet** (and set
+    the server `[Peer] AllowedIPs` to that `/32`), or use full tunnel
+    `peer_allowed_ips: 0.0.0.0/0` so the WG interface becomes the default route.
+
+- **OTA rollback can hide your changes.** A freshly flashed firmware is only
+  marked valid after it runs ~60 s without a reset (`safe_mode: Successful after:
+  60s`). If you reboot or unplug sooner, the bootloader rolls back to the
+  PREVIOUS image on the next boot, and you are silently testing the old config.
+  After flashing, leave it powered and untouched for ~90 s, then verify the log
+  shows your current settings.
+
+- **Do not debug MQTT through MQTT-delivered logs.** ESPHome's `<prefix>/debug`
+  log topic only arrives once MQTT works, so it is useless while MQTT is the
+  broken part. Use USB serial (`esphome logs ...`). On the server, `wg show`
+  (per-peer handshake, transfer, allowed-ips) and `tcpdump -ni wg0` show exactly
+  where the packets stop.
+
 ### Quick start
 
 1. Copy `secrets.yaml.example` to `secrets.yaml` and fill in your values.
@@ -110,6 +145,30 @@ text sensor drives `wireguard.enable` / `wireguard.disable`).
 5. Flash `example-bridge-mobile.yaml`.
 6. At home it stays on WiFi with the tunnel off; on the hotspot it brings the
    tunnel up automatically and the data flows.
+
+Prefer a graphical workflow over the command line? See the next section.
+
+### Using the ESPHome add-on in Home Assistant
+
+You do not need the command line. You can do everything inside the **ESPHome
+Device Builder** add-on that most Home Assistant users already have.
+
+1. In Home Assistant go to **Settings > Add-ons**, install and open **ESPHome
+   Device Builder**, then **Open Web UI**.
+2. Click **New device**, give it a name, pick **ESP32-C3** when asked, then
+   **Edit** the device and replace its YAML with the contents of
+   [`example-bridge-mobile.yaml`](example-bridge-mobile.yaml).
+3. Open the **Secrets** editor (top-right menu of the dashboard) and add the
+   keys from [`secrets.yaml.example`](secrets.yaml.example), filled with your
+   values. The secrets editor is **shared by all devices** in this add-on, so
+   if you already use ESPHome you may have keys like `wifi_ssid` already.
+   Reuse those instead of adding them twice.
+4. Click **Install > Plug into this computer** for the first flash. Connect the
+   ESP by USB to the computer showing the dashboard and use Chrome or Edge
+   (Web Serial). After the first flash you can update **Wirelessly** (OTA) over
+   WiFi.
+5. The first build downloads the toolchain and platform (a few minutes). USB is
+   only needed for that first flash.
 
 ---
 
@@ -205,6 +264,42 @@ Beispiel aktiviert den Tunnel daher nur, wenn das verbundene WLAN dein Hotspot
 ist, und deaktiviert ihn sonst (ein `wifi_info`-Textsensor steuert
 `wireguard.enable` / `wireguard.disable`).
 
+### WireGuard-Fehlersuche
+
+Wenn der Tunnel steht (Handshake ok, du kannst den ESP sogar anpingen), MQTT
+sich aber nie verbindet (`select() timeout`, `esp-tls error 0x8006`, und auf dem
+Server-`wg0` kommt nichts vom ESP an), ist es fast immer eines davon:
+
+- **Die ESP-Tunnel-IP muss im selben Subnetz wie der MQTT-Broker liegen.**
+  ESPHomes WireGuard (lwIP-basiert, via `esp_wireguard` / `wireguard-lwip`) macht
+  **kein Policy-Routing** über `peer_allowed_ips` wie ein vollwertiger
+  OS-Client. Es routet nach On-Link-Subnetz plus Default-Route. Der Broker geht
+  also nur durch den Tunnel, wenn er auf dem WG-Interface **on-link** ist - die
+  ESP-`address` muss im Broker-Subnetz liegen (mit `netmask: 255.255.255.0`).
+  Eine FritzBox-WireGuard macht genau das automatisch (sie vergibt dem Peer eine
+  IP aus dem Heim-Subnetz), deshalb funktionieren FritzBox-Setups direkt.
+  - Eigener WireGuard-Server mit **separatem** Tunnel-Subnetz (z. B.
+    `10.6.0.0/24`), während der Broker in `192.168.x.0/24` liegt? Dann ist der
+    Broker off-link, und der ESP schickt seine Pakete über die WLAN-Default-Route
+    statt in den Tunnel (Handshake und Ping gehen trotzdem, das ist die
+    Rückrichtung). Lösung: dem ESP eine freie Tunnel-IP **im Broker-Subnetz**
+    geben (und die Server-`[Peer] AllowedIPs` auf dieses `/32` setzen), oder
+    Full-Tunnel `peer_allowed_ips: 0.0.0.0/0`, damit das WG-Interface zur
+    Default-Route wird.
+
+- **OTA-Rollback verschleiert deine Änderungen.** Eine frisch geflashte Firmware
+  wird erst nach ~60 s ohne Reset als gültig markiert (`safe_mode: Successful
+  after: 60s`). Rebootest oder trennst du früher, fällt der Bootloader beim
+  nächsten Start auf die **alte** Firmware zurück, und du testest unbemerkt die
+  alte Config. Nach dem Flashen also ~90 s unangetastet laufen lassen und im Log
+  prüfen, dass deine aktuellen Einstellungen wirklich aktiv sind.
+
+- **MQTT nicht über MQTT-Logs debuggen.** ESPHomes Log-Topic `<prefix>/debug`
+  kommt erst an, wenn MQTT funktioniert - es ist also nutzlos, solange genau MQTT
+  klemmt. Nimm USB-Serial (`esphome logs ...`). Auf dem Server zeigen `wg show`
+  (Handshake, Transfer, allowed-ips je Peer) und `tcpdump -ni wg0` exakt, wo die
+  Pakete stehenbleiben.
+
 ### Schnellstart
 
 1. `secrets.yaml.example` nach `secrets.yaml` kopieren und ausfüllen.
@@ -214,3 +309,26 @@ ist, und deaktiviert ihn sonst (ein `wifi_info`-Textsensor steuert
 5. `example-bridge-mobile.yaml` flashen.
 6. Zu Hause bleibt der ESP im WLAN, Tunnel aus; am Hotspot baut er den Tunnel
    automatisch auf und die Daten fließen.
+
+Lieber grafisch statt Kommandozeile? Siehe nächster Abschnitt.
+
+### Einrichtung im ESPHome-Add-on von Home Assistant
+
+Du brauchst keine Kommandozeile. Alles geht im Add-on **ESPHome Device
+Builder**, das die meisten HA-Nutzer schon haben.
+
+1. In Home Assistant unter **Einstellungen > Add-ons** das Add-on **ESPHome
+   Device Builder** installieren, öffnen und **Web-UI öffnen**.
+2. Auf **New device** klicken, Namen vergeben, bei der Abfrage **ESP32-C3**
+   wählen, dann das Gerät **bearbeiten** und seine YAML durch den Inhalt von
+   [`example-bridge-mobile.yaml`](example-bridge-mobile.yaml) ersetzen.
+3. Den **Secrets**-Editor öffnen (Menü oben rechts im Dashboard) und die
+   Schlüssel aus [`secrets.yaml.example`](secrets.yaml.example) mit deinen
+   Werten eintragen. Der Secrets-Editor gilt für **alle** Geräte in diesem
+   Add-on. Wer ESPHome schon nutzt, hat Schlüssel wie `wifi_ssid` evtl. schon,
+   dann vorhandene wiederverwenden statt doppelt anlegen.
+4. **Install > Plug into this computer** für den ersten Flash. Den ESP per USB
+   an den Rechner stecken, der das Dashboard anzeigt, und Chrome oder Edge
+   verwenden (Web Serial). Danach geht **Wirelessly** (OTA) über WLAN.
+5. Der erste Build lädt Toolchain und Plattform (einige Minuten). USB ist nur
+   für diesen ersten Flash nötig.
