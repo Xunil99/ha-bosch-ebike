@@ -167,6 +167,11 @@ const I18N = {
     dash_editor_bike_name_hint: "Defaults to the title if empty.",
     dash_editor_odo: "Odometer entity",
     dash_editor_battery: "Battery SoC entity (0..100)",
+    dash_editor_battery_live: "Live battery SoC entity (ESP bridge, optional)",
+    dash_editor_battery_live_hint: "From the local LDI bridge. When set and available it is shown instead of the cloud battery SoC for a real-time value; falls back to the cloud entity when the bridge is offline.",
+    map_editor_battery_live: "Live battery SoC entity (ESP bridge, optional)",
+    map_editor_battery_live_show: "Show live battery on the map",
+    map_editor_battery_live_hint: "From the local LDI bridge. When set, the live battery percentage is shown in the card header.",
     dash_editor_charging: "Charging-detected entity (binary)",
     dash_editor_last_tour: "Last tour distance entity (optional)",
     dash_editor_charge_power: "Charging power entity (W, optional)",
@@ -431,6 +436,11 @@ const I18N = {
     dash_editor_bike_name_hint: "Fällt auf den Titel zurück, wenn leer.",
     dash_editor_odo: "Tachostand-Entity",
     dash_editor_battery: "Akku-SoC-Entity (0..100)",
+    dash_editor_battery_live: "Live-Akku-SoC-Entity (ESP-Bridge, optional)",
+    dash_editor_battery_live_hint: "Vom lokalen LDI-Bridge-ESP. Wenn gesetzt und verfuegbar, wird dieser Wert in Echtzeit statt des Cloud-Akkustands angezeigt; faellt auf die Cloud-Entity zurueck, wenn die Bridge offline ist.",
+    map_editor_battery_live: "Live-Akku-SoC-Entity (ESP-Bridge, optional)",
+    map_editor_battery_live_show: "Live-Akkustand auf der Karte anzeigen",
+    map_editor_battery_live_hint: "Vom lokalen LDI-Bridge-ESP. Wenn gesetzt, wird der Live-Akkustand in der Kopfzeile der Karte angezeigt.",
     dash_editor_charging: "Lade-Erkennung-Entity (binär)",
     dash_editor_last_tour: "Letzte-Tour-Distanz-Entity (optional)",
     dash_editor_charge_power: "Ladeleistung-Entity (W, optional)",
@@ -695,6 +705,11 @@ const I18N = {
     dash_editor_bike_name_hint: "Valt terug op de titel als leeg.",
     dash_editor_odo: "Kilometerstand-entity",
     dash_editor_battery: "Accu-SoC-entity (0..100)",
+    dash_editor_battery_live: "Live accu-SoC-entity (ESP-bridge, optioneel)",
+    dash_editor_battery_live_hint: "Van de lokale LDI-bridge. Indien ingesteld en beschikbaar wordt deze waarde in realtime getoond in plaats van de cloud-accustand; valt terug op de cloud-entity wanneer de bridge offline is.",
+    map_editor_battery_live: "Live accu-SoC-entity (ESP-bridge, optioneel)",
+    map_editor_battery_live_show: "Live accu op de kaart tonen",
+    map_editor_battery_live_hint: "Van de lokale LDI-bridge. Indien ingesteld wordt het live accupercentage in de kaartkop getoond.",
     dash_editor_charging: "Laden-detectie-entity (binair)",
     dash_editor_last_tour: "Entity laatste rit-afstand (optioneel)",
     dash_editor_charge_power: "Laadvermogen-entity (W, optioneel)",
@@ -971,6 +986,11 @@ const I18N = {
     dash_editor_bike_name_hint: "Reprend le titre si vide.",
     dash_editor_odo: "Entité compteur",
     dash_editor_battery: "Entité SoC batterie (0..100)",
+    dash_editor_battery_live: "Entité SoC batterie en direct (pont ESP, optionnel)",
+    dash_editor_battery_live_hint: "Issue du pont LDI local. Si définie et disponible, cette valeur est affichée en temps réel au lieu du SoC cloud; revient à l'entité cloud lorsque le pont est hors ligne.",
+    map_editor_battery_live: "Entité SoC batterie en direct (pont ESP, optionnel)",
+    map_editor_battery_live_show: "Afficher la batterie en direct sur la carte",
+    map_editor_battery_live_hint: "Issue du pont LDI local. Si définie, le niveau de batterie en direct est affiché dans l'en-tête de la carte.",
     dash_editor_charging: "Entité détection de charge (binaire)",
     dash_editor_last_tour: "Entité distance dernière sortie (optionnel)",
     dash_editor_charge_power: "Entité puissance de charge (W, optionnel)",
@@ -1247,6 +1267,11 @@ const I18N = {
     dash_editor_bike_name_hint: "Se vuoto, usa il titolo.",
     dash_editor_odo: "Entità contachilometri",
     dash_editor_battery: "Entità SoC batteria (0..100)",
+    dash_editor_battery_live: "Entità SoC batteria live (bridge ESP, opzionale)",
+    dash_editor_battery_live_hint: "Dal bridge LDI locale. Se impostata e disponibile viene mostrata in tempo reale al posto del SoC cloud; ricade sull'entità cloud quando il bridge è offline.",
+    map_editor_battery_live: "Entità SoC batteria live (bridge ESP, opzionale)",
+    map_editor_battery_live_show: "Mostra batteria live sulla mappa",
+    map_editor_battery_live_hint: "Dal bridge LDI locale. Se impostata, la percentuale batteria live viene mostrata nell'intestazione della scheda.",
     dash_editor_charging: "Entità rilevamento ricarica (binaria)",
     dash_editor_last_tour: "Entità distanza ultima uscita (opzionale)",
     dash_editor_charge_power: "Entità potenza di ricarica (W, opzionale)",
@@ -1523,6 +1548,11 @@ const I18N = {
     dash_editor_bike_name_hint: "Si está vacío, usa el título.",
     dash_editor_odo: "Entidad cuentakilómetros",
     dash_editor_battery: "Entidad SoC batería (0..100)",
+    dash_editor_battery_live: "Entidad SoC batería en vivo (puente ESP, opcional)",
+    dash_editor_battery_live_hint: "Del puente LDI local. Si se define y está disponible se muestra en tiempo real en lugar del SoC de la nube; recurre a la entidad de la nube cuando el puente está sin conexión.",
+    map_editor_battery_live: "Entidad SoC batería en vivo (puente ESP, opcional)",
+    map_editor_battery_live_show: "Mostrar batería en vivo en el mapa",
+    map_editor_battery_live_hint: "Del puente LDI local. Si se define, el porcentaje de batería en vivo se muestra en el encabezado de la tarjeta.",
     dash_editor_charging: "Entidad detección de carga (binaria)",
     dash_editor_last_tour: "Entidad distancia última ruta (opcional)",
     dash_editor_charge_power: "Entidad potencia de carga (W, opcional)",
@@ -2303,6 +2333,7 @@ class BoschEBikeMapCard extends HTMLElement {
         if (this._poiEnabled && this._currentTrackActivityId) this._loadAndRenderPoi();
       }
       if (this._activities.length) this._show(0, true);
+      this._updateBatteryBadge();
     }
   }
 
@@ -2311,6 +2342,36 @@ class BoschEBikeMapCard extends HTMLElement {
     this._hass = hass;
     if (first) this._boot();
     else if (this._connected) this._scheduleActivation("hass update");
+    this._updateBatteryBadge();
+  }
+
+  // Opt-in live battery SoC overlay (top-left) on the inline map, the
+  // fullscreen view and the chase-cam overlay. Shows only when the user set
+  // a live battery entity AND enabled "battery_live_show". Hidden otherwise
+  // or when the entity is unavailable.
+  _updateBatteryBadge() {
+    if (!this._ready) return;
+    const cfg = this._config || {};
+    const entId = cfg.battery_live_entity;
+    const enabled = !!cfg.battery_live_show && !!entId;
+    const st = enabled && this._hass ? this._hass.states[entId] : null;
+    const raw = st ? Number(st.state) : NaN;
+    const ok = !!(enabled && st && st.state !== "unavailable" &&
+                  st.state !== "unknown" && Number.isFinite(raw));
+    const pct = ok ? Math.round(raw) : null;
+    const html = ok
+      ? `<svg viewBox="0 0 24 24"><path fill="currentColor" d="M16.67,4H15V2H9V4H7.33A1.33,1.33 0 0,0 6,5.33V20.67C6,21.4 6.6,22 7.33,22H16.67A1.33,1.33 0 0,0 18,20.67V5.33C18,4.6 17.4,4 16.67,4Z"/></svg><span>${pct}%</span>`
+      : "";
+    const low = ok && pct <= 20;
+    const apply = (el) => {
+      if (!el) return;
+      el.style.display = ok ? "inline-flex" : "none";
+      el.classList.toggle("eb-batt-low", low);
+      if (ok) el.innerHTML = html;
+    };
+    apply(this.querySelector("#eb-batt-inline"));
+    apply(this.querySelector("#eb-batt-full"));
+    apply(this._chaseBattEl);   // chase overlay lives in document.body
   }
 
   connectedCallback() {
@@ -2344,6 +2405,7 @@ class BoschEBikeMapCard extends HTMLElement {
       this._buildDOM();
       this._attachLifecycleHooks();
       this._ready = true;
+      this._updateBatteryBadge();
     }
 
     try {
@@ -2375,6 +2437,18 @@ class BoschEBikeMapCard extends HTMLElement {
         background:var(--primary-color,#03a9f4); color:#fff; font-size:16px; font-weight:500;
       }
       .eb-head svg { flex-shrink:0; }
+      /* Opt-in live battery overlay, top-left on the map / fullscreen / chase. */
+      .eb-batt-badge {
+        position:absolute; left:12px; top:12px; z-index:1100;
+        display:none; align-items:center; gap:6px;
+        padding:5px 11px; border-radius:999px;
+        background:rgba(33,33,33,.72); backdrop-filter:blur(4px);
+        color:#fff; font-size:15px; font-weight:600; white-space:nowrap;
+        box-shadow:0 2px 8px rgba(0,0,0,.25); pointer-events:none;
+      }
+      .eb-batt-badge.eb-batt-low { color:#ff5252; }
+      .eb-batt-badge svg { width:18px; height:18px; }
+      .eb-fullscreen-map { position:relative; }
       .eb-nav {
         display:flex; align-items:center; gap:8px; padding:8px 12px;
         background:var(--secondary-background-color,#f5f5f5);
@@ -2613,6 +2687,7 @@ class BoschEBikeMapCard extends HTMLElement {
           </button>
         </div>
         <div id="eb-overlay-msg" class="eb-overlay-msg"></div>
+        <div id="eb-batt-inline" class="eb-batt-badge"></div>
       </div>
       <div id="eb-title" class="eb-title"></div>
       <div id="eb-date-lbl" class="eb-datelbl"></div>
@@ -2645,7 +2720,9 @@ class BoschEBikeMapCard extends HTMLElement {
             <button id="eb-tab-map" class="eb-fullscreen-tab active" role="tab" aria-selected="true">${t("tab_map")}</button>
             <button id="eb-tab-elevation" class="eb-fullscreen-tab" role="tab" aria-selected="false">${t("tab_elevation")}</button>
           </div>
-          <div id="eb-fullscreen-map" class="eb-fullscreen-map"></div>
+          <div id="eb-fullscreen-map" class="eb-fullscreen-map">
+            <div id="eb-batt-full" class="eb-batt-badge"></div>
+          </div>
           <div id="eb-fullscreen-profile" class="eb-profile eb-hidden"></div>
           <div id="eb-fullscreen-meta" class="eb-fullscreen-meta"></div>
         </div>
@@ -4412,6 +4489,15 @@ ${trackPoints}
     closeBtn.addEventListener("click", () => this._closeChaseCam());
     overlay.appendChild(closeBtn);
 
+    // Live battery overlay (top-left), same opt-in logic as the 2D map.
+    const battEl = document.createElement("div");
+    battEl.className = "eb-batt-badge";
+    battEl.style.cssText =
+      "position:absolute;left:12px;top:calc(env(safe-area-inset-top,0px) + 8px);z-index:10001;";
+    overlay.appendChild(battEl);
+    this._chaseBattEl = battEl;
+    this._updateBatteryBadge();
+
     const card = document.createElement("bosch-ebike-3d-map-card");
     // Playback- und Darstellungs-Settings aus einer auf der Seite
     // existierenden bosch-ebike-3d-map-card übernehmen. Sonst würde
@@ -5399,6 +5485,17 @@ class BoschEBikeMapCardEditor extends HTMLElement {
       bikeOpts += `<option value="${this._escapeHtml(b.id)}"${selected}>${this._escapeHtml(b.label)}</option>`;
     }
 
+    // ESP/LDI-bridge live battery SoC entity (sensor.*). Optional; shown as a
+    // badge in the card header when set.
+    let battLiveOpts = `<option value="">—</option>`;
+    const battEntities = this._hass
+      ? Object.keys(this._hass.states).filter((e) => e.startsWith("sensor.")).sort()
+      : [];
+    for (const e of battEntities) {
+      const selected = cfg.battery_live_entity === e ? " selected" : "";
+      battLiveOpts += `<option value="${this._escapeHtml(e)}"${selected}>${this._escapeHtml(e)}</option>`;
+    }
+
     const radii = [
       { v: 500, l: "500 m" },
       { v: 1000, l: "1 km" },
@@ -5437,6 +5534,14 @@ class BoschEBikeMapCardEditor extends HTMLElement {
       <label style="${labelStyle}">${t("editor_bike_label")}</label>
       <select id="bike-in" style="${inputStyle}">${bikeOpts}</select>
       <span style="${hintStyle}">${t("editor_bike_hint")}</span>
+
+      <label style="${labelStyle}">${t("map_editor_battery_live")}</label>
+      <select id="batt-live-in" style="${inputStyle}">${battLiveOpts}</select>
+      <span style="${hintStyle}">${t("map_editor_battery_live_hint")}</span>
+
+      <label style="${labelStyle}">
+        <input type="checkbox" id="batt-live-show-in"${cfg.battery_live_show ? " checked" : ""} style="margin-right:8px;vertical-align:middle;">${t("map_editor_battery_live_show")}
+      </label>
 
       <label style="${labelStyle}">${t("editor_wiki_radius")}</label>
       <select id="wiki-radius-in" style="${inputStyle}">${wikiRadiusOpts}</select>
@@ -5494,6 +5599,19 @@ class BoschEBikeMapCardEditor extends HTMLElement {
       this._config = { ...this._config };
       if (v) this._config.bike_id = v;
       else delete this._config.bike_id;
+      this._emit();
+    });
+    this.querySelector("#batt-live-in").addEventListener("change", (e) => {
+      const v = e.target.value;
+      this._config = { ...this._config };
+      if (v) this._config.battery_live_entity = v;
+      else delete this._config.battery_live_entity;
+      this._emit();
+    });
+    this.querySelector("#batt-live-show-in").addEventListener("change", (e) => {
+      this._config = { ...this._config };
+      if (e.target.checked) this._config.battery_live_show = true;
+      else delete this._config.battery_live_show;
       this._emit();
     });
     this.querySelector("#wiki-radius-in").addEventListener("change", (e) => {
@@ -6573,7 +6691,12 @@ class BoschEBikeDashboardCard extends HTMLElement {
     const odo = this._num(cfg.odometer_entity);
     const lastTour = this._num(cfg.last_tour_distance_entity);
     const power = this._num(cfg.charge_power_entity);
-    const battery = this._num(cfg.battery_entity);
+    const batteryLive = cfg.battery_live_entity ? this._num(cfg.battery_live_entity) : null;
+    const batteryCloud = this._num(cfg.battery_entity);
+    // Prefer the real-time value from the local LDI bridge when it is
+    // available; otherwise fall back to the periodically-updated cloud SoC.
+    const battery = (batteryLive != null) ? batteryLive : batteryCloud;
+    const batteryIsLive = (batteryLive != null);
     const isCharging = this._onOff(cfg.charging_entity);
 
     const row = this.querySelector("#dash-row-stats");
@@ -6618,10 +6741,11 @@ class BoschEBikeDashboardCard extends HTMLElement {
       pill.innerHTML = `<ha-icon icon="${stateIcon}"></ha-icon><span>${stateLabel}</span>`;
       pills.appendChild(pill);
 
-      if (cfg.battery_entity) {
+      if (cfg.battery_entity || cfg.battery_live_entity) {
         const bp = document.createElement("span");
         bp.className = "dash-pill";
-        bp.innerHTML = `<ha-icon icon="mdi:battery"></ha-icon><span>${this._formatPct(battery)}</span>`;
+        const battIcon = batteryIsLive ? "mdi:battery-sync" : "mdi:battery";
+        bp.innerHTML = `<ha-icon icon="${battIcon}"></ha-icon><span>${this._formatPct(battery)}</span>`;
         pills.appendChild(bp);
       }
     }
@@ -7301,6 +7425,8 @@ class BoschEBikeDashboardCardEditor extends HTMLElement {
       odometer_entity: mkEntity("odometer_entity", "dash_editor_odo", null,
         (e) => e.startsWith("sensor.")),
       battery_entity: mkEntity("battery_entity", "dash_editor_battery", null,
+        (e) => e.startsWith("sensor.")),
+      battery_live_entity: mkEntity("battery_live_entity", "dash_editor_battery_live", "dash_editor_battery_live_hint",
         (e) => e.startsWith("sensor.")),
       charging_entity: mkEntity("charging_entity", "dash_editor_charging", null,
         (e) => e.startsWith("binary_sensor.") || e.startsWith("sensor.")),
