@@ -103,6 +103,9 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
+          # Auto-build release notes (merged PRs + commits since the last tag)
+          # so HACS shows a changelog in the update dialog.
+          generate_release_notes: true
           files: |
             firmware-output/ebike-bridge.factory.bin
             firmware-output/ebike-bridge.ota.bin
