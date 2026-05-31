@@ -99,12 +99,27 @@ jobs:
           EOF
           cat firmware-output/manifest.json
 
+      # Use the annotated tag message as a short "What's changed" summary,
+      # shown at the top of the release notes (and in the HACS update dialog).
+      - name: Release notes from tag message
+        if: startsWith(github.ref, 'refs/tags/v')
+        id: relnotes
+        run: |
+          set -euo pipefail
+          git fetch --tags --force origin >/dev/null 2>&1 || true
+          {
+            echo "body<<__EOF__"
+            git for-each-ref "refs/tags/${GITHUB_REF_NAME}" --format='%(contents)'
+            echo "__EOF__"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Upload firmware to release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          # Auto-build release notes (merged PRs + commits since the last tag)
-          # so HACS shows a changelog in the update dialog.
+          # Tag message = curated "What's changed"; generate_release_notes
+          # appends the detailed PR/commit list below it (shown in HACS).
+          body: ${{ steps.relnotes.outputs.body }}
           generate_release_notes: true
           files: |
             firmware-output/ebike-bridge.factory.bin
