@@ -68,21 +68,37 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
             )
         ])
 
-        # Auto-register as Lovelace resource so the card works without manual setup
+        # Auto-register as Lovelace resource so the card works without manual setup.
+        #
+        # Only possible in storage mode. In YAML mode the resource collection is
+        # read-only and the user adds the resource manually (see README).
+        #
+        # Two correctness requirements, both previously missing:
+        #   1. hass.data["lovelace"] is a LovelaceData dataclass on modern HA, not
+        #      a dict, so the resources collection must be read via the .resources
+        #      attribute. The old dict-key access (["resources"]) always raised and
+        #      was silently swallowed, so auto-registration never actually ran.
+        #   2. The collection must be loaded from storage before we inspect it.
+        #      async_get_info() forces that load; without it async_items() reports
+        #      an empty list and we would add a duplicate of our own resource on
+        #      every cold start.
         try:
-            if "lovelace" in hass.data:
-                resources: ResourceStorageCollection = hass.data["lovelace"]["resources"]
-                # Check if already registered
-                existing = [
-                    r for r in resources.async_items()
-                    if r.get("url") == card_url
-                ]
-                if not existing:
+            lovelace_data = hass.data.get("lovelace")
+            resources = getattr(lovelace_data, "resources", None)
+            if resources is None and isinstance(lovelace_data, dict):
+                resources = lovelace_data.get("resources")
+            if isinstance(resources, ResourceStorageCollection):
+                # Ensure existing resources are loaded from storage first.
+                await resources.async_get_info()
+                already = any(
+                    r.get("url") == card_url for r in resources.async_items()
+                )
+                if not already:
                     await resources.async_create_item(
                         {"res_type": "module", "url": card_url}
                     )
                     _LOGGER.info("Registered Lovelace resource: %s", card_url)
-        except Exception:
+        except Exception:  # noqa: BLE001
             _LOGGER.debug(
                 "Could not auto-register Lovelace resource. "
                 "Add manually: %s (JavaScript Module)", card_url
