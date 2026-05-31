@@ -21,6 +21,10 @@ If you just want to get the bridge running, the easiest path is the **web instal
 
 The page is bilingual (DE/EN) and walks through the full flow including the Flow App pairing step. Everything below this section is for users who want to customize the YAML themselves or build from source.
 
+> **Mobile / roaming use (no display):** to take the ESP along on a ride and still reach Home Assistant from anywhere via a phone hotspot and a WireGuard tunnel the ESP builds itself (no VPN app on the phone), see **[MOBILE.md](MOBILE.md)** and [`example-bridge-mobile.yaml`](example-bridge-mobile.yaml).
+>
+> **Mobiler Einsatz (ohne Display):** um den ESP mitzunehmen und die Daten über einen Handy-Hotspot und einen WireGuard-Tunnel (vom ESP selbst aufgebaut, keine VPN-App am Handy) von überall nach Home Assistant zu bringen, siehe **[MOBILE.md](MOBILE.md)** und [`example-bridge-mobile.yaml`](example-bridge-mobile.yaml).
+
 ---
 
 ## English
