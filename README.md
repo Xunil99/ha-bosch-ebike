@@ -162,6 +162,8 @@ Die Integration enthält eine interaktive Lovelace-Karte zur Anzeige deiner GPS-
 
 **Schritt A: Ressource registrieren**
 
+> **Wichtig:** Diese Ressource muss **manuell** eingetragen werden. Die Integration registriert sie bewusst **nicht** automatisch (das wurde ab Version 1.16.26 entfernt, weil es auf manchen Home-Assistant-Versionen andere vorhandene Lovelace-Ressourcen überschreiben konnte). Ohne diesen Schritt erscheint die Karte als „Custom element doesn't exist".
+
 1. Gehe zu **Einstellungen → Dashboards**
 2. Klicke oben rechts auf das **⋮ Drei-Punkte-Menü** → **Ressourcen**
 3. Klicke auf **+ Ressource hinzufügen** (unten rechts)
@@ -647,6 +649,8 @@ The integration should now update with **all available entities** (bike data, ba
 The integration includes an interactive Lovelace card for displaying your GPS tracks.
 
 **Step A: Register the Resource**
+
+> **Important:** This resource must be added **manually**. The integration deliberately does **not** register it automatically (removed in version 1.16.26 because on some Home Assistant versions it could overwrite other existing Lovelace resources). Without this step the card shows up as "Custom element doesn't exist".
 
 1. Go to **Settings → Dashboards**
 2. Click the **⋮ three-dot menu** in the top right → **Resources**
