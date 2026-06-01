@@ -10,7 +10,6 @@ import voluptuous as vol
 from homeassistant.components import websocket_api
 from homeassistant.components.frontend import async_register_built_in_panel
 from homeassistant.components.http import StaticPathConfig
-from homeassistant.components.lovelace.resources import ResourceStorageCollection
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
@@ -68,41 +67,23 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
             )
         ])
 
-        # Auto-register as Lovelace resource so the card works without manual setup.
+        # NOTE: We deliberately do NOT auto-register the Lovelace resource.
         #
-        # Only possible in storage mode. In YAML mode the resource collection is
-        # read-only and the user adds the resource manually (see README).
+        # Earlier versions tried to add it to the Lovelace resource collection
+        # automatically. On Home Assistant builds where
+        # `ResourceStorageCollection.async_create_item()` does not load the
+        # collection from storage first (e.g. 2025.12.x, which uses the base
+        # `StorageCollection.async_create_item`), calling it before the collection
+        # is loaded persisted ONLY our item and wiped every other Lovelace
+        # resource (including all /hacsfiles/ entries). That is a data-loss bug,
+        # so the auto-registration is removed entirely.
         #
-        # Two correctness requirements, both previously missing:
-        #   1. hass.data["lovelace"] is a LovelaceData dataclass on modern HA, not
-        #      a dict, so the resources collection must be read via the .resources
-        #      attribute. The old dict-key access (["resources"]) always raised and
-        #      was silently swallowed, so auto-registration never actually ran.
-        #   2. The collection must be loaded from storage before we inspect it.
-        #      async_get_info() forces that load; without it async_items() reports
-        #      an empty list and we would add a duplicate of our own resource on
-        #      every cold start.
-        try:
-            lovelace_data = hass.data.get("lovelace")
-            resources = getattr(lovelace_data, "resources", None)
-            if resources is None and isinstance(lovelace_data, dict):
-                resources = lovelace_data.get("resources")
-            if isinstance(resources, ResourceStorageCollection):
-                # Ensure existing resources are loaded from storage first.
-                await resources.async_get_info()
-                already = any(
-                    r.get("url") == card_url for r in resources.async_items()
-                )
-                if not already:
-                    await resources.async_create_item(
-                        {"res_type": "module", "url": card_url}
-                    )
-                    _LOGGER.info("Registered Lovelace resource: %s", card_url)
-        except Exception:  # noqa: BLE001
-            _LOGGER.debug(
-                "Could not auto-register Lovelace resource. "
-                "Add manually: %s (JavaScript Module)", card_url
-            )
+        # The card is still served at `card_url`; the user registers it once as a
+        # JavaScript-module resource (see README, "Register the Resource").
+        _LOGGER.info(
+            "Bosch eBike card served at %s - add it as a Lovelace resource "
+            "(JavaScript Module) if not already present.", card_url
+        )
 
     return True
 
