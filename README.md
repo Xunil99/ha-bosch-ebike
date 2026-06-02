@@ -13,14 +13,14 @@
 > ### 🔌 Echte Live-Daten per Bluetooth (smart system v19+)
 > Dieses Repo enthält neben der HACS-Integration auch eine **ESPHome-BLE-Bridge**, die einen ESP32 zur Brücke zum **Bosch eBike Live Data Interface** macht. Damit fließen Akku-SoC, Speed, Tachostand & Co. in Echtzeit nach Home Assistant.
 >
-> 🚀 **Flashen ohne ESPHome-Setup**: ESP32 (oder ESP32-C3, z. B. "C3 Mini") per USB anstecken und in Chrome / Edge **[https://xunil99.github.io/ha-bosch-ebike/](https://xunil99.github.io/ha-bosch-ebike/)** öffnen, *Install* klicken. Der Installer erkennt den Chip automatisch und flasht die passende Firmware. WLAN-Setup läuft im selben Browser-Schritt. Vollständige Anleitung (DE/EN) inkl. Pairing über die Flow App: [`esphome/`](esphome/).
+> 🚀 **Flashen ohne ESPHome-Setup**: ESP32 (oder ESP32-C3, z. B. "C3 Mini") per USB anstecken und in Chrome / Edge **[https://xunil99.github.io/ha-bosch-ebike/](https://xunil99.github.io/ha-bosch-ebike/)** öffnen, *Install* klicken. Der Installer erkennt den Chip automatisch und flasht die passende Firmware. WLAN-Setup läuft im selben Browser-Schritt. Vollständige Anleitung (DE/EN) inkl. Pairing über die Flow App: [`esphome/`](https://github.com/Xunil99/ha-bosch-ebike/tree/main/esphome).
 >
-> *Real live data via Bluetooth: ESP32 firmware can be flashed directly from your browser at the link above, no ESPHome installation required. Bilingual guide in [`esphome/`](esphome/).*
+> *Real live data via Bluetooth: ESP32 firmware can be flashed directly from your browser at the link above, no ESPHome installation required. Bilingual guide in [`esphome/`](https://github.com/Xunil99/ha-bosch-ebike/tree/main/esphome).*
 
 > ### 🖥️ Optional: 4,3"-Display für Datum, Wetter und Live-Daten
-> Zusätzlich zur Bridge gibt es jetzt eine zweite Firmware für das **Guition/Sunton JC4827W543** (ESP32-S3 mit 4,3" IPS-Touch). Sie liest die Bridge-Sensoren aus Home Assistant, zeigt Datum, Uhrzeit, Wetter und bis zu zwei eBikes parallel an. Bestehende Bridge-Nutzer müssen nichts ändern, das Display ist rein additiv. Setup-Anleitung: [`esphome/DISPLAY.md`](esphome/DISPLAY.md).
+> Zusätzlich zur Bridge gibt es jetzt eine zweite Firmware für das **Guition/Sunton JC4827W543** (ESP32-S3 mit 4,3" IPS-Touch). Sie liest die Bridge-Sensoren aus Home Assistant, zeigt Datum, Uhrzeit, Wetter und bis zu zwei eBikes parallel an. Bestehende Bridge-Nutzer müssen nichts ändern, das Display ist rein additiv. Setup-Anleitung: [`esphome/DISPLAY.md`](https://github.com/Xunil99/ha-bosch-ebike/blob/main/esphome/DISPLAY.md).
 >
-> *Optional 4.3" companion display (JC4827W543) renders date, time, weather, and up to two bikes from your HA data. Read-only, no impact on existing bridge users. Setup: [esphome/DISPLAY.md](esphome/DISPLAY.md).*
+> *Optional 4.3" companion display (JC4827W543) renders date, time, weather, and up to two bikes from your HA data. Read-only, no impact on existing bridge users. Setup: [esphome/DISPLAY.md](https://github.com/Xunil99/ha-bosch-ebike/blob/main/esphome/DISPLAY.md).*
 
 ---
 
@@ -47,11 +47,11 @@ Diese Custom Integration verbindet dein **Bosch eBike Smart System** mit Home As
 
 ### 🆕 Live-Daten über Bluetooth (ESPHome-Bridge)
 
-Zusätzlich zur Cloud-Integration findest du im Unterordner [`esphome/`](esphome/) eine **ESPHome-External-Component**, die einen ESP32 als Brücke zum **Bosch eBike Live Data Interface (LDI)** (BLE, smart system v19+) macht. Damit fließen Echtzeit-Werte (Speed, Akku-SoC, Tritt­frequenz, Fahrer­leistung, Tachostand, Lichtstatus, Lock-Status, …) als ESPHome-Sensoren in HA - ergänzend zur Cloud-basierten Tour-History.
+Zusätzlich zur Cloud-Integration findest du im Unterordner [`esphome/`](https://github.com/Xunil99/ha-bosch-ebike/tree/main/esphome) eine **ESPHome-External-Component**, die einen ESP32 als Brücke zum **Bosch eBike Live Data Interface (LDI)** (BLE, smart system v19+) macht. Damit fließen Echtzeit-Werte (Speed, Akku-SoC, Tritt­frequenz, Fahrer­leistung, Tachostand, Lichtstatus, Lock-Status, …) als ESPHome-Sensoren in HA - ergänzend zur Cloud-basierten Tour-History.
 
 🚀 **Schnellster Weg ohne ESPHome-Kenntnisse**: ESP32 anstecken, in Chrome / Edge auf **https://xunil99.github.io/ha-bosch-ebike/** klicken und auf *Install* tippen. Firmware-Flash und WLAN-Setup laufen komplett im Browser - keine ESPHome-Installation nötig.
 
-Komplette Anleitung: **[esphome/README.md](esphome/README.md)**
+Komplette Anleitung: **[esphome/README.md](https://github.com/Xunil99/ha-bosch-ebike/blob/main/esphome/README.md)**
 
 > **Verwandte Projekte:** Kein ESP32 zur Hand, aber ein Raspberry Pi? [ha-bosch-ebike-pibridge](https://github.com/possm/ha-bosch-ebike-pibridge) von [@possm](https://github.com/possm) ist eine Community-Portierung in Python (BlueZ + MQTT), die direkt auf dem Pi läuft, **zwei Bikes gleichzeitig** unterstützt und ein eigenes Web-Dashboard mitbringt.
 
@@ -535,11 +535,11 @@ This custom integration connects your **Bosch eBike Smart System** to Home Assis
 
 ### 🆕 Live data over Bluetooth (ESPHome bridge)
 
-In addition to the cloud integration, the [`esphome/`](esphome/) subfolder contains an **ESPHome external component** that turns an ESP32 into a bridge for the **Bosch eBike Live Data Interface (LDI)** (BLE, smart system v19+). Real-time values (speed, battery SoC, cadence, rider power, odometer, light state, lock state, …) become ESPHome sensors in HA - complementing the cloud-based tour history.
+In addition to the cloud integration, the [`esphome/`](https://github.com/Xunil99/ha-bosch-ebike/tree/main/esphome) subfolder contains an **ESPHome external component** that turns an ESP32 into a bridge for the **Bosch eBike Live Data Interface (LDI)** (BLE, smart system v19+). Real-time values (speed, battery SoC, cadence, rider power, odometer, light state, lock state, …) become ESPHome sensors in HA - complementing the cloud-based tour history.
 
 🚀 **Fastest path without ESPHome experience**: plug an ESP32 into your computer, open **https://xunil99.github.io/ha-bosch-ebike/** in Chrome / Edge and click *Install*. Firmware flash and WiFi setup run entirely in the browser, no ESPHome installation required on your side.
 
-Full guide: **[esphome/README.md](esphome/README.md)**
+Full guide: **[esphome/README.md](https://github.com/Xunil99/ha-bosch-ebike/blob/main/esphome/README.md)**
 
 > **Related projects:** No ESP32 on hand but a spare Raspberry Pi? [ha-bosch-ebike-pibridge](https://github.com/possm/ha-bosch-ebike-pibridge) by [@possm](https://github.com/possm) is a community Python port (BlueZ + MQTT) that runs straight on the Pi, handles **two bikes simultaneously** and ships its own web dashboard.
 
