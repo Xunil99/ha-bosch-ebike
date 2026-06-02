@@ -130,7 +130,7 @@ sensor:
   # reliable rate has built up. 80 % stays in the linear CC region (accurate);
   # 100 % adds a slowdown factor for the CV tail.
   - platform: template
-    name: "eBike Restladezeit bis 80% (Schätzung)"
+    name: "eBike Charge Time to 80% (Estimate)"
     id: chg_eta_80
     unit_of_measurement: "min"
     device_class: duration
@@ -144,7 +144,7 @@ sensor:
       if (rate <= 0 || std::isnan(soc) || soc >= 80.0f) return NAN;
       return (80.0f - soc) / rate;
   - platform: template
-    name: "eBike Restladezeit bis 100% (Schätzung)"
+    name: "eBike Charge Time to 100% (Estimate)"
     id: chg_eta_100
     unit_of_measurement: "min"
     device_class: duration
