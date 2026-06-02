@@ -10,10 +10,12 @@ import voluptuous as vol
 from homeassistant.components import websocket_api
 from homeassistant.components.frontend import async_register_built_in_panel
 from homeassistant.components.http import StaticPathConfig
+from homeassistant.components.lovelace.resources import ResourceStorageCollection
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.start import async_at_started
 from homeassistant.helpers.storage import Store
 
 from .api import BoschEBikeAPI
@@ -23,6 +25,58 @@ from .coordinator import BoschEBikeCoordinator
 _LOGGER = logging.getLogger(__name__)
 
 PLATFORMS = [Platform.SENSOR, Platform.BUTTON, Platform.NUMBER, Platform.DATE]
+
+CARD_URL = "/ha_bosch_ebike/bosch-ebike-map-card.js"
+
+
+async def _async_register_card_resource(hass: HomeAssistant) -> None:
+    """Register the card as a Lovelace resource - safely and idempotently.
+
+    Runs only after Home Assistant has fully started (via async_at_started), so
+    the Lovelace resource collection is already loaded from storage. As extra
+    safeguards we force a load, refuse to write unless the load is confirmed,
+    and only ever APPEND our own entry - we never delete anything.
+
+    This is the careful counterpart to the data-loss bug fixed in 1.16.26:
+    earlier code called async_create_item() before the collection was loaded,
+    so the save persisted ONLY our entry and wiped every other Lovelace
+    resource. By guaranteeing the existing entries are loaded first, the save
+    always contains the full set plus ours.
+    """
+    try:
+        lovelace_data = hass.data.get("lovelace")
+        resources = getattr(lovelace_data, "resources", None)
+        if resources is None and isinstance(lovelace_data, dict):
+            resources = lovelace_data.get("resources")
+
+        # Storage mode only. YAML-mode resources are read-only -> manual setup.
+        if not isinstance(resources, ResourceStorageCollection):
+            return
+
+        # Force a load of all existing resources from storage, then refuse to
+        # touch anything unless the load is actually confirmed. This is the
+        # crucial guard: never write to an unloaded (apparently empty) collection.
+        await resources.async_get_info()
+        if not getattr(resources, "loaded", False):
+            _LOGGER.debug(
+                "Lovelace resources not loaded; skipping auto-register of %s",
+                CARD_URL,
+            )
+            return
+
+        if any(item.get("url") == CARD_URL for item in resources.async_items()):
+            return  # already present, nothing to do
+
+        await resources.async_create_item(
+            {"res_type": "module", "url": CARD_URL}
+        )
+        _LOGGER.info("Registered Lovelace resource: %s", CARD_URL)
+    except Exception:  # noqa: BLE001
+        _LOGGER.debug(
+            "Could not auto-register Lovelace resource; add it manually "
+            "(JavaScript Module): %s",
+            CARD_URL,
+        )
 
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
@@ -57,33 +111,20 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
 
     # Register static path for the Lovelace card
     card_dir = os.path.join(os.path.dirname(__file__), "www")
-    card_url = "/ha_bosch_ebike/bosch-ebike-map-card.js"
     if os.path.isdir(card_dir):
         await hass.http.async_register_static_paths([
             StaticPathConfig(
-                card_url,
+                CARD_URL,
                 os.path.join(card_dir, "bosch-ebike-map-card.js"),
                 cache_headers=False,
             )
         ])
 
-        # NOTE: We deliberately do NOT auto-register the Lovelace resource.
-        #
-        # Earlier versions tried to add it to the Lovelace resource collection
-        # automatically. On Home Assistant builds where
-        # `ResourceStorageCollection.async_create_item()` does not load the
-        # collection from storage first (e.g. 2025.12.x, which uses the base
-        # `StorageCollection.async_create_item`), calling it before the collection
-        # is loaded persisted ONLY our item and wiped every other Lovelace
-        # resource (including all /hacsfiles/ entries). That is a data-loss bug,
-        # so the auto-registration is removed entirely.
-        #
-        # The card is still served at `card_url`; the user registers it once as a
-        # JavaScript-module resource (see README, "Register the Resource").
-        _LOGGER.info(
-            "Bosch eBike card served at %s - add it as a Lovelace resource "
-            "(JavaScript Module) if not already present.", card_url
-        )
+        # Auto-register the card as a Lovelace resource, but ONLY after Home
+        # Assistant has fully started, so the resource collection is loaded and
+        # we can safely append without wiping existing entries. See the
+        # _async_register_card_resource docstring for the data-loss history.
+        async_at_started(hass, _async_register_card_resource)
 
     return True
 

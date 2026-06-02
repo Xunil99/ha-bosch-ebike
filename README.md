@@ -162,7 +162,7 @@ Die Integration enthält eine interaktive Lovelace-Karte zur Anzeige deiner GPS-
 
 **Schritt A: Ressource registrieren**
 
-> **Wichtig:** Diese Ressource muss **manuell** eingetragen werden. Die Integration registriert sie bewusst **nicht** automatisch (das wurde ab Version 1.16.26 entfernt, weil es auf manchen Home-Assistant-Versionen andere vorhandene Lovelace-Ressourcen überschreiben konnte). Ohne diesen Schritt erscheint die Karte als „Custom element doesn't exist".
+> **Hinweis:** Ab Version 1.16.27 registriert sich diese Ressource **automatisch**, sobald Home Assistant vollständig gestartet ist - sicher, ohne andere vorhandene Ressourcen zu verändern (die fehlerhafte, datenverlust-anfällige Variante aus früheren Versionen wurde ersetzt). **In der Regel musst du hier also nichts tun.** Nur falls die Karte trotzdem als „Custom element doesn't exist" erscheint (z. B. weil du Ressourcen im YAML-Modus verwaltest), trage sie einmalig manuell wie folgt ein.
 
 1. Gehe zu **Einstellungen → Dashboards**
 2. Klicke oben rechts auf das **⋮ Drei-Punkte-Menü** → **Ressourcen**
@@ -650,7 +650,7 @@ The integration includes an interactive Lovelace card for displaying your GPS tr
 
 **Step A: Register the Resource**
 
-> **Important:** This resource must be added **manually**. The integration deliberately does **not** register it automatically (removed in version 1.16.26 because on some Home Assistant versions it could overwrite other existing Lovelace resources). Without this step the card shows up as "Custom element doesn't exist".
+> **Note:** As of version 1.16.27 this resource is registered **automatically** once Home Assistant has fully started - safely, without touching any other existing resources (replacing the earlier, data-loss-prone variant). **So you usually do not need to do anything here.** Only if the card still shows up as "Custom element doesn't exist" (e.g. because you manage resources in YAML mode) add it manually as follows.
 
 1. Go to **Settings → Dashboards**
 2. Click the **⋮ three-dot menu** in the top right → **Resources**
