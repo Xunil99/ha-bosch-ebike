@@ -198,21 +198,3 @@ button:
       then:
         - lambda: |-
             id(ebike_bridge).clear_bonding();
-
-# Vorsorglicher Reboot alle 6 Stunden. Haelt den NimBLE-Stack frisch
-# und beugt seltenen Edge-Cases (Memory-Fragmentation, haengende BLE-
-# Connections, WiFi-Driver-Glitches) vor. Im Idle-Fall unauffaellig,
-# der Reboot dauert wenige Sekunden.
-interval:
-  - interval: 6h
-    # ESPHome runs interval actions ONCE at boot by default. Without this
-    # startup_delay the 6h reboot fires ~3 s after every boot, so the device
-    # reboots every few seconds and the setup AP never stays up long enough
-    # to be joined. startup_delay defers the first run by a full interval.
-    startup_delay: 6h
-    then:
-      - logger.log:
-          level: WARN
-          format: "Scheduled 6h reboot"
-      - delay: 5s
-      - lambda: 'App.safe_reboot();'
