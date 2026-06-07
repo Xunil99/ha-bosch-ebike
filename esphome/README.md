@@ -47,6 +47,8 @@ The page is bilingual (DE/EN) and walks through the full flow including the Flow
 | `binary_sensor.ebike_diagnosis_active` | bool | – |
 | `binary_sensor.ebike_in_motion` | bool | motion |
 
+> **Note on `system_locked`:** This is the LDI's official `system_locked` flag (field 21 in the Bosch protobuf), **not** the consumer "eBike Lock" anti-theft feature. In practice it stays *unlocked* during normal operation and charging - the eBike Lock engages when the bike is switched off, which is exactly when the bridge has no BLE connection and cannot read it. So this sensor is not suitable for "is my bike locked?" and will normally show unlocked. (Because of the `lock` device class, ON = unlocked in Home Assistant.)
+
 ### Taking the bridge on a ride (MQTT + WireGuard)
 
 Want to take the ESP along on a ride and still get the data home? There is an
@@ -236,6 +238,8 @@ included).
 | `binary_sensor.ebike_light_reserve` | bool | problem |
 | `binary_sensor.ebike_diagnosis_active` | bool | – |
 | `binary_sensor.ebike_in_motion` | bool | motion |
+
+> **Hinweis zu `system_locked`:** Das ist der offizielle LDI-Flag `system_locked` (Feld 21 im Bosch-Protobuf), **nicht** die Verbraucher-Funktion „eBike Lock" (Diebstahlsperre). In der Praxis bleibt er im Normalbetrieb und beim Laden auf *aufgeschlossen* - die eBike-Lock-Sperre greift beim Ausschalten des Rades, also genau dann, wenn die Bridge keine BLE-Verbindung hat und nichts lesen kann. Dieser Sensor eignet sich daher **nicht** für „Ist mein Rad abgeschlossen?" und zeigt normalerweise „aufgeschlossen". (Wegen der `lock`-Geräteklasse bedeutet in Home Assistant AN = aufgeschlossen.)
 
 ### Bridge mit auf die Fahrt nehmen (MQTT + WireGuard)
 
