@@ -1957,7 +1957,13 @@ function ensureLeaflet() {
         else reject(new Error("Leaflet wurde geladen, ist aber nicht verfügbar"));
       };
       existing.addEventListener("load", finish, { once: true });
-      existing.addEventListener("error", () => reject(new Error("Leaflet konnte nicht geladen werden")), { once: true });
+      existing.addEventListener("error", () => {
+        // Totes Script-Tag entfernen, damit der nächste Versuch ein
+        // frisches injiziert (sonst hinge er ewig an einem Tag, dessen
+        // load/error-Events längst gefeuert haben).
+        existing.remove();
+        reject(new Error("Leaflet konnte nicht geladen werden"));
+      }, { once: true });
       if (window.L && typeof window.L.map === "function") finish();
       return;
     }
@@ -1969,8 +1975,17 @@ function ensureLeaflet() {
       if (window.L && typeof window.L.map === "function") resolve(window.L);
       else reject(new Error("Leaflet wurde geladen, ist aber nicht verfügbar"));
     };
-    script.onerror = () => reject(new Error("Leaflet konnte nicht geladen werden"));
+    script.onerror = () => {
+      script.remove();
+      reject(new Error("Leaflet konnte nicht geladen werden"));
+    };
     document.head.appendChild(script);
+  }).catch((err) => {
+    // Fehlgeschlagenen Ladeversuch NICHT cachen — sonst liefe jeder
+    // Retry (z. B. nach kurzem CDN-Ausfall) für immer in dieselbe
+    // rejected Promise. Nächster Aufruf startet einen frischen Versuch.
+    window.__ebikeLeafletPromise = null;
+    throw err;
   });
 
   return window.__ebikeLeafletPromise;
@@ -10961,6 +10976,7 @@ class BoschEBikeRoutePlannerCard extends HTMLElement {
     this._ready = false;           // Boot komplett (Leaflet geladen, Map steht)
     this._domBuilt = false;
     this._booting = false;
+    this._bootErrorShown = false; // Boot-Fehler nur einmal loggen/anzeigen
   }
 
   setConfig(config) {
@@ -10986,7 +11002,7 @@ class BoschEBikeRoutePlannerCard extends HTMLElement {
   }
 
   getCardSize() {
-    return Math.ceil((this._config.height || 480) / 50) + 3;
+    return Math.ceil((parseInt(this._config.height, 10) || 480) / 50) + 3;
   }
 
   static getConfigElement() {
@@ -11016,10 +11032,18 @@ class BoschEBikeRoutePlannerCard extends HTMLElement {
       // fehl, bleibt _ready false und die nächste hass-Zuweisung (bzw.
       // connectedCallback) startet einen neuen Versuch.
       this._ready = !!this._map;
-      if (this._ready) this._setStatus(null);
+      if (this._ready) {
+        this._setStatus(null);
+        this._bootErrorShown = false;
+      }
     } catch (err) {
-      console.error("[Bosch eBike Routeplanner] boot error", err);
-      this._setStatus(this._t("msg_error_prefix") + (err?.message || err), "");
+      // Jede hass-Zuweisung stößt bei !_ready einen neuen Boot-Versuch an —
+      // ohne Drossel würde ein anhaltender CDN-Ausfall die Konsole fluten.
+      if (!this._bootErrorShown) {
+        this._bootErrorShown = true;
+        console.error("[Bosch eBike Routeplanner] boot error", err);
+        this._setStatus(this._t("msg_error_prefix") + (err?.message || err), "");
+      }
     } finally {
       this._booting = false;
     }
@@ -11080,7 +11104,9 @@ class BoschEBikeRoutePlannerCard extends HTMLElement {
   }
 
   _buildDOM() {
-    const h = this._config.height || 480;
+    // parseInt: height kann aus YAML als String kommen — niemals
+    // un-koerziert in den <style>-Text interpolieren.
+    const h = parseInt(this._config.height, 10) || 480;
     this.innerHTML = "";
     const card = document.createElement("ha-card");
     this.appendChild(card);
@@ -11548,17 +11574,31 @@ class BoschEBikeRoutePlannerCard extends HTMLElement {
 }
 
 class BoschEBikeRoutePlannerCardEditor extends HTMLElement {
+  constructor() {
+    super();
+    this._hass = null;
+    this._config = null;
+    this._built = false;
+  }
+
+  // DOM nur EINMAL bauen (Muster wie BoschEBike3DMapCardEditor): ein
+  // innerHTML-Re-Render nach jedem config-changed-Roundtrip würde nach
+  // jedem Feld-Commit den Eingabe-Fokus wegschießen (v1.16.5-Bug-Klasse).
+  // Danach synct setConfig nur noch die Feld-Werte.
   setConfig(config) {
     this._config = config;
-    this._render();
+    if (!this._built) {
+      // Lazy: erst rendern, wenn hass da ist — die Entity-Dropdowns
+      // brauchen hass.states und die Labels die hass-Sprache.
+      if (this._hass) this._render();
+    } else {
+      this._sync();
+    }
   }
 
   set hass(hass) {
-    const first = !this._hass;
     this._hass = hass;
-    // Entity-Dropdowns brauchen hass.states — einmalig neu rendern,
-    // sobald hass da ist (Muster wie _loadInstances im Map-Editor).
-    if (first) this._render();
+    if (!this._built && this._config) this._render();
   }
 
   _escapeHtml(s) {
@@ -11583,6 +11623,21 @@ class BoschEBikeRoutePlannerCardEditor extends HTMLElement {
     return opts;
   }
 
+  // Wird nach dem einmaligen _render() bei jedem setConfig aufgerufen:
+  // aktualisiert nur die Feld-Werte, ohne das DOM neu zu bauen.
+  _sync() {
+    const cfg = this._config || {};
+    const set = (id, v) => {
+      const el = this.querySelector(id);
+      if (el && el.value !== v) el.value = v;
+    };
+    set("#rp-h-in", String(parseInt(cfg.height, 10) || 480));
+    set("#rp-title-in", cfg.title || "");
+    set("#rp-brouter-in", cfg.brouter_url || "");
+    set("#rp-entity-in", cfg.entity || "");
+    set("#rp-soc-in", cfg.soc_entity || "");
+  }
+
   _render() {
     if (!this._config) return;
     const cfg = this._config;
@@ -11596,7 +11651,7 @@ class BoschEBikeRoutePlannerCardEditor extends HTMLElement {
 
     this.innerHTML = `<div style="padding:16px">
       <label style="${labelStyle.replace('margin-top:14px;', '')}">${t("editor_height")}</label>
-      <input type="number" value="${cfg.height || 480}" min="200" max="1000" step="20" style="${inputStyle}" id="rp-h-in">
+      <input type="number" value="${parseInt(cfg.height, 10) || 480}" min="200" max="1000" step="20" style="${inputStyle}" id="rp-h-in">
 
       <label style="${labelStyle}">${t("editor_title")}</label>
       <input type="text" value="${this._escapeHtml(cfg.title || '')}" placeholder="${t("rp_default_title")}" style="${inputStyle}" id="rp-title-in">
@@ -11648,6 +11703,8 @@ class BoschEBikeRoutePlannerCardEditor extends HTMLElement {
       else delete this._config.soc_entity;
       this._emit();
     });
+
+    this._built = true;
   }
 }
 
