@@ -11100,7 +11100,21 @@ class BoschEBikeRoutePlannerCard extends HTMLElement {
     for (const m of this._waypoints) {
       try { m.addTo(this._map); } catch (_) {}
     }
-    if (this._waypoints.length >= 2) {
+    // Gecachte Route nur neu ZEICHNEN — kein erneuter BRouter-Request bei
+    // jedem View-Wechsel (Fair-Use gegenüber brouter.de). Neu gerechnet
+    // wird nur, wenn noch keine Route vorliegt (z. B. Recalc beim
+    // Disconnect verloren gegangen).
+    if (this._lastRouteCoords && this._lastRouteCoords.length >= 2) {
+      const Leaflet = window.L;
+      const latlngs = this._lastRouteCoords.map((c) => [c[1], c[0]]);
+      try {
+        this._routeGroup.clearLayers();
+        Leaflet.polyline(latlngs, {
+          color: "#0b84c7", weight: 5, opacity: 0.9, lineCap: "round",
+        }).addTo(this._routeGroup);
+        this._map.fitBounds(Leaflet.latLngBounds(latlngs), { padding: [40, 40], animate: false });
+      } catch (_) {}
+    } else if (this._waypoints.length >= 2) {
       this._fitPending = true;
       this._scheduleRoute();
     }
