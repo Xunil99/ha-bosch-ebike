@@ -379,8 +379,8 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     def invalidate_live_enrichment_cache(self) -> None:
         """Clear the per-activity enrichment cache.
 
-        Called when the user changes the live-sensor options or when the
-        battery capacity changes (live consumption depends on it).
+        Called when the battery capacity changes (live consumption depends
+        on it). Options changes reload the entry and rebuild this object.
         """
         self._live_enrichment_cache.clear()
 
