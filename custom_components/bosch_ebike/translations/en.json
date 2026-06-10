@@ -77,6 +77,12 @@
       "maintenance_overview": {
         "name": "Maintenance Overview"
       },
+      "estimated_range_full": {
+        "name": "Estimated range (full battery)"
+      },
+      "estimated_range_current": {
+        "name": "Estimated range (current)"
+      },
       "last_ride_distance": {
         "name": "Last Ride Distance"
       },

@@ -77,6 +77,12 @@
       "maintenance_overview": {
         "name": "Onderhoudsoverzicht"
       },
+      "estimated_range_full": {
+        "name": "Geschatte actieradius (volle accu)"
+      },
+      "estimated_range_current": {
+        "name": "Geschatte actieradius (actueel)"
+      },
       "last_ride_distance": {
         "name": "Laatste rit: afstand"
       },

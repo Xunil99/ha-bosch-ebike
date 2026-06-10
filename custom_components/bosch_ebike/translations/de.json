@@ -77,6 +77,12 @@
       "maintenance_overview": {
         "name": "Wartungs-Übersicht"
       },
+      "estimated_range_full": {
+        "name": "Geschätzte Reichweite (voller Akku)"
+      },
+      "estimated_range_current": {
+        "name": "Geschätzte Reichweite (aktuell)"
+      },
       "last_ride_distance": {
         "name": "Letzte Fahrt: Distanz"
       },
