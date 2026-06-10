@@ -10925,20 +10925,34 @@ class BoschEBikeRoutePlannerCard extends HTMLElement {
     this._routeSeq = 0;            // verwirft veraltete plan_route-Antworten
     this._debounceTimer = null;
     this._lastRouteCoords = null;  // [[lon, lat, ele], …] der letzten Route
+    this._lastRouteProps = null;   // properties der letzten Route (für Re-Render)
+    this._lastRangeSig = "";       // zuletzt gerenderte Verbrauchs-/SoC-Daten
     this._fitPending = false;      // fitBounds einmalig nach Wegpunkt-Änderung
-    this._ready = false;
+    this._ready = false;           // Boot komplett (Leaflet geladen, Map steht)
+    this._domBuilt = false;
     this._booting = false;
   }
 
   setConfig(config) {
     this._config = { height: config.height || 480, ...config };
-    if (this._ready) this._applyTitle();
+    if (this._domBuilt) this._applyTitle();
   }
 
   set hass(hass) {
-    const first = !this._hass;
     this._hass = hass;
-    if (first) this._boot();
+    if (!this._ready) {
+      // Erst-Boot bzw. neuer Versuch nach fehlgeschlagenem Boot
+      // (z. B. Leaflet-CDN kurz nicht erreichbar).
+      if (!this._booting) this._boot();
+      return;
+    }
+    // Live-SoC: ändert sich der Akkustand (oder Ø-Verbrauch/Kapazität),
+    // während eine Route angezeigt wird, Akku-Zeile + Verbrauch auffrischen.
+    if (this._lastRouteProps) {
+      const r = this._rangeData();
+      const sig = r ? `${r.whPerKm}|${r.capacityWh}|${r.soc}` : "";
+      if (sig !== this._lastRangeSig) this._renderStats(this._lastRouteProps);
+    }
   }
 
   getCardSize() {
@@ -10961,11 +10975,18 @@ class BoschEBikeRoutePlannerCard extends HTMLElement {
     if (this._booting || this._ready) return;
     this._booting = true;
     try {
-      this._buildDOM();
-      this._ready = true;
+      if (!this._domBuilt) {
+        this._buildDOM();
+        this._domBuilt = true;
+      }
       this._applyTitle();
       await ensureLeaflet();
       this._createMap();
+      // Erst nach erfolgreichem Map-Aufbau "fertig" — schlägt der Boot
+      // fehl, bleibt _ready false und die nächste hass-Zuweisung (bzw.
+      // connectedCallback) startet einen neuen Versuch.
+      this._ready = !!this._map;
+      if (this._ready) this._setStatus(null);
     } catch (err) {
       console.error("[Bosch eBike Routeplanner] boot error", err);
       this._setStatus(this._t("msg_error_prefix") + (err?.message || err), "");
@@ -10974,10 +10995,52 @@ class BoschEBikeRoutePlannerCard extends HTMLElement {
     }
   }
 
+  connectedCallback() {
+    if (!this._ready) {
+      // Boot lief noch nicht oder ist fehlgeschlagen — neuer Versuch,
+      // sobald hass schon da ist (sonst stößt set hass den Boot an).
+      if (this._hass && !this._booting) this._boot();
+      return;
+    }
+    if (!this._map) {
+      this._rebuildMap();
+    } else {
+      setTimeout(() => {
+        try { this._map?.invalidateSize({ animate: false, pan: false }); } catch (_) {}
+      }, 50);
+    }
+  }
+
   disconnectedCallback() {
     if (this._debounceTimer) {
       clearTimeout(this._debounceTimer);
       this._debounceTimer = null;
+    }
+    this._routeSeq += 1; // laufende plan_route-Antwort verwerfen
+    // Leaflet-Map sauber abbauen (Listener/Memory-Leak bei Lovelace-
+    // Edit-Zyklen) — Muster wie _destroyMap() der Map-/3D-Card.
+    if (this._map) {
+      try { this._map.remove(); } catch (_) {}
+      this._map = null;
+      this._baseLayer = null;
+      this._routeGroup = null;
+    }
+  }
+
+  // Nach disconnect/reconnect (z. B. Lovelace-Editor): Map neu aufbauen,
+  // Wegpunkt-Marker wieder anhängen (Marker überleben map.remove() samt
+  // ihrer Listener) und bei ≥ 2 Punkten die Route neu berechnen — das
+  // deckt auch eine beim Disconnect verloren gegangene, noch ausstehende
+  // Neuberechnung ab. Stats/Höhenprofil bleiben stehen (DOM bleibt).
+  _rebuildMap() {
+    this._createMap();
+    if (!this._map) return;
+    for (const m of this._waypoints) {
+      try { m.addTo(this._map); } catch (_) {}
+    }
+    if (this._waypoints.length >= 2) {
+      this._fitPending = true;
+      this._scheduleRoute();
     }
   }
 
@@ -11230,6 +11293,7 @@ class BoschEBikeRoutePlannerCard extends HTMLElement {
   _clearRoute() {
     if (this._routeGroup) this._routeGroup.clearLayers();
     this._lastRouteCoords = null;
+    this._lastRouteProps = null;
     const gpxBtn = this.querySelector("#rp-gpx");
     if (gpxBtn) gpxBtn.disabled = true;
     for (const id of ["rp-stats", "rp-batt", "rp-elev"]) {
@@ -11250,6 +11314,7 @@ class BoschEBikeRoutePlannerCard extends HTMLElement {
     }
 
     this._lastRouteCoords = coords;
+    this._lastRouteProps = feat.properties || {};
     this._routeGroup.clearLayers();
     const latlngs = coords.map((c) => [c[1], c[0]]);
     Leaflet.polyline(latlngs, {
@@ -11268,7 +11333,7 @@ class BoschEBikeRoutePlannerCard extends HTMLElement {
     const gpxBtn = this.querySelector("#rp-gpx");
     if (gpxBtn) gpxBtn.disabled = false;
 
-    this._renderStats(feat.properties || {});
+    this._renderStats(this._lastRouteProps);
     this._renderElevation(coords);
   }
 
@@ -11295,6 +11360,9 @@ class BoschEBikeRoutePlannerCard extends HTMLElement {
     const energyStat = this.querySelector("#rp-stat-energy");
     const battBox = this.querySelector("#rp-batt");
     const range = this._rangeData();
+    // Signatur merken, damit set hass nur bei tatsächlich geänderten
+    // Verbrauchs-/SoC-Werten neu rendert (Live-SoC-Refresh).
+    this._lastRangeSig = range ? `${range.whPerKm}|${range.capacityWh}|${range.soc}` : "";
     if (!range || !range.whPerKm) {
       // Ohne Ø-Verbrauch keine Verbrauchs-/Akku-Zeilen — die Basis-Stats bleiben.
       energyStat.style.display = "none";
@@ -11412,9 +11480,13 @@ class BoschEBikeRoutePlannerCard extends HTMLElement {
     const esc = (s) => String(s).replace(/[<>&]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" }[c]));
     const name = esc(`Bosch eBike Route ${new Date().toISOString().slice(0, 10)}`);
     const pts = coords.map((c) => {
+      const lon = Number(c[0]);
+      const lat = Number(c[1]);
+      if (!Number.isFinite(lon) || !Number.isFinite(lat)) return null;
       const ele = c.length > 2 && Number.isFinite(c[2]) ? `<ele>${Math.round(c[2])}</ele>` : "";
-      return `      <trkpt lat="${c[1].toFixed(6)}" lon="${c[0].toFixed(6)}">${ele}</trkpt>`;
-    }).join("\n");
+      return `      <trkpt lat="${lat.toFixed(6)}" lon="${lon.toFixed(6)}">${ele}</trkpt>`;
+    }).filter(Boolean).join("\n");
+    if (!pts) return;
     const gpx = `<?xml version="1.0" encoding="UTF-8"?>\n` +
       `<gpx version="1.1" creator="ha-bosch-ebike" xmlns="http://www.topografix.com/GPX/1/1">\n` +
       `  <trk>\n    <name>${name}</name>\n    <trkseg>\n${pts}\n    </trkseg>\n  </trk>\n</gpx>\n`;
