@@ -275,6 +275,26 @@ Naast de door Bosch geleverde servicebeurt (`Next Service Date`/`Next Service Od
 
 Daarmee kun je bijv. een pushmelding of een verlichtingsherinnering bouwen.
 
+### Actieradius-schatting
+
+Per fiets zijn er twee sensoren die de actieradius **schatten** — op basis
+van je werkelijke verbruik (afstandsgewogen gemiddelde over de laatste
+~500 km tourgeschiedenis):
+
+- **`Estimated Range (Full Battery)`** — geschatte actieradius met een volle
+  accu (accucapaciteit ÷ gemiddeld verbruik in Wh/km). Puur uit cloud-data,
+  altijd beschikbaar.
+- **`Estimated Range (Current)`** — geschatte resterende actieradius
+  (huidig accuniveau × capaciteit ÷ gemiddeld verbruik). Verschijnt alleen
+  als in de integratie-opties de **live-accuniveau-sensor** van de
+  ESPHome-bridge is gekoppeld; wordt direct bijgewerkt bij SoC-wijzigingen.
+
+> ⚠️ **Dit is een schatting, geen garantie.** De werkelijke actieradius hangt
+> sterk af van ondersteuningsmodus, topografie, wind, temperatuur en
+> accuconditie. De berekeningsbasis is in te zien in de sensorattributen
+> (`wh_per_km`, `tours_used`, `window_km`). Zolang er minder dan 3 tours
+> of 30 km aan verbruiksgegevens beschikbaar zijn, blijven de sensoren leeg.
+
 ### Heatmap-kaart – alle tours op één kaart
 
 Een tweede kaartvariant `bosch-ebike-heatmap-card` legt alle tours van een selectie als halftransparante lijnen over elkaar. Filter-dropdowns voor periode (30 dagen / 3 maanden / 12 maanden / alles), account en fiets. Daaronder een statusregel met het aantal tours en kilometers van de selectie.
@@ -449,6 +469,8 @@ Op de Lovelace-kaart zit een 📚-toggle in de kaartbediening. Is die actief, da
 | Active Assist Modes | - | Lijst van actieve ondersteuningsmodi |
 | Walk Assist Speed | km/h | Loophulpsnelheid |
 | Next Service Odometer | km | Kilometerstand volgende servicebeurt |
+| Estimated Range (Full Battery) | km | Geschatte actieradius met volle accu (uit gem. verbruik, schatting!) |
+| Estimated Range (Current) | km | Geschatte resterende actieradius (live-SoC vereist, schatting!) |
 
 #### Accusensoren (per accu)
 | Sensor | Eenheid | Beschrijving |

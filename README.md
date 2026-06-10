@@ -283,6 +283,25 @@ Neben dem von Bosch gelieferten Service-Termin (`Next Service Date`/`Next Servic
 
 Damit kann man z. B. eine Push-Mitteilung oder eine Beleuchtungs-Erinnerung bauen.
 
+### Reichweiten-Schätzung
+
+Pro Bike gibt es zwei Sensoren, die die Reichweite **schätzen** — auf Basis
+deines tatsächlichen Verbrauchs (distanzgewichteter Durchschnitt über die
+letzten ~500 km Tour-Historie):
+
+- **`Estimated Range (Full Battery)`** — geschätzte Reichweite mit vollem Akku
+  (Akkukapazität ÷ Ø-Verbrauch in Wh/km). Rein aus Cloud-Daten, immer verfügbar.
+- **`Estimated Range (Current)`** — geschätzte Restreichweite
+  (aktueller Akkustand × Kapazität ÷ Ø-Verbrauch). Erscheint nur, wenn in den
+  Integrations-Optionen der **Live-Akkustand-Sensor** der ESPHome-Bridge
+  verknüpft ist; aktualisiert sich sofort bei SoC-Änderungen.
+
+> ⚠️ **Das ist eine Schätzung, keine Garantie.** Die tatsächliche Reichweite
+> hängt stark von Unterstützungsmodus, Topografie, Wind, Temperatur und
+> Akkuzustand ab. Die Berechnungsgrundlage ist in den Sensor-Attributen
+> einsehbar (`wh_per_km`, `tours_used`, `window_km`). Solange weniger als
+> 3 Touren bzw. 30 km Verbrauchsdaten vorliegen, bleiben die Sensoren leer.
+
 ### Heatmap-Card - alle Touren auf einer Karte
 
 Eine zweite Card-Variante `bosch-ebike-heatmap-card` legt alle Touren einer Auswahl als halbtransparente Linien übereinander. Filter-Dropdowns für Zeitraum (30 Tage / 3 Monate / 12 Monate / Alle), Konto und Bike. Darunter eine Statuszeile mit Tour- und Kilometeranzahl der Auswahl.
@@ -457,6 +476,8 @@ Auf der Lovelace-Karte gibt es einen 📚-Toggle in den Karten-Steuerelementen. 
 | Active Assist Modes | - | Liste der aktiven Unterstützungsmodi |
 | Walk Assist Speed | km/h | Schiebehilfe-Geschwindigkeit |
 | Next Service Odometer | km | Nächster Service-Kilometerstand |
+| Estimated Range (Full Battery) | km | Geschätzte Reichweite mit vollem Akku (aus Ø-Verbrauch, Schätzung!) |
+| Estimated Range (Current) | km | Geschätzte Restreichweite (Live-SoC nötig, Schätzung!) |
 
 #### Batterie-Sensoren (pro Batterie)
 | Sensor | Einheit | Beschreibung |
@@ -763,6 +784,26 @@ Beyond the official Bosch service info (`Next Service Date` / `Next Service Odom
 
 You can wire these up to push notifications, light reminders, etc.
 
+### Range estimation
+
+Per bike there are two sensors that **estimate** range — based on your
+actual consumption (distance-weighted average over the last ~500 km of
+tour history):
+
+- **`Estimated Range (Full Battery)`** — estimated range on a full battery
+  (battery capacity ÷ avg consumption in Wh/km). Purely from cloud data,
+  always available.
+- **`Estimated Range (Current)`** — estimated remaining range
+  (current battery level × capacity ÷ avg consumption). Only appears when
+  the **live battery level sensor** of the ESPHome bridge is linked in the
+  integration options; updates immediately on SoC changes.
+
+> ⚠️ **This is an estimate, not a guarantee.** Actual range depends heavily
+> on assist mode, topography, wind, temperature and battery condition. The
+> calculation basis is exposed in the sensor attributes (`wh_per_km`,
+> `tours_used`, `window_km`). As long as less than 3 tours or 30 km of
+> consumption data are available, the sensors stay empty.
+
 ### Heatmap card - all rides overlaid
 
 A second card type, `bosch-ebike-heatmap-card`, draws all rides in a selection as semi-transparent overlays on a single map. Filter dropdowns for time range (30 days / 3 months / 12 months / All), account and bike. A status line below shows ride count and total distance for the current selection.
@@ -937,6 +978,8 @@ The Lovelace card has a 📚 toggle in the map controls. When enabled, the card 
 | Active Assist Modes | - | List of active assist modes |
 | Walk Assist Speed | km/h | Walk assist speed |
 | Next Service Odometer | km | Next service due at odometer reading |
+| Estimated Range (Full Battery) | km | Estimated range on a full battery (from avg consumption, estimate!) |
+| Estimated Range (Current) | km | Estimated remaining range (live SoC required, estimate!) |
 
 #### Battery Sensors (per battery)
 | Sensor | Unit | Description |

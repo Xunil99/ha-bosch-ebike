@@ -277,6 +277,28 @@ En plus de l'échéance d'entretien fournie par Bosch (`Next Service Date`/`Next
 
 Tu peux ainsi construire par exemple une notification push ou un rappel lumineux.
 
+### Estimation de l'autonomie
+
+Pour chaque vélo, deux capteurs **estiment** l'autonomie — sur la base de
+ta consommation réelle (moyenne pondérée par la distance sur les derniers
+~500 km d'historique de sorties) :
+
+- **`Estimated Range (Full Battery)`** — autonomie estimée avec une batterie
+  pleine (capacité de la batterie ÷ consommation moyenne en Wh/km).
+  Uniquement à partir des données cloud, toujours disponible.
+- **`Estimated Range (Current)`** — autonomie restante estimée
+  (niveau de batterie actuel × capacité ÷ consommation moyenne). N'apparaît
+  que si le **capteur de niveau de batterie en direct** de la passerelle
+  ESPHome est lié dans les options de l'intégration ; se met à jour
+  immédiatement lors des changements de SoC.
+
+> ⚠️ **C'est une estimation, pas une garantie.** L'autonomie réelle dépend
+> fortement du mode d'assistance, de la topographie, du vent, de la
+> température et de l'état de la batterie. La base de calcul est consultable
+> dans les attributs du capteur (`wh_per_km`, `tours_used`, `window_km`).
+> Tant que moins de 3 sorties ou 30 km de données de consommation sont
+> disponibles, les capteurs restent vides.
+
 ### Carte heatmap – toutes les sorties sur une seule carte
 
 Une deuxième variante de carte, `bosch-ebike-heatmap-card`, superpose toutes les sorties d'une sélection sous forme de lignes semi-transparentes. Menus déroulants de filtre pour la période (30 jours / 3 mois / 12 mois / tout), le compte et le vélo. En dessous, une ligne d'état avec le nombre de sorties et de kilomètres de la sélection.
@@ -451,6 +473,8 @@ Sur la carte Lovelace, il y a une bascule 📚 dans les commandes de la carte. Q
 | Active Assist Modes | - | Liste des modes d'assistance actifs |
 | Walk Assist Speed | km/h | Vitesse de l'aide à la poussée |
 | Next Service Odometer | km | Kilométrage du prochain entretien |
+| Estimated Range (Full Battery) | km | Autonomie estimée avec batterie pleine (d'après la conso moyenne, estimation !) |
+| Estimated Range (Current) | km | Autonomie restante estimée (SoC en direct requis, estimation !) |
 
 #### Capteurs de batterie (par batterie)
 | Capteur | Unité | Description |

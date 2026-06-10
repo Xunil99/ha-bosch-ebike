@@ -277,6 +277,27 @@ Oltre al tagliando fornito da Bosch (`Next Service Date`/`Next Service Odometer`
 
 Con questi puoi ad es. creare una notifica push o un promemoria luminoso.
 
+### Stima dell'autonomia
+
+Per ogni bici ci sono due sensori che **stimano** l'autonomia — sulla base
+del tuo consumo reale (media ponderata per distanza sugli ultimi ~500 km
+di storico dei tour):
+
+- **`Estimated Range (Full Battery)`** — autonomia stimata con batteria piena
+  (capacità della batteria ÷ consumo medio in Wh/km). Solo da dati cloud,
+  sempre disponibile.
+- **`Estimated Range (Current)`** — autonomia residua stimata
+  (livello attuale della batteria × capacità ÷ consumo medio). Compare solo
+  se nelle opzioni dell'integrazione è collegato il **sensore live del
+  livello batteria** della bridge ESPHome; si aggiorna immediatamente al
+  variare del SoC.
+
+> ⚠️ **È una stima, non una garanzia.** L'autonomia reale dipende fortemente
+> da modalità di assistenza, topografia, vento, temperatura e condizioni
+> della batteria. La base di calcolo è consultabile negli attributi del
+> sensore (`wh_per_km`, `tours_used`, `window_km`). Finché sono disponibili
+> meno di 3 tour o 30 km di dati di consumo, i sensori restano vuoti.
+
 ### Heatmap card – tutti i tour su una sola mappa
 
 Una seconda variante della card, `bosch-ebike-heatmap-card`, sovrappone tutti i tour di una selezione come linee semitrasparenti. Dropdown di filtro per periodo (30 giorni / 3 mesi / 12 mesi / tutti), account e bici. Sotto, una riga di stato con il numero di tour e di chilometri della selezione.
@@ -451,6 +472,8 @@ Sulla card Lovelace c'è un toggle 📚 nei controlli della mappa. Se attivato, 
 | Active Assist Modes | - | Elenco delle modalità di assistenza attive |
 | Walk Assist Speed | km/h | Velocità dell'assistenza alla spinta |
 | Next Service Odometer | km | Chilometraggio del prossimo tagliando |
+| Estimated Range (Full Battery) | km | Autonomia stimata con batteria piena (dal consumo medio, stima!) |
+| Estimated Range (Current) | km | Autonomia residua stimata (SoC live necessario, stima!) |
 
 #### Sensori della batteria (per batteria)
 | Sensore | Unità | Descrizione |
