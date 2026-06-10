@@ -312,6 +312,11 @@ const I18N = {
     rp_err_no_route: "No route found (waypoint off the road network or outside coverage?)",
     rp_err_server: "Routing server not reachable",
     rp_privacy_note: "Waypoints are sent to the configured BRouter server (default: brouter.de).",
+    rp_editor_brouter_url: "BRouter server (optional)",
+    rp_editor_entity: "Range sensor (optional)",
+    rp_editor_entity_hint: "Source for average consumption and battery capacity — auto-detected when empty.",
+    rp_editor_soc: "Live battery sensor (optional)",
+    rp_editor_soc_hint: "Current charge level for the battery check — falls back to the range sensors when empty.",
   },
   de: {
     rides_title: "Bosch eBike Rides",
@@ -604,6 +609,11 @@ const I18N = {
     rp_err_no_route: "Keine Route gefunden (Wegpunkt abseits des Wegenetzes oder außerhalb der Abdeckung?)",
     rp_err_server: "Routing-Server nicht erreichbar",
     rp_privacy_note: "Wegpunkte werden an den konfigurierten BRouter-Server gesendet (Standard: brouter.de).",
+    rp_editor_brouter_url: "BRouter-Server (optional)",
+    rp_editor_entity: "Reichweiten-Sensor (optional)",
+    rp_editor_entity_hint: "Quelle für Ø-Verbrauch und Akku-Kapazität — leer = automatische Erkennung.",
+    rp_editor_soc: "Live-Akkustand-Sensor (optional)",
+    rp_editor_soc_hint: "Aktueller Ladestand für den Akku-Check — leer = Wert aus den Reichweiten-Sensoren.",
   },
   nl: {
     rides_title: "Bosch eBike Ritten",
@@ -896,6 +906,11 @@ const I18N = {
     rp_err_no_route: "Geen route gevonden (wegpunt buiten het wegennet of buiten het dekkingsgebied?)",
     rp_err_server: "Routeringsserver niet bereikbaar",
     rp_privacy_note: "Wegpunten worden naar de geconfigureerde BRouter-server gestuurd (standaard: brouter.de).",
+    rp_editor_brouter_url: "BRouter-server (optioneel)",
+    rp_editor_entity: "Actieradius-sensor (optioneel)",
+    rp_editor_entity_hint: "Bron voor gemiddeld verbruik en accucapaciteit — leeg = automatische detectie.",
+    rp_editor_soc: "Live-accusensor (optioneel)",
+    rp_editor_soc_hint: "Actuele laadstand voor de accucheck — leeg = waarde uit de actieradius-sensoren.",
   },
   fr: {
     // Main card
@@ -1200,6 +1215,11 @@ const I18N = {
     rp_err_no_route: "Aucun itinéraire trouvé (point hors du réseau routier ou hors de la zone couverte ?)",
     rp_err_server: "Serveur de routage injoignable",
     rp_privacy_note: "Les points de passage sont envoyés au serveur BRouter configuré (par défaut : brouter.de).",
+    rp_editor_brouter_url: "Serveur BRouter (optionnel)",
+    rp_editor_entity: "Capteur d'autonomie (optionnel)",
+    rp_editor_entity_hint: "Source de la consommation moyenne et de la capacité de la batterie — détection automatique si vide.",
+    rp_editor_soc: "Capteur de charge en direct (optionnel)",
+    rp_editor_soc_hint: "Niveau de charge actuel pour le contrôle de batterie — si vide, valeur des capteurs d'autonomie.",
   },
   it: {
     // Main card
@@ -1504,6 +1524,11 @@ const I18N = {
     rp_err_no_route: "Nessun percorso trovato (punto fuori dalla rete stradale o fuori dall'area coperta?)",
     rp_err_server: "Server di routing non raggiungibile",
     rp_privacy_note: "I punti del percorso vengono inviati al server BRouter configurato (predefinito: brouter.de).",
+    rp_editor_brouter_url: "Server BRouter (opzionale)",
+    rp_editor_entity: "Sensore di autonomia (opzionale)",
+    rp_editor_entity_hint: "Fonte del consumo medio e della capacità della batteria — rilevamento automatico se vuoto.",
+    rp_editor_soc: "Sensore di carica live (opzionale)",
+    rp_editor_soc_hint: "Livello di carica attuale per il controllo della batteria — se vuoto, valore dai sensori di autonomia.",
   },
   es: {
     // Main card
@@ -1808,6 +1833,11 @@ const I18N = {
     rp_err_no_route: "No se encontró ninguna ruta (¿punto fuera de la red de caminos o fuera de la zona cubierta?)",
     rp_err_server: "Servidor de rutas no accesible",
     rp_privacy_note: "Los puntos de ruta se envían al servidor BRouter configurado (por defecto: brouter.de).",
+    rp_editor_brouter_url: "Servidor BRouter (opcional)",
+    rp_editor_entity: "Sensor de autonomía (opcional)",
+    rp_editor_entity_hint: "Fuente del consumo medio y la capacidad de la batería — detección automática si está vacío.",
+    rp_editor_soc: "Sensor de carga en vivo (opcional)",
+    rp_editor_soc_hint: "Nivel de carga actual para la comprobación de batería — si está vacío, valor de los sensores de autonomía.",
   },
 };
 
@@ -11517,6 +11547,110 @@ class BoschEBikeRoutePlannerCard extends HTMLElement {
   }
 }
 
+class BoschEBikeRoutePlannerCardEditor extends HTMLElement {
+  setConfig(config) {
+    this._config = config;
+    this._render();
+  }
+
+  set hass(hass) {
+    const first = !this._hass;
+    this._hass = hass;
+    // Entity-Dropdowns brauchen hass.states — einmalig neu rendern,
+    // sobald hass da ist (Muster wie _loadInstances im Map-Editor).
+    if (first) this._render();
+  }
+
+  _escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, (c) => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+    })[c]);
+  }
+
+  _emit() {
+    this.dispatchEvent(new CustomEvent("config-changed", { detail: { config: this._config } }));
+  }
+
+  _entityOptions(filter, selectedId) {
+    let opts = `<option value="">—</option>`;
+    const ids = this._hass
+      ? Object.keys(this._hass.states).filter(filter).sort()
+      : [];
+    for (const e of ids) {
+      const selected = selectedId === e ? " selected" : "";
+      opts += `<option value="${this._escapeHtml(e)}"${selected}>${this._escapeHtml(e)}</option>`;
+    }
+    return opts;
+  }
+
+  _render() {
+    if (!this._config) return;
+    const cfg = this._config;
+    const t = (k, ...a) => ebT(this._hass, k, ...a);
+    const inputStyle = "width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;background:var(--card-background-color,#fff);color:var(--primary-text-color,#222);";
+    const labelStyle = "display:block;margin-top:14px;margin-bottom:6px;font-weight:500";
+    const hintStyle = "display:block;margin-top:4px;font-size:12px;color:var(--secondary-text-color,#777)";
+
+    const rangeOpts = this._entityOptions((e) => e.endsWith("_estimated_range_full"), cfg.entity);
+    const socOpts = this._entityOptions((e) => e.startsWith("sensor."), cfg.soc_entity);
+
+    this.innerHTML = `<div style="padding:16px">
+      <label style="${labelStyle.replace('margin-top:14px;', '')}">${t("editor_height")}</label>
+      <input type="number" value="${cfg.height || 480}" min="200" max="1000" step="20" style="${inputStyle}" id="rp-h-in">
+
+      <label style="${labelStyle}">${t("editor_title")}</label>
+      <input type="text" value="${this._escapeHtml(cfg.title || '')}" placeholder="${t("rp_default_title")}" style="${inputStyle}" id="rp-title-in">
+      <span style="${hintStyle}">${t("editor_title_hint")}</span>
+
+      <label style="${labelStyle}">${t("rp_editor_brouter_url")}</label>
+      <input type="text" value="${this._escapeHtml(cfg.brouter_url || '')}" placeholder="https://brouter.de" style="${inputStyle}" id="rp-brouter-in">
+
+      <label style="${labelStyle}">${t("rp_editor_entity")}</label>
+      <select id="rp-entity-in" style="${inputStyle}">${rangeOpts}</select>
+      <span style="${hintStyle}">${t("rp_editor_entity_hint")}</span>
+
+      <label style="${labelStyle}">${t("rp_editor_soc")}</label>
+      <select id="rp-soc-in" style="${inputStyle}">${socOpts}</select>
+      <span style="${hintStyle}">${t("rp_editor_soc_hint")}</span>
+
+      <span style="${hintStyle};margin-top:14px;">${t("rp_privacy_note")}</span>
+    </div>`;
+
+    this.querySelector("#rp-h-in").addEventListener("change", (e) => {
+      this._config = { ...this._config, height: parseInt(e.target.value, 10) || 480 };
+      this._emit();
+    });
+    this.querySelector("#rp-title-in").addEventListener("change", (e) => {
+      const v = e.target.value.trim();
+      this._config = { ...this._config };
+      if (v) this._config.title = v;
+      else delete this._config.title;
+      this._emit();
+    });
+    this.querySelector("#rp-brouter-in").addEventListener("change", (e) => {
+      const v = e.target.value.trim();
+      this._config = { ...this._config };
+      if (v) this._config.brouter_url = v;
+      else delete this._config.brouter_url;
+      this._emit();
+    });
+    this.querySelector("#rp-entity-in").addEventListener("change", (e) => {
+      const v = e.target.value;
+      this._config = { ...this._config };
+      if (v) this._config.entity = v;
+      else delete this._config.entity;
+      this._emit();
+    });
+    this.querySelector("#rp-soc-in").addEventListener("change", (e) => {
+      const v = e.target.value;
+      this._config = { ...this._config };
+      if (v) this._config.soc_entity = v;
+      else delete this._config.soc_entity;
+      this._emit();
+    });
+  }
+}
+
 if (!customElements.get("bosch-ebike-map-card")) {
   customElements.define("bosch-ebike-map-card", BoschEBikeMapCard);
 }
@@ -11546,6 +11680,12 @@ if (!customElements.get("bosch-ebike-3d-map-card")) {
 }
 if (!customElements.get("bosch-ebike-3d-map-card-editor")) {
   customElements.define("bosch-ebike-3d-map-card-editor", BoschEBike3DMapCardEditor);
+}
+if (!customElements.get("bosch-ebike-routeplanner-card")) {
+  customElements.define("bosch-ebike-routeplanner-card", BoschEBikeRoutePlannerCard);
+}
+if (!customElements.get("bosch-ebike-routeplanner-card-editor")) {
+  customElements.define("bosch-ebike-routeplanner-card-editor", BoschEBikeRoutePlannerCardEditor);
 }
 
 window.customCards = window.customCards || [];
@@ -11586,6 +11726,14 @@ if (!window.customCards.find((c) => c.type === "bosch-ebike-3d-map-card")) {
     type: "bosch-ebike-3d-map-card",
     name: "Bosch eBike 3D-Karte",
     description: "Tour-Detailansicht in 3D mit Gebäude-Extrusionen, Zeit-Slider und Sonnenstand-Lichteffekt (MapLibre + OpenFreeMap)",
+    preview: false,
+  });
+}
+if (!window.customCards.find((c) => c.type === "bosch-ebike-routeplanner-card")) {
+  window.customCards.push({
+    type: "bosch-ebike-routeplanner-card",
+    name: "Bosch eBike Route Planner",
+    description: "Plan bike routes with BRouter: consumption estimate, battery check and GPX export",
     preview: false,
   });
 }
