@@ -1954,7 +1954,12 @@ function ensureLeaflet() {
     if (existing) {
       const finish = () => {
         if (window.L && typeof window.L.map === "function") resolve(window.L);
-        else reject(new Error("Leaflet wurde geladen, ist aber nicht verfügbar"));
+        else {
+          // Tag auch hier entfernen: load/error feuern nie wieder,
+          // ein Retry an diesem Tag würde sonst ewig hängen.
+          existing.remove();
+          reject(new Error("Leaflet wurde geladen, ist aber nicht verfügbar"));
+        }
       };
       existing.addEventListener("load", finish, { once: true });
       existing.addEventListener("error", () => {
@@ -1973,7 +1978,10 @@ function ensureLeaflet() {
     script.async = true;
     script.onload = () => {
       if (window.L && typeof window.L.map === "function") resolve(window.L);
-      else reject(new Error("Leaflet wurde geladen, ist aber nicht verfügbar"));
+      else {
+        script.remove();
+        reject(new Error("Leaflet wurde geladen, ist aber nicht verfügbar"));
+      }
     };
     script.onerror = () => {
       script.remove();
