@@ -3,7 +3,7 @@
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
 [![HA Version](https://img.shields.io/badge/Home%20Assistant-2024.1%2B-blue.svg)](https://www.home-assistant.io/)
 
-> [Deutsch](README.md) | [English](README.md#english) | **Nederlands**
+> [Deutsch](README.md) | [English](README.md#english) | **Nederlands** | [Français](README.fr.md) | [Italiano](README.it.md) | [Español](README.es.md)
 
 > ### ⚠️ Regionale vereiste
 > Deze integratie werkt **uitsluitend met een Bosch SingleKey-ID-account dat binnen de EU is geregistreerd**. Ze gebruikt de officiële Bosch Data Act API, waarvan de beschikbaarheid beperkt is tot EU-accounts. Accounts uit andere regio's worden door het API-endpoint geweigerd en de integratie kan zich dan niet aanmelden.
