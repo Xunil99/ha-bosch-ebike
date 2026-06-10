@@ -299,6 +299,41 @@ ta consommation réelle (moyenne pondérée par la distance sur les derniers
 > Tant que moins de 3 sorties ou 30 km de données de consommation sont
 > disponibles, les capteurs restent vides.
 
+### Carte planificateur d'itinéraires (BRouter)
+
+La carte `bosch-ebike-routeplanner-card` planifie des itinéraires à vélo
+directement dans le dashboard — sur la base du routeur open source
+[BRouter](https://brouter.de) :
+
+```yaml
+type: custom:bosch-ebike-routeplanner-card
+height: 480
+```
+
+- **Points de passage par clic** sur la carte (départ, arrivée, autant de
+  points intermédiaires que tu veux ; glisser un marqueur = déplacer,
+  cliquer dessus = supprimer)
+- **Profils :** Trekking, Vélo de route, MTB, Le plus court
+- **Résultat :** distance, dénivelé positif/négatif, temps de trajet,
+  **consommation estimée** (ta consommation moyenne issue de l'estimation
+  de l'autonomie × distance)
+- **Contrôle de batterie :** indicateur en feu tricolore montrant si
+  l'itinéraire est faisable avec le niveau de batterie actuel (nécessite le
+  capteur de niveau de batterie en direct lié) — comme les capteurs
+  d'autonomie, une **estimation**, pas une garantie
+- **Profil d'altitude** sous forme de diagramme sous la carte
+- **Export GPX** de l'itinéraire planifié (importable dans Garmin Connect,
+  Komoot, l'app Flow, etc.)
+
+Options : `title`, `height`, `brouter_url` (ta propre instance BRouter au
+lieu de brouter.de), `entity` (capteur d'autonomie), `soc_entity` (niveau
+de batterie en direct).
+
+> **Confidentialité :** Les coordonnées des points de passage sont envoyées
+> au serveur BRouter configuré pour le calcul de l'itinéraire — par défaut le
+> serveur public `brouter.de`, financé par des dons. Si tu préfères éviter
+> cela, héberge BRouter toi-même (Docker) et saisis l'URL sous `brouter_url`.
+
 ### Carte heatmap – toutes les sorties sur une seule carte
 
 Une deuxième variante de carte, `bosch-ebike-heatmap-card`, superpose toutes les sorties d'une sélection sous forme de lignes semi-transparentes. Menus déroulants de filtre pour la période (30 jours / 3 mois / 12 mois / tout), le compte et le vélo. En dessous, une ligne d'état avec le nombre de sorties et de kilomètres de la sélection.

@@ -295,6 +295,36 @@ van je werkelijke verbruik (afstandsgewogen gemiddelde over de laatste
 > (`wh_per_km`, `tours_used`, `window_km`). Zolang er minder dan 3 tours
 > of 30 km aan verbruiksgegevens beschikbaar zijn, blijven de sensoren leeg.
 
+### Routeplanner-kaart (BRouter)
+
+De kaart `bosch-ebike-routeplanner-card` plant fietsroutes direct in het
+dashboard — op basis van de open-source-router [BRouter](https://brouter.de):
+
+```yaml
+type: custom:bosch-ebike-routeplanner-card
+height: 480
+```
+
+- **Wegpunten per klik** op de kaart (start, bestemming, willekeurig veel
+  tussenpunten; marker slepen = verplaatsen, aanklikken = verwijderen)
+- **Profielen:** Trekking, Racefiets, MTB, Kortste
+- **Resultaat:** afstand, stijging/daling, rijtijd, **geschat verbruik**
+  (je gemiddelde verbruik uit de actieradius-schatting × afstand)
+- **Accucheck:** stoplicht-indicator die toont of de route haalbaar is met
+  het huidige accuniveau (vereist gekoppelde live-accuniveau-sensor) — net
+  als de actieradius-sensoren een **schatting**, geen garantie
+- **Hoogteprofiel** als diagram onder de kaart
+- **GPX-export** van de geplande route (importeerbaar in Garmin Connect,
+  Komoot, de Flow-app e.a.)
+
+Opties: `title`, `height`, `brouter_url` (eigen BRouter-instantie in plaats
+van brouter.de), `entity` (actieradius-sensor), `soc_entity` (live-accuniveau).
+
+> **Privacy:** De wegpunt-coördinaten worden voor de routeberekening naar de
+> geconfigureerde BRouter-server gestuurd — standaard de door donaties
+> gefinancierde publieke server `brouter.de`. Wil je dat niet, draai BRouter
+> dan zelf (Docker) en vul de URL in onder `brouter_url`.
+
 ### Heatmap-kaart – alle tours op één kaart
 
 Een tweede kaartvariant `bosch-ebike-heatmap-card` legt alle tours van een selectie als halftransparante lijnen over elkaar. Filter-dropdowns voor periode (30 dagen / 3 maanden / 12 maanden / alles), account en fiets. Daaronder een statusregel met het aantal tours en kilometers van de selectie.

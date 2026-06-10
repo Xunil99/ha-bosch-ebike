@@ -299,6 +299,40 @@ de historial de recorridos):
 > haya menos de 3 recorridos o 30 km de datos de consumo, los sensores
 > permanecen vacíos.
 
+### Tarjeta planificador de rutas (BRouter)
+
+La tarjeta `bosch-ebike-routeplanner-card` planifica rutas en bici
+directamente en el dashboard — sobre la base del router de código abierto
+[BRouter](https://brouter.de):
+
+```yaml
+type: custom:bosch-ebike-routeplanner-card
+height: 480
+```
+
+- **Puntos de ruta con un clic** en el mapa (salida, destino, tantos puntos
+  intermedios como quieras; arrastrar un marcador = mover, hacer clic en él
+  = eliminar)
+- **Perfiles:** Trekking, Bicicleta de carretera, MTB, La más corta
+- **Resultado:** distancia, ascenso/descenso, tiempo de marcha, **consumo
+  estimado** (tu consumo medio de la estimación de autonomía × distancia)
+- **Comprobación de batería:** indicador tipo semáforo que muestra si la
+  ruta es viable con el nivel de batería actual (requiere el sensor de nivel
+  de batería en vivo vinculado) — como los sensores de autonomía, una
+  **estimación**, no una garantía
+- **Perfil de elevación** como diagrama debajo del mapa
+- **Exportación GPX** de la ruta planificada (importable en Garmin Connect,
+  Komoot, la app Flow y otros)
+
+Opciones: `title`, `height`, `brouter_url` (instancia BRouter propia en
+lugar de brouter.de), `entity` (sensor de autonomía), `soc_entity` (nivel
+de batería en vivo).
+
+> **Privacidad:** Las coordenadas de los puntos de ruta se envían al servidor
+> BRouter configurado para calcular la ruta — por defecto el servidor público
+> `brouter.de`, financiado con donaciones. Si prefieres evitarlo, ejecuta
+> BRouter por tu cuenta (Docker) e introduce la URL en `brouter_url`.
+
 ### Tarjeta heatmap: todos los recorridos en un solo mapa
 
 Una segunda variante de tarjeta, `bosch-ebike-heatmap-card`, superpone todos los recorridos de una selección como líneas semitransparentes. Desplegables de filtro para el periodo (30 días / 3 meses / 12 meses / todo), cuenta y bici. Debajo, una línea de estado con el número de recorridos y kilómetros de la selección.

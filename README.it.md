@@ -298,6 +298,39 @@ di storico dei tour):
 > sensore (`wh_per_km`, `tours_used`, `window_km`). Finché sono disponibili
 > meno di 3 tour o 30 km di dati di consumo, i sensori restano vuoti.
 
+### Card pianificatore di percorsi (BRouter)
+
+La card `bosch-ebike-routeplanner-card` pianifica percorsi in bici
+direttamente nella dashboard — sulla base del router open source
+[BRouter](https://brouter.de):
+
+```yaml
+type: custom:bosch-ebike-routeplanner-card
+height: 480
+```
+
+- **Punti del percorso con un clic** sulla mappa (partenza, destinazione,
+  punti intermedi a piacere; trascina un marker = sposta, cliccalo = elimina)
+- **Profili:** Trekking, Bici da corsa, MTB, Più breve
+- **Risultato:** distanza, salita/discesa, tempo di percorrenza, **consumo
+  stimato** (il tuo consumo medio dalla stima dell'autonomia × distanza)
+- **Controllo batteria:** indicatore a semaforo che mostra se il percorso è
+  fattibile con il livello di batteria attuale (richiede il sensore live del
+  livello batteria collegato) — come i sensori di autonomia, una **stima**,
+  non una garanzia
+- **Profilo altimetrico** come diagramma sotto la mappa
+- **Esportazione GPX** del percorso pianificato (importabile in Garmin
+  Connect, Komoot, l'app Flow e altri)
+
+Opzioni: `title`, `height`, `brouter_url` (istanza BRouter propria invece di
+brouter.de), `entity` (sensore di autonomia), `soc_entity` (livello batteria
+live).
+
+> **Privacy:** Le coordinate dei punti del percorso vengono inviate al server
+> BRouter configurato per il calcolo del percorso — di default il server
+> pubblico `brouter.de`, finanziato da donazioni. Se preferisci evitarlo,
+> esegui BRouter in autonomia (Docker) e inserisci l'URL in `brouter_url`.
+
 ### Heatmap card – tutti i tour su una sola mappa
 
 Una seconda variante della card, `bosch-ebike-heatmap-card`, sovrappone tutti i tour di una selezione come linee semitrasparenti. Dropdown di filtro per periodo (30 giorni / 3 mesi / 12 mesi / tutti), account e bici. Sotto, una riga di stato con il numero di tour e di chilometri della selezione.

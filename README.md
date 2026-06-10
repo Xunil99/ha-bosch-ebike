@@ -302,6 +302,36 @@ letzten ~500 km Tour-Historie):
 > einsehbar (`wh_per_km`, `tours_used`, `window_km`). Solange weniger als
 > 3 Touren bzw. 30 km Verbrauchsdaten vorliegen, bleiben die Sensoren leer.
 
+### Routenplaner-Card (BRouter)
+
+Die Card `bosch-ebike-routeplanner-card` plant Fahrrad-Routen direkt im Dashboard
+— auf Basis des Open-Source-Routers [BRouter](https://brouter.de):
+
+```yaml
+type: custom:bosch-ebike-routeplanner-card
+height: 480
+```
+
+- **Wegpunkte per Klick** auf die Karte (Start, Ziel, beliebige Zwischenpunkte;
+  Marker ziehen = verschieben, anklicken = löschen)
+- **Profile:** Trekking, Rennrad, MTB, Kürzeste
+- **Ergebnis:** Distanz, Anstieg/Abstieg, Fahrzeit, **geschätzter Verbrauch**
+  (dein Ø-Verbrauch aus der Reichweiten-Schätzung × Distanz)
+- **Akku-Check:** Ampel-Anzeige, ob die Route mit dem aktuellen Akkustand
+  machbar ist (benötigt verknüpften Live-Akkustand-Sensor) — wie die
+  Reichweiten-Sensoren eine **Schätzung**, keine Garantie
+- **Höhenprofil** als Diagramm unter der Karte
+- **GPX-Export** der geplanten Route (importierbar in Garmin Connect,
+  Komoot, die Flow-App u. a.)
+
+Optionen: `title`, `height`, `brouter_url` (eigene BRouter-Instanz statt
+brouter.de), `entity` (Reichweiten-Sensor), `soc_entity` (Live-Akkustand).
+
+> **Datenschutz:** Die Wegpunkt-Koordinaten werden zur Routenberechnung an den
+> konfigurierten BRouter-Server gesendet — standardmäßig der spendenfinanzierte
+> öffentliche Server `brouter.de`. Wer das nicht möchte, betreibt BRouter selbst
+> (Docker) und trägt die URL unter `brouter_url` ein.
+
 ### Heatmap-Card - alle Touren auf einer Karte
 
 Eine zweite Card-Variante `bosch-ebike-heatmap-card` legt alle Touren einer Auswahl als halbtransparente Linien übereinander. Filter-Dropdowns für Zeitraum (30 Tage / 3 Monate / 12 Monate / Alle), Konto und Bike. Darunter eine Statuszeile mit Tour- und Kilometeranzahl der Auswahl.
@@ -803,6 +833,36 @@ tour history):
 > calculation basis is exposed in the sensor attributes (`wh_per_km`,
 > `tours_used`, `window_km`). As long as less than 3 tours or 30 km of
 > consumption data are available, the sensors stay empty.
+
+### Route planner card (BRouter)
+
+The `bosch-ebike-routeplanner-card` plans bike routes right in the dashboard
+— powered by the open-source router [BRouter](https://brouter.de):
+
+```yaml
+type: custom:bosch-ebike-routeplanner-card
+height: 480
+```
+
+- **Waypoints by clicking** the map (start, destination, any number of via
+  points; drag a marker to move it, click it to remove it)
+- **Profiles:** Trekking, Road bike, MTB, Shortest
+- **Result:** distance, ascent/descent, ride time, **estimated consumption**
+  (your average consumption from the range estimation × distance)
+- **Battery check:** traffic-light indicator showing whether the route is
+  doable with the current battery level (needs the linked live battery level
+  sensor) — like the range sensors an **estimate**, not a guarantee
+- **Elevation profile** chart below the map
+- **GPX export** of the planned route (importable into Garmin Connect,
+  Komoot, the Flow app and others)
+
+Options: `title`, `height`, `brouter_url` (your own BRouter instance instead
+of brouter.de), `entity` (range sensor), `soc_entity` (live battery level).
+
+> **Privacy:** The waypoint coordinates are sent to the configured BRouter
+> server for route calculation — by default the donation-funded public server
+> `brouter.de`. If you'd rather not, run BRouter yourself (Docker) and enter
+> the URL under `brouter_url`.
 
 ### Heatmap card - all rides overlaid
 
