@@ -1,4 +1,14 @@
-"""Config flow for Bosch eBike integration."""
+"""Config flow for the Bosch eBike integration.
+
+Uses Home Assistant's built-in OAuth2 helper with PKCE (public client, no
+secret). The user only enters their Client-ID; login happens via the normal
+"Authorize" redirect through https://my.home-assistant.io/redirect/oauth - no
+manual copying of authorization codes.
+
+Tokens are stored in the same shape the API client/coordinator already expect
+(``client_id`` + ``access_token`` + ``refresh_token``), so existing entries
+created with the older manual flow keep working without migration.
+"""
 
 from __future__ import annotations
 
@@ -9,12 +19,15 @@ import voluptuous as vol
 
 from homeassistant.config_entries import (
     ConfigEntry,
-    ConfigFlow,
     ConfigFlowResult,
     OptionsFlow,
 )
 from homeassistant.core import callback
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers import config_entry_oauth2_flow
+from homeassistant.helpers.config_entry_oauth2_flow import (
+    AbstractOAuth2FlowHandler,
+    LocalOAuth2ImplementationWithPkce,
+)
 from homeassistant.helpers.selector import (
     EntitySelector,
     EntitySelectorConfig,
@@ -25,134 +38,117 @@ from .const import (
     CONF_CLIENT_ID,
     CONF_LIVE_ODOMETER_ENTITY,
     CONF_LIVE_SOC_ENTITY,
-    REDIRECT_URI,
     AUTH_URL,
+    TOKEN_URL,
+    OAUTH_SCOPE,
+    FLOW_PORTAL_URL,
 )
-from .api import BoschEBikeAPI
 
 _LOGGER = logging.getLogger(__name__)
 
 
-class BoschEBikeConfigFlow(ConfigFlow, domain=DOMAIN):
-    """Handle a config flow for Bosch eBike."""
+class BoschPkceImplementation(LocalOAuth2ImplementationWithPkce):
+    """PKCE OAuth2 implementation that requests the openid scope."""
 
+    @property
+    def name(self) -> str:
+        return "Bosch eBike"
+
+    @property
+    def extra_authorize_data(self) -> dict[str, Any]:
+        # Must keep the PKCE params from the parent and add our scope.
+        data = {"scope": OAUTH_SCOPE}
+        data.update(super().extra_authorize_data)
+        return data
+
+
+class BoschEBikeConfigFlow(AbstractOAuth2FlowHandler, domain=DOMAIN):
+    """Handle the OAuth2 config flow for Bosch eBike."""
+
+    DOMAIN = DOMAIN
     VERSION = 1
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._client_id: str | None = None
+
+    @property
+    def logger(self) -> logging.Logger:
+        return _LOGGER
 
     @staticmethod
     @callback
     def async_get_options_flow(config_entry: ConfigEntry) -> OptionsFlow:
-        """Return the options flow handler (live BLE sensor wiring).
-
-        Since HA 2024.11 the framework auto-populates ``self.config_entry`` on
-        the OptionsFlow instance, so we MUST NOT pass it in. Doing so raises
-        TypeError because the parent OptionsFlow no longer accepts an
-        argument in its default __init__.
-        """
+        """Return the options flow handler (live BLE sensor wiring)."""
         return BoschEBikeOptionsFlowHandler()
-
-    def __init__(self) -> None:
-        self._client_id: str | None = None
-        self._api: BoschEBikeAPI | None = None
-        self._authorize_url: str | None = None
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Step 1: User enters their Client-ID from Bosch Portal."""
-        errors: dict[str, str] = {}
-
+        """Step 1: the user enters their Client-ID, then we start OAuth."""
         if user_input is not None:
             self._client_id = user_input[CONF_CLIENT_ID].strip()
-            session = async_get_clientsession(self.hass)
-            self._api = BoschEBikeAPI(session, self._client_id)
-
-            # Build authorize URL without PKCE for manual code flow
-            from urllib.parse import urlencode, quote
-            params = urlencode({
-                "client_id": self._client_id,
-                "response_type": "code",
-                "redirect_uri": REDIRECT_URI,
-                "scope": "openid",
-            })
-            self._authorize_url = f"{AUTH_URL}?{params}"
-            _LOGGER.warning(
-                "Bosch eBike: Open this URL in your browser to log in: %s",
-                self._authorize_url,
-            )
-            return await self.async_step_auth_code()
+            await self.async_set_unique_id(self._client_id)
+            self._abort_if_unique_id_configured()
+            self._register_impl(self._client_id)
+            return await self.async_step_pick_implementation()
 
         return self.async_show_form(
             step_id="user",
-            data_schema=vol.Schema({
-                vol.Required(CONF_CLIENT_ID): str,
-            }),
-            errors=errors,
+            data_schema=vol.Schema({vol.Required(CONF_CLIENT_ID): str}),
+            description_placeholders={"portal_url": FLOW_PORTAL_URL},
         )
 
-    async def async_step_auth_code(
+    async def async_step_reauth(
+        self, entry_data: dict[str, Any]
+    ) -> ConfigFlowResult:
+        """Re-authenticate an existing entry (e.g. refresh token expired)."""
+        self._client_id = entry_data.get(CONF_CLIENT_ID)
+        return await self.async_step_reauth_confirm()
+
+    async def async_step_reauth_confirm(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Step 2: User opens login URL in browser, then pastes the auth code or full callback URL."""
-        errors: dict[str, str] = {}
+        """Confirm re-auth, then re-run the OAuth login with the stored Client-ID."""
+        if user_input is None:
+            return self.async_show_form(
+                step_id="reauth_confirm",
+                description_placeholders={"portal_url": FLOW_PORTAL_URL},
+            )
+        if self._client_id:
+            self._register_impl(self._client_id)
+        return await self.async_step_pick_implementation()
 
-        if user_input is not None:
-            raw = user_input.get("auth_code", "").strip()
-            code = self._extract_auth_code(raw)
-            if not code:
-                errors["auth_code"] = "no_auth_code"
-            else:
-                try:
-                    await self._api.exchange_code_no_pkce(code, REDIRECT_URI)
-                    return self.async_create_entry(
-                        title="Bosch eBike",
-                        data={
-                            CONF_CLIENT_ID: self._client_id,
-                            "access_token": self._api.access_token,
-                            "refresh_token": self._api.refresh_token,
-                        },
-                    )
-                except Exception as err:
-                    _LOGGER.exception("Token exchange failed: %s", err)
-                    errors["auth_code"] = "token_error"
-
-        return self.async_show_form(
-            step_id="auth_code",
-            data_schema=vol.Schema({
-                vol.Required("auth_code"): str,
-            }),
-            description_placeholders={"authorize_url": self._authorize_url},
-            errors=errors,
+    def _register_impl(self, client_id: str) -> None:
+        """Register a fresh PKCE implementation for the given Client-ID."""
+        self.async_register_implementation(
+            self.hass,
+            BoschPkceImplementation(self.hass, DOMAIN, client_id, AUTH_URL, TOKEN_URL),
         )
 
-    @staticmethod
-    def _extract_auth_code(raw: str) -> str | None:
-        """Accept either a bare auth code or the full callback URL.
+    async def async_oauth_create_entry(
+        self, data: dict[str, Any]
+    ) -> ConfigFlowResult:
+        """Store tokens in the legacy shape so the API client keeps working.
 
-        Detects URLs containing ``code=`` and extracts the parameter; otherwise
-        returns the input as-is. Removes trailing whitespace, surrounding quotes
-        and angle brackets (common when copying from terminals/emails).
+        HA hands us ``data["token"]`` (access_token, refresh_token, expires_at,
+        ...). We flatten the bits the existing API client/coordinator read,
+        which keeps backward compatibility with entries from the old flow.
         """
-        if not raw:
-            return None
-        cleaned = raw.strip().strip("<>").strip("\"'").strip()
-        if not cleaned:
-            return None
-        if "code=" in cleaned:
-            from urllib.parse import urlparse, parse_qs
-            try:
-                parsed = urlparse(cleaned)
-                # Accept URLs with or without scheme (e.g. "localhost:8888/callback?code=...")
-                query = parsed.query or ""
-                if not query and "?" in cleaned:
-                    query = cleaned.split("?", 1)[1]
-                params = parse_qs(query)
-                code_values = params.get("code", [])
-                if code_values:
-                    return code_values[0].strip()
-            except Exception:  # noqa: BLE001
-                return None
-            return None
-        return cleaned
+        token = data.get("token", {})
+        entry_data = {
+            CONF_CLIENT_ID: self._client_id,
+            "access_token": token.get("access_token"),
+            "refresh_token": token.get("refresh_token"),
+        }
+
+        # Re-auth: update the existing entry in place instead of creating a new one.
+        if self.source == config_entry_oauth2_flow.SOURCE_REAUTH:
+            return self.async_update_reload_and_abort(
+                self._get_reauth_entry(), data=entry_data
+            )
+
+        return self.async_create_entry(title="Bosch eBike", data=entry_data)
 
 
 class BoschEBikeOptionsFlowHandler(OptionsFlow):
@@ -164,17 +160,14 @@ class BoschEBikeOptionsFlowHandler(OptionsFlow):
     start and end and uses the deltas as ground truth for distance and
     consumption.
 
-    Note: we deliberately do NOT override ``__init__`` here — the framework
-    sets ``self.config_entry`` automatically since HA 2024.11, and from
-    2025.12 onwards manually assigning it raises an AttributeError that
-    surfaces as an HTTP 500 when the user opens the options dialog.
+    Note: we deliberately do NOT override ``__init__`` here - the framework
+    sets ``self.config_entry`` automatically since HA 2024.11.
     """
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         if user_input is not None:
-            # Normalize empty strings to "not set" so users can clear values.
             cleaned: dict[str, Any] = {}
             for key in (CONF_LIVE_ODOMETER_ENTITY, CONF_LIVE_SOC_ENTITY):
                 value = user_input.get(key)

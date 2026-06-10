@@ -500,15 +500,21 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         except Exception as err:
             raise UpdateFailed(f"Error fetching data: {err}") from err
 
-        # Persist updated tokens back to config entry
-        self.hass.config_entries.async_update_entry(
-            self.config_entry,
-            data={
-                **self.config_entry.data,
-                "access_token": self.api.access_token,
-                "refresh_token": self.api.refresh_token,
-            },
-        )
+        # Persist updated tokens back to the config entry, but only when they
+        # actually changed (a token refresh happened). Writing on every poll
+        # would cause needless storage writes.
+        if (
+            self.api.access_token != self.config_entry.data.get("access_token")
+            or self.api.refresh_token != self.config_entry.data.get("refresh_token")
+        ):
+            self.hass.config_entries.async_update_entry(
+                self.config_entry,
+                data={
+                    **self.config_entry.data,
+                    "access_token": self.api.access_token,
+                    "refresh_token": self.api.refresh_token,
+                },
+            )
 
         latest_activity = self._all_activities[0] if self._all_activities else None
 
@@ -520,8 +526,12 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     details = await self.api.get_activity_detail(activity_id)
                     self._latest_activity_details = details
                     self._latest_activity_id = activity_id
-                except Exception:
-                    pass  # GPS details are optional, don't fail the whole update
+                except Exception as err:  # noqa: BLE001
+                    # GPS details are optional - never fail the whole update.
+                    _LOGGER.debug(
+                        "Could not fetch GPS details for activity %s: %s",
+                        activity_id, err,
+                    )
 
         # Restore persisted consumption state on first run
         await self.async_load_persisted_state()

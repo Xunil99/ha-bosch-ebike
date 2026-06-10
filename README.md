@@ -95,39 +95,33 @@ Dies ist der wichtigste Schritt. Du musst eine "App" im Bosch-Portal anlegen, um
 3. Klicke auf **"App erstellen"** (oder "Create App")
 4. Fülle das Formular aus:
    - **App-Name:** z. B. `Home Assistant`
-   - **Login URL:** `https://p9.authz.bosch.com/auth/realms/obc/protocol/openid-connect/auth`
-   - **Redirect URI:** `http://localhost:8888/callback`
+   - **Redirect URI:** `https://my.home-assistant.io/redirect/oauth`
+   - **Login URL:** beliebig (rein informativ), z. B. `https://github.com/Xunil99/ha-bosch-ebike`
+   - **Confidential client:** **AUS** lassen (Home Assistant nutzt einen Public Client mit PKCE, ohne Secret)
 
-   > **Wichtig:** Die Login URL muss der Bosch OAuth-Endpunkt sein (siehe oben). Die Redirect-URI muss **exakt** `http://localhost:8888/callback` lauten.
+   > **Wichtig:** Die **Redirect URI** muss exakt `https://my.home-assistant.io/redirect/oauth` lauten - das ist die offizielle „My Home Assistant"-Weiterleitung, über die Home Assistant den Login automatisch abschließt. Die „My Home Assistant"-Integration muss in HA aktiviert sein (Standard). Falls du sie deaktiviert hast, registriere stattdessen `https://<deine-HA-URL>/auth/external/callback`.
 
 5. Nach dem Erstellen erhältst du eine **Client-ID** (im Format `euda-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`).
 
 #### Schritt 2: Client-ID sichern
 
-Kopiere die gerade erstellte **Client-ID** in ein Text-File oder einen Notizzettel - du brauchst sie später zum Einfügen per Copy & Paste.
+Kopiere die gerade erstellte **Client-ID** - du brauchst sie gleich in Home Assistant.
+
+> **Hinweis:** Du musst die Client-ID im Flow Portal noch **aktivieren** (Schritt 5), bevor der Login funktioniert. Ohne Aktivierung lehnt Bosch die Anmeldung mit „Client nicht gefunden" ab.
 
 ---
 
 #### Schritt 3: Integration in Home Assistant einrichten
 
-> **Wichtig:** Am besten solltest du in deinem Browser **noch NICHT bei Bosch angemeldet** sein, bevor du diesen Schritt startest!
+1. Installiere die Integration (über HACS oder manuell - siehe unten) und starte Home Assistant neu
+2. Gehe zu **Einstellungen → Geräte & Dienste → Integration hinzufügen**
+3. Suche nach **"Bosch eBike"**
+4. Gib deine **Client-ID** ein und klicke **Absenden**
+5. Klicke auf **Autorisieren** - du wirst zur **Bosch-Anmeldung** weitergeleitet
+6. Melde dich mit deiner **SingleKey ID** an und bestätige die Freigabe
+7. Du wirst **automatisch** zu Home Assistant zurückgeleitet - **kein Kopieren von Codes mehr nötig**. Die Integration ist eingerichtet.
 
-1. Kopiere den Ordner `custom_components/bosch_ebike/` in dein Home Assistant `config/custom_components/`-Verzeichnis
-2. Starte Home Assistant neu
-3. Gehe zu **Einstellungen → Geräte & Dienste → Integration hinzufügen**
-4. Suche nach **"Bosch eBike"**
-5. Gib deine **Client-ID** ein (aus Schritt 2)
-6. Es erscheint ein Feld für den **Autorisierungscode**. Im Home Assistant Log (Warnung) findest du eine URL:
-   ```
-   Bosch eBike: Open this URL in your browser to log in: https://p9.authz.bosch.com/auth/realms/obc/...
-   ```
-7. Kopiere diese URL und öffne sie **in einem neuen Browser-Tab**
-8. Melde dich mit deiner **SingleKey ID** an
-9. Nach dem Login wirst du zu `http://localhost:8888/callback?code=XXXX...` weitergeleitet
-   - Dein Browser wird "Seite nicht erreichbar" anzeigen - **das ist normal!**
-   - Kopiere den Wert nach `code=` aus der Adressleiste (alles bis zum `&` oder bis zum Ende der URL)
-   - ⏱️ **Wichtig: Dies ist zeitkritisch!** Der Code ist nur ca. 45–60 Sekunden gültig - kopiere und füge ihn schnell ein!
-10. Füge den Code in Home Assistant ein und klicke **Absenden** - ebenfalls innerhalb von 45–60 Sekunden!
+> **Kein localhost, kein Copy & Paste mehr:** Seit der OAuth-Umstellung übernimmt Home Assistant den kompletten Login-Rücksprung selbst (über die „My Home Assistant"-Weiterleitung). Den Access- und Refresh-Token erneuert die Integration anschließend automatisch.
 
 #### Schritt 4: Ergebnis prüfen
 
@@ -443,8 +437,8 @@ Auf der Lovelace-Karte gibt es einen 📚-Toggle in den Karten-Steuerelementen. 
 | Problem | Lösung |
 |---------|--------|
 | Keine Entities nach Einrichtung | Datenfreigabe im Flow Portal aktivieren (Schritt 4) |
-| "Seite nicht erreichbar" nach Login | Normal! Kopiere den `code=`-Wert aus der Adressleiste |
-| Token-Austausch fehlgeschlagen | Prüfe, ob die Redirect-URI exakt `http://localhost:8888/callback` lautet |
+| „Client nicht gefunden" beim Login | Client-ID im Flow Portal aktivieren (Schritt 5) und auf Tippfehler/Leerzeichen prüfen |
+| „Invalid state" / Rücksprung schlägt fehl | „My Home Assistant" in HA aktiviert? Redirect-URI im Portal muss `https://my.home-assistant.io/redirect/oauth` sein |
 | Kilometerstand unrealistisch hoch | Der Odometer wird in Metern geliefert und automatisch in km umgerechnet |
 | Aktivitätsdaten fehlen | Prüfe, ob die Aktivitäten-Freigabe im Flow Portal aktiv ist |
 | Token nicht akzeptiert | Prüfe, ob die Client-ID korrekt eingegeben wurde |
@@ -583,39 +577,33 @@ This is the most important step. You need to create an "App" in the Bosch portal
 3. Click **"Create App"**
 4. Fill in the form:
    - **App Name:** e.g., `Home Assistant`
-   - **Login URL:** `https://p9.authz.bosch.com/auth/realms/obc/protocol/openid-connect/auth`
-   - **Redirect URI:** `http://localhost:8888/callback`
+   - **Redirect URI:** `https://my.home-assistant.io/redirect/oauth`
+   - **Login URL:** anything (informational only), e.g. `https://github.com/Xunil99/ha-bosch-ebike`
+   - **Confidential client:** leave **OFF** (Home Assistant uses a public client with PKCE, no secret)
 
-   > **Important:** The Login URL must be the Bosch OAuth endpoint shown above. The redirect URI must be **exactly** `http://localhost:8888/callback`.
+   > **Important:** The **Redirect URI** must be exactly `https://my.home-assistant.io/redirect/oauth` - this is the official "My Home Assistant" redirect that lets Home Assistant complete the login automatically. The "My Home Assistant" integration must be enabled in HA (it is by default). If you disabled it, register `https://<your-ha-url>/auth/external/callback` instead.
 
 5. After creating the app, you will receive a **Client-ID** (format: `euda-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`).
 
 #### Step 2: Save your Client-ID
 
-Copy the **Client-ID** you just created into a text file or note - you will need it later for copy & paste.
+Copy the **Client-ID** you just created - you will need it in Home Assistant in a moment.
+
+> **Note:** You still have to **activate** the Client-ID in the Flow Portal (step 5) before login works. Without activation, Bosch rejects the login with "client not found".
 
 ---
 
 #### Step 3: Set Up the Integration in Home Assistant
 
-> **Important:** It's best if you are **NOT already logged into Bosch** in your browser before starting this step!
+1. Install the integration (via HACS or manually - see below) and restart Home Assistant
+2. Go to **Settings → Devices & Services → Add Integration**
+3. Search for **"Bosch eBike"**
+4. Enter your **Client-ID** and click **Submit**
+5. Click **Authorize** - you will be forwarded to the **Bosch login**
+6. Sign in with your **SingleKey ID** and confirm the consent
+7. You are returned to Home Assistant **automatically** - **no more copying of codes**. The integration is set up.
 
-1. Copy the `custom_components/bosch_ebike/` folder into your Home Assistant `config/custom_components/` directory
-2. Restart Home Assistant
-3. Go to **Settings → Devices & Services → Add Integration**
-4. Search for **"Bosch eBike"**
-5. Enter your **Client-ID** (from step 2)
-6. A field for the **Authorization Code** will appear. In the Home Assistant log (warning level), you'll find a URL:
-   ```
-   Bosch eBike: Open this URL in your browser to log in: https://p9.authz.bosch.com/auth/realms/obc/...
-   ```
-7. Copy this URL and open it **in a new browser tab**
-8. Sign in with your **SingleKey ID**
-9. After login, you'll be redirected to `http://localhost:8888/callback?code=XXXX...`
-   - Your browser will show "This site can't be reached" - **this is expected!**
-   - Copy the value after `code=` from the address bar (everything up to the `&` or the end of the URL)
-   - ⏱️ **Important: This is time-critical!** The code is only valid for about 45–60 seconds - copy and paste it quickly!
-10. Paste the code into Home Assistant and click **Submit** - also within 45–60 seconds!
+> **No more localhost, no more copy & paste:** Since the OAuth switch, Home Assistant handles the entire login round-trip itself (via the "My Home Assistant" redirect). The access and refresh tokens are then renewed by the integration automatically.
 
 #### Step 4: Check the result
 
@@ -929,8 +917,8 @@ The Lovelace card has a 📚 toggle in the map controls. When enabled, the card 
 | Problem | Solution |
 |---------|----------|
 | No entities after setup | Enable data sharing in the Flow Portal (step 4) |
-| "This site can't be reached" after login | Expected! Copy the `code=` value from the address bar |
-| Token exchange failed | Check that redirect URI is exactly `http://localhost:8888/callback` |
+| "Client not found" during login | Activate the Client-ID in the Flow Portal (step 5) and check for typos/spaces |
+| "Invalid state" / redirect back fails | Is "My Home Assistant" enabled in HA? The portal redirect URI must be `https://my.home-assistant.io/redirect/oauth` |
 | Odometer unrealistically high | The odometer is delivered in meters and automatically converted to km |
 | Activity data missing | Check that activity sharing is enabled in the Flow Portal |
 | Token not accepted | Check that the Client-ID was entered correctly |

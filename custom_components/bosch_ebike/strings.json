@@ -3,27 +3,30 @@
     "step": {
       "user": {
         "title": "Bosch eBike Setup",
-        "description": "Enter the Client-ID from your Bosch eBike Portal app registration at portal.bosch-ebike.com/data-act/app",
+        "description": "Enter the **Client-ID** from your app registration in the [Bosch Flow Portal]({portal_url}).\n\n⚠️ **Important:** You must **activate** the Client-ID in the Flow Portal *before* logging in — otherwise Bosch rejects the login with \"client not found\". After submitting, you'll be sent to the Bosch login and returned to Home Assistant automatically.",
         "data": {
           "client_id": "Client-ID"
         }
       },
-      "auth_code": {
-        "title": "Bosch Login",
-        "description": "1. Open this link in your browser: [{authorize_url}]({authorize_url})\n2. Log in with your Bosch SingleKey ID\n3. After login the browser is redirected to `http://localhost:8888/callback?code=...`. The browser will show an error (no server is listening) — that's expected.\n4. Copy the **entire URL** from the address bar (or just the value after `code=`) and paste it below — both work.",
-        "data": {
-          "auth_code": "Authorization Code or Callback URL"
-        }
+      "reauth_confirm": {
+        "title": "Re-authenticate Bosch eBike",
+        "description": "Your Bosch login has expired. Click **Submit** to sign in again. Make sure your Client-ID is still active in the [Flow Portal]({portal_url})."
       }
     },
-    "error": {
-      "no_auth_code": "Please enter the authorization code.",
-      "token_error": "Token exchange failed. Please try again."
-    },
     "abort": {
-      "no_callback": "No callback received from Bosch login.",
-      "no_auth_code": "No authorization code received.",
-      "token_error": "Token exchange failed. Please try again."
+      "already_configured": "This Client-ID is already configured.",
+      "reauth_successful": "Re-authentication was successful.",
+      "oauth_error": "Received invalid token data from Bosch.",
+      "oauth_failed": "Error while obtaining the access token from Bosch.",
+      "oauth_timeout": "Timed out resolving the OAuth token with Bosch.",
+      "oauth_unauthorized": "Bosch refused the token request (unauthorized). Is the Client-ID activated in the Flow Portal?",
+      "missing_configuration": "The integration is not configured. Please follow the documentation.",
+      "authorize_url_timeout": "Timeout generating the authorize URL.",
+      "no_url_available": "No URL available for authorization. See the documentation for details.",
+      "user_rejected_authorize": "Authorization with Bosch was rejected."
+    },
+    "create_entry": {
+      "default": "Successfully authenticated with Bosch eBike."
     }
   },
   "options": {
@@ -69,7 +72,9 @@
       "name": "Mark maintenance item as done",
       "description": "Resets the counter for a maintenance item (date + odometer).",
       "fields": {
-        "bike_id": { "name": "Bike ID" },
+        "bike_id": {
+          "name": "Bike ID"
+        },
         "item_id": {
           "name": "Item ID",
           "description": "From the sensor's \"items\" attribute"
@@ -79,8 +84,12 @@
     "remove_maintenance": {
       "name": "Delete maintenance item",
       "fields": {
-        "bike_id": { "name": "Bike ID" },
-        "item_id": { "name": "Item ID" }
+        "bike_id": {
+          "name": "Bike ID"
+        },
+        "item_id": {
+          "name": "Item ID"
+        }
       }
     }
   }

@@ -3,27 +3,30 @@
     "step": {
       "user": {
         "title": "Bosch eBike Einrichtung",
-        "description": "Gib die Client-ID aus deiner Bosch eBike Portal App-Registrierung ein (portal.bosch-ebike.com/data-act/app)",
+        "description": "Gib die **Client-ID** aus deiner App-Registrierung im [Bosch Flow Portal]({portal_url}) ein.\n\n⚠️ **Wichtig:** Du musst die Client-ID im Flow Portal *vor* der Anmeldung **aktivieren** — sonst lehnt Bosch die Anmeldung mit „Client nicht gefunden“ ab. Nach dem Absenden wirst du zur Bosch-Anmeldung geleitet und automatisch zu Home Assistant zurückgeführt.",
         "data": {
           "client_id": "Client-ID"
         }
       },
-      "auth_code": {
-        "title": "Bosch Anmeldung",
-        "description": "1. Öffne diesen Link im Browser: [{authorize_url}]({authorize_url})\n2. Melde dich mit deiner Bosch SingleKey ID an\n3. Nach dem Login wirst du zu `http://localhost:8888/callback?code=...` weitergeleitet. Der Browser zeigt eine Fehlerseite (es lauscht kein Server) — das ist normal.\n4. Kopiere die **gesamte URL** aus der Adresszeile (oder nur den Wert nach `code=`) und füge sie unten ein — beides funktioniert.",
-        "data": {
-          "auth_code": "Autorisierungscode oder Callback-URL"
-        }
+      "reauth_confirm": {
+        "title": "Bosch eBike neu anmelden",
+        "description": "Deine Bosch-Anmeldung ist abgelaufen. Klicke auf **Bestätigen**, um dich erneut anzumelden. Stelle sicher, dass deine Client-ID im [Flow Portal]({portal_url}) noch aktiv ist."
       }
     },
-    "error": {
-      "no_auth_code": "Bitte gib den Autorisierungscode ein.",
-      "token_error": "Token-Austausch fehlgeschlagen. Bitte versuche es erneut."
-    },
     "abort": {
-      "no_callback": "Kein Callback vom Bosch-Login erhalten.",
-      "no_auth_code": "Kein Autorisierungscode erhalten.",
-      "token_error": "Token-Austausch fehlgeschlagen. Bitte versuche es erneut."
+      "already_configured": "Diese Client-ID ist bereits eingerichtet.",
+      "reauth_successful": "Die erneute Anmeldung war erfolgreich.",
+      "oauth_error": "Ungültige Token-Daten von Bosch erhalten.",
+      "oauth_failed": "Fehler beim Abrufen des Access-Tokens von Bosch.",
+      "oauth_timeout": "Zeitüberschreitung beim Token-Austausch mit Bosch.",
+      "oauth_unauthorized": "Bosch hat die Token-Anfrage abgelehnt (nicht autorisiert). Ist die Client-ID im Flow Portal aktiviert?",
+      "missing_configuration": "Die Integration ist nicht konfiguriert. Bitte folge der Dokumentation.",
+      "authorize_url_timeout": "Zeitüberschreitung beim Erzeugen der Autorisierungs-URL.",
+      "no_url_available": "Keine URL für die Autorisierung verfügbar. Details in der Dokumentation.",
+      "user_rejected_authorize": "Die Autorisierung bei Bosch wurde abgelehnt."
+    },
+    "create_entry": {
+      "default": "Erfolgreich bei Bosch eBike angemeldet."
     }
   },
   "options": {
@@ -44,52 +47,136 @@
   },
   "entity": {
     "sensor": {
-      "odometer": { "name": "Kilometerstand" },
-      "motor_total_hours": { "name": "Motor-Betriebsstunden" },
-      "motor_assist_hours": { "name": "Motor-Unterstützungsstunden" },
-      "max_assist_speed": { "name": "Max. Unterstützungsgeschwindigkeit" },
-      "active_assist_modes": { "name": "Aktive Unterstützungsstufen" },
-      "walk_assist_speed": { "name": "Schiebehilfe-Geschwindigkeit" },
-      "next_service_odometer": { "name": "Nächster Service (km)" },
-      "service_due_in_days": { "name": "Service fällig in Tagen" },
-      "service_due_in_km": { "name": "Service fällig in Kilometern" },
-      "maintenance_overview": { "name": "Wartungs-Übersicht" },
-      "last_ride_distance": { "name": "Letzte Fahrt: Distanz" },
-      "last_ride_duration": { "name": "Letzte Fahrt: Dauer" },
-      "last_ride_avg_speed": { "name": "Letzte Fahrt: Ø Geschwindigkeit" },
-      "last_ride_max_speed": { "name": "Letzte Fahrt: Max. Geschwindigkeit" },
-      "last_ride_calories": { "name": "Letzte Fahrt: Kalorien" },
-      "last_ride_elevation_gain": { "name": "Letzte Fahrt: Höhenmeter ↑" },
-      "last_ride_elevation_loss": { "name": "Letzte Fahrt: Höhenmeter ↓" },
-      "last_ride_date": { "name": "Letzte Fahrt: Datum" },
-      "last_ride_title": { "name": "Letzte Fahrt: Titel" },
-      "last_ride_avg_cadence": { "name": "Letzte Fahrt: Ø Trittfrequenz" },
-      "last_ride_max_cadence": { "name": "Letzte Fahrt: Max. Trittfrequenz" },
-      "last_ride_avg_power": { "name": "Letzte Fahrt: Ø Leistung" },
-      "last_ride_max_power": { "name": "Letzte Fahrt: Max. Leistung" },
-      "last_ride_battery_wh": { "name": "Letzte Fahrt: Akku-Verbrauch (Wh)" },
-      "last_ride_battery_percent": { "name": "Letzte Fahrt: Akku-Verbrauch (%)" },
-      "last_ride_difficulty": { "name": "Letzte Fahrt: Schwierigkeit" },
-      "last_ride_start_location": { "name": "Letzte Fahrt: Startort" },
-      "last_ride_end_location": { "name": "Letzte Fahrt: Zielort" },
-      "last_ride_start_time": { "name": "Letzte Fahrt: Startzeit" },
-      "last_ride_end_time": { "name": "Letzte Fahrt: Endzeit" },
-      "days_since_last_ride": { "name": "Tage seit letzter Fahrt" },
-      "total_rides": { "name": "Touren gesamt" },
-      "total_distance_activities": { "name": "Distanz gesamt (Touren)" },
-      "total_duration": { "name": "Fahrzeit gesamt" },
-      "total_calories": { "name": "Kalorien gesamt" },
-      "total_elevation_gain": { "name": "Höhenmeter gesamt" },
-      "avg_speed_all_rides": { "name": "Ø Geschwindigkeit (alle Touren)" },
-      "avg_power_all_rides": { "name": "Ø Leistung (alle Touren)" },
-      "avg_cadence_all_rides": { "name": "Ø Trittfrequenz (alle Touren)" }
+      "odometer": {
+        "name": "Kilometerstand"
+      },
+      "motor_total_hours": {
+        "name": "Motor-Betriebsstunden"
+      },
+      "motor_assist_hours": {
+        "name": "Motor-Unterstützungsstunden"
+      },
+      "max_assist_speed": {
+        "name": "Max. Unterstützungsgeschwindigkeit"
+      },
+      "active_assist_modes": {
+        "name": "Aktive Unterstützungsstufen"
+      },
+      "walk_assist_speed": {
+        "name": "Schiebehilfe-Geschwindigkeit"
+      },
+      "next_service_odometer": {
+        "name": "Nächster Service (km)"
+      },
+      "service_due_in_days": {
+        "name": "Service fällig in Tagen"
+      },
+      "service_due_in_km": {
+        "name": "Service fällig in Kilometern"
+      },
+      "maintenance_overview": {
+        "name": "Wartungs-Übersicht"
+      },
+      "last_ride_distance": {
+        "name": "Letzte Fahrt: Distanz"
+      },
+      "last_ride_duration": {
+        "name": "Letzte Fahrt: Dauer"
+      },
+      "last_ride_avg_speed": {
+        "name": "Letzte Fahrt: Ø Geschwindigkeit"
+      },
+      "last_ride_max_speed": {
+        "name": "Letzte Fahrt: Max. Geschwindigkeit"
+      },
+      "last_ride_calories": {
+        "name": "Letzte Fahrt: Kalorien"
+      },
+      "last_ride_elevation_gain": {
+        "name": "Letzte Fahrt: Höhenmeter ↑"
+      },
+      "last_ride_elevation_loss": {
+        "name": "Letzte Fahrt: Höhenmeter ↓"
+      },
+      "last_ride_date": {
+        "name": "Letzte Fahrt: Datum"
+      },
+      "last_ride_title": {
+        "name": "Letzte Fahrt: Titel"
+      },
+      "last_ride_avg_cadence": {
+        "name": "Letzte Fahrt: Ø Trittfrequenz"
+      },
+      "last_ride_max_cadence": {
+        "name": "Letzte Fahrt: Max. Trittfrequenz"
+      },
+      "last_ride_avg_power": {
+        "name": "Letzte Fahrt: Ø Leistung"
+      },
+      "last_ride_max_power": {
+        "name": "Letzte Fahrt: Max. Leistung"
+      },
+      "last_ride_battery_wh": {
+        "name": "Letzte Fahrt: Akku-Verbrauch (Wh)"
+      },
+      "last_ride_battery_percent": {
+        "name": "Letzte Fahrt: Akku-Verbrauch (%)"
+      },
+      "last_ride_difficulty": {
+        "name": "Letzte Fahrt: Schwierigkeit"
+      },
+      "last_ride_start_location": {
+        "name": "Letzte Fahrt: Startort"
+      },
+      "last_ride_end_location": {
+        "name": "Letzte Fahrt: Zielort"
+      },
+      "last_ride_start_time": {
+        "name": "Letzte Fahrt: Startzeit"
+      },
+      "last_ride_end_time": {
+        "name": "Letzte Fahrt: Endzeit"
+      },
+      "days_since_last_ride": {
+        "name": "Tage seit letzter Fahrt"
+      },
+      "total_rides": {
+        "name": "Touren gesamt"
+      },
+      "total_distance_activities": {
+        "name": "Distanz gesamt (Touren)"
+      },
+      "total_duration": {
+        "name": "Fahrzeit gesamt"
+      },
+      "total_calories": {
+        "name": "Kalorien gesamt"
+      },
+      "total_elevation_gain": {
+        "name": "Höhenmeter gesamt"
+      },
+      "avg_speed_all_rides": {
+        "name": "Ø Geschwindigkeit (alle Touren)"
+      },
+      "avg_power_all_rides": {
+        "name": "Ø Leistung (alle Touren)"
+      },
+      "avg_cadence_all_rides": {
+        "name": "Ø Trittfrequenz (alle Touren)"
+      }
     },
     "number": {
-      "battery_capacity": { "name": "Akkukapazität" },
-      "service_due_odometer": { "name": "Service-Fälligkeit (km)" }
+      "battery_capacity": {
+        "name": "Akkukapazität"
+      },
+      "service_due_odometer": {
+        "name": "Service-Fälligkeit (km)"
+      }
     },
     "date": {
-      "service_due_date": { "name": "Service-Fälligkeitsdatum" }
+      "service_due_date": {
+        "name": "Service-Fälligkeitsdatum"
+      }
     }
   },
   "services": {
@@ -119,7 +206,9 @@
       "name": "Wartungsposten als erledigt markieren",
       "description": "Setzt den Zähler eines Postens zurück (Datum + Kilometerstand).",
       "fields": {
-        "bike_id": { "name": "Bike-ID" },
+        "bike_id": {
+          "name": "Bike-ID"
+        },
         "item_id": {
           "name": "Posten-ID",
           "description": "Aus dem Sensor-Attribut \"items\""
@@ -129,8 +218,12 @@
     "remove_maintenance": {
       "name": "Wartungsposten löschen",
       "fields": {
-        "bike_id": { "name": "Bike-ID" },
-        "item_id": { "name": "Posten-ID" }
+        "bike_id": {
+          "name": "Bike-ID"
+        },
+        "item_id": {
+          "name": "Posten-ID"
+        }
       }
     }
   }

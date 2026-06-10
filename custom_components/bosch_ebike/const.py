@@ -25,6 +25,13 @@ EVENT_MAINTENANCE_OVERDUE = f"{DOMAIN}_maintenance_overdue"
 
 REDIRECT_URI = "http://localhost:8888/callback"
 
+# Bosch Data Act developer portal where the user registers an "app" to get a
+# Client-ID and must ACTIVATE it before the OAuth login works.
+FLOW_PORTAL_URL = "https://portal.bosch-ebike.com/data-act/app"
+
+# OAuth2 scope requested during authorization.
+OAUTH_SCOPE = "openid"
+
 CONF_CLIENT_ID = "client_id"
 
 # Optional links to live BLE sensors (provided by the ESPHome bridge in

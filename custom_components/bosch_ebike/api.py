@@ -18,6 +18,10 @@ _LOGGER = logging.getLogger(__name__)
 class BoschEBikeAPI:
     """Async client for the Bosch eBike Data Act API."""
 
+    # Single shared timeout for every Bosch cloud request. Without it a hung
+    # connection would block the coordinator poll indefinitely.
+    _TIMEOUT = aiohttp.ClientTimeout(total=30)
+
     def __init__(
         self,
         session: aiohttp.ClientSession,
@@ -65,7 +69,7 @@ class BoschEBikeAPI:
             "redirect_uri": redirect_uri,
             "code_verifier": self._code_verifier,
         }
-        async with self._session.post(TOKEN_URL, data=data) as resp:
+        async with self._session.post(TOKEN_URL, data=data, timeout=self._TIMEOUT) as resp:
             resp.raise_for_status()
             tokens = await resp.json()
         self._access_token = tokens["access_token"]
@@ -80,7 +84,7 @@ class BoschEBikeAPI:
             "code": code,
             "redirect_uri": redirect_uri,
         }
-        async with self._session.post(TOKEN_URL, data=data) as resp:
+        async with self._session.post(TOKEN_URL, data=data, timeout=self._TIMEOUT) as resp:
             resp.raise_for_status()
             tokens = await resp.json()
         self._access_token = tokens["access_token"]
@@ -96,7 +100,7 @@ class BoschEBikeAPI:
             "client_id": self._client_id,
             "refresh_token": self._refresh_token,
         }
-        async with self._session.post(TOKEN_URL, data=data) as resp:
+        async with self._session.post(TOKEN_URL, data=data, timeout=self._TIMEOUT) as resp:
             resp.raise_for_status()
             tokens = await resp.json()
         self._access_token = tokens["access_token"]
@@ -125,7 +129,7 @@ class BoschEBikeAPI:
             raise AuthError("Not authenticated")
         headers = {"Authorization": f"Bearer {self._access_token}"}
         url = f"{API_BASE_URL}{path}"
-        async with self._session.get(url, headers=headers) as resp:
+        async with self._session.get(url, headers=headers, timeout=self._TIMEOUT) as resp:
             if resp.status == 401 and retry_on_401:
                 _LOGGER.debug("401 received, refreshing token")
                 await self.refresh_access_token()
