@@ -51,6 +51,7 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         )
         self.api = api
         self._initial_import_done = False
+        # Sorted newest-first; range_estimate and latest_activity rely on this.
         self._all_activities: list[dict[str, Any]] = []
         self._latest_activity_details: list[dict[str, Any]] | None = None
         self._latest_activity_id: str | None = None

@@ -55,6 +55,17 @@ def test_window_stops_at_500km():
     assert abs(r["window_km"] - 500.0) < 0.001
 
 
+def test_window_overshoot_includes_crossing_tour():
+    # 9 Touren à 60 km: Tour 9 überschreitet die 500-km-Grenze (480 -> 540 km)
+    # und wird laut Doku trotzdem noch mitgenommen
+    activities = [act(f"a{i}", 60) for i in range(9)]
+    bike_map = {f"a{i}": "bike1" for i in range(9)}
+    cons = {f"a{i}": {"consumed_wh": 300.0} for i in range(9)}
+    r = compute_range_estimate(activities, bike_map, cons, "bike1")
+    assert r["tours_used"] == 9
+    assert abs(r["window_km"] - 540.0) < 0.001
+
+
 def test_min_data_thresholds():
     # nur 2 Touren -> None; 3 Touren aber < 30 km -> None
     activities = [act("a1", 20), act("a2", 20)]

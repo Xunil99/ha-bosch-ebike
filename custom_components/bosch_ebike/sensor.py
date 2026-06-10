@@ -15,12 +15,13 @@ from homeassistant.components.sensor import (
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import UnitOfLength, UnitOfSpeed, UnitOfTime, UnitOfEnergy, UnitOfPower
-from homeassistant.core import HomeAssistant
+from homeassistant.core import Event, HomeAssistant, callback
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.event import async_track_state_change_event
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN
+from .const import CONF_LIVE_SOC_ENTITY, DOMAIN
 from .coordinator import BoschEBikeCoordinator
 
 RANGE_DISCLAIMER = (
@@ -483,6 +484,7 @@ async def async_setup_entry(
     entities: list[BoschEBikeSensor] = []
 
     bikes = coordinator.data.get("bikes", [])
+    soc_entity = entry.options.get(CONF_LIVE_SOC_ENTITY)
     for bike in bikes:
         bike_id = bike.get("id", "unknown")
         drive_name = _safe_get(bike, "driveUnit", "productName") or "eBike"
@@ -521,6 +523,10 @@ async def async_setup_entry(
 
         # Estimated range (clearly labelled estimate, derived from history)
         entities.append(BoschRangeEstimateSensor(coordinator, bike_id, drive_name))
+        if soc_entity:
+            entities.append(
+                BoschCurrentRangeSensor(coordinator, bike_id, drive_name, soc_entity)
+            )
 
         # Maintenance overview (count of items due/overdue + full list as attributes)
         entities.append(BoschMaintenanceOverviewSensor(coordinator, bike_id, drive_name))
@@ -800,6 +806,68 @@ class BoschRangeEstimateSensor(CoordinatorEntity[BoschEBikeCoordinator], SensorE
             "newest_tour_date": est.get("newest_tour_date"),
             "battery_capacity_wh": self.coordinator.data.get("battery_capacity_wh"),
         }
+
+
+class BoschCurrentRangeSensor(BoschRangeEstimateSensor):
+    """Estimated remaining range from live SoC × capacity ÷ avg consumption.
+
+    Only created when the live SoC sensor (ESPHome bridge) is linked in the
+    options. Listens to that entity so the value updates immediately, not
+    just on the 30-minute poll.
+    """
+
+    _attr_translation_key = "estimated_range_current"
+    _attr_name = "Estimated Range (Current)"
+
+    def __init__(
+        self,
+        coordinator: BoschEBikeCoordinator,
+        bike_id: str,
+        drive_name: str,
+        soc_entity_id: str,
+    ) -> None:
+        super().__init__(coordinator, bike_id, drive_name)
+        self._attr_unique_id = f"{bike_id}_estimated_range_current"
+        self._soc_entity_id = soc_entity_id
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        self.async_on_remove(
+            async_track_state_change_event(
+                self.hass, [self._soc_entity_id], self._on_soc_change
+            )
+        )
+
+    @callback
+    def _on_soc_change(self, event: Event) -> None:
+        self.async_write_ha_state()
+
+    def _current_soc(self) -> float | None:
+        state = self.hass.states.get(self._soc_entity_id)
+        if state is None or state.state in ("unknown", "unavailable"):
+            return None
+        try:
+            soc = float(state.state)
+        except ValueError:
+            return None
+        return max(0.0, min(100.0, soc))
+
+    @property
+    def native_value(self) -> int | None:
+        full = super().native_value
+        if full is None:
+            return None
+        soc = self._current_soc()
+        if soc is None:
+            return None
+        return round(full * soc / 100.0)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        attrs = dict(super().extra_state_attributes or {})
+        attrs["soc_source"] = self._soc_entity_id
+        attrs["current_soc"] = self._current_soc()
+        return attrs
 
 
 class BoschServiceDueSensor(CoordinatorEntity[BoschEBikeCoordinator], SensorEntity):
