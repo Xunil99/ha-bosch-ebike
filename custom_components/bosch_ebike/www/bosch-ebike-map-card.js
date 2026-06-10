@@ -10904,6 +10904,547 @@ class BoschEBike3DMapCardEditor extends HTMLElement {
   }
 }
 
+// ===========================================================================
+// Route-Planner-Card — Wegpunkte klicken, Routing via Backend-Proxy
+// (bosch_ebike/plan_route → BRouter), Verbrauchs-Schätzung + Akku-Check,
+// Höhenprofil-SVG und GPX-Export. Editor + Registrierung folgen in Task 5.
+// ===========================================================================
+const RP_MAX_WAYPOINTS = 30; // muss zum Backend-Limit in brouter.py passen
+const RP_PROFILES = ["trekking", "fastbike", "mtb", "shortest"];
+
+class BoschEBikeRoutePlannerCard extends HTMLElement {
+  constructor() {
+    super();
+    this._hass = null;
+    this._config = {};
+    this._map = null;
+    this._baseLayer = null;
+    this._routeGroup = null;
+    this._waypoints = [];          // L.marker[], in Klick-Reihenfolge
+    this._profile = "trekking";
+    this._routeSeq = 0;            // verwirft veraltete plan_route-Antworten
+    this._debounceTimer = null;
+    this._lastRouteCoords = null;  // [[lon, lat, ele], …] der letzten Route
+    this._fitPending = false;      // fitBounds einmalig nach Wegpunkt-Änderung
+    this._ready = false;
+    this._booting = false;
+  }
+
+  setConfig(config) {
+    this._config = { height: config.height || 480, ...config };
+    if (this._ready) this._applyTitle();
+  }
+
+  set hass(hass) {
+    const first = !this._hass;
+    this._hass = hass;
+    if (first) this._boot();
+  }
+
+  getCardSize() {
+    return Math.ceil((this._config.height || 480) / 50) + 3;
+  }
+
+  static getConfigElement() {
+    return document.createElement("bosch-ebike-routeplanner-card-editor");
+  }
+
+  static getStubConfig() {
+    return { height: 480 };
+  }
+
+  _t(key, ...args) {
+    return ebT(this._hass, key, ...args);
+  }
+
+  async _boot() {
+    if (this._booting || this._ready) return;
+    this._booting = true;
+    try {
+      this._buildDOM();
+      this._ready = true;
+      this._applyTitle();
+      await ensureLeaflet();
+      this._createMap();
+    } catch (err) {
+      console.error("[Bosch eBike Routeplanner] boot error", err);
+      this._setStatus(this._t("msg_error_prefix") + (err?.message || err), "");
+    } finally {
+      this._booting = false;
+    }
+  }
+
+  disconnectedCallback() {
+    if (this._debounceTimer) {
+      clearTimeout(this._debounceTimer);
+      this._debounceTimer = null;
+    }
+  }
+
+  _applyTitle() {
+    const head = this.querySelector(".rp-head span");
+    if (head) head.textContent = this._config.title || this._t("rp_default_title");
+  }
+
+  _buildDOM() {
+    const h = this._config.height || 480;
+    this.innerHTML = "";
+    const card = document.createElement("ha-card");
+    this.appendChild(card);
+    const style = document.createElement("style");
+    style.textContent = LEAFLET_INLINE_CSS + `
+      .rp-head {
+        display:flex; align-items:center; gap:8px; padding:12px 16px;
+        background:var(--primary-color,#03a9f4); color:#fff; font-size:16px; font-weight:500;
+      }
+      .rp-toolbar {
+        display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding:8px 12px;
+        background:var(--secondary-background-color,#f5f5f5);
+        border-bottom:1px solid var(--divider-color,#e0e0e0);
+      }
+      .rp-toolbar select {
+        padding:5px 8px; border:1px solid var(--divider-color,#ccc);
+        border-radius:6px; font-size:13px;
+        background:var(--card-background-color,#fff); color:var(--primary-text-color,#333);
+      }
+      .rp-toolbar button {
+        padding:6px 12px; flex-shrink:0;
+        background:var(--primary-color,#03a9f4); color:#fff;
+        border:none; border-radius:8px; cursor:pointer; font-size:13px;
+      }
+      .rp-toolbar button:disabled { opacity:.35; cursor:not-allowed; }
+      .rp-lbl { font-size:12px; color:var(--secondary-text-color,#666); }
+      .rp-hint {
+        padding:6px 12px; font-size:12px; color:var(--secondary-text-color,#666);
+        border-bottom:1px solid var(--divider-color,#e0e0e0);
+      }
+      .rp-map-wrap { position:relative; }
+      .rp-map { width:100% !important; height:${h}px !important; min-height:${h}px; z-index:0; position:relative; }
+      .rp-status {
+        position:absolute; left:50%; top:12px; transform:translateX(-50%); z-index:1100;
+        max-width:90%; padding:6px 12px; border-radius:8px; text-align:center;
+        background:rgba(33,33,33,.78); backdrop-filter:blur(4px); color:#fff;
+        font-size:13px; pointer-events:none;
+      }
+      .rp-status small { display:block; font-size:11px; opacity:.8; margin-top:2px; }
+      .rp-wp {
+        width:18px; height:18px; border-radius:50%; box-sizing:border-box;
+        border:3px solid #fff; box-shadow:0 1px 4px rgba(0,0,0,.4);
+      }
+      .rp-stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(90px,1fr)); gap:4px; padding:10px 16px 4px; }
+      .rp-stat { text-align:center; }
+      .rp-val { font-size:18px; font-weight:700; color:var(--primary-text-color,#212121); }
+      .rp-stat .rp-lbl { font-size:11px; color:var(--secondary-text-color,#757575); }
+      .rp-batt { padding:4px 16px 8px; }
+      .rp-batt-line { font-size:14px; color:var(--primary-text-color,#333); margin-bottom:4px; }
+      .rp-note { font-size:11px; color:var(--secondary-text-color,#757575); line-height:1.35; }
+      .rp-elev { padding:0 16px 12px; }
+      .rp-elev svg { width:100%; height:80px; display:block; }
+      .rp-elev-range { font-size:11px; color:var(--secondary-text-color,#777); margin-top:2px; }
+    `;
+    card.appendChild(style);
+
+    const t = (k, ...a) => ebT(this._hass, k, ...a);
+    const wrap = document.createElement("div");
+    wrap.innerHTML = `
+      <div class="rp-head">
+        <svg viewBox="0 0 24 24" width="22" height="22"><path fill="white" d="M6.5,8.11C5.61,8.11 4.89,7.39 4.89,6.5A1.61,1.61 0 0,1 6.5,4.89C7.39,4.89 8.11,5.61 8.11,6.5A1.61,1.61 0 0,1 6.5,8.11M6.5,2C4,2 2,4 2,6.5C2,9.87 6.5,14.86 6.5,14.86C6.5,14.86 11,9.87 11,6.5C11,4 9,2 6.5,2M17.5,8.11A1.61,1.61 0 0,1 15.89,6.5C15.89,5.61 16.61,4.89 17.5,4.89C18.39,4.89 19.11,5.61 19.11,6.5A1.61,1.61 0 0,1 17.5,8.11M17.5,2C15,2 13,4 13,6.5C13,9.87 17.5,14.86 17.5,14.86C17.5,14.86 22,9.87 22,6.5C22,4 20,2 17.5,2M17.5,16C16.23,16 15.1,16.8 14.68,18H9.32C8.77,16.44 7.05,15.62 5.5,16.17C3.93,16.72 3.11,18.44 3.66,20C4.22,21.56 5.93,22.38 7.5,21.83C8.35,21.53 9,20.85 9.32,20H14.68C15.23,21.56 16.95,22.38 18.5,21.83C20.07,21.28 20.89,19.56 20.34,18C19.92,16.8 18.78,16 17.5,16M17.5,20.5A1.5,1.5 0 0,1 16,19A1.5,1.5 0 0,1 17.5,17.5A1.5,1.5 0 0,1 19,19A1.5,1.5 0 0,1 17.5,20.5Z"/></svg>
+        <span>${t("rp_default_title")}</span>
+      </div>
+      <div class="rp-toolbar">
+        <span class="rp-lbl">${t("rp_profile_label")}</span>
+        <select id="rp-profile">
+          <option value="trekking" selected>${t("rp_profile_trekking")}</option>
+          <option value="fastbike">${t("rp_profile_fastbike")}</option>
+          <option value="mtb">${t("rp_profile_mtb")}</option>
+          <option value="shortest">${t("rp_profile_shortest")}</option>
+        </select>
+        <button id="rp-reset" type="button">${t("rp_reset")}</button>
+        <button id="rp-gpx" type="button" disabled>${t("rp_export_gpx")}</button>
+      </div>
+      <div class="rp-hint" id="rp-hint">${t("rp_hint_click")}</div>
+      <div class="rp-map-wrap">
+        <div id="rp-map" class="rp-map"></div>
+        <div class="rp-status" id="rp-status" style="display:none;">
+          <span id="rp-status-main"></span><small id="rp-status-sub" style="display:none;"></small>
+        </div>
+      </div>
+      <div class="rp-stats" id="rp-stats" style="display:none;">
+        <div class="rp-stat"><div class="rp-val" id="rp-dist">–</div><div class="rp-lbl">${t("rp_stat_distance")}</div></div>
+        <div class="rp-stat"><div class="rp-val" id="rp-asc">–</div><div class="rp-lbl">${t("rp_stat_ascent")}</div></div>
+        <div class="rp-stat"><div class="rp-val" id="rp-desc">–</div><div class="rp-lbl">${t("rp_stat_descent")}</div></div>
+        <div class="rp-stat"><div class="rp-val" id="rp-time">–</div><div class="rp-lbl">${t("rp_stat_time")}</div></div>
+        <div class="rp-stat" id="rp-stat-energy" style="display:none;"><div class="rp-val" id="rp-energy">–</div><div class="rp-lbl">${t("rp_stat_energy")}</div></div>
+      </div>
+      <div class="rp-batt" id="rp-batt" style="display:none;">
+        <div class="rp-batt-line" id="rp-batt-line" style="display:none;"></div>
+        <div class="rp-note" id="rp-note-est"></div>
+        <div class="rp-note" id="rp-note-hilly" style="display:none;"></div>
+      </div>
+      <div class="rp-elev" id="rp-elev" style="display:none;">
+        <svg id="rp-elev-svg" viewBox="0 0 600 80" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg"></svg>
+        <div class="rp-elev-range" id="rp-elev-range"></div>
+      </div>
+    `;
+    while (wrap.firstChild) card.appendChild(wrap.firstChild);
+
+    this.querySelector("#rp-profile").addEventListener("change", (e) => {
+      const v = e.target.value;
+      this._profile = RP_PROFILES.includes(v) ? v : "trekking";
+      this._scheduleRoute();
+    });
+    this.querySelector("#rp-reset").addEventListener("click", () => this._reset());
+    this.querySelector("#rp-gpx").addEventListener("click", () => this._exportGpx());
+  }
+
+  _createMap() {
+    const Leaflet = window.L;
+    const mapEl = this.querySelector("#rp-map");
+    if (!Leaflet || !mapEl) {
+      this._setStatus(this._t("err_leaflet_load"), "");
+      return;
+    }
+    const cfg = this._hass && this._hass.config;
+    const lat = Number(cfg && cfg.latitude);
+    const lon = Number(cfg && cfg.longitude);
+    this._map = Leaflet.map(mapEl, {
+      zoomControl: true,
+      attributionControl: false,
+      preferCanvas: true,
+    }).setView([Number.isFinite(lat) ? lat : 48.7, Number.isFinite(lon) ? lon : 12.4], 13);
+    const def = MAP_STYLES.osm;
+    this._baseLayer = Leaflet.tileLayer(def.url, def.options).addTo(this._map);
+    this._routeGroup = Leaflet.layerGroup().addTo(this._map);
+    this._map.on("click", (e) => this._onMapClick(e));
+  }
+
+  // -------------------------------------------------------------------------
+  // Wegpunkte
+  // -------------------------------------------------------------------------
+
+  _wpIcon(color) {
+    return window.L.divIcon({
+      className: "",
+      html: `<div class="rp-wp" style="background:${color}"></div>`,
+      iconSize: [18, 18],
+      iconAnchor: [9, 9],
+    });
+  }
+
+  _onMapClick(e) {
+    const Leaflet = window.L;
+    if (!Leaflet || !this._map || this._waypoints.length >= RP_MAX_WAYPOINTS) return;
+    const marker = Leaflet.marker(e.latlng, {
+      draggable: true,
+      icon: this._wpIcon("#2196F3"),
+    });
+    marker.on("click", () => this._removeWaypoint(marker));
+    marker.on("dragend", () => {
+      this._fitPending = true;
+      this._scheduleRoute();
+    });
+    marker.addTo(this._map);
+    this._waypoints.push(marker);
+    this._refreshWaypointStyles();
+    this._fitPending = true;
+    this._scheduleRoute();
+  }
+
+  _removeWaypoint(marker) {
+    const idx = this._waypoints.indexOf(marker);
+    if (idx === -1) return;
+    this._waypoints.splice(idx, 1);
+    try { this._map.removeLayer(marker); } catch (_) {}
+    this._refreshWaypointStyles();
+    this._fitPending = true;
+    this._scheduleRoute();
+  }
+
+  // Start grün, Ziel rot, Zwischenpunkte blau (Farben wie Start/Ziel der Map-Card).
+  _refreshWaypointStyles() {
+    const n = this._waypoints.length;
+    this._waypoints.forEach((m, i) => {
+      const color = i === 0 ? "#4CAF50" : i === n - 1 ? "#f44336" : "#2196F3";
+      m.setIcon(this._wpIcon(color));
+    });
+  }
+
+  _reset() {
+    this._routeSeq += 1; // laufende Anfrage verwerfen
+    if (this._debounceTimer) {
+      clearTimeout(this._debounceTimer);
+      this._debounceTimer = null;
+    }
+    for (const m of this._waypoints) {
+      try { this._map.removeLayer(m); } catch (_) {}
+    }
+    this._waypoints = [];
+    this._clearRoute();
+    this._setStatus(null);
+    const hint = this.querySelector("#rp-hint");
+    if (hint) hint.style.display = "";
+  }
+
+  // -------------------------------------------------------------------------
+  // Routing
+  // -------------------------------------------------------------------------
+
+  _scheduleRoute() {
+    if (this._debounceTimer) clearTimeout(this._debounceTimer);
+    this._debounceTimer = setTimeout(() => {
+      this._debounceTimer = null;
+      this._calcRoute();
+    }, 600);
+  }
+
+  async _calcRoute() {
+    if (this._waypoints.length < 2) {
+      this._routeSeq += 1;
+      this._clearRoute();
+      this._setStatus(null);
+      return;
+    }
+    const seq = ++this._routeSeq;
+    this._setStatus(this._t("rp_routing"));
+    let res;
+    try {
+      res = await this._hass.callWS({
+        type: "bosch_ebike/plan_route",
+        lonlats: this._waypoints.map((m) => { const ll = m.getLatLng(); return [ll.lng, ll.lat]; }),
+        profile: this._profile,
+        brouter_url: this._config.brouter_url || null,
+      });
+    } catch (err) {
+      if (seq !== this._routeSeq) return;
+      const main = err && err.code === "server_unreachable"
+        ? this._t("rp_err_server")
+        : this._t("rp_err_no_route");
+      this._setStatus(main, (err && err.message) || "");
+      return;
+    }
+    if (seq !== this._routeSeq) return;
+    this._setStatus(null);
+    this._renderRoute(res && res.geojson);
+  }
+
+  _clearRoute() {
+    if (this._routeGroup) this._routeGroup.clearLayers();
+    this._lastRouteCoords = null;
+    const gpxBtn = this.querySelector("#rp-gpx");
+    if (gpxBtn) gpxBtn.disabled = true;
+    for (const id of ["rp-stats", "rp-batt", "rp-elev"]) {
+      const el = this.querySelector(`#${id}`);
+      if (el) el.style.display = "none";
+    }
+  }
+
+  _renderRoute(geojson) {
+    const Leaflet = window.L;
+    const feat = geojson && Array.isArray(geojson.features) ? geojson.features[0] : null;
+    const coords = feat && feat.geometry && Array.isArray(feat.geometry.coordinates)
+      ? feat.geometry.coordinates : null;
+    if (!Leaflet || !this._map || !coords || coords.length < 2) {
+      this._clearRoute();
+      this._setStatus(this._t("rp_err_no_route"), "");
+      return;
+    }
+
+    this._lastRouteCoords = coords;
+    this._routeGroup.clearLayers();
+    const latlngs = coords.map((c) => [c[1], c[0]]);
+    Leaflet.polyline(latlngs, {
+      color: "#0b84c7", weight: 5, opacity: 0.9, lineCap: "round",
+    }).addTo(this._routeGroup);
+
+    if (this._fitPending) {
+      this._fitPending = false;
+      try {
+        this._map.fitBounds(Leaflet.latLngBounds(latlngs), { padding: [40, 40], animate: false });
+      } catch (_) {}
+    }
+
+    const hint = this.querySelector("#rp-hint");
+    if (hint) hint.style.display = "none";
+    const gpxBtn = this.querySelector("#rp-gpx");
+    if (gpxBtn) gpxBtn.disabled = false;
+
+    this._renderStats(feat.properties || {});
+    this._renderElevation(coords);
+  }
+
+  // -------------------------------------------------------------------------
+  // Stats, Verbrauch + Akku-Check
+  // -------------------------------------------------------------------------
+
+  _renderStats(props) {
+    const km = (parseFloat(props["track-length"]) || 0) / 1000;
+    const ascent = Math.max(0, Math.round(parseFloat(props["filtered ascend"]) || 0));
+    const plain = parseFloat(props["plain-ascend"]) || 0;
+    const descent = Math.max(0, Math.round((parseFloat(props["filtered ascend"]) || 0) - plain));
+    const totalS = parseFloat(props["total-time"]) || 0;
+    let hh = Math.floor(totalS / 3600);
+    let mm = Math.round((totalS % 3600) / 60);
+    if (mm === 60) { hh += 1; mm = 0; }
+
+    this.querySelector("#rp-dist").textContent = `${km.toFixed(1)} km`;
+    this.querySelector("#rp-asc").textContent = `${ascent} m`;
+    this.querySelector("#rp-desc").textContent = `${descent} m`;
+    this.querySelector("#rp-time").textContent = `${hh}:${String(mm).padStart(2, "0")} h`;
+    this.querySelector("#rp-stats").style.display = "";
+
+    const energyStat = this.querySelector("#rp-stat-energy");
+    const battBox = this.querySelector("#rp-batt");
+    const range = this._rangeData();
+    if (!range || !range.whPerKm) {
+      // Ohne Ø-Verbrauch keine Verbrauchs-/Akku-Zeilen — die Basis-Stats bleiben.
+      energyStat.style.display = "none";
+      battBox.style.display = "none";
+      return;
+    }
+
+    const wh = Math.round(range.whPerKm * km);
+    this.querySelector("#rp-energy").textContent = `${wh} Wh`;
+    energyStat.style.display = "";
+
+    const battLine = this.querySelector("#rp-batt-line");
+    if (range.capacityWh && range.soc != null) {
+      const needPct = (wh / range.capacityWh) * 100;
+      const soc = range.soc;
+      const icon = needPct <= soc * 0.7 ? "✅" : needPct <= soc ? "⚠️" : "⛔";
+      battLine.textContent = `${icon} ${this._t("rp_batt_line", wh, Math.round(needPct), Math.round(soc))}`;
+      battLine.style.display = "";
+    } else {
+      battLine.style.display = "none";
+    }
+    this.querySelector("#rp-note-est").textContent = this._t("rp_estimate_note");
+    const hilly = this.querySelector("#rp-note-hilly");
+    hilly.textContent = this._t("rp_hilly_note");
+    hilly.style.display = ascent > 800 ? "" : "none";
+    battBox.style.display = "";
+  }
+
+  // Reichweiten-Datenquelle: config.entity oder Auto-Detect des ersten
+  // *_estimated_range_full-Sensors. SoC aus config.soc_entity oder der
+  // Schwester-Entity *_estimated_range_current (Attribut current_soc).
+  _rangeData() {
+    const states = this._hass && this._hass.states;
+    if (!states) return null;
+    let entId = this._config.entity;
+    if (!entId || !states[entId]) {
+      entId = Object.keys(states).find((k) => k.endsWith("_estimated_range_full"));
+    }
+    const st = entId ? states[entId] : null;
+    if (!st) return null;
+    const attrs = st.attributes || {};
+    const whPerKm = Number(attrs.wh_per_km);
+    const capacityWh = Number(attrs.battery_capacity_wh);
+    let soc = NaN;
+    if (this._config.soc_entity && states[this._config.soc_entity]) {
+      soc = Number(states[this._config.soc_entity].state);
+    } else {
+      const sibling = states[entId.replace(/_estimated_range_full$/, "_estimated_range_current")];
+      if (sibling && sibling.attributes) soc = Number(sibling.attributes.current_soc);
+    }
+    return {
+      whPerKm: Number.isFinite(whPerKm) && whPerKm > 0 ? whPerKm : null,
+      capacityWh: Number.isFinite(capacityWh) && capacityWh > 0 ? capacityWh : null,
+      soc: Number.isFinite(soc) ? soc : null,
+    };
+  }
+
+  // -------------------------------------------------------------------------
+  // Höhenprofil
+  // -------------------------------------------------------------------------
+
+  _haversineMeters(lat1, lon1, lat2, lon2) {
+    const R = 6371000;
+    const toRad = (d) => d * Math.PI / 180;
+    const dLat = toRad(lat2 - lat1);
+    const dLon = toRad(lon2 - lon1);
+    const a = Math.sin(dLat / 2) ** 2
+      + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+    return 2 * R * Math.asin(Math.sqrt(a));
+  }
+
+  _renderElevation(coords) {
+    const box = this.querySelector("#rp-elev");
+    const svg = this.querySelector("#rp-elev-svg");
+    if (!box || !svg) return;
+
+    const pts = []; // [kumulierte Distanz m, Höhe m]
+    let dist = 0;
+    let prev = null;
+    for (const c of coords) {
+      if (prev) dist += this._haversineMeters(prev[1], prev[0], c[1], c[0]);
+      prev = c;
+      if (c.length > 2 && Number.isFinite(c[2])) pts.push([dist, c[2]]);
+    }
+    if (pts.length < 2) {
+      box.style.display = "none";
+      return;
+    }
+
+    const W = 600, H = 80, PAD = 4;
+    const maxD = pts[pts.length - 1][0] || 1;
+    let minE = Infinity, maxE = -Infinity;
+    for (const p of pts) {
+      if (p[1] < minE) minE = p[1];
+      if (p[1] > maxE) maxE = p[1];
+    }
+    const span = Math.max(maxE - minE, 10);
+    const x = (d) => PAD + (d / maxD) * (W - 2 * PAD);
+    const y = (e) => H - PAD - ((e - minE) / span) * (H - 2 * PAD);
+    const line = pts.map((p) => `${x(p[0]).toFixed(1)},${y(p[1]).toFixed(1)}`).join(" ");
+    svg.innerHTML =
+      `<polygon points="${PAD},${H - PAD} ${line} ${W - PAD},${H - PAD}" fill="var(--primary-color,#03a9f4)" fill-opacity="0.15"></polygon>` +
+      `<polyline points="${line}" fill="none" stroke="var(--primary-color,#03a9f4)" stroke-width="2"></polyline>`;
+    const range = this.querySelector("#rp-elev-range");
+    if (range) range.textContent = this._t("profile_min_max", Math.round(minE), Math.round(maxE));
+    box.style.display = "";
+  }
+
+  // -------------------------------------------------------------------------
+  // GPX-Export
+  // -------------------------------------------------------------------------
+
+  _exportGpx() {
+    const coords = this._lastRouteCoords; if (!coords || coords.length < 2) return;
+    const esc = (s) => String(s).replace(/[<>&]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" }[c]));
+    const name = esc(`Bosch eBike Route ${new Date().toISOString().slice(0, 10)}`);
+    const pts = coords.map((c) => {
+      const ele = c.length > 2 && Number.isFinite(c[2]) ? `<ele>${Math.round(c[2])}</ele>` : "";
+      return `      <trkpt lat="${c[1].toFixed(6)}" lon="${c[0].toFixed(6)}">${ele}</trkpt>`;
+    }).join("\n");
+    const gpx = `<?xml version="1.0" encoding="UTF-8"?>\n` +
+      `<gpx version="1.1" creator="ha-bosch-ebike" xmlns="http://www.topografix.com/GPX/1/1">\n` +
+      `  <trk>\n    <name>${name}</name>\n    <trkseg>\n${pts}\n    </trkseg>\n  </trk>\n</gpx>\n`;
+    const blob = new Blob([gpx], { type: "application/gpx+xml" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `bosch-ebike-route-${new Date().toISOString().slice(0, 10)}.gpx`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  }
+
+  // -------------------------------------------------------------------------
+  // Status-Chip auf der Karte (Routing läuft / Fehler + Servertext klein)
+  // -------------------------------------------------------------------------
+
+  _setStatus(main, sub = "") {
+    const box = this.querySelector("#rp-status");
+    if (!box) return;
+    if (!main) {
+      box.style.display = "none";
+      return;
+    }
+    this.querySelector("#rp-status-main").textContent = main;
+    const subEl = this.querySelector("#rp-status-sub");
+    subEl.textContent = sub || "";
+    subEl.style.display = sub ? "" : "none";
+    box.style.display = "";
+  }
+}
+
 if (!customElements.get("bosch-ebike-map-card")) {
   customElements.define("bosch-ebike-map-card", BoschEBikeMapCard);
 }
