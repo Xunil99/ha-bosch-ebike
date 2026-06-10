@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
+import json
 import logging
 import os
 
+import aiohttp
 import voluptuous as vol
 
 from homeassistant.components import websocket_api
@@ -19,6 +22,7 @@ from homeassistant.helpers.start import async_at_started
 from homeassistant.helpers.storage import Store
 
 from .api import BoschEBikeAPI
+from .brouter import BRouterRequestError, build_brouter_url
 from .const import DOMAIN, CONF_CLIENT_ID
 from .coordinator import BoschEBikeCoordinator
 
@@ -94,6 +98,7 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     websocket_api.async_register_command(hass, ws_get_card_settings)
     websocket_api.async_register_command(hass, ws_set_card_settings)
     websocket_api.async_register_command(hass, ws_overpass_pois)
+    websocket_api.async_register_command(hass, ws_plan_route)
 
     # Singleton Store für gemeinsame Darstellungs-Settings, die sowohl
     # die 3D-Karte als auch die 2D-Karte (Chase-Cam-Overlay + Editor)
@@ -1006,3 +1011,46 @@ async def ws_overpass_pois(
         return
 
     connection.send_result(msg["id"], {"elements": elements})
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "bosch_ebike/plan_route",
+        vol.Required("lonlats"): [[vol.Coerce(float)]],
+        vol.Required("profile"): str,
+        vol.Optional("brouter_url"): vol.Any(str, None),
+    }
+)
+@websocket_api.async_response
+async def ws_plan_route(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict
+) -> None:
+    """Proxy a routing request to BRouter (CORS-safe, like the POI proxy)."""
+    try:
+        url = build_brouter_url(msg.get("brouter_url"), msg["lonlats"], msg["profile"])
+    except BRouterRequestError as err:
+        connection.send_error(msg["id"], "invalid_request", str(err))
+        return
+
+    session = async_get_clientsession(hass)
+    try:
+        async with asyncio.timeout(30):
+            resp = await session.get(url)
+            body = await resp.text()
+    except (TimeoutError, aiohttp.ClientError) as err:
+        connection.send_error(msg["id"], "server_unreachable", f"BRouter not reachable: {err}")
+        return
+
+    # BRouter returns errors as plain text with status 200 *or* non-200 —
+    # treat any non-JSON body as a routing failure and pass the text through.
+    if resp.status != 200 or not body.lstrip().startswith("{"):
+        connection.send_error(msg["id"], "routing_failed", body.strip()[:300] or f"HTTP {resp.status}")
+        return
+
+    try:
+        geojson = json.loads(body)
+    except ValueError:
+        connection.send_error(msg["id"], "routing_failed", "invalid response from BRouter")
+        return
+
+    connection.send_result(msg["id"], {"geojson": geojson})
