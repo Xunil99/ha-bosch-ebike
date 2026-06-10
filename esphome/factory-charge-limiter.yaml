@@ -131,7 +131,10 @@ sensor:
           - if:
               condition:
                 lambda: |-
-                  return x >= id(charge_limit).state;
+                  // Bei charge_limit = 100 wird NICHT abgeschaltet: Bosch zieht
+                  // nach Erreichen von 100% SoC noch ca. 30-45 min Strom fuer
+                  // das Cell-Balancing. Nur unterhalb von 100% begrenzen.
+                  return id(charge_limit).state < 100.0f && x >= id(charge_limit).state;
               then:
                 - switch.turn_off: switch_1
     odometer:
