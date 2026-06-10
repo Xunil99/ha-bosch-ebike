@@ -18,12 +18,12 @@ from typing import Any
 import voluptuous as vol
 
 from homeassistant.config_entries import (
+    SOURCE_REAUTH,
     ConfigEntry,
     ConfigFlowResult,
     OptionsFlow,
 )
 from homeassistant.core import callback
-from homeassistant.helpers import config_entry_oauth2_flow
 from homeassistant.helpers.config_entry_oauth2_flow import (
     AbstractOAuth2FlowHandler,
     LocalOAuth2ImplementationWithPkce,
@@ -143,7 +143,7 @@ class BoschEBikeConfigFlow(AbstractOAuth2FlowHandler, domain=DOMAIN):
         }
 
         # Re-auth: update the existing entry in place instead of creating a new one.
-        if self.source == config_entry_oauth2_flow.SOURCE_REAUTH:
+        if self.source == SOURCE_REAUTH:
             return self.async_update_reload_and_abort(
                 self._get_reauth_entry(), data=entry_data
             )
