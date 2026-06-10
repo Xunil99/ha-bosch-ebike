@@ -148,22 +148,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
-    # React to OptionsFlow changes (live BLE sensor wiring): clear the
-    # enrichment cache and trigger a fresh poll so new options take effect
-    # immediately.
+    # React to OptionsFlow changes (live BLE sensor wiring): reload the
+    # entry so entities depending on options (e.g. the current-range
+    # sensor) are created/removed immediately. The coordinator — and with
+    # it the enrichment cache — is rebuilt as part of the reload.
     entry.async_on_unload(entry.add_update_listener(_async_options_updated))
     return True
 
 
 async def _async_options_updated(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Handle options updates by invalidating cache and refreshing."""
-    coordinator: BoschEBikeCoordinator | None = hass.data.get(DOMAIN, {}).get(
-        entry.entry_id
-    )
-    if coordinator is None:
-        return
-    coordinator.invalidate_live_enrichment_cache()
-    await coordinator.async_request_refresh()
+    """Handle options updates by reloading the config entry."""
+    await hass.config_entries.async_reload(entry.entry_id)
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

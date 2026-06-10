@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -762,7 +763,6 @@ class BoschRangeEstimateSensor(CoordinatorEntity[BoschEBikeCoordinator], SensorE
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_icon = "mdi:map-marker-distance"
     _attr_translation_key = "estimated_range_full"
-    _attr_name = "Estimated Range (Full Battery)"
 
     def __init__(
         self,
@@ -817,7 +817,6 @@ class BoschCurrentRangeSensor(BoschRangeEstimateSensor):
     """
 
     _attr_translation_key = "estimated_range_current"
-    _attr_name = "Estimated Range (Current)"
 
     def __init__(
         self,
@@ -849,6 +848,8 @@ class BoschCurrentRangeSensor(BoschRangeEstimateSensor):
         try:
             soc = float(state.state)
         except ValueError:
+            return None
+        if not math.isfinite(soc):
             return None
         return max(0.0, min(100.0, soc))
 
@@ -887,12 +888,10 @@ class BoschServiceDueSensor(CoordinatorEntity[BoschEBikeCoordinator], SensorEnti
         self._kind = kind  # "days" or "km"
         if kind == "days":
             self._attr_translation_key = "service_due_in_days"
-            self._attr_name = "Service Due In Days"
             self._attr_native_unit_of_measurement = "d"
             self._attr_icon = "mdi:calendar-clock"
         else:
             self._attr_translation_key = "service_due_in_km"
-            self._attr_name = "Service Due In Kilometres"
             self._attr_native_unit_of_measurement = "km"
             self._attr_icon = "mdi:road"
         self._attr_unique_id = f"{bike_id}_service_due_in_{kind}"
@@ -953,7 +952,6 @@ class BoschMaintenanceOverviewSensor(CoordinatorEntity[BoschEBikeCoordinator], S
     """
 
     _attr_has_entity_name = True
-    _attr_name = "Maintenance Items Due"
     _attr_translation_key = "maintenance_overview"
     _attr_icon = "mdi:tools"
 
