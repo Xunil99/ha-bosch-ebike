@@ -29,6 +29,7 @@ from .const import (
     CONF_LIVE_SOC_ENTITY,
 )
 from .live_enrichment import get_state_at, parse_iso_utc
+from .range_estimate import compute_range_estimate
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -561,6 +562,24 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if self._check_service_and_maintenance(bikes):
             state_changed = True
 
+        # Estimated range: distance-weighted Wh/km over the last ~500 km,
+        # computed from data already in memory (no extra API calls).
+        range_estimate: dict[str, dict[str, Any]] = {}
+        single_bike = len(bikes) == 1
+        for bike in bikes:
+            bid = bike.get("id")
+            if not bid:
+                continue
+            est = compute_range_estimate(
+                self._all_activities,
+                self._activity_bike,
+                self._activity_consumption,
+                bid,
+                fallback_all=single_bike,
+            )
+            if est:
+                range_estimate[bid] = est
+
         if state_changed:
             await self._async_save_state()
 
@@ -574,6 +593,7 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "maintenance": self._maintenance,
             "service_overrides": self._service_overrides,
             "battery_capacity_wh": self._battery_capacity_wh,
+            "range_estimate": range_estimate,
         }
 
     # -- Service & maintenance --
