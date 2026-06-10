@@ -42,10 +42,20 @@ def build_brouter_url(
             raise BRouterRequestError(f"waypoint out of range: {point!r}")
         pairs.append(f"{lon},{lat}")
 
-    base = (base_url or DEFAULT_BASE_URL).rstrip("/")
-    scheme = urlsplit(base).scheme
-    if scheme not in ("http", "https"):
-        raise BRouterRequestError(f"unsupported BRouter URL scheme: {scheme!r}")
+    raw = base_url or DEFAULT_BASE_URL
+    parts = urlsplit(raw)
+    if parts.scheme not in ("http", "https"):
+        raise BRouterRequestError(f"unsupported BRouter URL scheme: {parts.scheme!r}")
+    if not parts.netloc:
+        raise BRouterRequestError("BRouter URL has no host")
+    # Check the raw string too: urlsplit maps a bare trailing "?" / "#" to an
+    # *empty* query/fragment, which would slip past a parts-only check.
+    if parts.query or parts.fragment or "?" in raw or "#" in raw:
+        raise BRouterRequestError("BRouter URL must not contain query or fragment")
+
+    # Reconstruct deterministically from parsed components so nothing can be
+    # smuggled past the path (a path prefix for reverse-proxy setups is fine).
+    base = f"{parts.scheme}://{parts.netloc}{parts.path.rstrip('/')}"
 
     return (
         f"{base}/brouter?lonlats={'|'.join(pairs)}"

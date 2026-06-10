@@ -52,6 +52,32 @@ def test_rejects_out_of_range_coords():
     expect_error(build_brouter_url, None, [[1.0, 91.0], [3.0, 4.0]], "trekking")
 
 
+def test_rejects_query_or_fragment_in_base():
+    expect_error(build_brouter_url, "http://10.0.0.5:8080/internal/api?x=1", [[1.0, 2.0], [3.0, 4.0]], "trekking")
+    expect_error(build_brouter_url, "http://10.0.0.5:8080/internal/api#", [[1.0, 2.0], [3.0, 4.0]], "trekking")
+
+
+def test_allows_path_prefix():
+    url = build_brouter_url("https://example.com/routing", [[1.0, 2.0], [3.0, 4.0]], "trekking")
+    assert url.startswith("https://example.com/routing/brouter?lonlats="), url
+
+
+def test_rejects_empty_netloc():
+    expect_error(build_brouter_url, "http://", [[1.0, 2.0], [3.0, 4.0]], "trekking")
+    expect_error(build_brouter_url, "https:///path", [[1.0, 2.0], [3.0, 4.0]], "trekking")
+
+
+def test_boundary_coords():
+    url = build_brouter_url(None, [[180.0, 90.0], [-180.0, -90.0]], "trekking")
+    assert "lonlats=180.0,90.0|-180.0,-90.0" in url, url
+    expect_error(build_brouter_url, None, [[-181.0, 0.0], [0.0, 0.0]], "trekking")
+
+
+def test_rejects_malformed_waypoint():
+    expect_error(build_brouter_url, None, [[1.0], [2.0, 3.0]], "trekking")
+    expect_error(build_brouter_url, None, [["a", "b"], [1, 2]], "trekking")
+
+
 if __name__ == "__main__":
     for name, fn in sorted(globals().items()):
         if name.startswith("test_") and callable(fn):
