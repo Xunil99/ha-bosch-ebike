@@ -23,6 +23,12 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import DOMAIN
 from .coordinator import BoschEBikeCoordinator
 
+RANGE_DISCLAIMER = (
+    "Estimate based on your past consumption over the last ~500 km. "
+    "Actual range depends on assist mode, terrain, wind, temperature "
+    "and battery age."
+)
+
 
 def _safe_get(data: dict, *keys: str, default: Any = None) -> Any:
     """Safely traverse nested dicts."""
@@ -513,6 +519,9 @@ async def async_setup_entry(
         entities.append(BoschServiceDueSensor(coordinator, bike_id, drive_name, kind="days"))
         entities.append(BoschServiceDueSensor(coordinator, bike_id, drive_name, kind="km"))
 
+        # Estimated range (clearly labelled estimate, derived from history)
+        entities.append(BoschRangeEstimateSensor(coordinator, bike_id, drive_name))
+
         # Maintenance overview (count of items due/overdue + full list as attributes)
         entities.append(BoschMaintenanceOverviewSensor(coordinator, bike_id, drive_name))
 
@@ -731,6 +740,65 @@ class BoschBatteryConsumptionSensor(CoordinatorEntity[BoschEBikeCoordinator], Se
             "percentage": consumption.get("percentage"),
             "capacity_wh": consumption.get("capacity_wh"),
             "is_exact": consumption.get("is_exact"),
+        }
+
+
+class BoschRangeEstimateSensor(CoordinatorEntity[BoschEBikeCoordinator], SensorEntity):
+    """Estimated range at full battery, derived from past consumption.
+
+    Clearly labelled as an estimate: name prefix, disclaimer attribute and
+    the underlying numbers (wh_per_km, tours_used, window_km) exposed.
+    """
+
+    _attr_has_entity_name = True
+    _attr_native_unit_of_measurement = UnitOfLength.KILOMETERS
+    _attr_device_class = SensorDeviceClass.DISTANCE
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_icon = "mdi:map-marker-distance"
+    _attr_translation_key = "estimated_range_full"
+    _attr_name = "Estimated Range (Full Battery)"
+
+    def __init__(
+        self,
+        coordinator: BoschEBikeCoordinator,
+        bike_id: str,
+        drive_name: str,
+    ) -> None:
+        super().__init__(coordinator)
+        self._bike_id = bike_id
+        self._attr_unique_id = f"{bike_id}_estimated_range_full"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, bike_id)},
+            name=drive_name,
+            manufacturer="Bosch",
+            model=drive_name,
+        )
+
+    def _estimate(self) -> dict[str, Any] | None:
+        return (self.coordinator.data.get("range_estimate") or {}).get(self._bike_id)
+
+    @property
+    def native_value(self) -> int | None:
+        est = self._estimate()
+        if not est or not est.get("wh_per_km"):
+            return None
+        capacity = self.coordinator.data.get("battery_capacity_wh")
+        if not capacity:
+            return None
+        return round(capacity / est["wh_per_km"])
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        est = self._estimate()
+        if not est:
+            return {"disclaimer": RANGE_DISCLAIMER}
+        return {
+            "disclaimer": RANGE_DISCLAIMER,
+            "wh_per_km": est.get("wh_per_km"),
+            "tours_used": est.get("tours_used"),
+            "window_km": est.get("window_km"),
+            "newest_tour_date": est.get("newest_tour_date"),
+            "battery_capacity_wh": self.coordinator.data.get("battery_capacity_wh"),
         }
 
 
