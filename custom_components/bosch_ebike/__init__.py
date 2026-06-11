@@ -930,6 +930,23 @@ OVERPASS_ENDPOINTS = [
     "https://overpass.private.coffee/api/interpreter",
 ]
 
+# Whitelist of selectable POI categories. Only these keys are accepted from the
+# frontend; everything else is silently dropped so arbitrary Overpass selectors
+# can never be injected through the websocket API.
+POI_CATEGORY_SELECTORS = {
+    "charging": ['node["amenity"="charging_station"]'],
+    "bicycle": ['node["shop"="bicycle"]', 'node["amenity"="bicycle_repair_station"]'],
+    "water": ['node["amenity"="drinking_water"]'],
+    "toilets": ['node["amenity"="toilets"]'],
+    "food": [
+        'node["amenity"="restaurant"]',
+        'node["amenity"="cafe"]',
+        'node["amenity"="biergarten"]',
+        'node["amenity"="fast_food"]',
+    ],
+}
+DEFAULT_POI_CATEGORIES = ("charging", "bicycle", "water", "toilets")
+
 
 @websocket_api.websocket_command(
     {
@@ -938,6 +955,7 @@ OVERPASS_ENDPOINTS = [
         vol.Required("west"): vol.Coerce(float),
         vol.Required("north"): vol.Coerce(float),
         vol.Required("east"): vol.Coerce(float),
+        vol.Optional("categories"): [str],
     }
 )
 @websocket_api.async_response
@@ -946,11 +964,12 @@ async def ws_overpass_pois(
 ) -> None:
     """Proxy Overpass POI queries through the backend (no CORS).
 
-    Looks up charging stations, bike shops/repair stations, drinking water and
-    toilets within the supplied bounding box. Each Overpass mirror is tried in
-    turn; the first that responds with valid JSON wins. The full element list
-    is passed back to the card; client-side proximity filtering keeps the
-    radius user-tunable.
+    Looks up POIs of the requested categories (see POI_CATEGORY_SELECTORS)
+    within the supplied bounding box; without a "categories" parameter the
+    classic set (charging stations, bike shops/repair stations, drinking water
+    and toilets) is used. Each Overpass mirror is tried in turn; the first
+    that responds with valid JSON wins. The full element list is passed back
+    to the card; client-side proximity filtering keeps the radius user-tunable.
     """
     import asyncio
     from homeassistant.helpers.aiohttp_client import async_get_clientsession
@@ -961,15 +980,27 @@ async def ws_overpass_pois(
     east = float(msg["east"])
     bbox = f"({south},{west},{north},{east})"
 
+    requested = msg.get("categories") or list(DEFAULT_POI_CATEGORIES)
+    categories = [key for key in requested if key in POI_CATEGORY_SELECTORS]
+    if not categories:
+        connection.send_error(
+            msg["id"],
+            "invalid_request",
+            f"No valid POI categories in {requested!r}",
+        )
+        return
+
+    selectors: list[str] = []
+    for key in categories:
+        for selector in POI_CATEGORY_SELECTORS[key]:
+            if selector not in selectors:
+                selectors.append(selector)
+
     query = (
         "[out:json][timeout:30];"
         "("
-        f'node["amenity"="charging_station"]{bbox};'
-        f'node["shop"="bicycle"]{bbox};'
-        f'node["amenity"="bicycle_repair_station"]{bbox};'
-        f'node["amenity"="drinking_water"]{bbox};'
-        f'node["amenity"="toilets"]{bbox};'
-        ");"
+        + "".join(f"{selector}{bbox};" for selector in selectors)
+        + ");"
         "out body;"
     )
 
