@@ -173,6 +173,12 @@ binary_sensor:
       name: "eBike System Locked"
     charger_connected:
       name: "eBike Charger Connected"
+      id: charger_conn
+      on_state:
+        - lambda: |-
+            id(chg_rate) = -1;
+            id(chg_last_soc) = -1;
+            id(chg_last_ms) = millis();
     light_reserve:
       name: "eBike Light Reserve"
     diagnosis_active:
