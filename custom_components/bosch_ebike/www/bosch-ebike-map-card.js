@@ -1063,7 +1063,7 @@ const I18N = {
     dash_label_battery: "Batterie",
     dash_label_charge_power: "Puissance de charge",
     dash_label_range: "Autonomie (estimée)",
-    dash_editor_range: "Entité d'autonomie estimée (optionnel)",
+    dash_editor_range: "Entité d'autonomie estimée (optionnelle)",
     dash_editor_range_hint: "Capteur \"Autonomie estimée (actuelle)\" de l'intégration. Vide = détection automatique ; sans valeur, la tuile est masquée.",
     dash_label_target_soc: "Arrêter la charge à",
     dash_state_charging: "En charge",
@@ -6859,7 +6859,7 @@ class BoschEBikeDashboardCard extends HTMLElement {
       // später angelegter Sensor ohne Card-Neuaufbau erscheint.
       if (!this._rangeAutoEntity || !states[this._rangeAutoEntity]) {
         this._rangeAutoEntity =
-          Object.keys(states).find((k) => k.endsWith("_estimated_range_current")) || null;
+          boschRangeEntityIds(this._hass, "estimated_range_current")[0] || null;
       }
       ent = this._rangeAutoEntity;
     }
@@ -11018,6 +11018,30 @@ class BoschEBike3DMapCardEditor extends HTMLElement {
 const RP_MAX_WAYPOINTS = 30; // muss zum Backend-Limit in brouter.py passen
 const RP_PROFILES = ["trekking", "fastbike", "mtb", "shortest"];
 
+// Sprachunabhängige Erkennung der Reichweiten-Sensoren. Entity-IDs werden
+// aus dem ÜBERSETZTEN Namen erzeugt (deutsche Instanz →
+// sensor.…_geschatzte_reichweite_aktuell), ein englischer Suffix-Match
+// reicht daher nicht. Primär über die Frontend-Entity-Registry
+// (platform + translation_key), Fallback: englisches ID-Suffix.
+function boschRangeEntityIds(hass, translationKey) {
+  const ids = [];
+  const reg = hass && hass.entities ? hass.entities : null;
+  if (reg) {
+    for (const id in reg) {
+      const e = reg[id];
+      if (e && e.platform === "ha_bosch_ebike" && e.translation_key === translationKey) {
+        ids.push(id);
+      }
+    }
+  }
+  if (!ids.length && hass && hass.states) {
+    for (const id in hass.states) {
+      if (id.startsWith("sensor.") && id.endsWith("_" + translationKey)) ids.push(id);
+    }
+  }
+  return ids;
+}
+
 class BoschEBikeRoutePlannerCard extends HTMLElement {
   constructor() {
     super();
@@ -11522,15 +11546,15 @@ class BoschEBikeRoutePlannerCard extends HTMLElement {
     battBox.style.display = "";
   }
 
-  // Reichweiten-Datenquelle: config.entity oder Auto-Detect des ersten
-  // *_estimated_range_full-Sensors. SoC aus config.soc_entity oder der
-  // Schwester-Entity *_estimated_range_current (Attribut current_soc).
+  // Reichweiten-Datenquelle: config.entity oder sprachunabhängige
+  // Auto-Erkennung (Registry). SoC aus config.soc_entity oder dem
+  // Schwester-Sensor "estimated_range_current" (Attribut current_soc).
   _rangeData() {
     const states = this._hass && this._hass.states;
     if (!states) return null;
     let entId = this._config.entity;
     if (!entId || !states[entId]) {
-      entId = Object.keys(states).find((k) => k.endsWith("_estimated_range_full"));
+      entId = boschRangeEntityIds(this._hass, "estimated_range_full")[0] || null;
     }
     const st = entId ? states[entId] : null;
     if (!st) return null;
@@ -11541,7 +11565,19 @@ class BoschEBikeRoutePlannerCard extends HTMLElement {
     if (this._config.soc_entity && states[this._config.soc_entity]) {
       soc = Number(states[this._config.soc_entity].state);
     } else {
-      const sibling = states[entId.replace(/_estimated_range_full$/, "_estimated_range_current")];
+      // Schwester-Sensor bevorzugt vom selben Gerät (Registry); Fallback:
+      // englisches ID-Suffix bzw. erster Treffer.
+      const reg = (this._hass && this._hass.entities) || {};
+      const dev = reg[entId] && reg[entId].device_id;
+      const candidates = boschRangeEntityIds(this._hass, "estimated_range_current");
+      let sibId = dev
+        ? candidates.find((id) => reg[id] && reg[id].device_id === dev)
+        : null;
+      if (!sibId) {
+        const guess = entId.replace(/_estimated_range_full$/, "_estimated_range_current");
+        sibId = (guess !== entId && states[guess]) ? guess : candidates[0];
+      }
+      const sibling = sibId ? states[sibId] : null;
       if (sibling && sibling.attributes) soc = Number(sibling.attributes.current_soc);
     }
     return {
@@ -11721,7 +11757,9 @@ class BoschEBikeRoutePlannerCardEditor extends HTMLElement {
     const labelStyle = "display:block;margin-top:14px;margin-bottom:6px;font-weight:500";
     const hintStyle = "display:block;margin-top:4px;font-size:12px;color:var(--secondary-text-color,#777)";
 
-    const rangeOpts = this._entityOptions((e) => e.endsWith("_estimated_range_full"), cfg.entity);
+    const rangeIds = new Set(boschRangeEntityIds(this._hass, "estimated_range_full"));
+    const rangeOpts = this._entityOptions(
+      (e) => rangeIds.has(e) || e.endsWith("_estimated_range_full"), cfg.entity);
     const socOpts = this._entityOptions((e) => e.startsWith("sensor."), cfg.soc_entity);
 
     this.innerHTML = `<div style="padding:16px">
