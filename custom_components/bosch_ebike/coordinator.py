@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 import logging
+import math
 import uuid
 from typing import Any
 
@@ -35,6 +36,46 @@ _LOGGER = logging.getLogger(__name__)
 
 STORAGE_VERSION = 1
 STORAGE_KEY_SUFFIX = "consumption_state"
+
+
+def _track_distance_m(details: dict[str, Any]) -> float | None:
+    """Total distance in metres covered by an activity's GPS track.
+
+    Prefers Bosch's own cumulative per-point ``distance`` field (largest
+    value wins — robust against a missing tail). Falls back to a haversine
+    sum over the coordinates when no point carries a distance. Returns
+    ``None`` when the track is unusable.
+    """
+    points = details.get("activityDetails") or []
+    best = 0.0
+    coords: list[tuple[float, float]] = []
+    for p in points:
+        d = p.get("distance")
+        if isinstance(d, (int, float)) and d > best:
+            best = float(d)
+        lat, lon = p.get("latitude"), p.get("longitude")
+        if (
+            isinstance(lat, (int, float))
+            and isinstance(lon, (int, float))
+            and not (lat == 0 and lon == 0)
+        ):
+            coords.append((float(lat), float(lon)))
+    if best > 0:
+        return best
+    if len(coords) < 2:
+        return None
+    total = 0.0
+    for (lat1, lon1), (lat2, lon2) in zip(coords, coords[1:]):
+        p1 = math.radians(lat1)
+        p2 = math.radians(lat2)
+        dphi = math.radians(lat2 - lat1)
+        dlmb = math.radians(lon2 - lon1)
+        a = (
+            math.sin(dphi / 2) ** 2
+            + math.cos(p1) * math.cos(p2) * math.sin(dlmb / 2) ** 2
+        )
+        total += 2 * 6371000.0 * math.asin(math.sqrt(a))
+    return total if total > 0 else None
 
 
 class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
@@ -488,7 +529,14 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 if latest:
                     latest_id = latest.get("id")
                     if self._all_activities and self._all_activities[0].get("id") == latest_id:
-                        # Same activity, update in place
+                        # Same activity, update in place — but keep a derived
+                        # distance (BLE odometer / GPS track): the fresh cloud
+                        # copy would silently revert it and the enrichment
+                        # cache prevents re-deriving (issue #31).
+                        old = self._all_activities[0]
+                        if old.get("_distance_source") in ("ble_live", "gps_track"):
+                            latest["distance"] = old.get("distance")
+                            latest["_distance_source"] = old.get("_distance_source")
                         self._all_activities[0] = latest
                     else:
                         # New activity, prepend
@@ -533,6 +581,31 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     _LOGGER.debug(
                         "Could not fetch GPS details for activity %s: %s",
                         activity_id, err,
+                    )
+
+            # Sanity-check the summary distance against the GPS track
+            # (issue #31): the cloud summary sometimes reports fewer metres
+            # than the recorded track covers. Only ever corrects UPWARDS
+            # (a partially uploaded track must never shrink the value) and
+            # never touches a BLE-derived distance.
+            if (
+                self._latest_activity_details
+                and self._latest_activity_id == activity_id
+                and latest_activity.get("_distance_source") != "ble_live"
+            ):
+                track_m = _track_distance_m(self._latest_activity_details)
+                summary_m = float(latest_activity.get("distance") or 0)
+                if (
+                    track_m is not None
+                    and track_m > summary_m * 1.05
+                    and track_m - summary_m > 200.0
+                ):
+                    latest_activity["distance"] = round(track_m, 1)
+                    latest_activity["_distance_source"] = "gps_track"
+                    _LOGGER.info(
+                        "Distance for activity %s corrected from GPS track: "
+                        "%.0f m (summary said %.0f m)",
+                        activity_id, track_m, summary_m,
                     )
 
         # Restore persisted consumption state on first run
