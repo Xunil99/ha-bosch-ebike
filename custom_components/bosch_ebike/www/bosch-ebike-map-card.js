@@ -30,7 +30,7 @@ const I18N = {
     // Map controls
     btn_change_style: "Change map style",
     btn_wiki: "Wikipedia articles",
-    btn_poi: "Charging stations, repair shops, drinking water, toilets",
+    btn_poi: "Charging stations, repair shops, drinking water, toilets, food",
     btn_gpx: "Download GPX",
     btn_chase: "Chase-cam playback",
     editor_chase_section: "Chase-cam playback (shared)",
@@ -110,7 +110,7 @@ const I18N = {
     editor_wiki_radius: "Wikipedia search radius",
     editor_wiki_radius_hint: "How far around each route sample point Wikipedia articles are searched. Larger radius = more results, more data.",
     editor_poi_radius: "POI search radius",
-    editor_poi_radius_hint: "How far around the route charging stations, repair shops, drinking water and toilets are searched.",
+    editor_poi_radius_hint: "How far around the route charging stations, repair shops, drinking water, toilets and food are searched.",
     editor_select_all: "All",
     radius_default_suffix: "(default)",
     // Heatmap card
@@ -353,7 +353,7 @@ const I18N = {
     sort_battery_pct: "Akku %",
     btn_change_style: "Kartenstil wechseln",
     btn_wiki: "Wikipedia-Artikel",
-    btn_poi: "Ladestationen, Werkstätten, Trinkwasser, Toiletten",
+    btn_poi: "Ladestationen, Werkstätten, Trinkwasser, Toiletten, Gastronomie",
     btn_gpx: "GPX herunterladen",
     btn_chase: "Chase-Cam-Wiedergabe",
     editor_chase_section: "Chase-Cam-Wiedergabe (geteilt)",
@@ -426,7 +426,7 @@ const I18N = {
     editor_wiki_radius: "Wikipedia-Suchradius",
     editor_wiki_radius_hint: "Wie weit um jeden Stützpunkt der Route Wikipedia-Artikel gesucht werden. Größerer Radius = mehr Treffer, mehr Daten.",
     editor_poi_radius: "POI-Suchradius",
-    editor_poi_radius_hint: "Wie weit um die Route Ladestationen, Werkstätten, Trinkwasser und Toiletten gesucht werden.",
+    editor_poi_radius_hint: "Wie weit um die Route Ladestationen, Werkstätten, Trinkwasser, Toiletten und Gastronomie gesucht werden.",
     editor_select_all: "Alle",
     radius_default_suffix: "(Standard)",
     heatmap_title: "Bosch eBike Heatmap",
@@ -665,7 +665,7 @@ const I18N = {
     sort_battery_pct: "Accu %",
     btn_change_style: "Kaartstijl wisselen",
     btn_wiki: "Wikipedia-artikelen",
-    btn_poi: "Laadstations, werkplaatsen, drinkwater, toiletten",
+    btn_poi: "Laadstations, werkplaatsen, drinkwater, toiletten, horeca",
     btn_gpx: "GPX downloaden",
     btn_chase: "Chase-cam afspelen",
     editor_chase_section: "Chase-cam afspelen (gedeeld)",
@@ -738,7 +738,7 @@ const I18N = {
     editor_wiki_radius: "Wikipedia-zoekstraal",
     editor_wiki_radius_hint: "Hoe ver er rond elk steunpunt van de route naar Wikipedia-artikelen wordt gezocht. Grotere straal = meer treffers, meer data.",
     editor_poi_radius: "POI-zoekstraal",
-    editor_poi_radius_hint: "Hoe ver er rond de route naar laadstations, werkplaatsen, drinkwater en toiletten wordt gezocht.",
+    editor_poi_radius_hint: "Hoe ver er rond de route naar laadstations, werkplaatsen, drinkwater, toiletten en horeca wordt gezocht.",
     editor_select_all: "Alle",
     radius_default_suffix: "(standaard)",
     heatmap_title: "Bosch eBike Heatmap",
@@ -979,7 +979,7 @@ const I18N = {
     // Map controls
     btn_change_style: "Changer le style de carte",
     btn_wiki: "Articles Wikipedia",
-    btn_poi: "Bornes de recharge, ateliers, eau potable, toilettes",
+    btn_poi: "Bornes de recharge, ateliers, eau potable, toilettes, restauration",
     btn_gpx: "Télécharger GPX",
     btn_chase: "Lecture chase-cam",
     editor_chase_section: "Lecture chase-cam (partagé)",
@@ -1059,7 +1059,7 @@ const I18N = {
     editor_wiki_radius: "Rayon de recherche Wikipedia",
     editor_wiki_radius_hint: "Jusqu'où chercher des articles Wikipedia autour de chaque point de l'itinéraire. Rayon plus grand = plus de résultats, plus de données.",
     editor_poi_radius: "Rayon de recherche POI",
-    editor_poi_radius_hint: "Jusqu'où chercher bornes de recharge, ateliers, eau potable et toilettes autour de l'itinéraire.",
+    editor_poi_radius_hint: "Jusqu'où chercher bornes de recharge, ateliers, eau potable, toilettes et restauration autour de l'itinéraire.",
     editor_select_all: "Tous",
     radius_default_suffix: "(par défaut)",
     // Heatmap card
@@ -1303,7 +1303,7 @@ const I18N = {
     // Map controls
     btn_change_style: "Cambia stile mappa",
     btn_wiki: "Articoli Wikipedia",
-    btn_poi: "Stazioni di ricarica, officine, acqua potabile, bagni",
+    btn_poi: "Stazioni di ricarica, officine, acqua potabile, bagni, ristorazione",
     btn_gpx: "Scarica GPX",
     btn_chase: "Riproduzione chase-cam",
     editor_chase_section: "Riproduzione chase-cam (condivisa)",
@@ -1383,7 +1383,7 @@ const I18N = {
     editor_wiki_radius: "Raggio di ricerca Wikipedia",
     editor_wiki_radius_hint: "Fino a che distanza intorno a ogni punto del percorso vengono cercati articoli Wikipedia. Raggio più ampio = più risultati, più dati.",
     editor_poi_radius: "Raggio di ricerca POI",
-    editor_poi_radius_hint: "Fino a che distanza intorno al percorso vengono cercati stazioni di ricarica, officine, acqua potabile e bagni.",
+    editor_poi_radius_hint: "Fino a che distanza intorno al percorso vengono cercati stazioni di ricarica, officine, acqua potabile, bagni e ristorazione.",
     editor_select_all: "Tutti",
     radius_default_suffix: "(predefinito)",
     // Heatmap card
@@ -1627,7 +1627,7 @@ const I18N = {
     // Map controls
     btn_change_style: "Cambiar estilo de mapa",
     btn_wiki: "Artículos de Wikipedia",
-    btn_poi: "Estaciones de carga, talleres, agua potable, baños",
+    btn_poi: "Estaciones de carga, talleres, agua potable, baños, gastronomía",
     btn_gpx: "Descargar GPX",
     btn_chase: "Reproducción chase-cam",
     editor_chase_section: "Reproducción chase-cam (compartida)",
@@ -1707,7 +1707,7 @@ const I18N = {
     editor_wiki_radius: "Radio de búsqueda de Wikipedia",
     editor_wiki_radius_hint: "Hasta qué distancia alrededor de cada punto de la ruta se buscan artículos de Wikipedia. Radio mayor = más resultados, más datos.",
     editor_poi_radius: "Radio de búsqueda POI",
-    editor_poi_radius_hint: "Hasta qué distancia alrededor de la ruta se buscan estaciones de carga, talleres, agua potable y baños.",
+    editor_poi_radius_hint: "Hasta qué distancia alrededor de la ruta se buscan estaciones de carga, talleres, agua potable, baños y gastronomía.",
     editor_select_all: "Todos",
     radius_default_suffix: "(predeterminado)",
     // Heatmap card
@@ -2815,6 +2815,9 @@ class BoschEBikeMapCard extends HTMLElement {
       .eb-poi-marker.eb-poi-bicycle  { border:1.5px solid #c62828; }
       .eb-poi-marker.eb-poi-water    { border:1.5px solid #1565c0; }
       .eb-poi-marker.eb-poi-toilet   { border:1.5px solid #6a1b9a; }
+      .eb-poi-marker.eb-poi-food       { border:1.5px solid #e65100; }
+      .eb-poi-marker.eb-poi-cafe       { border:1.5px solid #5d4037; }
+      .eb-poi-marker.eb-poi-biergarten { border:1.5px solid #f9a825; }
       .eb-poi-popup { font-family:inherit; max-width:240px; font-size:13px; }
       .eb-poi-popup .eb-poi-title { font-weight:600; margin-bottom:4px; }
       .eb-poi-popup .eb-poi-cat { font-size:11px; color:#666; margin-bottom:6px; }
@@ -3924,8 +3927,10 @@ class BoschEBikeMapCard extends HTMLElement {
   async _loadAndRenderPoi() {
     if (!this._currentTrackActivityId || !this._currentTrack.length) return;
     const aid = this._currentTrackActivityId;
-    // Cache key includes the radius so different radii don't collide
-    const cacheKey = `eb-poi-${aid}-${this._poiRadius || 1000}`;
+    // Cache key includes the radius so different radii don't collide, and
+    // the category list so adding a category invalidates stale cached results
+    // (pre-gastronomy caches would otherwise hide the new POIs).
+    const cacheKey = `eb-poi-${aid}-${this._poiRadius || 1000}-${RP_POI_CATEGORIES.join(",")}`;
 
     let pois = this._poiData.get(aid);
     if (!pois || pois.length === 0) {
@@ -3984,6 +3989,7 @@ class BoschEBikeMapCard extends HTMLElement {
       const res = await this._hass.callWS({
         type: "bosch_ebike/get_pois",
         south, west, north, east,
+        categories: RP_POI_CATEGORIES,
       });
       elements = (res && Array.isArray(res.elements)) ? res.elements : [];
     } catch (err) {
@@ -4042,6 +4048,15 @@ class BoschEBikeMapCard extends HTMLElement {
     }
     if (tags.amenity === "toilets") {
       return { key: "toilet", label: this._t("poi_toilet"), icon: "🚻" };
+    }
+    if (tags.amenity === "restaurant" || tags.amenity === "fast_food") {
+      return { key: "food", label: this._t("poi_food"), icon: "🍽️" };
+    }
+    if (tags.amenity === "cafe") {
+      return { key: "cafe", label: this._t("poi_cafe"), icon: "☕" };
+    }
+    if (tags.amenity === "biergarten") {
+      return { key: "biergarten", label: this._t("poi_biergarten"), icon: "🍺" };
     }
     return null;
   }
