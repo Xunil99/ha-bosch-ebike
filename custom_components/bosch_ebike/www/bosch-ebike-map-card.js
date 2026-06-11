@@ -87,6 +87,11 @@ const I18N = {
     poi_water: "Drinking water",
     poi_toilet: "Toilet",
     poi_open_osm: "Open on OpenStreetMap",
+    poi_food: "Restaurant",
+    poi_cafe: "Café",
+    poi_biergarten: "Beer garden",
+    rp_poi_btn: "Show POIs along the route (charging, repair, water, toilets, food)",
+    rp_poi_error: "POIs could not be loaded",
     // Editor
     editor_height: "Card height (px)",
     editor_title: "Title (optional)",
@@ -392,6 +397,11 @@ const I18N = {
     poi_water: "Trinkwasser",
     poi_toilet: "Toilette",
     poi_open_osm: "Auf OpenStreetMap",
+    poi_food: "Gaststätte",
+    poi_cafe: "Café",
+    poi_biergarten: "Biergarten",
+    rp_poi_btn: "POIs entlang der Route anzeigen (Laden, Werkstatt, Wasser, Toiletten, Gastronomie)",
+    rp_poi_error: "POIs konnten nicht geladen werden",
     editor_height: "Kartenhöhe (px)",
     editor_title: "Titel (optional)",
     editor_title_hint: "Wird in der Kopfzeile der Karte angezeigt — nützlich, wenn Du mehrere fest verdrahtete Karten nebeneinander hast.",
@@ -692,6 +702,11 @@ const I18N = {
     poi_water: "Drinkwater",
     poi_toilet: "Toilet",
     poi_open_osm: "Op OpenStreetMap openen",
+    poi_food: "Restaurant",
+    poi_cafe: "Café",
+    poi_biergarten: "Biertuin",
+    rp_poi_btn: "POI's langs de route tonen (laden, werkplaats, water, toiletten, horeca)",
+    rp_poi_error: "POI's konden niet worden geladen",
     editor_height: "Kaarthoogte (px)",
     editor_title: "Titel (optioneel)",
     editor_title_hint: "Wordt in de koptekst van de kaart getoond — handig als je meerdere vastgezette kaarten naast elkaar hebt.",
@@ -1000,6 +1015,11 @@ const I18N = {
     poi_water: "Eau potable",
     poi_toilet: "Toilettes",
     poi_open_osm: "Ouvrir sur OpenStreetMap",
+    poi_food: "Restaurant",
+    poi_cafe: "Café",
+    poi_biergarten: "Biergarten",
+    rp_poi_btn: "Afficher les POI le long de l'itinéraire (recharge, atelier, eau, toilettes, restauration)",
+    rp_poi_error: "Impossible de charger les POI",
     // Editor
     editor_height: "Hauteur de la carte (px)",
     editor_title: "Titre (optionnel)",
@@ -1312,6 +1332,11 @@ const I18N = {
     poi_water: "Acqua potabile",
     poi_toilet: "Bagno",
     poi_open_osm: "Apri su OpenStreetMap",
+    poi_food: "Ristorante",
+    poi_cafe: "Caffè",
+    poi_biergarten: "Birreria all'aperto",
+    rp_poi_btn: "Mostra i POI lungo il percorso (ricarica, officina, acqua, bagni, ristorazione)",
+    rp_poi_error: "Impossibile caricare i POI",
     // Editor
     editor_height: "Altezza della scheda (px)",
     editor_title: "Titolo (opzionale)",
@@ -1624,6 +1649,11 @@ const I18N = {
     poi_water: "Agua potable",
     poi_toilet: "Baño",
     poi_open_osm: "Abrir en OpenStreetMap",
+    poi_food: "Restaurante",
+    poi_cafe: "Cafetería",
+    poi_biergarten: "Cervecería al aire libre",
+    rp_poi_btn: "Mostrar POI a lo largo de la ruta (carga, taller, agua, baños, gastronomía)",
+    rp_poi_error: "No se pudieron cargar los POI",
     // Editor
     editor_height: "Altura de la tarjeta (px)",
     editor_title: "Título (opcional)",
@@ -11017,6 +11047,10 @@ class BoschEBike3DMapCardEditor extends HTMLElement {
 // ===========================================================================
 const RP_MAX_WAYPOINTS = 30; // muss zum Backend-Limit in brouter.py passen
 const RP_PROFILES = ["trekking", "fastbike", "mtb", "shortest"];
+// POI-Kategorien für den Routenplaner: wie die Map-Card plus Gastronomie
+// (muss zur Whitelist POI_CATEGORY_SELECTORS im Backend passen).
+const RP_POI_CATEGORIES = ["charging", "bicycle", "water", "toilets", "food"];
+const RP_POI_RADIUS_M = 500; // POIs max. 500 m neben der Route
 
 // Sprachunabhängige Erkennung der Reichweiten-Sensoren. Entity-IDs werden
 // aus dem ÜBERSETZTEN Namen erzeugt (deutsche Instanz →
@@ -11062,6 +11096,12 @@ class BoschEBikeRoutePlannerCard extends HTMLElement {
     this._domBuilt = false;
     this._booting = false;
     this._bootErrorShown = false; // Boot-Fehler nur einmal loggen/anzeigen
+    // POI-Overlay entlang der Route (eigener localStorage-Key, unabhängig
+    // vom 📍-Toggle der Map-Card)
+    this._poiEnabled = (typeof localStorage !== "undefined" && localStorage.getItem("eb-rp-poi-enabled") === "1");
+    this._poiGroup = null;         // L.layerGroup mit den POI-Markern
+    this._poiCache = new Map();    // bbox+Kategorien → rohe Overpass-Elemente
+    this._poiSeq = 0;              // verwirft veraltete get_pois-Antworten
   }
 
   setConfig(config) {
@@ -11156,6 +11196,7 @@ class BoschEBikeRoutePlannerCard extends HTMLElement {
       this._debounceTimer = null;
     }
     this._routeSeq += 1; // laufende plan_route-Antwort verwerfen
+    this._poiSeq += 1;   // laufende get_pois-Antwort verwerfen
     // Leaflet-Map sauber abbauen (Listener/Memory-Leak bei Lovelace-
     // Edit-Zyklen) — Muster wie _destroyMap() der Map-/3D-Card.
     if (this._map) {
@@ -11163,6 +11204,7 @@ class BoschEBikeRoutePlannerCard extends HTMLElement {
       this._map = null;
       this._baseLayer = null;
       this._routeGroup = null;
+      this._poiGroup = null;
     }
   }
 
@@ -11191,6 +11233,8 @@ class BoschEBikeRoutePlannerCard extends HTMLElement {
         }).addTo(this._routeGroup);
         this._map.fitBounds(Leaflet.latLngBounds(latlngs), { padding: [40, 40], animate: false });
       } catch (_) {}
+      // POI-Marker aus dem In-Memory-Cache neu zeichnen (kein Re-Query)
+      if (this._poiEnabled) this._loadAndRenderPois();
     } else if (this._waypoints.length >= 2) {
       this._fitPending = true;
       this._scheduleRoute();
@@ -11231,6 +11275,18 @@ class BoschEBikeRoutePlannerCard extends HTMLElement {
         border:none; border-radius:8px; cursor:pointer; font-size:13px;
       }
       .rp-toolbar button:disabled { opacity:.35; cursor:not-allowed; }
+      .rp-toolbar button.eb-active {
+        background:rgba(11,132,199,.95);
+        outline:2px solid rgba(255,255,255,.6);
+      }
+      .rp-toolbar button.eb-loading {
+        opacity:.6;
+        animation:rp-poi-pulse 1.2s ease-in-out infinite;
+      }
+      @keyframes rp-poi-pulse {
+        0%,100% { opacity:.55; }
+        50%     { opacity:.95; }
+      }
       .rp-lbl { font-size:12px; color:var(--secondary-text-color,#666); }
       .rp-hint {
         padding:6px 12px; font-size:12px; color:var(--secondary-text-color,#666);
@@ -11248,6 +11304,30 @@ class BoschEBikeRoutePlannerCard extends HTMLElement {
       .rp-wp {
         width:18px; height:18px; border-radius:50%; box-sizing:border-box;
         border:3px solid #fff; box-shadow:0 1px 4px rgba(0,0,0,.4);
+      }
+      .eb-poi-marker {
+        background:rgba(255,255,255,.95);
+        border-radius:50%;
+        width:18px !important; height:18px !important;
+        display:flex; align-items:center; justify-content:center;
+        font-size:12px; line-height:1;
+        box-shadow:0 1px 3px rgba(0,0,0,.3);
+        cursor:pointer;
+      }
+      .eb-poi-marker.eb-poi-charging   { border:1.5px solid #2e7d32; }
+      .eb-poi-marker.eb-poi-bicycle    { border:1.5px solid #c62828; }
+      .eb-poi-marker.eb-poi-water      { border:1.5px solid #1565c0; }
+      .eb-poi-marker.eb-poi-toilet     { border:1.5px solid #6a1b9a; }
+      .eb-poi-marker.eb-poi-food       { border:1.5px solid #e65100; }
+      .eb-poi-marker.eb-poi-cafe       { border:1.5px solid #5d4037; }
+      .eb-poi-marker.eb-poi-biergarten { border:1.5px solid #f9a825; }
+      .eb-poi-popup { font-family:inherit; max-width:240px; font-size:13px; }
+      .eb-poi-popup .eb-poi-title { font-weight:600; margin-bottom:4px; }
+      .eb-poi-popup .eb-poi-cat { font-size:11px; color:#666; margin-bottom:6px; }
+      .eb-poi-popup .eb-poi-link {
+        display:inline-block; padding:3px 8px;
+        background:#0b84c7; color:#fff; border-radius:6px;
+        text-decoration:none; font-size:11px; font-weight:500;
       }
       .rp-stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(90px,1fr)); gap:4px; padding:10px 16px 4px; }
       .rp-stat { text-align:center; }
@@ -11279,6 +11359,7 @@ class BoschEBikeRoutePlannerCard extends HTMLElement {
         </select>
         <button id="rp-reset" type="button">${t("rp_reset")}</button>
         <button id="rp-gpx" type="button" disabled>${t("rp_export_gpx")}</button>
+        <button id="rp-poi" type="button" class="${this._poiEnabled ? "eb-active" : ""}" title="${t("rp_poi_btn")}" aria-label="${t("rp_poi_btn")}">📍</button>
       </div>
       <div class="rp-hint" id="rp-hint">${t("rp_hint_click")}</div>
       <div class="rp-map-wrap">
@@ -11313,6 +11394,7 @@ class BoschEBikeRoutePlannerCard extends HTMLElement {
     });
     this.querySelector("#rp-reset").addEventListener("click", () => this._reset());
     this.querySelector("#rp-gpx").addEventListener("click", () => this._exportGpx());
+    this.querySelector("#rp-poi").addEventListener("click", () => this._togglePoi());
   }
 
   _createMap() {
@@ -11333,6 +11415,7 @@ class BoschEBikeRoutePlannerCard extends HTMLElement {
     const def = MAP_STYLES.osm;
     this._baseLayer = Leaflet.tileLayer(def.url, def.options).addTo(this._map);
     this._routeGroup = Leaflet.layerGroup().addTo(this._map);
+    this._poiGroup = Leaflet.layerGroup().addTo(this._map);
     this._map.on("click", (e) => this._onMapClick(e));
   }
 
@@ -11447,6 +11530,10 @@ class BoschEBikeRoutePlannerCard extends HTMLElement {
 
   _clearRoute() {
     if (this._routeGroup) this._routeGroup.clearLayers();
+    this._poiSeq += 1; // laufende get_pois-Antwort verwerfen
+    if (this._poiGroup) {
+      try { this._poiGroup.clearLayers(); } catch (_) {}
+    }
     this._lastRouteCoords = null;
     this._lastRouteProps = null;
     const gpxBtn = this.querySelector("#rp-gpx");
@@ -11490,6 +11577,7 @@ class BoschEBikeRoutePlannerCard extends HTMLElement {
 
     this._renderStats(this._lastRouteProps);
     this._renderElevation(coords);
+    if (this._poiEnabled) this._loadAndRenderPois();
   }
 
   // -------------------------------------------------------------------------
@@ -11663,6 +11751,232 @@ class BoschEBikeRoutePlannerCard extends HTMLElement {
     a.download = `bosch-ebike-route-${new Date().toISOString().slice(0, 10)}.gpx`;
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  }
+
+  // -------------------------------------------------------------------------
+  // POI-Overlay entlang der Route (Overpass via Backend-Proxy) — Mechanik wie
+  // in der Map-Card, zusätzlich mit Gastronomie-Kategorien
+  // -------------------------------------------------------------------------
+
+  _togglePoi() {
+    this._poiEnabled = !this._poiEnabled;
+    try { localStorage.setItem("eb-rp-poi-enabled", this._poiEnabled ? "1" : "0"); } catch (_) {}
+    const btn = this.querySelector("#rp-poi");
+    if (btn) btn.classList.toggle("eb-active", this._poiEnabled);
+    if (this._poiEnabled) {
+      // Ohne Route passiert nichts — POIs kommen, sobald eine Route da ist.
+      this._loadAndRenderPois();
+    } else {
+      this._poiSeq += 1; // laufende Antwort verwerfen
+      if (this._poiGroup) {
+        try { this._poiGroup.clearLayers(); } catch (_) {}
+      }
+    }
+  }
+
+  _setPoiLoadingUI(loading) {
+    const btn = this.querySelector("#rp-poi");
+    if (btn) {
+      btn.classList.toggle("eb-loading", !!loading);
+      btn.disabled = !!loading;
+    }
+  }
+
+  async _loadAndRenderPois() {
+    if (!this._poiEnabled || !this._map) return;
+    const coords = this._lastRouteCoords;
+    if (!coords || coords.length < 2) return;
+    const track = coords
+      .map((c) => ({ lat: Number(c[1]), lon: Number(c[0]) }))
+      .filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lon));
+    if (track.length < 2) return;
+
+    // Bbox der Route + Puffer (wie _fetchPois der Map-Card, Radius 500 m)
+    let minLat = Infinity, maxLat = -Infinity, minLon = Infinity, maxLon = -Infinity;
+    for (const p of track) {
+      if (p.lat < minLat) minLat = p.lat;
+      if (p.lat > maxLat) maxLat = p.lat;
+      if (p.lon < minLon) minLon = p.lon;
+      if (p.lon > maxLon) maxLon = p.lon;
+    }
+    const pad = RP_POI_RADIUS_M / 111000 + 0.001;
+    const south = minLat - pad;
+    const north = maxLat + pad;
+    const west = minLon - pad;
+    const east = maxLon + pad;
+
+    // In-Memory-Cache: gerundete Bbox + Kategorien — Toggle/Rebuild auf
+    // derselben Route fragt Overpass nicht erneut ab.
+    const cacheKey = [south, west, north, east].map((v) => v.toFixed(4)).join(",")
+      + "|" + RP_POI_CATEGORIES.join(",");
+    const seq = ++this._poiSeq;
+    let elements = this._poiCache.get(cacheKey);
+
+    if (!elements) {
+      this._setPoiLoadingUI(true);
+      try {
+        const res = await this._hass.callWS({
+          type: "bosch_ebike/get_pois",
+          south, west, north, east,
+          categories: RP_POI_CATEGORIES,
+        });
+        elements = (res && Array.isArray(res.elements)) ? res.elements : [];
+        if (this._poiCache.size > 20) this._poiCache.clear();
+        this._poiCache.set(cacheKey, elements);
+      } catch (err) {
+        console.warn("[Bosch eBike Routeplanner] POI fetch failed", err);
+        if (seq === this._poiSeq) {
+          const msg = this._t("rp_poi_error");
+          this._setStatus(msg, "");
+          // Hinweis nach kurzer Zeit ausblenden — die Route bleibt nutzbar.
+          setTimeout(() => {
+            const mainEl = this.querySelector("#rp-status-main");
+            if (mainEl && mainEl.textContent === msg) this._setStatus(null);
+          }, 5000);
+        }
+        return;
+      } finally {
+        this._setPoiLoadingUI(false);
+      }
+    }
+
+    // Veraltet (neue Route/Toggle aus/Reset während des Fetches)? Verwerfen.
+    if (seq !== this._poiSeq || !this._poiEnabled || this._lastRouteCoords !== coords) return;
+    this._renderPoiMarkers(this._filterPois(elements, track));
+  }
+
+  // Elemente parsen, auf Routen-Nähe filtern und auf 100 Marker kappen
+  // (Spiegel von _fetchPois der Map-Card, fester Radius 500 m).
+  _filterPois(elements, track) {
+    const MAX_DIST_M = RP_POI_RADIUS_M;
+    const sampled = this._poiSamplePoints(track, MAX_DIST_M / 2);
+    const out = [];
+    for (const el of elements) {
+      if (typeof el.lat !== "number" || typeof el.lon !== "number") continue;
+      let near = false;
+      for (const sp of sampled) {
+        if (this._haversineMeters(el.lat, el.lon, sp.lat, sp.lon) <= MAX_DIST_M) {
+          near = true; break;
+        }
+      }
+      if (!near) continue;
+      const tags = el.tags || {};
+      const cat = this._poiCategory(tags);
+      if (!cat) continue;
+      out.push({
+        lat: el.lat,
+        lon: el.lon,
+        category: cat.key,
+        catLabel: cat.label,
+        catIcon: cat.icon,
+        name: tags.name || cat.label,
+        osmId: el.id,
+        tags,
+      });
+    }
+    // Maximal 100 Marker, sonst wird die Karte unübersichtlich
+    return out.slice(0, 100);
+  }
+
+  // Kategorien wie in der Map-Card, zusätzlich Gastronomie
+  _poiCategory(tags) {
+    if (tags.amenity === "charging_station") {
+      return { key: "charging", label: this._t("poi_charging"), icon: "🔌" };
+    }
+    if (tags.shop === "bicycle") {
+      return { key: "bicycle", label: this._t("poi_bicycle_shop"), icon: "🛠️" };
+    }
+    if (tags.amenity === "bicycle_repair_station") {
+      return { key: "bicycle", label: this._t("poi_repair"), icon: "🛠️" };
+    }
+    if (tags.amenity === "drinking_water") {
+      return { key: "water", label: this._t("poi_water"), icon: "💧" };
+    }
+    if (tags.amenity === "toilets") {
+      return { key: "toilet", label: this._t("poi_toilet"), icon: "🚻" };
+    }
+    if (tags.amenity === "restaurant" || tags.amenity === "fast_food") {
+      return { key: "food", label: this._t("poi_food"), icon: "🍽️" };
+    }
+    if (tags.amenity === "cafe") {
+      return { key: "cafe", label: this._t("poi_cafe"), icon: "☕" };
+    }
+    if (tags.amenity === "biergarten") {
+      return { key: "biergarten", label: this._t("poi_biergarten"), icon: "🍺" };
+    }
+    return null;
+  }
+
+  /// Punkte alle `intervalM` Meter entlang der Route (Dublette der Map-Card,
+  /// wie beim _haversineMeters-Präzedenzfall).
+  _poiSamplePoints(track, intervalM = 250) {
+    if (!Array.isArray(track) || track.length < 2) return [];
+    const intervalKm = Math.max(0.05, intervalM / 1000);
+    const pts = [];
+    pts.push({ lat: track[0].lat, lon: track[0].lon });
+    let cumKm = 0;
+    let lastSampled = 0;
+    for (let i = 1; i < track.length; i += 1) {
+      cumKm += this._haversineMeters(track[i - 1].lat, track[i - 1].lon, track[i].lat, track[i].lon) / 1000;
+      if (cumKm - lastSampled >= intervalKm) {
+        pts.push({ lat: track[i].lat, lon: track[i].lon });
+        lastSampled = cumKm;
+      }
+    }
+    const last = track[track.length - 1];
+    pts.push({ lat: last.lat, lon: last.lon });
+    return pts;
+  }
+
+  _renderPoiMarkers(pois) {
+    if (!this._poiEnabled) return;
+    const Leaflet = window.L;
+    if (!Leaflet || !this._map) return;
+    if (!this._poiGroup) this._poiGroup = Leaflet.layerGroup().addTo(this._map);
+    this._poiGroup.clearLayers();
+    const popupOpts = { maxWidth: 260, closeOnClick: false, autoClose: false };
+    for (const poi of pois) {
+      const icon = Leaflet.divIcon({
+        className: "",
+        html: `<div class="eb-poi-marker eb-poi-${poi.category}">${poi.catIcon}</div>`,
+        iconSize: [18, 18],
+        iconAnchor: [9, 9],
+      });
+      const marker = Leaflet.marker([poi.lat, poi.lon], { icon, title: `${poi.catIcon} ${poi.name}` });
+      marker.bindPopup(this._poiPopupHtml(poi), popupOpts);
+      marker.addTo(this._poiGroup);
+    }
+  }
+
+  // Dublette der Map-Card-Methode — OSM-Tag-Werte (Name, Öffnungszeiten,
+  // Adresse, Website) sind Fremddaten und werden durchgängig escaped.
+  _poiPopupHtml(poi) {
+    const safeName = this._escapeHtml(poi.name);
+    const osmUrl = `https://www.openstreetmap.org/node/${poi.osmId}`;
+    let extra = "";
+    if (poi.tags.opening_hours) {
+      extra += `<div>🕒 ${this._escapeHtml(poi.tags.opening_hours)}</div>`;
+    }
+    if (poi.tags["addr:street"]) {
+      const addr = [poi.tags["addr:street"], poi.tags["addr:housenumber"]].filter(Boolean).join(" ");
+      extra += `<div>📍 ${this._escapeHtml(addr)}</div>`;
+    }
+    if (poi.tags.website) {
+      const url = poi.tags.website.startsWith("http") ? poi.tags.website : "https://" + poi.tags.website;
+      extra += `<div>🌐 <a href="${this._escapeHtml(url)}" target="_blank" rel="noopener">Website</a></div>`;
+    }
+    return `<div class="eb-poi-popup">
+      <div class="eb-poi-title">${poi.catIcon} ${safeName}</div>
+      <div class="eb-poi-cat">${this._escapeHtml(poi.catLabel)}</div>
+      ${extra}
+      <a class="eb-poi-link" href="${osmUrl}" target="_blank" rel="noopener noreferrer">${this._t("poi_open_osm")}</a>
+    </div>`;
+  }
+
+  _escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, (c) => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+    })[c]);
   }
 
   // -------------------------------------------------------------------------
