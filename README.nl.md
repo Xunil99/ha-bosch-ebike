@@ -429,6 +429,7 @@ battery_entity: sensor.ebike_battery_soc_live
 charging_entity: binary_sensor.ebike_charger_connected
 last_tour_distance_entity: sensor.bosch_ebike_last_activity_distance
 charge_power_entity: sensor.ebike_smart_plug_power
+range_entity: sensor.cx_estimated_range_current
 charge_switch_entity: switch.ebike_smart_plug
 target_soc_entity: input_number.ebike_target_soc
 ```
@@ -437,6 +438,7 @@ target_soc_entity: input_number.ebike_target_soc
 
 - **Fietsfoto** met ingebouwde upload in de kaarteditor (afbeelding kiezen, de kaart schrijft het pad zelf). Alternatief klassiek via `/config/www/` en `/local/bestand.jpg` verwijzen. Placeholder met fietsicoon zolang er niets is ingesteld.
 - **Kilometerstand-tegel** en optioneel **afstand laatste tour**, **laadvermogen in watt**
+- **Geschatte actieradius** als tegel (`≈ 62 km`) — automatisch zodra de sensor "Geschatte actieradius (actueel)" bestaat, of expliciet via `range_entity`. Net als de sensoren een **schatting**.
 - **Status-pills** voor laadstatus en accupercentage
 - **Doel-SoC-schuifregelaar** die de waarde van een `input_number` instelt
 - **Start- en stopknoppen** met dubbele-klik-bevestiging bij stop (bescherming tegen vergissingen)

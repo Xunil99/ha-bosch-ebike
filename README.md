@@ -436,6 +436,7 @@ battery_entity: sensor.ebike_battery_soc_live
 charging_entity: binary_sensor.ebike_charger_connected
 last_tour_distance_entity: sensor.bosch_ebike_last_activity_distance
 charge_power_entity: sensor.ebike_smart_plug_power
+range_entity: sensor.cx_estimated_range_current
 charge_switch_entity: switch.ebike_smart_plug
 target_soc_entity: input_number.ebike_target_soc
 ```
@@ -444,6 +445,7 @@ target_soc_entity: input_number.ebike_target_soc
 
 - **Bike-Foto** mit eingebautem Upload im Karten-Editor (Bild auswählen, Karte schreibt den Pfad selbst). Alternativ klassisch über `/config/www/` und `/local/datei.jpg` referenzieren. Platzhalter mit Fahrrad-Icon, solange nichts gesetzt ist.
 - **Tachostand-Kachel** und optional **Letzte-Tour-Distanz**, **Ladeleistung in Watt**
+- **Geschätzte Restreichweite** als Kachel (`≈ 62 km`) — automatisch, sobald der Sensor „Geschätzte Reichweite (aktuell)“ existiert, oder explizit über `range_entity`. Wie bei den Sensoren eine **Schätzung**.
 - **Status-Pills** für Lade-Zustand und Akku-Prozent
 - **Ziel-SoC-Schieberegler**, der den Wert eines `input_number` setzt
 - **Start- und Stop-Buttons** mit Zwei-Klick-Bestätigung bei Stop (Versehensschutz)
@@ -968,6 +970,7 @@ battery_entity: sensor.ebike_battery_soc_live
 charging_entity: binary_sensor.ebike_charger_connected
 last_tour_distance_entity: sensor.bosch_ebike_last_activity_distance
 charge_power_entity: sensor.ebike_smart_plug_power
+range_entity: sensor.cx_estimated_range_current
 charge_switch_entity: switch.ebike_smart_plug
 target_soc_entity: input_number.ebike_target_soc
 ```
@@ -976,6 +979,7 @@ target_soc_entity: input_number.ebike_target_soc
 
 - **Bike photo** with a built-in upload right in the card editor (pick a file, the card fills the path itself). Or paste a classic `/local/file.jpg` URL after dropping a file into `/config/www/`. A placeholder with a bicycle icon is shown when nothing is set.
 - **Odometer tile**, plus optional **last-tour distance** and **charging power in watts**
+- **Estimated remaining range** as a tile (`≈ 62 km`) — automatic as soon as the "Estimated range (current)" sensor exists, or explicitly via `range_entity`. Like the sensors, an **estimate**.
 - **Status pills** for charging state and battery percent
 - **Target-SoC slider** that writes to an `input_number`
 - **Start and Stop buttons** with a two-click confirm on Stop (accident protection)

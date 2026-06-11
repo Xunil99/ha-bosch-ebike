@@ -435,6 +435,7 @@ battery_entity: sensor.ebike_battery_soc_live
 charging_entity: binary_sensor.ebike_charger_connected
 last_tour_distance_entity: sensor.bosch_ebike_last_activity_distance
 charge_power_entity: sensor.ebike_smart_plug_power
+range_entity: sensor.cx_estimated_range_current
 charge_switch_entity: switch.ebike_smart_plug
 target_soc_entity: input_number.ebike_target_soc
 ```
@@ -443,6 +444,7 @@ target_soc_entity: input_number.ebike_target_soc
 
 - **Foto della bici** con upload integrato nell'editor della card (scegli l'immagine, la card scrive il percorso da sola). In alternativa, in modo classico tramite `/config/www/` e riferimento `/local/file.jpg`. Segnaposto con icona di bicicletta finché non è impostato nulla.
 - **Riquadro del chilometraggio** e, opzionalmente, **distanza dell'ultimo tour**, **potenza di ricarica in watt**
+- **Autonomia residua stimata** come riquadro (`≈ 62 km`) — automatica non appena esiste il sensore "Autonomia stimata (attuale)", oppure esplicitamente tramite `range_entity`. Come i sensori, è una **stima**.
 - **Status pill** per lo stato di ricarica e la percentuale della batteria
 - **Slider del SoC target**, che imposta il valore di un `input_number`
 - **Pulsanti Start e Stop** con conferma a doppio clic per lo Stop (protezione dagli errori)

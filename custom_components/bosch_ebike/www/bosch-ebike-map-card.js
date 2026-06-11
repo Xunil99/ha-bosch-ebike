@@ -149,6 +149,9 @@ const I18N = {
     dash_label_last_tour: "Last tour",
     dash_label_battery: "Battery",
     dash_label_charge_power: "Charging power",
+    dash_label_range: "Range (est.)",
+    dash_editor_range: "Estimated range entity (optional)",
+    dash_editor_range_hint: "Sensor \"Estimated range (current)\" of the integration. If empty, the card auto-detects it; the tile is hidden when no value is available.",
     dash_label_target_soc: "Stop charging at",
     dash_state_charging: "Charging",
     dash_state_not_charging: "Not charging",
@@ -447,6 +450,9 @@ const I18N = {
     dash_label_last_tour: "Letzte Tour",
     dash_label_battery: "Akku",
     dash_label_charge_power: "Ladeleistung",
+    dash_label_range: "Reichweite (geschätzt)",
+    dash_editor_range: "Reichweiten-Sensor (optional)",
+    dash_editor_range_hint: "Sensor \"Geschätzte Reichweite (aktuell)\" der Integration. Leer = automatische Erkennung; ohne Wert wird die Kachel ausgeblendet.",
     dash_label_target_soc: "Laden stoppen bei",
     dash_state_charging: "Lädt",
     dash_state_not_charging: "Lädt nicht",
@@ -744,6 +750,9 @@ const I18N = {
     dash_label_last_tour: "Laatste rit",
     dash_label_battery: "Accu",
     dash_label_charge_power: "Laadvermogen",
+    dash_label_range: "Actieradius (geschat)",
+    dash_editor_range: "Actieradius-sensor (optioneel)",
+    dash_editor_range_hint: "Sensor \"Geschatte actieradius (actueel)\" van de integratie. Leeg = automatische detectie; zonder waarde wordt de tegel verborgen.",
     dash_label_target_soc: "Laden stoppen bij",
     dash_state_charging: "Aan het laden",
     dash_state_not_charging: "Niet aan het laden",
@@ -1053,6 +1062,9 @@ const I18N = {
     dash_label_last_tour: "Dernière sortie",
     dash_label_battery: "Batterie",
     dash_label_charge_power: "Puissance de charge",
+    dash_label_range: "Autonomie (estimée)",
+    dash_editor_range: "Entité d'autonomie estimée (optionnel)",
+    dash_editor_range_hint: "Capteur \"Autonomie estimée (actuelle)\" de l'intégration. Vide = détection automatique ; sans valeur, la tuile est masquée.",
     dash_label_target_soc: "Arrêter la charge à",
     dash_state_charging: "En charge",
     dash_state_not_charging: "Pas en charge",
@@ -1362,6 +1374,9 @@ const I18N = {
     dash_label_last_tour: "Ultima uscita",
     dash_label_battery: "Batteria",
     dash_label_charge_power: "Potenza di ricarica",
+    dash_label_range: "Autonomia (stimata)",
+    dash_editor_range: "Entità autonomia stimata (opzionale)",
+    dash_editor_range_hint: "Sensore \"Autonomia stimata (attuale)\" dell'integrazione. Vuoto = rilevamento automatico; senza valore la tessera viene nascosta.",
     dash_label_target_soc: "Interrompi ricarica a",
     dash_state_charging: "In carica",
     dash_state_not_charging: "Non in carica",
@@ -1671,6 +1686,9 @@ const I18N = {
     dash_label_last_tour: "Última ruta",
     dash_label_battery: "Batería",
     dash_label_charge_power: "Potencia de carga",
+    dash_label_range: "Autonomía (estimada)",
+    dash_editor_range: "Entidad de autonomía estimada (opcional)",
+    dash_editor_range_hint: "Sensor \"Autonomía estimada (actual)\" de la integración. Vacío = detección automática; sin valor, la ficha se oculta.",
     dash_label_target_soc: "Detener carga al",
     dash_state_charging: "Cargando",
     dash_state_not_charging: "Sin carga",
@@ -6829,6 +6847,28 @@ class BoschEBikeDashboardCard extends HTMLElement {
     return v.toLocaleString(undefined, { maximumFractionDigits: 0 }) + " %";
   }
 
+  // Geschätzte Restreichweite in km: explizit konfigurierter Sensor
+  // (range_entity) oder Auto-Erkennung des Integrations-Sensors
+  // "Estimated Range (Current)". null = keine Kachel anzeigen.
+  _estimatedRangeKm(cfg) {
+    const states = this._hass && this._hass.states ? this._hass.states : null;
+    if (!states) return null;
+    let ent = cfg.range_entity;
+    if (!ent) {
+      // Treffer cachen; bei "nicht gefunden" weiter suchen, damit ein erst
+      // später angelegter Sensor ohne Card-Neuaufbau erscheint.
+      if (!this._rangeAutoEntity || !states[this._rangeAutoEntity]) {
+        this._rangeAutoEntity =
+          Object.keys(states).find((k) => k.endsWith("_estimated_range_current")) || null;
+      }
+      ent = this._rangeAutoEntity;
+    }
+    const st = ent ? states[ent] : null;
+    if (!st) return null;
+    const v = Number(st.state);
+    return Number.isFinite(v) && v >= 0 ? Math.round(v) : null;
+  }
+
   _render() {
     if (!this._built || !this._hass) return;
 
@@ -6899,6 +6939,17 @@ class BoschEBikeDashboardCard extends HTMLElement {
       ];
       if (cfg.last_tour_distance_entity) {
         tiles.push({ icon: "mdi:map-marker-distance", label: this._t("dash_label_last_tour"), val: this._formatKm(lastTour) });
+      }
+      // Geschätzte Restreichweite (Sensor "Estimated Range (Current)" der
+      // Integration). Explizit via range_entity, sonst Auto-Erkennung; ohne
+      // Wert keine Kachel. "≈" markiert den Schätzungs-Charakter.
+      const rangeKm = this._estimatedRangeKm(cfg);
+      if (rangeKm != null) {
+        tiles.push({
+          icon: "mdi:road-variant",
+          label: this._t("dash_label_range"),
+          val: `≈ ${rangeKm} km`,
+        });
       }
       if (cfg.charge_power_entity) {
         tiles.push({
@@ -7623,6 +7674,8 @@ class BoschEBikeDashboardCardEditor extends HTMLElement {
       charging_entity: mkEntity("charging_entity", "dash_editor_charging", null,
         (e) => e.startsWith("binary_sensor.") || e.startsWith("sensor.")),
       last_tour_distance_entity: mkEntity("last_tour_distance_entity", "dash_editor_last_tour", null,
+        (e) => e.startsWith("sensor.")),
+      range_entity: mkEntity("range_entity", "dash_editor_range", "dash_editor_range_hint",
         (e) => e.startsWith("sensor.")),
       charge_power_entity: mkEntity("charge_power_entity", "dash_editor_charge_power", null,
         (e) => e.startsWith("sensor.")),
