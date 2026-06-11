@@ -319,6 +319,9 @@ height: 480
 - **Hoogteprofiel** als diagram onder de kaart
 - **GPX-export** van de geplande route (importeerbaar in Garmin Connect,
   Komoot, de Flow-app e.a.)
+- **Routes opslaan & laden:** geplande routes onder een eigen naam bewaren
+  (opgeslagen in Home Assistant, op al je apparaten beschikbaar), via de
+  📁-lijst opnieuw laden, verder bewerken of verwijderen
 
 Opties: `title`, `height`, `brouter_url` (eigen BRouter-instantie in plaats
 van brouter.de), `entity` (actieradius-sensor), `soc_entity` (live-accuniveau).

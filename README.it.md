@@ -324,6 +324,9 @@ height: 480
 - **Profilo altimetrico** come diagramma sotto la mappa
 - **Esportazione GPX** del percorso pianificato (importabile in Garmin
   Connect, Komoot, l'app Flow e altri)
+- **Salvare e caricare percorsi:** salva i percorsi pianificati con un nome
+  a scelta (memorizzati in Home Assistant, disponibili su tutti i tuoi
+  dispositivi), ricaricali dalla lista 📁, continua a modificarli o eliminali
 
 Opzioni: `title`, `height`, `brouter_url` (istanza BRouter propria invece di
 brouter.de), `entity` (sensore di autonomia), `soc_entity` (livello batteria

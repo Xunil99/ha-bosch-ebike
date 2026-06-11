@@ -327,6 +327,10 @@ height: 480
 - **Profil d'altitude** sous forme de diagramme sous la carte
 - **Export GPX** de l'itinéraire planifié (importable dans Garmin Connect,
   Komoot, l'app Flow, etc.)
+- **Enregistrer & charger des itinéraires :** sauvegarder les itinéraires
+  planifiés sous le nom de ton choix (stockés dans Home Assistant,
+  disponibles sur tous tes appareils), les recharger via la liste 📁,
+  continuer à les modifier ou les supprimer
 
 Options : `title`, `height`, `brouter_url` (ta propre instance BRouter au
 lieu de brouter.de), `entity` (capteur d'autonomie), `soc_entity` (niveau

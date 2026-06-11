@@ -326,6 +326,9 @@ height: 480
 - **Höhenprofil** als Diagramm unter der Karte
 - **GPX-Export** der geplanten Route (importierbar in Garmin Connect,
   Komoot, die Flow-App u. a.)
+- **Routen speichern & laden:** geplante Routen unter eigenem Namen ablegen
+  (gespeichert in Home Assistant, auf allen Geräten verfügbar), über die
+  📁-Liste wieder laden, weiter bearbeiten oder löschen
 
 Optionen: `title`, `height`, `brouter_url` (eigene BRouter-Instanz statt
 brouter.de), `entity` (Reichweiten-Sensor), `soc_entity` (Live-Akkustand).
@@ -863,6 +866,9 @@ height: 480
 - **Elevation profile** chart below the map
 - **GPX export** of the planned route (importable into Garmin Connect,
   Komoot, the Flow app and others)
+- **Save & load routes:** store planned routes under a name of your choice
+  (saved in Home Assistant, available on all your devices), reload them from
+  the 📁 list, keep editing or delete them
 
 Options: `title`, `height`, `brouter_url` (your own BRouter instance instead
 of brouter.de), `entity` (range sensor), `soc_entity` (live battery level).

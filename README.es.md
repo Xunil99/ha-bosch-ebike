@@ -326,6 +326,9 @@ height: 480
 - **Perfil de elevación** como diagrama debajo del mapa
 - **Exportación GPX** de la ruta planificada (importable en Garmin Connect,
   Komoot, la app Flow y otros)
+- **Guardar y cargar rutas:** guarda las rutas planificadas con el nombre
+  que quieras (almacenadas en Home Assistant, disponibles en todos tus
+  dispositivos), recárgalas desde la lista 📁, sigue editándolas o elimínalas
 
 Opciones: `title`, `height`, `brouter_url` (instancia BRouter propia en
 lugar de brouter.de), `entity` (sensor de autonomía), `soc_entity` (nivel
