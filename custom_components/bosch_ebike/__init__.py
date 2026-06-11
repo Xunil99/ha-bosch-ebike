@@ -6,6 +6,7 @@ import asyncio
 import json
 import logging
 import os
+import uuid
 
 import aiohttp
 import voluptuous as vol
@@ -22,7 +23,13 @@ from homeassistant.helpers.start import async_at_started
 from homeassistant.helpers.storage import Store
 
 from .api import BoschEBikeAPI
-from .brouter import BRouterRequestError, build_brouter_url
+from .brouter import (
+    ALLOWED_PROFILES,
+    MAX_POINTS,
+    MIN_POINTS,
+    BRouterRequestError,
+    build_brouter_url,
+)
 from .const import DOMAIN, CONF_CLIENT_ID
 from .coordinator import BoschEBikeCoordinator
 
@@ -99,6 +106,9 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     websocket_api.async_register_command(hass, ws_set_card_settings)
     websocket_api.async_register_command(hass, ws_overpass_pois)
     websocket_api.async_register_command(hass, ws_plan_route)
+    websocket_api.async_register_command(hass, ws_list_routes)
+    websocket_api.async_register_command(hass, ws_save_route)
+    websocket_api.async_register_command(hass, ws_delete_route)
 
     # Singleton Store für gemeinsame Darstellungs-Settings, die sowohl
     # die 3D-Karte als auch die 2D-Karte (Chase-Cam-Overlay + Editor)
@@ -111,6 +121,19 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
         loaded = await store.async_load() or {}
         domain_data["card_settings_store"] = store
         domain_data["card_settings"] = loaded if isinstance(loaded, dict) else {}
+
+    # Singleton Store für gespeicherte Routenplaner-Routen. Gleiche
+    # Mechanik wie die Card-Settings: einmal laden, in hass.data halten,
+    # WS-Handler lesen/schreiben gegen diese Liste und persistieren über
+    # den Store. Liegt im Backend, damit gespeicherte Routen auf allen
+    # Geräten verfügbar sind (wie die Wartungsliste).
+    if "saved_routes_store" not in domain_data:
+        routes_store = Store(hass, 1, f"{DOMAIN}_saved_routes")
+        loaded_routes = await routes_store.async_load() or []
+        domain_data["saved_routes_store"] = routes_store
+        domain_data["saved_routes"] = (
+            loaded_routes if isinstance(loaded_routes, list) else []
+        )
 
     _register_services(hass)
 
@@ -1085,3 +1108,164 @@ async def ws_plan_route(
         return
 
     connection.send_result(msg["id"], {"geojson": geojson})
+
+
+# Obergrenze für gespeicherte Planer-Routen. Schützt den Store vor
+# unbegrenztem Wachstum; Updates bestehender Einträge sind immer erlaubt.
+MAX_SAVED_ROUTES = 50
+
+
+@websocket_api.websocket_command(
+    {vol.Required("type"): "bosch_ebike/list_routes"}
+)
+@websocket_api.async_response
+async def ws_list_routes(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict
+) -> None:
+    """Return all saved route-planner routes.
+
+    Each entry carries id, name, profile, lonlats, distance_km and the
+    "updated" UTC ISO timestamp - everything the planner card needs to
+    render the list and to restore a route for further editing.
+    """
+    routes = hass.data.get(DOMAIN, {}).get("saved_routes", []) or []
+    connection.send_result(msg["id"], {"routes": routes})
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "bosch_ebike/save_route",
+        vol.Required("name"): str,
+        vol.Required("profile"): str,
+        vol.Required("lonlats"): [[vol.Coerce(float)]],
+        # "id" is reserved for the websocket message id, hence "route_id".
+        vol.Optional("route_id"): vol.Any(str, None),
+        vol.Optional("distance_km"): vol.Any(vol.Coerce(float), None),
+    }
+)
+@websocket_api.async_response
+async def ws_save_route(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict
+) -> None:
+    """Save (upsert) a planned route under a user-chosen name.
+
+    Upsert semantics: if "route_id" is given and exists, that entry is
+    updated in place (renaming allowed). Otherwise an entry whose name
+    matches case-insensitively is overwritten (keeping its id), so saving
+    under an existing name never produces duplicates. Only when neither
+    matches is a new entry appended - capped at MAX_SAVED_ROUTES.
+    """
+    from homeassistant.util import dt as dt_util
+
+    name = (msg.get("name") or "").strip()
+    if not 1 <= len(name) <= 60:
+        connection.send_error(
+            msg["id"], "invalid_request", "name must be 1-60 characters"
+        )
+        return
+
+    profile = msg["profile"]
+    if profile not in ALLOWED_PROFILES:
+        connection.send_error(
+            msg["id"],
+            "invalid_request",
+            f"profile must be one of {ALLOWED_PROFILES}, got {profile!r}",
+        )
+        return
+
+    raw_points = msg.get("lonlats") or []
+    if not MIN_POINTS <= len(raw_points) <= MAX_POINTS:
+        connection.send_error(
+            msg["id"],
+            "invalid_request",
+            f"waypoint count must be {MIN_POINTS}-{MAX_POINTS}, got {len(raw_points)}",
+        )
+        return
+    lonlats: list[list[float]] = []
+    for pair in raw_points:
+        if not isinstance(pair, (list, tuple)) or len(pair) != 2:
+            connection.send_error(
+                msg["id"], "invalid_request", "each waypoint must be a [lon, lat] pair"
+            )
+            return
+        lonlats.append([float(pair[0]), float(pair[1])])
+
+    distance_km = msg.get("distance_km")
+    if distance_km is not None:
+        distance_km = round(float(distance_km), 1)
+
+    domain_data = hass.data.setdefault(DOMAIN, {})
+    routes = list(domain_data.get("saved_routes", []) or [])
+
+    entry = {
+        "name": name,
+        "profile": profile,
+        "lonlats": lonlats,
+        "distance_km": distance_km,
+        "updated": dt_util.utcnow().isoformat(),
+    }
+
+    route_id = msg.get("route_id")
+    index = None
+    if route_id:
+        index = next(
+            (i for i, r in enumerate(routes) if r.get("id") == route_id), None
+        )
+    if index is None:
+        folded = name.casefold()
+        index = next(
+            (
+                i
+                for i, r in enumerate(routes)
+                if (r.get("name") or "").strip().casefold() == folded
+            ),
+            None,
+        )
+
+    if index is not None:
+        entry["id"] = routes[index].get("id") or uuid.uuid4().hex[:12]
+        routes[index] = entry
+    else:
+        if len(routes) >= MAX_SAVED_ROUTES:
+            connection.send_error(
+                msg["id"],
+                "limit_reached",
+                f"Maximum of {MAX_SAVED_ROUTES} saved routes reached - "
+                "delete an old route first",
+            )
+            return
+        entry["id"] = uuid.uuid4().hex[:12]
+        routes.append(entry)
+
+    domain_data["saved_routes"] = routes
+    store = domain_data.get("saved_routes_store")
+    if store is not None:
+        await store.async_save(routes)
+    connection.send_result(msg["id"], {"routes": routes, "saved_id": entry["id"]})
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "bosch_ebike/delete_route",
+        # "id" is reserved for the websocket message id, hence "route_id".
+        vol.Required("route_id"): str,
+    }
+)
+@websocket_api.async_response
+async def ws_delete_route(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict
+) -> None:
+    """Delete a saved planner route by id.
+
+    Idempotent: an unknown id simply returns the current list, so a
+    double-click in the card can never surface an error.
+    """
+    domain_data = hass.data.setdefault(DOMAIN, {})
+    routes = list(domain_data.get("saved_routes", []) or [])
+    remaining = [r for r in routes if r.get("id") != msg["route_id"]]
+    if len(remaining) != len(routes):
+        domain_data["saved_routes"] = remaining
+        store = domain_data.get("saved_routes_store")
+        if store is not None:
+            await store.async_save(remaining)
+    connection.send_result(msg["id"], {"routes": remaining})
