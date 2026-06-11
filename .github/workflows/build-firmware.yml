@@ -15,28 +15,28 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
           ref: main
 
       - name: Build classic ESP32 firmware
         id: esphome-build-esp32
-        uses: esphome/build-action@v6
+        uses: esphome/build-action@v7
         with:
           yaml-file: esphome/factory.yaml
           version: latest
 
       - name: Build ESP32-C3 firmware
         id: esphome-build-c3
-        uses: esphome/build-action@v6
+        uses: esphome/build-action@v7
         with:
           yaml-file: esphome/factory-c3.yaml
           version: latest
 
       - name: Build Charge Limiter firmware (Sonoff BASICR4)
         id: esphome-build-charge-limiter
-        uses: esphome/build-action@v6
+        uses: esphome/build-action@v7
         with:
           yaml-file: esphome/factory-charge-limiter.yaml
           version: latest
@@ -115,7 +115,7 @@ jobs:
 
       - name: Upload firmware to release
         if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           # Tag message = curated "What's changed"; generate_release_notes
           # appends the detailed PR/commit list below it (shown in HACS).
@@ -160,7 +160,7 @@ jobs:
 
       - name: Upload firmware as workflow artifact
         if: github.event_name == 'workflow_dispatch'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: firmware
           path: firmware-output/
