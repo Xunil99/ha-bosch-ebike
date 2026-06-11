@@ -6,6 +6,7 @@ standalone (see tests/test_range_estimate.py).
 
 from __future__ import annotations
 
+import math
 from typing import Any
 
 # Defaults mirror docs/plans/2026-06-10-range-estimate-design.md
@@ -75,3 +76,49 @@ def compute_range_estimate(
         "window_km": round(total_km, 1),
         "newest_tour_date": newest_date,
     }
+
+
+def track_distance_m(details: dict[str, Any]) -> float | None:
+    """Total distance in metres covered by an activity's GPS track.
+
+    Prefers Bosch's own cumulative per-point ``distance`` field (largest
+    value wins — robust against a missing tail). Falls back to a haversine
+    sum over the coordinates when no point carries a distance. Returns
+    ``None`` when the track is unusable.
+    """
+    if not isinstance(details, dict):
+        return None
+    points = details.get("activityDetails") or []
+    if not isinstance(points, list):
+        return None
+    best = 0.0
+    coords: list[tuple[float, float]] = []
+    for p in points:
+        d = p.get("distance")
+        if isinstance(d, (int, float)) and d > best:
+            best = float(d)
+        lat, lon = p.get("latitude"), p.get("longitude")
+        if (
+            isinstance(lat, (int, float))
+            and isinstance(lon, (int, float))
+            and not (lat == 0 and lon == 0)
+            and -90.0 <= lat <= 90.0
+            and -180.0 <= lon <= 180.0
+        ):
+            coords.append((float(lat), float(lon)))
+    if best > 0:
+        return best
+    if len(coords) < 2:
+        return None
+    total = 0.0
+    for (lat1, lon1), (lat2, lon2) in zip(coords, coords[1:]):
+        p1 = math.radians(lat1)
+        p2 = math.radians(lat2)
+        dphi = math.radians(lat2 - lat1)
+        dlmb = math.radians(lon2 - lon1)
+        a = (
+            math.sin(dphi / 2) ** 2
+            + math.cos(p1) * math.cos(p2) * math.sin(dlmb / 2) ** 2
+        )
+        total += 2 * 6371000.0 * math.asin(math.sqrt(a))
+    return total if total > 0 else None

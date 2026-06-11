@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 import logging
-import math
 import uuid
 from typing import Any
 
@@ -30,52 +29,12 @@ from .const import (
     CONF_LIVE_SOC_ENTITY,
 )
 from .live_enrichment import get_state_at, parse_iso_utc
-from .range_estimate import compute_range_estimate
+from .range_estimate import compute_range_estimate, track_distance_m
 
 _LOGGER = logging.getLogger(__name__)
 
 STORAGE_VERSION = 1
 STORAGE_KEY_SUFFIX = "consumption_state"
-
-
-def _track_distance_m(details: dict[str, Any]) -> float | None:
-    """Total distance in metres covered by an activity's GPS track.
-
-    Prefers Bosch's own cumulative per-point ``distance`` field (largest
-    value wins — robust against a missing tail). Falls back to a haversine
-    sum over the coordinates when no point carries a distance. Returns
-    ``None`` when the track is unusable.
-    """
-    points = details.get("activityDetails") or []
-    best = 0.0
-    coords: list[tuple[float, float]] = []
-    for p in points:
-        d = p.get("distance")
-        if isinstance(d, (int, float)) and d > best:
-            best = float(d)
-        lat, lon = p.get("latitude"), p.get("longitude")
-        if (
-            isinstance(lat, (int, float))
-            and isinstance(lon, (int, float))
-            and not (lat == 0 and lon == 0)
-        ):
-            coords.append((float(lat), float(lon)))
-    if best > 0:
-        return best
-    if len(coords) < 2:
-        return None
-    total = 0.0
-    for (lat1, lon1), (lat2, lon2) in zip(coords, coords[1:]):
-        p1 = math.radians(lat1)
-        p2 = math.radians(lat2)
-        dphi = math.radians(lat2 - lat1)
-        dlmb = math.radians(lon2 - lon1)
-        a = (
-            math.sin(dphi / 2) ** 2
-            + math.cos(p1) * math.cos(p2) * math.sin(dlmb / 2) ** 2
-        )
-        total += 2 * 6371000.0 * math.asin(math.sqrt(a))
-    return total if total > 0 else None
 
 
 class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
@@ -94,7 +53,7 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._initial_import_done = False
         # Sorted newest-first; range_estimate and latest_activity rely on this.
         self._all_activities: list[dict[str, Any]] = []
-        self._latest_activity_details: list[dict[str, Any]] | None = None
+        self._latest_activity_details: dict[str, Any] | None = None
         self._latest_activity_id: str | None = None
         # Battery consumption tracking (Wh delta between polls)
         self._prev_delivered_wh: float | None = None
@@ -533,10 +492,19 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                         # distance (BLE odometer / GPS track): the fresh cloud
                         # copy would silently revert it and the enrichment
                         # cache prevents re-deriving (issue #31).
+                        # A gps_track value is only kept while it is still >=
+                        # the fresh cloud summary: tracks are fetched once and
+                        # can be stale (ride still uploading) — a GROWING
+                        # summary must win over a stale track-derived value.
                         old = self._all_activities[0]
-                        if old.get("_distance_source") in ("ble_live", "gps_track"):
+                        src = old.get("_distance_source")
+                        if src == "ble_live" or (
+                            src == "gps_track"
+                            and float(old.get("distance") or 0)
+                            >= float(latest.get("distance") or 0)
+                        ):
                             latest["distance"] = old.get("distance")
-                            latest["_distance_source"] = old.get("_distance_source")
+                            latest["_distance_source"] = src
                         self._all_activities[0] = latest
                     else:
                         # New activity, prepend
@@ -593,12 +561,22 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 and self._latest_activity_id == activity_id
                 and latest_activity.get("_distance_source") != "ble_live"
             ):
-                track_m = _track_distance_m(self._latest_activity_details)
+                track_m = track_distance_m(self._latest_activity_details)
                 summary_m = float(latest_activity.get("distance") or 0)
                 if (
                     track_m is not None
                     and track_m > summary_m * 1.05
                     and track_m - summary_m > 200.0
+                    # Plausibilitäts-Obergrenze: schützt vor Einheiten-
+                    # Überraschungen im Track-Feld und GPS-Ausreißern in der
+                    # Haversine-Summe — mehr als das Doppelte der Summary
+                    # wird nicht übernommen (ohne Summary: max. 500 km, wie
+                    # der Sanity-Guard des Live-Enrichments).
+                    and (
+                        track_m <= summary_m * 2.0
+                        if summary_m > 0
+                        else track_m <= 500_000.0
+                    )
                 ):
                     latest_activity["distance"] = round(track_m, 1)
                     latest_activity["_distance_source"] = "gps_track"

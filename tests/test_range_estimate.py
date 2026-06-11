@@ -106,6 +106,47 @@ def test_unmapped_activities_count_for_single_bike_fallback():
     assert r is not None and r["tours_used"] == 3
 
 
+
+track_distance_m = _mod.track_distance_m
+
+
+def test_track_distance_prefers_cumulative_field():
+    # Größter kumulativer Bosch-Wert gewinnt (robust gegen fehlendes Track-Ende)
+    d = {"activityDetails": [
+        {"distance": 0}, {"distance": 5200.0}, {"distance": 12340.5}, {"distance": None},
+    ]}
+    assert track_distance_m(d) == 12340.5
+
+
+def test_track_distance_haversine_fallback():
+    # Ohne distance-Feld: Haversine — 1 Breitengrad ≈ 111 km
+    d = {"activityDetails": [
+        {"latitude": 48.0, "longitude": 12.0},
+        {"latitude": 49.0, "longitude": 12.0},
+    ]}
+    v = track_distance_m(d)
+    assert v is not None and 110000 < v < 112500, v
+
+
+def test_track_distance_filters_bad_points():
+    # (0,0) und Out-of-Range-Koordinaten werden ignoriert -> < 2 Punkte -> None
+    d = {"activityDetails": [
+        {"latitude": 0, "longitude": 0},
+        {"latitude": 91.0, "longitude": 12.0},
+        {"latitude": 48.0, "longitude": 181.0},
+        {"latitude": 48.0, "longitude": 12.0},
+    ]}
+    assert track_distance_m(d) is None
+
+
+def test_track_distance_unusable_input():
+    assert track_distance_m({"activityDetails": []}) is None
+    assert track_distance_m({}) is None
+    assert track_distance_m(None) is None
+    assert track_distance_m([1, 2, 3]) is None
+    assert track_distance_m({"activityDetails": "kaputt"}) is None
+
+
 if __name__ == "__main__":
     for name, fn in sorted(globals().items()):
         if name.startswith("test_") and callable(fn):
