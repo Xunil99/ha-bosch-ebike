@@ -11826,6 +11826,10 @@ class BoschEBikeRoutePlannerCard extends HTMLElement {
       } catch (err) {
         console.warn("[Bosch eBike Routeplanner] POI fetch failed", err);
         if (seq === this._poiSeq) {
+          // Marker der VORHERIGEN Route nicht neben der neuen stehen lassen.
+          if (this._poiGroup) {
+            try { this._poiGroup.clearLayers(); } catch (_) {}
+          }
           const msg = this._t("rp_poi_error");
           this._setStatus(msg, "");
           // Hinweis nach kurzer Zeit ausblenden — die Route bleibt nutzbar.
@@ -11836,7 +11840,9 @@ class BoschEBikeRoutePlannerCard extends HTMLElement {
         }
         return;
       } finally {
-        this._setPoiLoadingUI(false);
+        // Nur die eigene (aktuelle) Anfrage darf den Lade-Puls beenden —
+        // sonst stoppt eine überholte Antwort die Anzeige der laufenden.
+        if (seq === this._poiSeq) this._setPoiLoadingUI(false);
       }
     }
 
