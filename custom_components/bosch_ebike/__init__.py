@@ -1188,11 +1188,24 @@ async def ws_save_route(
                 msg["id"], "invalid_request", "each waypoint must be a [lon, lat] pair"
             )
             return
-        lonlats.append([float(pair[0]), float(pair[1])])
+        lon, lat = float(pair[0]), float(pair[1])
+        # NaN/Inf wuerde als nicht-standardkonformes JSON im Store landen und
+        # den naechsten async_load scheitern lassen; Bereichscheck weist
+        # nicht-endliche Werte automatisch ab (NaN-Vergleiche sind False).
+        if not (-180.0 <= lon <= 180.0 and -90.0 <= lat <= 90.0):
+            connection.send_error(
+                msg["id"], "invalid_request", f"waypoint out of range: {pair!r}"
+            )
+            return
+        lonlats.append([lon, lat])
 
     distance_km = msg.get("distance_km")
     if distance_km is not None:
-        distance_km = round(float(distance_km), 1)
+        distance_km = float(distance_km)
+        if not 0.0 <= distance_km <= 100000.0:
+            distance_km = None
+        else:
+            distance_km = round(distance_km, 1)
 
     domain_data = hass.data.setdefault(DOMAIN, {})
     routes = list(domain_data.get("saved_routes", []) or [])
