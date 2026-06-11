@@ -11268,6 +11268,10 @@ class BoschEBikeRoutePlannerCard extends HTMLElement {
       this._routeGroup = null;
       this._poiGroup = null;
     }
+    if (this._rpResizeObserver) {
+      try { this._rpResizeObserver.disconnect(); } catch (_) {}
+      this._rpResizeObserver = null;
+    }
   }
 
   // Nach disconnect/reconnect (z. B. Lovelace-Editor): Map neu aufbauen,
@@ -11527,6 +11531,27 @@ class BoschEBikeRoutePlannerCard extends HTMLElement {
     this._routeGroup = Leaflet.layerGroup().addTo(this._map);
     this._poiGroup = Leaflet.layerGroup().addTo(this._map);
     this._map.on("click", (e) => this._onMapClick(e));
+
+    // Leaflet friert die beim Erstellen gemessene Container-Größe ein.
+    // Wird die Karte initialisiert, bevor das HA-Layout fertig ist
+    // (Panel-Ansicht, Masonry, langsame Browser), rendern Kacheln nur in
+    // einer Teilfläche. Gegenmittel wie bei der Heatmap-Card:
+    // (a) ResizeObserver fängt jede spätere Größenänderung ab,
+    // (b) eine kurze invalidateSize-Staffel deckt das Einschwingen
+    //     direkt nach dem Erstellen ab.
+    if (!this._rpResizeObserver && typeof ResizeObserver !== "undefined") {
+      this._rpResizeObserver = new ResizeObserver(() => {
+        try { this._map?.invalidateSize({ animate: false, pan: false }); } catch (_) {}
+      });
+      this._rpResizeObserver.observe(mapEl);
+    }
+    const settle = () => {
+      try { this._map?.invalidateSize({ animate: false, pan: false }); } catch (_) {}
+    };
+    requestAnimationFrame(() => requestAnimationFrame(settle));
+    setTimeout(settle, 150);
+    setTimeout(settle, 400);
+    setTimeout(settle, 700);
   }
 
   // -------------------------------------------------------------------------
