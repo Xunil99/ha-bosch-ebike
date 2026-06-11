@@ -312,6 +312,9 @@ height: 480
 - **Punti del percorso con un clic** sulla mappa (partenza, destinazione,
   punti intermedi a piacere; trascina un marker = sposta, cliccalo = elimina)
 - **Profili:** Trekking, Bici da corsa, MTB, Più breve
+- **POI lungo il percorso** (interruttore 📍): stazioni di ricarica, negozi
+  di biciclette/officine, acqua potabile, bagni e **ristorazione** (ristoranti,
+  caffè, birrerie all'aperto) — dati da OpenStreetMap/Overpass
 - **Risultato:** distanza, salita/discesa, tempo di percorrenza, **consumo
   stimato** (il tuo consumo medio dalla stima dell'autonomia × distanza)
 - **Controllo batteria:** indicatore a semaforo che mostra se il percorso è

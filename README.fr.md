@@ -314,6 +314,9 @@ height: 480
   points intermédiaires que tu veux ; glisser un marqueur = déplacer,
   cliquer dessus = supprimer)
 - **Profils :** Trekking, Vélo de route, MTB, Le plus court
+- **POI le long de l'itinéraire** (bouton 📍) : bornes de recharge, magasins
+  de vélos/ateliers, eau potable, toilettes et **restauration** (restaurants,
+  cafés, biergartens) — données d'OpenStreetMap/Overpass
 - **Résultat :** distance, dénivelé positif/négatif, temps de trajet,
   **consommation estimée** (ta consommation moyenne issue de l'estimation
   de l'autonomie × distance)

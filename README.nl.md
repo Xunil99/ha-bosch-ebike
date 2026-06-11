@@ -308,6 +308,9 @@ height: 480
 - **Wegpunten per klik** op de kaart (start, bestemming, willekeurig veel
   tussenpunten; marker slepen = verplaatsen, aanklikken = verwijderen)
 - **Profielen:** Trekking, Racefiets, MTB, Kortste
+- **POI's langs de route** (📍-schakelaar): laadstations, fietsenwinkels/
+  werkplaatsen, drinkwater, toiletten en **horeca** (restaurants, cafés,
+  biertuinen) — gegevens van OpenStreetMap/Overpass
 - **Resultaat:** afstand, stijging/daling, rijtijd, **geschat verbruik**
   (je gemiddelde verbruik uit de actieradius-schatting × afstand)
 - **Accucheck:** stoplicht-indicator die toont of de route haalbaar is met

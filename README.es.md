@@ -314,6 +314,9 @@ height: 480
   intermedios como quieras; arrastrar un marcador = mover, hacer clic en él
   = eliminar)
 - **Perfiles:** Trekking, Bicicleta de carretera, MTB, La más corta
+- **POI a lo largo de la ruta** (botón 📍): estaciones de carga, tiendas de
+  bicicletas/talleres, agua potable, baños y **gastronomía** (restaurantes,
+  cafeterías, cervecerías al aire libre) — datos de OpenStreetMap/Overpass
 - **Resultado:** distancia, ascenso/descenso, tiempo de marcha, **consumo
   estimado** (tu consumo medio de la estimación de autonomía × distancia)
 - **Comprobación de batería:** indicador tipo semáforo que muestra si la

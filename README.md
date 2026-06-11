@@ -315,6 +315,9 @@ height: 480
 - **Wegpunkte per Klick** auf die Karte (Start, Ziel, beliebige Zwischenpunkte;
   Marker ziehen = verschieben, anklicken = löschen)
 - **Profile:** Trekking, Rennrad, MTB, Kürzeste
+- **POIs entlang der Route** (📍-Schalter): Ladestationen, Fahrradläden/Werkstätten,
+  Trinkwasser, Toiletten und **Gastronomie** (Restaurants, Cafés, Biergärten) —
+  Daten von OpenStreetMap/Overpass
 - **Ergebnis:** Distanz, Anstieg/Abstieg, Fahrzeit, **geschätzter Verbrauch**
   (dein Ø-Verbrauch aus der Reichweiten-Schätzung × Distanz)
 - **Akku-Check:** Ampel-Anzeige, ob die Route mit dem aktuellen Akkustand
@@ -849,6 +852,9 @@ height: 480
 - **Waypoints by clicking** the map (start, destination, any number of via
   points; drag a marker to move it, click it to remove it)
 - **Profiles:** Trekking, Road bike, MTB, Shortest
+- **POIs along the route** (📍 toggle): charging stations, bike shops/repair
+  stations, drinking water, toilets and **food & drink** (restaurants, cafés,
+  beer gardens) — data from OpenStreetMap/Overpass
 - **Result:** distance, ascent/descent, ride time, **estimated consumption**
   (your average consumption from the range estimation × distance)
 - **Battery check:** traffic-light indicator showing whether the route is
