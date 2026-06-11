@@ -92,6 +92,13 @@ const I18N = {
     poi_biergarten: "Beer garden",
     rp_poi_btn: "Show POIs along the route (charging, repair, water, toilets, food)",
     rp_poi_error: "POIs could not be loaded",
+    rp_save_btn: "Save route",
+    rp_routes_btn: "Saved routes",
+    rp_name_placeholder: "Route name",
+    rp_save_ok: "Route saved",
+    rp_save_cancel: "Cancel",
+    rp_no_saved: "No saved routes yet",
+    rp_load_failed: "Could not load saved routes",
     // Editor
     editor_height: "Card height (px)",
     editor_title: "Title (optional)",
@@ -402,6 +409,13 @@ const I18N = {
     poi_biergarten: "Biergarten",
     rp_poi_btn: "POIs entlang der Route anzeigen (Laden, Werkstatt, Wasser, Toiletten, Gastronomie)",
     rp_poi_error: "POIs konnten nicht geladen werden",
+    rp_save_btn: "Route speichern",
+    rp_routes_btn: "Gespeicherte Routen",
+    rp_name_placeholder: "Name der Route",
+    rp_save_ok: "Route gespeichert",
+    rp_save_cancel: "Abbrechen",
+    rp_no_saved: "Noch keine gespeicherten Routen",
+    rp_load_failed: "Gespeicherte Routen konnten nicht geladen werden",
     editor_height: "Kartenhöhe (px)",
     editor_title: "Titel (optional)",
     editor_title_hint: "Wird in der Kopfzeile der Karte angezeigt — nützlich, wenn Du mehrere fest verdrahtete Karten nebeneinander hast.",
@@ -707,6 +721,13 @@ const I18N = {
     poi_biergarten: "Biertuin",
     rp_poi_btn: "POI's langs de route tonen (laden, werkplaats, water, toiletten, horeca)",
     rp_poi_error: "POI's konden niet worden geladen",
+    rp_save_btn: "Route opslaan",
+    rp_routes_btn: "Opgeslagen routes",
+    rp_name_placeholder: "Naam van de route",
+    rp_save_ok: "Route opgeslagen",
+    rp_save_cancel: "Annuleren",
+    rp_no_saved: "Nog geen opgeslagen routes",
+    rp_load_failed: "Opgeslagen routes konden niet worden geladen",
     editor_height: "Kaarthoogte (px)",
     editor_title: "Titel (optioneel)",
     editor_title_hint: "Wordt in de koptekst van de kaart getoond — handig als je meerdere vastgezette kaarten naast elkaar hebt.",
@@ -1020,6 +1041,13 @@ const I18N = {
     poi_biergarten: "Biergarten",
     rp_poi_btn: "Afficher les POI le long de l'itinéraire (recharge, atelier, eau, toilettes, restauration)",
     rp_poi_error: "Impossible de charger les POI",
+    rp_save_btn: "Enregistrer l'itinéraire",
+    rp_routes_btn: "Itinéraires enregistrés",
+    rp_name_placeholder: "Nom de l'itinéraire",
+    rp_save_ok: "Itinéraire enregistré",
+    rp_save_cancel: "Annuler",
+    rp_no_saved: "Aucun itinéraire enregistré pour l'instant",
+    rp_load_failed: "Impossible de charger les itinéraires enregistrés",
     // Editor
     editor_height: "Hauteur de la carte (px)",
     editor_title: "Titre (optionnel)",
@@ -1337,6 +1365,13 @@ const I18N = {
     poi_biergarten: "Birreria all'aperto",
     rp_poi_btn: "Mostra i POI lungo il percorso (ricarica, officina, acqua, bagni, ristorazione)",
     rp_poi_error: "Impossibile caricare i POI",
+    rp_save_btn: "Salva percorso",
+    rp_routes_btn: "Percorsi salvati",
+    rp_name_placeholder: "Nome del percorso",
+    rp_save_ok: "Percorso salvato",
+    rp_save_cancel: "Annulla",
+    rp_no_saved: "Nessun percorso salvato finora",
+    rp_load_failed: "Impossibile caricare i percorsi salvati",
     // Editor
     editor_height: "Altezza della scheda (px)",
     editor_title: "Titolo (opzionale)",
@@ -1654,6 +1689,13 @@ const I18N = {
     poi_biergarten: "Cervecería al aire libre",
     rp_poi_btn: "Mostrar POI a lo largo de la ruta (carga, taller, agua, baños, gastronomía)",
     rp_poi_error: "No se pudieron cargar los POI",
+    rp_save_btn: "Guardar ruta",
+    rp_routes_btn: "Rutas guardadas",
+    rp_name_placeholder: "Nombre de la ruta",
+    rp_save_ok: "Ruta guardada",
+    rp_save_cancel: "Cancelar",
+    rp_no_saved: "Aún no hay rutas guardadas",
+    rp_load_failed: "No se pudieron cargar las rutas guardadas",
     // Editor
     editor_height: "Altura de la tarjeta (px)",
     editor_title: "Título (opcional)",
@@ -11102,6 +11144,11 @@ class BoschEBikeRoutePlannerCard extends HTMLElement {
     this._poiGroup = null;         // L.layerGroup mit den POI-Markern
     this._poiCache = new Map();    // bbox+Kategorien → rohe Overpass-Elemente
     this._poiSeq = 0;              // verwirft veraltete get_pois-Antworten
+    // Gespeicherte Routen (HA-Storage): id + Name der aktuell geladenen
+    // Route — einfache Felder, überleben Map-Rebuilds (das DOM bleibt
+    // bei disconnect/reconnect stehen, nur die Leaflet-Map wird neu gebaut).
+    this._loadedRouteId = null;
+    this._loadedRouteName = null;
   }
 
   setConfig(config) {
@@ -11288,6 +11335,34 @@ class BoschEBikeRoutePlannerCard extends HTMLElement {
         50%     { opacity:.95; }
       }
       .rp-lbl { font-size:12px; color:var(--secondary-text-color,#666); }
+      .rp-namerow input {
+        flex:1; min-width:120px; padding:5px 8px;
+        border:1px solid var(--divider-color,#ccc); border-radius:6px; font-size:13px;
+        background:var(--card-background-color,#fff); color:var(--primary-text-color,#333);
+      }
+      .rp-routes {
+        padding:4px 12px 8px; max-height:220px; overflow-y:auto;
+        background:var(--secondary-background-color,#f5f5f5);
+        border-bottom:1px solid var(--divider-color,#e0e0e0);
+      }
+      .rp-route-row {
+        display:flex; align-items:center; gap:8px; padding:6px 4px;
+        border-bottom:1px solid var(--divider-color,#e0e0e0);
+      }
+      .rp-route-row:last-child { border-bottom:none; }
+      .rp-route-info { flex:1; min-width:0; cursor:pointer; }
+      .rp-route-name {
+        font-size:13px; font-weight:500; color:var(--primary-text-color,#333);
+        overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+      }
+      .rp-route-meta { font-size:11px; color:var(--secondary-text-color,#757575); }
+      .rp-route-del {
+        padding:4px 9px; flex-shrink:0; cursor:pointer; font-size:12px;
+        background:none; border:1px solid var(--divider-color,#ccc);
+        border-radius:6px; color:var(--secondary-text-color,#666);
+      }
+      .rp-route-del.confirm { background:#c62828; border-color:#c62828; color:#fff; }
+      .rp-routes-empty { font-size:12px; color:var(--secondary-text-color,#757575); padding:6px 4px; }
       .rp-hint {
         padding:6px 12px; font-size:12px; color:var(--secondary-text-color,#666);
         border-bottom:1px solid var(--divider-color,#e0e0e0);
@@ -11360,7 +11435,15 @@ class BoschEBikeRoutePlannerCard extends HTMLElement {
         <button id="rp-reset" type="button">${t("rp_reset")}</button>
         <button id="rp-gpx" type="button" disabled>${t("rp_export_gpx")}</button>
         <button id="rp-poi" type="button" class="${this._poiEnabled ? "eb-active" : ""}" title="${t("rp_poi_btn")}" aria-label="${t("rp_poi_btn")}">📍</button>
+        <button id="rp-save" type="button" disabled title="${t("rp_save_btn")}" aria-label="${t("rp_save_btn")}">💾</button>
+        <button id="rp-routes" type="button" title="${t("rp_routes_btn")}" aria-label="${t("rp_routes_btn")}">📁</button>
       </div>
+      <div class="rp-toolbar rp-namerow" id="rp-name-row" style="display:none;">
+        <input type="text" id="rp-name-in" maxlength="60" placeholder="${t("rp_name_placeholder")}">
+        <button id="rp-name-ok" type="button">OK</button>
+        <button id="rp-name-cancel" type="button">${t("rp_save_cancel")}</button>
+      </div>
+      <div id="rp-routes-panel" class="rp-routes" style="display:none;"></div>
       <div class="rp-hint" id="rp-hint">${t("rp_hint_click")}</div>
       <div class="rp-map-wrap">
         <div id="rp-map" class="rp-map"></div>
@@ -11395,6 +11478,18 @@ class BoschEBikeRoutePlannerCard extends HTMLElement {
     this.querySelector("#rp-reset").addEventListener("click", () => this._reset());
     this.querySelector("#rp-gpx").addEventListener("click", () => this._exportGpx());
     this.querySelector("#rp-poi").addEventListener("click", () => this._togglePoi());
+    this.querySelector("#rp-save").addEventListener("click", () => this._toggleSaveRow());
+    this.querySelector("#rp-routes").addEventListener("click", () => this._toggleRoutesPanel());
+    this.querySelector("#rp-name-ok").addEventListener("click", () => this._saveRoute());
+    this.querySelector("#rp-name-cancel").addEventListener("click", () => this._toggleSaveRow(false));
+    this.querySelector("#rp-name-in").addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        this._saveRoute();
+      } else if (e.key === "Escape") {
+        this._toggleSaveRow(false);
+      }
+    });
   }
 
   _createMap() {
@@ -11432,10 +11527,12 @@ class BoschEBikeRoutePlannerCard extends HTMLElement {
     });
   }
 
-  _onMapClick(e) {
+  // Gemeinsamer Marker-Bau für Karten-Klick UND das Laden gespeicherter
+  // Routen — Farben, Drag- und Klick-Handler bleiben so garantiert identisch.
+  _addWaypoint(latlng) {
     const Leaflet = window.L;
-    if (!Leaflet || !this._map || this._waypoints.length >= RP_MAX_WAYPOINTS) return;
-    const marker = Leaflet.marker(e.latlng, {
+    if (!Leaflet || !this._map || this._waypoints.length >= RP_MAX_WAYPOINTS) return null;
+    const marker = Leaflet.marker(latlng, {
       draggable: true,
       icon: this._wpIcon("#2196F3"),
     });
@@ -11446,6 +11543,11 @@ class BoschEBikeRoutePlannerCard extends HTMLElement {
     });
     marker.addTo(this._map);
     this._waypoints.push(marker);
+    return marker;
+  }
+
+  _onMapClick(e) {
+    if (!this._addWaypoint(e.latlng)) return;
     this._refreshWaypointStyles();
     this._fitPending = true;
     this._scheduleRoute();
@@ -11470,7 +11572,10 @@ class BoschEBikeRoutePlannerCard extends HTMLElement {
     });
   }
 
-  _reset() {
+  // Wegpunkte + Route entfernen — gemeinsamer Kern von _reset (Toolbar-
+  // Button) und _loadSavedRoute (Karte leeren, bevor die geladene Route
+  // ihre eigenen Marker setzt).
+  _clearWaypoints() {
     this._routeSeq += 1; // laufende Anfrage verwerfen
     if (this._debounceTimer) {
       clearTimeout(this._debounceTimer);
@@ -11482,6 +11587,13 @@ class BoschEBikeRoutePlannerCard extends HTMLElement {
     this._waypoints = [];
     this._clearRoute();
     this._setStatus(null);
+  }
+
+  _reset() {
+    this._clearWaypoints();
+    this._loadedRouteId = null;
+    this._loadedRouteName = null;
+    this._toggleSaveRow(false);
     const hint = this.querySelector("#rp-hint");
     if (hint) hint.style.display = "";
   }
@@ -11538,6 +11650,8 @@ class BoschEBikeRoutePlannerCard extends HTMLElement {
     this._lastRouteProps = null;
     const gpxBtn = this.querySelector("#rp-gpx");
     if (gpxBtn) gpxBtn.disabled = true;
+    const saveBtn = this.querySelector("#rp-save");
+    if (saveBtn) saveBtn.disabled = true;
     for (const id of ["rp-stats", "rp-batt", "rp-elev"]) {
       const el = this.querySelector(`#${id}`);
       if (el) el.style.display = "none";
@@ -11574,6 +11688,8 @@ class BoschEBikeRoutePlannerCard extends HTMLElement {
     if (hint) hint.style.display = "none";
     const gpxBtn = this.querySelector("#rp-gpx");
     if (gpxBtn) gpxBtn.disabled = false;
+    const saveBtn = this.querySelector("#rp-save");
+    if (saveBtn) saveBtn.disabled = false;
 
     this._renderStats(this._lastRouteProps);
     this._renderElevation(coords);
@@ -11751,6 +11867,221 @@ class BoschEBikeRoutePlannerCard extends HTMLElement {
     a.download = `bosch-ebike-route-${new Date().toISOString().slice(0, 10)}.gpx`;
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  }
+
+  // -------------------------------------------------------------------------
+  // Gespeicherte Routen (HA-Storage via list_routes/save_route/delete_route)
+  // -------------------------------------------------------------------------
+
+  _toggleSaveRow(show) {
+    const row = this.querySelector("#rp-name-row");
+    if (!row) return;
+    const visible = row.style.display !== "none";
+    const next = show != null ? !!show : !visible;
+    row.style.display = next ? "" : "none";
+    if (next) {
+      const input = this.querySelector("#rp-name-in");
+      if (input) {
+        // Vorbelegung: Name der aktuell geladenen Route (Re-Save), sonst leer.
+        input.value = this._loadedRouteName || "";
+        input.focus();
+        input.select();
+      }
+    }
+  }
+
+  async _saveRoute() {
+    const input = this.querySelector("#rp-name-in");
+    const name = ((input && input.value) || "").trim();
+    if (!name || this._waypoints.length < 2) return;
+    const lonlats = this._waypoints.map((m) => {
+      const ll = m.getLatLng();
+      return [ll.lng, ll.lat];
+    });
+    const meters = parseFloat(this._lastRouteProps && this._lastRouteProps["track-length"]);
+    const msg = {
+      type: "bosch_ebike/save_route",
+      name,
+      profile: this._profile,
+      lonlats,
+      distance_km: Number.isFinite(meters) ? Math.round(meters / 100) / 10 : null,
+    };
+    // Unveränderter Name der geladenen Route → Update per id. Ein NEUER
+    // Name lässt die id bewusst weg: das Backend überschreibt dann einen
+    // namensgleichen Eintrag oder legt neu an ("Speichern unter").
+    if (
+      this._loadedRouteId
+      && this._loadedRouteName
+      && name.toLowerCase() === this._loadedRouteName.trim().toLowerCase()
+    ) {
+      msg.route_id = this._loadedRouteId;
+    }
+    let res;
+    try {
+      res = await this._hass.callWS(msg);
+    } catch (err) {
+      // Servermeldung (Limit erreicht, ungültiger Name, …) klein dazu.
+      this._setStatus(this._t("msg_error_prefix") + (err && err.message || err), "");
+      return;
+    }
+    this._loadedRouteId = (res && res.saved_id) || null;
+    this._loadedRouteName = name;
+    this._toggleSaveRow(false);
+    // Kurz-Bestätigung, blendet sich selbst aus (Muster wie rp_poi_error).
+    const okMsg = this._t("rp_save_ok");
+    this._setStatus(okMsg, "");
+    setTimeout(() => {
+      const mainEl = this.querySelector("#rp-status-main");
+      if (mainEl && mainEl.textContent === okMsg) this._setStatus(null);
+    }, 3000);
+    // Offenes Listen-Panel direkt mit der Antwort auffrischen (kein Re-Fetch).
+    this._refreshRoutesPanel(res && Array.isArray(res.routes) ? res.routes : null);
+  }
+
+  async _toggleRoutesPanel() {
+    const panel = this.querySelector("#rp-routes-panel");
+    if (!panel) return;
+    const open = panel.style.display === "none";
+    panel.style.display = open ? "" : "none";
+    const btn = this.querySelector("#rp-routes");
+    if (btn) btn.classList.toggle("eb-active", open);
+    if (open) await this._refreshRoutesPanel();
+  }
+
+  // Listen-Panel neu rendern; ohne übergebene Liste wird sie frisch vom
+  // Backend geholt. Tut nichts, solange das Panel geschlossen ist.
+  async _refreshRoutesPanel(routes = null) {
+    const panel = this.querySelector("#rp-routes-panel");
+    if (!panel || panel.style.display === "none") return;
+    if (!routes) {
+      try {
+        const res = await this._hass.callWS({ type: "bosch_ebike/list_routes" });
+        routes = res && Array.isArray(res.routes) ? res.routes : [];
+      } catch (err) {
+        console.warn("[Bosch eBike Routeplanner] list_routes failed", err);
+        panel.innerHTML = "";
+        const fail = document.createElement("div");
+        fail.className = "rp-routes-empty";
+        fail.textContent = this._t("rp_load_failed");
+        panel.appendChild(fail);
+        return;
+      }
+    }
+    this._renderRoutesList(routes);
+  }
+
+  // Routennamen sind Nutzereingaben → konsequent über textContent setzen
+  // (kein innerHTML), damit kein HTML aus dem Namen gerendert wird.
+  _renderRoutesList(routes) {
+    const panel = this.querySelector("#rp-routes-panel");
+    if (!panel) return;
+    panel.innerHTML = "";
+    if (!routes.length) {
+      const empty = document.createElement("div");
+      empty.className = "rp-routes-empty";
+      empty.textContent = this._t("rp_no_saved");
+      panel.appendChild(empty);
+      return;
+    }
+    for (const route of routes) {
+      const row = document.createElement("div");
+      row.className = "rp-route-row";
+
+      const info = document.createElement("div");
+      info.className = "rp-route-info";
+      const nameEl = document.createElement("div");
+      nameEl.className = "rp-route-name";
+      nameEl.textContent = route.name || "";
+      const meta = document.createElement("div");
+      meta.className = "rp-route-meta";
+      const parts = [];
+      if (RP_PROFILES.includes(route.profile)) {
+        parts.push(this._t("rp_profile_" + route.profile));
+      }
+      const km = Number(route.distance_km);
+      if (Number.isFinite(km)) {
+        parts.push(`${km.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })} km`);
+      }
+      if (route.updated) {
+        const d = new Date(route.updated);
+        if (!Number.isNaN(d.getTime())) parts.push(d.toLocaleDateString());
+      }
+      meta.textContent = parts.join(" · ");
+      info.appendChild(nameEl);
+      info.appendChild(meta);
+      info.addEventListener("click", () => this._loadSavedRoute(route));
+
+      const del = document.createElement("button");
+      del.type = "button";
+      del.className = "rp-route-del";
+      del.textContent = "✕";
+      del.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        this._deleteSavedRoute(route, del);
+      });
+
+      row.appendChild(info);
+      row.appendChild(del);
+      panel.appendChild(row);
+    }
+  }
+
+  _loadSavedRoute(route) {
+    const Leaflet = window.L;
+    if (!Leaflet || !this._map) return;
+    // Karte leeren wie _reset, aber Panel + Hinweiszeile unangetastet lassen.
+    this._clearWaypoints();
+    for (const pair of (Array.isArray(route.lonlats) ? route.lonlats : [])) {
+      const lon = Number(pair && pair[0]);
+      const lat = Number(pair && pair[1]);
+      if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
+      this._addWaypoint(Leaflet.latLng(lat, lon));
+    }
+    this._refreshWaypointStyles();
+    if (RP_PROFILES.includes(route.profile)) {
+      this._profile = route.profile;
+      const sel = this.querySelector("#rp-profile");
+      if (sel) sel.value = route.profile;
+    }
+    this._loadedRouteId = route.id || null;
+    this._loadedRouteName = route.name || null;
+    this._fitPending = true;
+    this._scheduleRoute();
+  }
+
+  async _deleteSavedRoute(route, btn) {
+    // Zwei-Klick-Bestätigung wie der Stop-Button der Dashboard-Card:
+    // erster Klick schaltet 3 s lang in den "Sicher?"-Zustand.
+    if (btn.dataset.confirm !== "1") {
+      btn.dataset.confirm = "1";
+      btn.classList.add("confirm");
+      btn.textContent = this._t("dash_btn_confirm");
+      setTimeout(() => {
+        if (btn.dataset.confirm === "1") {
+          btn.dataset.confirm = "";
+          btn.classList.remove("confirm");
+          btn.textContent = "✕";
+        }
+      }, 3000);
+      return;
+    }
+    let res;
+    try {
+      res = await this._hass.callWS({
+        type: "bosch_ebike/delete_route",
+        route_id: route.id,
+      });
+    } catch (err) {
+      this._setStatus(this._t("msg_error_prefix") + (err && err.message || err), "");
+      return;
+    }
+    // Geladene Route gelöscht? Verknüpfung lösen — die Marker bleiben,
+    // ein erneutes 💾 legt die Route bei Bedarf wieder neu an.
+    if (this._loadedRouteId && this._loadedRouteId === route.id) {
+      this._loadedRouteId = null;
+      this._loadedRouteName = null;
+    }
+    this._renderRoutesList(res && Array.isArray(res.routes) ? res.routes : []);
   }
 
   // -------------------------------------------------------------------------
