@@ -244,6 +244,7 @@ En el mapa hay un interruptor 📍 en los controles. Al activarlo, se inicia en 
 - 🛠️ **Tiendas de bicicletas** y estaciones de reparación (`shop=bicycle`, `amenity=bicycle_repair_station`)
 - 💧 **Agua potable** (`amenity=drinking_water`)
 - 🚻 **Aseos** (`amenity=toilets`)
+- 🍽️ **Gastronomía** (restaurantes, cafeterías, cervecerías al aire libre, comida rápida — `amenity=restaurant/cafe/biergarten/fast_food`)
 
 Clic en un marcador → ventana emergente con el nombre, horario de apertura/dirección/sitio web (si están registrados en OSM) y un enlace a OpenStreetMap. Se muestran hasta 100 marcadores por recorrido; los resultados se almacenan en la localStorage del navegador.
 

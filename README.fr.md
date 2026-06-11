@@ -244,6 +244,7 @@ Sur la carte, il y a une bascule 📍 dans les commandes. Quand elle est activé
 - 🛠️ **Magasins de vélos** et stations de réparation (`shop=bicycle`, `amenity=bicycle_repair_station`)
 - 💧 **Eau potable** (`amenity=drinking_water`)
 - 🚻 **Toilettes** (`amenity=toilets`)
+- 🍽️ **Restauration** (restaurants, cafés, brasseries en plein air, restauration rapide — `amenity=restaurant/cafe/biergarten/fast_food`)
 
 Clic sur un marqueur → popup avec nom, horaires d'ouverture/adresse/site web (si renseignés dans OSM) et lien vers OpenStreetMap. Jusqu'à 100 marqueurs sont affichés par sortie ; les résultats sont mis en cache dans le localStorage du navigateur.
 

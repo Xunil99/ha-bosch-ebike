@@ -244,6 +244,7 @@ Sulla mappa c'è un toggle 📍 nei controlli. Se attivato, in background viene 
 - 🛠️ **Negozi di biciclette** e stazioni di riparazione (`shop=bicycle`, `amenity=bicycle_repair_station`)
 - 💧 **Acqua potabile** (`amenity=drinking_water`)
 - 🚻 **Servizi igienici** (`amenity=toilets`)
+- 🍽️ **Ristorazione** (ristoranti, caffè, birrerie all'aperto, fast food — `amenity=restaurant/cafe/biergarten/fast_food`)
 
 Clic su un marker → popup con nome, orari di apertura/indirizzo/sito web (se presenti in OSM) e link a OpenStreetMap. Per ogni tour vengono mostrati fino a 100 marker; i risultati vengono memorizzati nella localStorage del browser.
 

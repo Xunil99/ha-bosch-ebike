@@ -250,6 +250,7 @@ Auf der Karte gibt es einen 📍-Toggle in den Steuerelementen. Aktiviert er, wi
 - 🛠️ **Fahrradgeschäfte** und Reparaturstationen (`shop=bicycle`, `amenity=bicycle_repair_station`)
 - 💧 **Trinkwasser** (`amenity=drinking_water`)
 - 🚻 **Toiletten** (`amenity=toilets`)
+- 🍽️ **Gastronomie** (Restaurants, Cafés, Biergärten, Imbisse — `amenity=restaurant/cafe/biergarten/fast_food`)
 
 Klick auf einen Marker → Popup mit Name, Öffnungszeiten/Adresse/Website (sofern bei OSM hinterlegt) und Link zu OpenStreetMap. Pro Tour werden bis zu 100 Marker dargestellt; Ergebnisse werden im Browser-localStorage gecacht.
 
@@ -789,6 +790,7 @@ Click the 📍 toggle in the map controls to overlay points of interest sourced 
 - 🛠️ **Bike shops** and repair stations (`shop=bicycle`, `amenity=bicycle_repair_station`)
 - 💧 **Drinking water** (`amenity=drinking_water`)
 - 🚻 **Toilets** (`amenity=toilets`)
+- 🍽️ **Food & drink** (restaurants, cafés, beer gardens, fast food — `amenity=restaurant/cafe/biergarten/fast_food`)
 
 Clicking a marker opens a popup with name, opening hours / address / website (if tagged in OSM) and a link to the OpenStreetMap node. Up to 100 markers per ride; results are cached in the browser's localStorage.
 

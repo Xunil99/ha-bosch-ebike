@@ -242,6 +242,7 @@ Op de kaart zit een 📍-toggle in de bedieningselementen. Is die actief, dan wo
 - 🛠️ **Fietsenwinkels** en reparatiestations (`shop=bicycle`, `amenity=bicycle_repair_station`)
 - 💧 **Drinkwater** (`amenity=drinking_water`)
 - 🚻 **Toiletten** (`amenity=toilets`)
+- 🍽️ **Horeca** (restaurants, cafés, biertuinen, snackbars — `amenity=restaurant/cafe/biergarten/fast_food`)
 
 Klik op een marker → pop-up met naam, openingstijden/adres/website (voor zover bij OSM bekend) en een link naar OpenStreetMap. Per tour worden maximaal 100 markers getoond; resultaten worden gecachet in de localStorage van de browser.
 
