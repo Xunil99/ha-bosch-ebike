@@ -223,6 +223,7 @@
     },
     "remove_maintenance": {
       "name": "Wartungsposten löschen",
+      "description": "Löscht einen eigenen Wartungsposten.",
       "fields": {
         "bike_id": {
           "name": "Bike-ID"

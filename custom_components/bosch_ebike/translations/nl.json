@@ -223,6 +223,7 @@
     },
     "remove_maintenance": {
       "name": "Onderhoudsitem verwijderen",
+      "description": "Verwijdert een eigen onderhoudsitem.",
       "fields": {
         "bike_id": {
           "name": "Fiets-ID"

@@ -223,6 +223,7 @@
     },
     "remove_maintenance": {
       "name": "Delete maintenance item",
+      "description": "Deletes a custom maintenance item.",
       "fields": {
         "bike_id": {
           "name": "Bike ID"

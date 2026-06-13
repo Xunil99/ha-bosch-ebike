@@ -18,6 +18,7 @@ from homeassistant.components.lovelace.resources import ResourceStorageCollectio
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.start import async_at_started
 from homeassistant.helpers.storage import Store
@@ -34,6 +35,10 @@ from .const import DOMAIN, CONF_CLIENT_ID
 from .coordinator import BoschEBikeCoordinator
 
 _LOGGER = logging.getLogger(__name__)
+
+# This integration is configured exclusively via the UI (config entries),
+# never via YAML — declare that so hassfest is satisfied.
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 PLATFORMS = [Platform.SENSOR, Platform.BUTTON, Platform.NUMBER, Platform.DATE]
 
