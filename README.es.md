@@ -5,6 +5,8 @@
 
 > [Deutsch](README.md) | [English](README.md#english) | [Nederlands](README.nl.md) | [Français](README.fr.md) | [Italiano](README.it.md) | **Español**
 
+> **⚠️ Nota de actualización (desde v1.17.6):** La carpeta de la integración ahora se llama `ha_bosch_ebike` (antes `bosch_ebike`). Tu configuración, dispositivos y ajustes permanecen sin cambios. Si tras la actualización de HACS existen **ambas** carpetas en `config/custom_components/`, elimina una vez la antigua `bosch_ebike` y reinicia Home Assistant.
+
 > ### ⚠️ Requisito regional
 > Esta integración funciona **exclusivamente con una cuenta Bosch SingleKey-ID registrada dentro de la UE**. Utiliza la API oficial Bosch Data Act, cuya disponibilidad está limitada a cuentas de la UE. Las cuentas de otras regiones son rechazadas por el endpoint de la API y la integración no puede iniciar sesión.
 

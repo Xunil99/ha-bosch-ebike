@@ -5,6 +5,8 @@
 
 > **Deutsch** | [English](#english) | [Nederlands](https://github.com/Xunil99/ha-bosch-ebike/blob/main/README.nl.md) | [Français](https://github.com/Xunil99/ha-bosch-ebike/blob/main/README.fr.md) | [Italiano](https://github.com/Xunil99/ha-bosch-ebike/blob/main/README.it.md) | [Español](https://github.com/Xunil99/ha-bosch-ebike/blob/main/README.es.md)
 
+> **⚠️ Update-Hinweis (ab v1.17.6):** Der Integrationsordner heißt jetzt `ha_bosch_ebike` (vorher `bosch_ebike`). Deine Einrichtung, Geräte und Einstellungen bleiben unverändert. Falls nach dem HACS-Update **beide** Ordner in `config/custom_components/` liegen, lösche den alten `bosch_ebike` einmalig und starte Home Assistant neu.
+
 > ### ⚠️ Regionale Voraussetzung / Regional requirement
 > Diese Integration funktioniert **ausschließlich mit einem Bosch SingleKey-ID-Konto, das innerhalb der EU registriert ist**. Sie nutzt die offizielle Bosch Data Act API, deren Verfügbarkeit auf EU-Konten beschränkt ist. Konten aus anderen Regionen werden vom API-Endpoint abgelehnt und die Integration kann sich nicht anmelden.
 >
@@ -567,6 +569,8 @@ Auf der Lovelace-Karte gibt es einen 📚-Toggle in den Karten-Steuerelementen. 
 <a id="english"></a>
 
 ## English
+
+> **⚠️ Upgrade note (since v1.17.6):** The integration folder is now `ha_bosch_ebike` (was `bosch_ebike`). Your setup, devices and settings stay unchanged. If **both** folders exist in `config/custom_components/` after the HACS update, delete the old `bosch_ebike` once and restart Home Assistant.
 
 ### Description
 
