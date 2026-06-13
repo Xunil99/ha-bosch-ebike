@@ -136,6 +136,15 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # Tag builds check out a detached tag that can lag behind main
+          # (later commits pushed after the release). Base the firmware
+          # commit on the CURRENT main so the push fast-forwards instead of
+          # being rejected. firmware-output/ is untracked and survives the
+          # checkout, so we copy the bins AFTER switching to main.
+          git fetch origin main
+          git checkout -B firmware-publish origin/main
           mkdir -p docs/firmware
           cp firmware-output/ebike-bridge.factory.bin    docs/firmware/ebike-bridge.factory.bin
           cp firmware-output/ebike-bridge.ota.bin        docs/firmware/ebike-bridge.ota.bin || true
@@ -143,8 +152,6 @@ jobs:
           cp firmware-output/ebike-bridge-c3.ota.bin     docs/firmware/ebike-bridge-c3.ota.bin || true
           cp firmware-output/ebike-charge-limiter.factory.bin docs/firmware/ebike-charge-limiter.factory.bin
           cp firmware-output/ebike-charge-limiter.ota.bin     docs/firmware/ebike-charge-limiter.ota.bin || true
-          git config user.name  "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add docs/firmware/ebike-bridge.factory.bin \
                   docs/firmware/ebike-bridge.ota.bin \
                   docs/firmware/ebike-bridge-c3.factory.bin \
