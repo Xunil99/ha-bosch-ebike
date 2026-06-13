@@ -3,10 +3,10 @@ import importlib.util
 from pathlib import Path
 
 # Load the module file directly: importing the package would pull in
-# custom_components/bosch_ebike/__init__.py, which needs Home Assistant.
+# custom_components/ha_bosch_ebike/__init__.py, which needs Home Assistant.
 _MODULE_PATH = (
     Path(__file__).resolve().parent.parent
-    / "custom_components" / "bosch_ebike" / "range_estimate.py"
+    / "custom_components" / "ha_bosch_ebike" / "range_estimate.py"
 )
 _spec = importlib.util.spec_from_file_location("range_estimate", _MODULE_PATH)
 _mod = importlib.util.module_from_spec(_spec)

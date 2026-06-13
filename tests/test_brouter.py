@@ -2,7 +2,7 @@
 import importlib.util
 from pathlib import Path
 
-_path = Path(__file__).resolve().parent.parent / "custom_components" / "bosch_ebike" / "brouter.py"
+_path = Path(__file__).resolve().parent.parent / "custom_components" / "ha_bosch_ebike" / "brouter.py"
 _spec = importlib.util.spec_from_file_location("brouter", _path)
 brouter = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(brouter)
