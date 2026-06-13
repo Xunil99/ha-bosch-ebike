@@ -1,10 +1,10 @@
 {
   "domain": "ha_bosch_ebike",
   "name": "Bosch eBike (Smart System)",
-  "codeowners": ["@Xunil99"],
-  "dependencies": ["http", "websocket_api"],
   "after_dependencies": ["lovelace", "recorder"],
+  "codeowners": ["@Xunil99"],
   "config_flow": true,
+  "dependencies": ["http", "websocket_api"],
   "documentation": "https://github.com/Xunil99/ha-bosch-ebike",
   "iot_class": "cloud_polling",
   "issue_tracker": "https://github.com/Xunil99/ha-bosch-ebike/issues",
