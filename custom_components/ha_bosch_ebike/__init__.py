@@ -31,7 +31,14 @@ from .brouter import (
     BRouterRequestError,
     build_brouter_url,
 )
-from .const import DOMAIN, CONF_CLIENT_ID
+from .const import (
+    DOMAIN,
+    CONF_CLIENT_ID,
+    CONF_SYSTEM,
+    DEFAULT_SYSTEM,
+    CONF_BES2_SERIAL,
+    CONF_BES2_PART,
+)
 from .coordinator import BoschEBikeCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -172,14 +179,20 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Bosch eBike from a config entry."""
     session = async_get_clientsession(hass)
+    system = entry.data.get(CONF_SYSTEM, DEFAULT_SYSTEM)
+    bes2_serial = entry.data.get(CONF_BES2_SERIAL)
+    bes2_part = entry.data.get(CONF_BES2_PART)
     api = BoschEBikeAPI(
         session=session,
         client_id=entry.data[CONF_CLIENT_ID],
         access_token=entry.data.get("access_token"),
         refresh_token=entry.data.get("refresh_token"),
+        system=system,
     )
 
-    coordinator = BoschEBikeCoordinator(hass, api)
+    coordinator = BoschEBikeCoordinator(
+        hass, api, system=system, bes2_serial=bes2_serial, bes2_part=bes2_part
+    )
     coordinator.config_entry = entry
 
     await coordinator.async_config_entry_first_refresh()

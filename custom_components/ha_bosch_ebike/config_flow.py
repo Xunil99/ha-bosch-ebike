@@ -38,6 +38,10 @@ from .const import (
     CONF_CLIENT_ID,
     CONF_LIVE_ODOMETER_ENTITY,
     CONF_LIVE_SOC_ENTITY,
+    CONF_SYSTEM,
+    SYSTEM_SMART,
+    SYSTEM_BES2,
+    BES2_KC_IDP_HINT,
     AUTH_URL,
     TOKEN_URL,
     OAUTH_SCOPE,
@@ -59,6 +63,10 @@ class BoschPkceImplementation(LocalOAuth2ImplementationWithPkce):
         # Must keep the PKCE params from the parent and add our scope.
         data = {"scope": OAUTH_SCOPE}
         data.update(super().extra_authorize_data)
+        # eBike System 2 accounts authenticate via the eBike Connect identity
+        # provider, selected by this Keycloak hint on the authorize URL.
+        if getattr(self, "_kc_idp_hint", None):
+            data["kc_idp_hint"] = self._kc_idp_hint
         return data
 
 
@@ -71,6 +79,7 @@ class BoschEBikeConfigFlow(AbstractOAuth2FlowHandler, domain=DOMAIN):
     def __init__(self) -> None:
         super().__init__()
         self._client_id: str | None = None
+        self._system: str = SYSTEM_SMART
 
     @property
     def logger(self) -> logging.Logger:
@@ -85,7 +94,30 @@ class BoschEBikeConfigFlow(AbstractOAuth2FlowHandler, domain=DOMAIN):
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Step 1: the user enters their Client-ID, then we start OAuth."""
+        """Step 1: choose the eBike system (Smart System or eBike System 2)."""
+        return self.async_show_menu(
+            step_id="user",
+            menu_options=["smart_system", "ebike_system_2"],
+        )
+
+    async def async_step_smart_system(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Smart System (BES3) selected."""
+        self._system = SYSTEM_SMART
+        return await self.async_step_credentials()
+
+    async def async_step_ebike_system_2(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """eBike System 2 (BES2 / eBike Connect) selected."""
+        self._system = SYSTEM_BES2
+        return await self.async_step_credentials()
+
+    async def async_step_credentials(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Enter the Client-ID, then start the OAuth login."""
         if user_input is not None:
             self._client_id = user_input[CONF_CLIENT_ID].strip()
             await self.async_set_unique_id(self._client_id)
@@ -94,7 +126,7 @@ class BoschEBikeConfigFlow(AbstractOAuth2FlowHandler, domain=DOMAIN):
             return await self.async_step_pick_implementation()
 
         return self.async_show_form(
-            step_id="user",
+            step_id="credentials",
             data_schema=vol.Schema({vol.Required(CONF_CLIENT_ID): str}),
             description_placeholders={"portal_url": FLOW_PORTAL_URL},
         )
@@ -104,6 +136,7 @@ class BoschEBikeConfigFlow(AbstractOAuth2FlowHandler, domain=DOMAIN):
     ) -> ConfigFlowResult:
         """Re-authenticate an existing entry (e.g. refresh token expired)."""
         self._client_id = entry_data.get(CONF_CLIENT_ID)
+        self._system = entry_data.get(CONF_SYSTEM, SYSTEM_SMART)
         return await self.async_step_reauth_confirm()
 
     async def async_step_reauth_confirm(
@@ -120,11 +153,19 @@ class BoschEBikeConfigFlow(AbstractOAuth2FlowHandler, domain=DOMAIN):
         return await self.async_step_pick_implementation()
 
     def _register_impl(self, client_id: str) -> None:
-        """Register a fresh PKCE implementation for the given Client-ID."""
-        self.async_register_implementation(
-            self.hass,
-            BoschPkceImplementation(self.hass, DOMAIN, client_id, AUTH_URL, TOKEN_URL),
+        """Register a fresh PKCE implementation for the given Client-ID.
+
+        For eBike System 2 the implementation carries the eBike Connect
+        Keycloak hint so the authorize URL routes to the right identity
+        provider; Smart System leaves it unset.
+        """
+        impl = BoschPkceImplementation(
+            self.hass, DOMAIN, client_id, AUTH_URL, TOKEN_URL
         )
+        impl._kc_idp_hint = (
+            BES2_KC_IDP_HINT if self._system == SYSTEM_BES2 else None
+        )
+        self.async_register_implementation(self.hass, impl)
 
     async def async_oauth_create_entry(
         self, data: dict[str, Any]
@@ -138,6 +179,7 @@ class BoschEBikeConfigFlow(AbstractOAuth2FlowHandler, domain=DOMAIN):
         token = data.get("token", {})
         entry_data = {
             CONF_CLIENT_ID: self._client_id,
+            CONF_SYSTEM: self._system,
             "access_token": token.get("access_token"),
             "refresh_token": token.get("refresh_token"),
         }
