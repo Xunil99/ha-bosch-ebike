@@ -2,6 +2,14 @@
   "config": {
     "step": {
       "user": {
+        "title": "Bosch eBike",
+        "description": "Which eBike system would you like to integrate?",
+        "menu_options": {
+          "smart_system": "Smart System (newer models)",
+          "ebike_system_2": "eBike System 2 (older models, eBike Connect)"
+        }
+      },
+      "credentials": {
         "title": "Bosch eBike Setup",
         "description": "Enter the **Client-ID** from your app registration in the [Bosch Flow Portal]({portal_url}).\n\n⚠️ **Important:** You must **activate** the Client-ID in the Flow Portal *before* logging in — otherwise Bosch rejects the login with \"client not found\". After submitting, you'll be sent to the Bosch login and returned to Home Assistant automatically.",
         "data": {

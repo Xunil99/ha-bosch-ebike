@@ -2,6 +2,14 @@
   "config": {
     "step": {
       "user": {
+        "title": "Bosch eBike",
+        "description": "Welk eBike-systeem wil je integreren?",
+        "menu_options": {
+          "smart_system": "Smart System (nieuwere modellen)",
+          "ebike_system_2": "eBike System 2 (oudere modellen, eBike Connect)"
+        }
+      },
+      "credentials": {
         "title": "Bosch eBike instellen",
         "description": "Voer de **Client-ID** in uit je app-registratie in het [Bosch Flow-portaal]({portal_url}).\n\n⚠️ **Belangrijk:** Je moet de Client-ID *vóór* het inloggen in het Flow-portaal **activeren** — anders weigert Bosch de login met \"client niet gevonden\". Na het verzenden word je naar de Bosch-login geleid en automatisch teruggebracht naar Home Assistant.",
         "data": {
