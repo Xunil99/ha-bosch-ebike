@@ -6,11 +6,25 @@ import hashlib
 import base64
 import secrets
 import logging
+import urllib.parse
 from typing import Any
 
 import aiohttp
 
-from .const import API_BASE_URL, AUTH_URL, TOKEN_URL, BIKES_ENDPOINT, ACTIVITIES_ENDPOINT, BIKE_PASS_ENDPOINT, SERVICE_RECORDS_ENDPOINT
+from .const import (
+    API_BASE_URL,
+    AUTH_URL,
+    TOKEN_URL,
+    BIKES_ENDPOINT,
+    ACTIVITIES_ENDPOINT,
+    BIKE_PASS_ENDPOINT,
+    SERVICE_RECORDS_ENDPOINT,
+    SYSTEM_SMART,
+    SYSTEM_BES2,
+    BES2_KC_IDP_HINT,
+    BES2_BIKES_ENDPOINT,
+    BES2_ACTIVITIES_ENDPOINT,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -28,11 +42,13 @@ class BoschEBikeAPI:
         client_id: str,
         access_token: str | None = None,
         refresh_token: str | None = None,
+        system: str = SYSTEM_SMART,
     ) -> None:
         self._session = session
         self._client_id = client_id
         self._access_token = access_token
         self._refresh_token = refresh_token
+        self._system = system
         self._code_verifier: str | None = None
 
     # -- PKCE helpers --
@@ -56,6 +72,8 @@ class BoschEBikeAPI:
             f"&code_challenge_method=S256"
             f"&scope=openid"
         )
+        if self._system == SYSTEM_BES2:
+            params += f"&kc_idp_hint={BES2_KC_IDP_HINT}"
         return f"{AUTH_URL}{params}"
 
     # -- Token management --
@@ -187,6 +205,34 @@ class BoschEBikeAPI:
     async def get_service_records(self, bike_id: str) -> dict[str, Any]:
         """Digital Service Book records (battery measurements, customer reports) for one bike."""
         return await self._get(f"{SERVICE_RECORDS_ENDPOINT}?bikeId={bike_id}")
+
+    # -- eBike System 2 (BES2) API calls --
+
+    async def get_bikes_bes2(
+        self, serial: str | None = None, part: str | None = None
+    ) -> list[dict[str, Any]]:
+        """Fetch BES2 bike profiles, optionally filtered by drive-unit serial/part."""
+        path = BES2_BIKES_ENDPOINT
+        params = []
+        if serial:
+            params.append(f"serialNumber={urllib.parse.quote(serial, safe='')}")
+        if part:
+            params.append(f"partNumber={urllib.parse.quote(part, safe='')}")
+        if params:
+            path = f"{path}?{'&'.join(params)}"
+        data = await self._get(path)
+        return data.get("bikes", []) if isinstance(data, dict) else []
+
+    async def get_activities_bes2(
+        self, limit: int = 20, offset: int = 0
+    ) -> list[dict[str, Any]]:
+        """Fetch BES2 activities with pagination."""
+        data = await self._get(f"{BES2_ACTIVITIES_ENDPOINT}?limit={limit}&offset={offset}")
+        return data.get("activities", []) if isinstance(data, dict) else []
+
+    async def get_activity_detail_bes2(self, activity_id) -> dict[str, Any]:
+        """Fetch full BES2 activity detail."""
+        return await self._get(f"{BES2_ACTIVITIES_ENDPOINT}/{activity_id}")
 
     async def get_all_activity_details(
         self, activity_ids: list[str], progress_callback: Any = None

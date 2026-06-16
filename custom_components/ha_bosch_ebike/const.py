@@ -12,6 +12,21 @@ ACTIVITIES_ENDPOINT = "/activity/smart-system/v1/activities"
 BIKE_PASS_ENDPOINT = "/bike-pass/smart-system/v1/bike-passes"
 SERVICE_RECORDS_ENDPOINT = "/service-book/smart-system/v1/service-records"
 
+CONF_SYSTEM = "system"
+SYSTEM_SMART = "smart_system"
+SYSTEM_BES2 = "ebike_system_2"
+DEFAULT_SYSTEM = SYSTEM_SMART
+
+# eBike System 2 (BES2 / eBike Connect)
+BES2_KC_IDP_HINT = "ebike-connect"
+BES2_BIKES_ENDPOINT = "/bike-profile/ebike-system-2/v1/bikes"
+BES2_ACTIVITIES_ENDPOINT = "/activity/ebike-system-2/v1/activities"
+BES2_STATISTICS_ENDPOINT = "/activity/ebike-system-2/v1/statistics"
+
+# Config keys for the BES2 drive-unit fallback identification
+CONF_BES2_SERIAL = "bes2_drive_unit_serial"
+CONF_BES2_PART = "bes2_drive_unit_part"
+
 DEFAULT_SCAN_INTERVAL = 30  # minutes
 DEFAULT_BATTERY_CAPACITY_WH = 750  # Default battery capacity in Wh
 
