@@ -40,3 +40,134 @@ def next_service_date(bike: dict) -> datetime | None:
         return datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
     except (ValueError, TypeError):
         return None
+
+
+# ---------------------------------------------------------------------------
+# Bike Pass — GET /bike-pass/smart-system/v1/bike-passes
+# ---------------------------------------------------------------------------
+
+def theft_status(bike_pass: dict | None) -> dict | None:
+    """Theft state from the most recent theftReportLogs entry.
+
+    Returns None when bike_pass is falsy or has no theftReportLogs key
+    (unknown / not fetched). Empty list -> not reported. Otherwise reports
+    the newest entry (by createdAt) with its location (location optional).
+    """
+    if not bike_pass or "theftReportLogs" not in bike_pass:
+        return None
+    logs = [e for e in (bike_pass.get("theftReportLogs") or [])
+            if isinstance(e, dict)]
+    if not logs:
+        return {"reported": False, "since": None, "latitude": None,
+                "longitude": None, "address": None, "detected_at": None}
+    newest = max(logs, key=lambda e: str(_get(e, "createdAt", default="")))
+    loc = newest.get("location")
+    loc = loc if isinstance(loc, dict) else {}
+    since = newest.get("theftCaseEnteredAt") or newest.get("createdAt")
+    return {
+        "reported": True,
+        "since": str(since) if since is not None else None,
+        "latitude": _get(loc, "latitude"),
+        "longitude": _get(loc, "longitude"),
+        "address": _get(loc, "address"),
+        "detected_at": _get(loc, "detectedAt"),
+    }
+
+
+def frame_number(bike_pass: dict | None) -> str | None:
+    """First bikePasses[0].frameNumber, else None."""
+    passes = _get(bike_pass, "bikePasses", default=[]) or []
+    if not passes:
+        return None
+    return _get(passes[0], "frameNumber")
+
+
+# ---------------------------------------------------------------------------
+# Digital Service Book — GET /service-book/smart-system/v1/service-records
+# ---------------------------------------------------------------------------
+
+def _newest_record(service_records: dict | None, record_type: str) -> dict | None:
+    """Newest serviceRecords entry of the given type by attributes.createdAt."""
+    recs = _get(service_records, "serviceRecords", default=[]) or []
+    matching = [r for r in recs if isinstance(r, dict)
+                and r.get("type") == record_type]
+    if not matching:
+        return None
+    return max(matching,
+               key=lambda r: str(_get(r, "attributes", "createdAt", default="")))
+
+
+def battery_soh(service_records: dict | None, serial: str) -> dict | None:
+    """Newest BATTERY_MEASUREMENT for the given battery serialNumber."""
+    recs = _get(service_records, "serviceRecords", default=[]) or []
+    matching = [
+        r for r in recs
+        if isinstance(r, dict) and r.get("type") == "BATTERY_MEASUREMENT"
+        and _get(r, "attributes", "details", "batteryMeasurement",
+                 "battery", "serialNumber") == serial
+    ]
+    if not matching:
+        return None
+    rec = max(matching,
+              key=lambda r: str(_get(r, "attributes", "createdAt", default="")))
+    meas = _get(rec, "attributes", "details", "batteryMeasurement",
+                "measurement", default={}) or {}
+    return {
+        "soh_pct": meas.get("measuredCapacityPercentage"),
+        "measured_wh": meas.get("measuredEnergyCapacity"),
+        "nominal_wh": meas.get("nominalEnergyCapacity"),
+        "full_charge_cycles": meas.get("fullChargeCycles"),
+        "measured_at": _get(rec, "attributes", "createdAt"),
+    }
+
+
+def _newest_customer_components(service_records: dict | None) -> list | None:
+    """Components of the newest CUSTOMER_REPORT, or None if no report."""
+    rec = _newest_record(service_records, "CUSTOMER_REPORT")
+    if rec is None:
+        return None
+    return _get(rec, "attributes", "details", "customerReport",
+                "bike", "components", default=[]) or []
+
+
+def software_update_available(service_records: dict | None) -> bool | None:
+    """True if any component in the newest CUSTOMER_REPORT has an update.
+
+    False if a report exists but no component flags one; None if no report.
+    """
+    components = _newest_customer_components(service_records)
+    if components is None:
+        return None
+    return any(c.get("softwareUpdateAvailable") is True
+               for c in components if isinstance(c, dict))
+
+
+def special_states(service_records: dict | None) -> list[str]:
+    """Distinct highestSpecialState values (!= "NONE") from newest report."""
+    components = _newest_customer_components(service_records)
+    if not components:
+        return []
+    out: list[str] = []
+    for c in components:
+        if not isinstance(c, dict):
+            continue
+        state = c.get("highestSpecialState")
+        if state and state != "NONE" and state not in out:
+            out.append(state)
+    return out
+
+
+def next_service_info(service_records: dict | None) -> dict | None:
+    """nextServiceInformation from the newest CUSTOMER_REPORT, or None."""
+    rec = _newest_record(service_records, "CUSTOMER_REPORT")
+    if rec is None:
+        return None
+    info = _get(rec, "attributes", "details", "customerReport",
+                "nextServiceInformation")
+    if not info:
+        return None
+    return {
+        "days": info.get("daysNextService"),
+        "meters": info.get("metersNextService"),
+        "updated_at": info.get("updatedAt"),
+    }

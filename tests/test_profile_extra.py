@@ -17,6 +17,12 @@ _spec.loader.exec_module(profile_extra)
 
 reachable_ranges = profile_extra.reachable_ranges
 next_service_date = profile_extra.next_service_date
+theft_status = profile_extra.theft_status
+frame_number = profile_extra.frame_number
+battery_soh = profile_extra.battery_soh
+software_update_available = profile_extra.software_update_available
+special_states = profile_extra.special_states
+next_service_info = profile_extra.next_service_info
 
 BIKE = {
     "serviceDue": {"date": "2026-09-30T14:15:22Z", "odometer": 2000000},
@@ -64,6 +70,206 @@ def test_next_service_date_parses_iso():
 
 def test_next_service_date_parses_date_only():
     assert next_service_date({"serviceDue": {"date": "2026-09-15"}}).month == 9
+
+
+# ---------------------------------------------------------------------------
+# Bike Pass — theft_status / frame_number
+# ---------------------------------------------------------------------------
+
+def test_theft_status_no_logs_key_is_none():
+    assert theft_status(None) is None
+    assert theft_status({}) is None
+    assert theft_status({"bikePasses": []}) is None
+
+
+def test_theft_status_empty_list_not_reported():
+    assert theft_status({"theftReportLogs": []}) == {
+        "reported": False, "since": None, "latitude": None,
+        "longitude": None, "address": None, "detected_at": None}
+
+
+def test_theft_status_with_location_reported_with_coords():
+    bp = {"theftReportLogs": [{
+        "createdAt": "2026-01-01T10:00:00Z",
+        "theftCaseEnteredAt": "2026-01-01T09:30:00Z",
+        "location": {"latitude": 52.4, "longitude": 13.3,
+                     "address": "Berlin", "detectedAt": "2026-01-01T08:00:00Z",
+                     "horizontalAccuracy": 15}}]}
+    assert theft_status(bp) == {
+        "reported": True, "since": "2026-01-01T09:30:00Z",
+        "latitude": 52.4, "longitude": 13.3, "address": "Berlin",
+        "detected_at": "2026-01-01T08:00:00Z"}
+
+
+def test_theft_status_picks_most_recent_by_created_at():
+    bp = {"theftReportLogs": [
+        {"createdAt": "2026-01-01T10:00:00Z",
+         "theftCaseEnteredAt": "2026-01-01T10:00:00Z",
+         "location": {"latitude": 1.0, "longitude": 1.0}},
+        {"createdAt": "2026-03-01T10:00:00Z",
+         "theftCaseEnteredAt": "2026-03-01T10:00:00Z",
+         "location": {"latitude": 9.0, "longitude": 9.0}},
+    ]}
+    out = theft_status(bp)
+    assert out["reported"] is True
+    assert out["since"] == "2026-03-01T10:00:00Z"
+    assert out["latitude"] == 9.0
+
+
+def test_theft_status_log_without_location_reported_but_no_coords():
+    bp = {"theftReportLogs": [{
+        "createdAt": "2026-01-01T10:00:00Z",
+        "theftCaseEnteredAt": "2026-01-01T09:30:00Z"}]}
+    assert theft_status(bp) == {
+        "reported": True, "since": "2026-01-01T09:30:00Z",
+        "latitude": None, "longitude": None,
+        "address": None, "detected_at": None}
+
+
+def test_theft_status_falls_back_to_created_at_when_no_entered_at():
+    bp = {"theftReportLogs": [{"createdAt": "2026-01-01T10:00:00Z"}]}
+    assert theft_status(bp)["since"] == "2026-01-01T10:00:00Z"
+
+
+def test_theft_status_non_list_logs_degrades_to_not_reported():
+    assert theft_status({"theftReportLogs": {"weird": "dict"}}) == {
+        "reported": False, "since": None, "latitude": None,
+        "longitude": None, "address": None, "detected_at": None}
+
+
+def test_theft_status_list_with_non_dict_elements_not_reported():
+    assert theft_status({"theftReportLogs": ["not-a-dict", 123]}) == {
+        "reported": False, "since": None, "latitude": None,
+        "longitude": None, "address": None, "detected_at": None}
+
+
+def test_theft_status_logs_key_absent_still_none():
+    assert theft_status({"bikePasses": [{"frameNumber": "X"}]}) is None
+
+
+def test_frame_number_present_and_absent():
+    assert frame_number({"bikePasses": [{"frameNumber": "WBK123"}]}) == "WBK123"
+    assert frame_number({"bikePasses": []}) is None
+    assert frame_number({}) is None
+    assert frame_number(None) is None
+
+
+# ---------------------------------------------------------------------------
+# Service Book — battery_soh
+# ---------------------------------------------------------------------------
+
+def _battery_record(serial, created_at, soh):
+    return {"id": serial + created_at, "type": "BATTERY_MEASUREMENT",
+            "attributes": {"createdAt": created_at,
+                "details": {"batteryMeasurement": {
+                    "battery": {"serialNumber": serial, "partNumber": "PN",
+                                "productName": "PowerTube"},
+                    "measurement": {"fullChargeCycles": 100,
+                        "measuredEnergyCapacity": 450,
+                        "nominalEnergyCapacity": 500,
+                        "measuredCapacityPercentage": soh,
+                        "onBikeMeasurement": True}}}}}
+
+
+def test_battery_soh_matching_serial_returns_fields():
+    recs = {"serviceRecords": [_battery_record("ABC", "2026-01-01T00:00:00Z", 90)]}
+    assert battery_soh(recs, "ABC") == {
+        "soh_pct": 90, "measured_wh": 450, "nominal_wh": 500,
+        "full_charge_cycles": 100, "measured_at": "2026-01-01T00:00:00Z"}
+
+
+def test_battery_soh_non_matching_serial_is_none():
+    recs = {"serviceRecords": [_battery_record("ABC", "2026-01-01T00:00:00Z", 90)]}
+    assert battery_soh(recs, "XYZ") is None
+
+
+def test_battery_soh_empty_or_none_is_none():
+    assert battery_soh(None, "ABC") is None
+    assert battery_soh({}, "ABC") is None
+    assert battery_soh({"serviceRecords": []}, "ABC") is None
+
+
+def test_battery_soh_newest_created_at_wins():
+    recs = {"serviceRecords": [
+        _battery_record("ABC", "2026-01-01T00:00:00Z", 90),
+        _battery_record("ABC", "2026-05-01T00:00:00Z", 80),
+    ]}
+    assert battery_soh(recs, "ABC")["soh_pct"] == 80
+
+
+# ---------------------------------------------------------------------------
+# Service Book — customer report based functions
+# ---------------------------------------------------------------------------
+
+def _customer_record(created_at, components, next_service=None):
+    cr = {"bike": {"components": components}}
+    if next_service is not None:
+        cr["nextServiceInformation"] = next_service
+    return {"id": created_at, "type": "CUSTOMER_REPORT",
+            "attributes": {"createdAt": created_at,
+                "details": {"customerReport": cr}}}
+
+
+def test_software_update_available_any_true():
+    recs = {"serviceRecords": [_customer_record("2026-01-01T00:00:00Z", [
+        {"softwareUpdateAvailable": False}, {"softwareUpdateAvailable": True}])]}
+    assert software_update_available(recs) is True
+
+
+def test_software_update_available_none_true_is_false():
+    recs = {"serviceRecords": [_customer_record("2026-01-01T00:00:00Z", [
+        {"softwareUpdateAvailable": False}, {"softwareUpdateAvailable": False}])]}
+    assert software_update_available(recs) is False
+
+
+def test_software_update_available_no_report_is_none():
+    assert software_update_available(None) is None
+    assert software_update_available({}) is None
+    assert software_update_available({"serviceRecords": []}) is None
+    assert software_update_available({"serviceRecords": [
+        _battery_record("ABC", "2026-01-01T00:00:00Z", 90)]}) is None
+
+
+def test_software_update_available_uses_newest_report():
+    recs = {"serviceRecords": [
+        _customer_record("2026-01-01T00:00:00Z", [{"softwareUpdateAvailable": True}]),
+        _customer_record("2026-05-01T00:00:00Z", [{"softwareUpdateAvailable": False}]),
+    ]}
+    assert software_update_available(recs) is False
+
+
+def test_special_states_distinct_excluding_none():
+    recs = {"serviceRecords": [_customer_record("2026-01-01T00:00:00Z", [
+        {"highestSpecialState": "NONE"},
+        {"highestSpecialState": "STOLEN"},
+        {"highestSpecialState": "LOCKED"},
+        {"highestSpecialState": "STOLEN"},
+    ])]}
+    assert special_states(recs) == ["STOLEN", "LOCKED"]
+
+
+def test_special_states_no_report_is_empty():
+    assert special_states(None) == []
+    assert special_states({}) == []
+    assert special_states({"serviceRecords": []}) == []
+    assert special_states({"serviceRecords": [_customer_record(
+        "2026-01-01T00:00:00Z", [{"highestSpecialState": "NONE"}])]}) == []
+
+
+def test_next_service_info_present():
+    recs = {"serviceRecords": [_customer_record("2026-01-01T00:00:00Z", [],
+        next_service={"daysNextService": 30, "metersNextService": 500000,
+                      "updatedAt": "2026-01-01T00:00:00Z"})]}
+    assert next_service_info(recs) == {
+        "days": 30, "meters": 500000, "updated_at": "2026-01-01T00:00:00Z"}
+
+
+def test_next_service_info_absent():
+    assert next_service_info(None) is None
+    assert next_service_info({}) is None
+    assert next_service_info({"serviceRecords": []}) is None
+    assert next_service_info({"serviceRecords": [_customer_record(
+        "2026-01-01T00:00:00Z", [])]}) is None
 
 
 if __name__ == "__main__":
