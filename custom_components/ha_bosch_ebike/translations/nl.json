@@ -143,6 +143,9 @@
       "last_ride_start_time": {
         "name": "Laatste rit: starttijd"
       },
+      "last_ride_start_odometer": {
+        "name": "Laatste rit startkilometerstand"
+      },
       "last_ride_end_time": {
         "name": "Laatste rit: eindtijd"
       },

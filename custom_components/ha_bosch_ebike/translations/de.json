@@ -143,6 +143,9 @@
       "last_ride_start_time": {
         "name": "Letzte Fahrt: Startzeit"
       },
+      "last_ride_start_odometer": {
+        "name": "Letzte Fahrt Start-Kilometerstand"
+      },
       "last_ride_end_time": {
         "name": "Letzte Fahrt: Endzeit"
       },

@@ -49,6 +49,9 @@
     "sensor": {
       "next_service_date": {
         "name": "Next Service Date"
+      },
+      "last_ride_start_odometer": {
+        "name": "Last Ride Start Odometer"
       }
     }
   },

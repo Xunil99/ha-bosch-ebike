@@ -143,6 +143,9 @@
       "last_ride_start_time": {
         "name": "Last Ride Start Time"
       },
+      "last_ride_start_odometer": {
+        "name": "Last Ride Start Odometer"
+      },
       "last_ride_end_time": {
         "name": "Last Ride End Time"
       },
