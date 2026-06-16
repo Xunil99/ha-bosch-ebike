@@ -107,11 +107,24 @@ Dies ist der wichtigste Schritt. Du musst eine "App" im Bosch-Portal anlegen, um
 
 Kopiere die gerade erstellte **Client-ID** - du brauchst sie gleich in Home Assistant.
 
-> **Hinweis:** Du musst die Client-ID im Flow Portal noch **aktivieren** (Schritt 5), bevor der Login funktioniert. Ohne Aktivierung lehnt Bosch die Anmeldung mit „Client nicht gefunden" ab.
+> **Wichtig:** Bevor du die Integration in Home Assistant einrichtest, musst du die Client-ID bzw. die Datenfreigabe im Flow Portal **aktivieren** (nächster Schritt). Ohne Aktivierung lehnt Bosch die Anmeldung mit „Client nicht gefunden" ab.
 
 ---
 
-#### Schritt 3: Integration in Home Assistant einrichten
+#### Schritt 3: Datenfreigabe aktivieren
+
+Ohne Datenfreigabe schlägt schon der Login fehl - und die API liefert später ein leeres Ergebnis!
+
+1. Gehe zu **[flow.bosch-ebike.com](https://flow.bosch-ebike.com)**
+2. Melde dich mit deiner **SingleKey ID** an
+3. Wähle oben im Menü **"Data Act"** aus
+4. Suche den Eintrag **"Home Assistant"** und **aktiviere** ihn
+
+Jetzt solltest du auf der passenden Bosch-API Seite die Option sehen, die Client-ID zu aktivieren!
+
+---
+
+#### Schritt 4: Integration in Home Assistant einrichten
 
 1. Installiere die Integration (über HACS oder manuell - siehe unten) und starte Home Assistant neu
 2. Gehe zu **Einstellungen → Geräte & Dienste → Integration hinzufügen**
@@ -123,26 +136,15 @@ Kopiere die gerade erstellte **Client-ID** - du brauchst sie gleich in Home Assi
 
 > **Kein localhost, kein Copy & Paste mehr:** Seit der OAuth-Umstellung übernimmt Home Assistant den kompletten Login-Rücksprung selbst (über die „My Home Assistant"-Weiterleitung). Den Access- und Refresh-Token erneuert die Integration anschließend automatisch.
 
-#### Schritt 4: Ergebnis prüfen
+#### Schritt 5: Ergebnis prüfen
 
-Die Integration sollte jetzt eingerichtet sein - aber **noch ohne Entities!** Das ist normal. Weiter mit Schritt 5.
+Die Integration sollte jetzt eingerichtet sein. Erscheinen noch **keine Entities**, ist das meist nur eine Frage des Timings - lade die Integration einmal neu (nächster Schritt).
 
 ---
 
-#### Schritt 5: Datenfreigabe aktivieren
-
-Ohne Datenfreigabe liefert die API ein leeres Ergebnis!
-
-1. Gehe zu **[flow.bosch-ebike.com](https://flow.bosch-ebike.com)**
-2. Melde dich mit deiner **SingleKey ID** an
-3. Wähle oben im Menü **"Data Act"** aus
-4. Suche den Eintrag **"Home Assistant"** und **aktiviere** ihn
-
-Jetzt solltest du auf der passenden Bosch-API Seite die Option sehen, die Client-ID zu aktivieren!
-
 #### Schritt 6: Integration neu laden
 
-Nachdem du die Client-ID im Flow Portal aktiviert hast:
+Falls direkt nach der Einrichtung noch keine Entities erscheinen:
 
 1. Gehe zurück zu **Home Assistant → Einstellungen → Geräte & Dienste**
 2. Suche die **Bosch eBike** Integration

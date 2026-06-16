@@ -539,7 +539,19 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # Fetch GPS details for the latest activity (for start/end coordinates)
         if latest_activity:
             activity_id = latest_activity.get("id")
-            if activity_id and activity_id != self._latest_activity_id:
+            # Fetch the GPS track for the latest activity. We refetch on every
+            # poll while the ride stays the latest one AND its distance is not
+            # yet confirmed from a derived source: the track can still be
+            # uploading when we first see the activity (the ride may not be
+            # finished in the Flow app yet), so a later poll may carry the full
+            # track the distance sanity-check below needs (issue #31).
+            distance_confirmed = latest_activity.get("_distance_source") in (
+                "ble_live",
+                "gps_track",
+            )
+            if activity_id and (
+                activity_id != self._latest_activity_id or not distance_confirmed
+            ):
                 try:
                     details = await self.api.get_activity_detail(activity_id)
                     self._latest_activity_details = details
@@ -567,16 +579,15 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     track_m is not None
                     and track_m > summary_m * 1.05
                     and track_m - summary_m > 200.0
-                    # Plausibilitäts-Obergrenze: schützt vor Einheiten-
-                    # Überraschungen im Track-Feld und GPS-Ausreißern in der
-                    # Haversine-Summe — mehr als das Doppelte der Summary
-                    # wird nicht übernommen (ohne Summary: max. 500 km, wie
-                    # der Sanity-Guard des Live-Enrichments).
-                    and (
-                        track_m <= summary_m * 2.0
-                        if summary_m > 0
-                        else track_m <= 500_000.0
-                    )
+                    # Absolute Plausibilitäts-Obergrenze (max. 500 km) gegen
+                    # echten Müll (Einheiten-Überraschung im Track-Feld, GPS-
+                    # Ausreißer in der Haversine-Summe). KEINE relative Grenze
+                    # mehr (früher: max. 2x Summary): eine in der Flow App noch
+                    # nicht beendete Tour meldet als Summary nur ein Teilstück,
+                    # sodass der vollständige Track ein Vielfaches betragen kann
+                    # — genau dieser Fall (0,9 km gemeldet, 5,4 km gefahren)
+                    # wurde von der 2x-Grenze faelschlich blockiert (issue #31).
+                    and track_m <= 500_000.0
                 ):
                     latest_activity["distance"] = round(track_m, 1)
                     latest_activity["_distance_source"] = "gps_track"
