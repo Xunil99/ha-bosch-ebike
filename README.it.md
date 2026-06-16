@@ -28,6 +28,21 @@ Questa integrazione custom collega il tuo **Bosch eBike Smart System** a Home As
 
 **Sono supportate esclusivamente le eBike con Bosch Smart System** (non il sistema Classic Line).
 
+### 🆕 eBike System 2 (BES2) – NUOVO, attualmente in fase di test (alpha)
+
+L'integrazione ora supporta **anche** il più vecchio **eBike System 2 (BES2)**, oltre allo Smart System. Gli utenti esistenti dello Smart System **non sono interessati**: il sistema si sceglie **per ogni voce di integrazione**, la tua configurazione esistente resta invariata.
+
+> **⚠️ Nota:** Il supporto per BES2 è **nuovo e attualmente in fase di test (alpha)**.
+
+**Configurazione (differenza rispetto allo Smart System):** nel portale Bosch Data Act ([portal.bosch-ebike.com/data-act](https://portal.bosch-ebike.com/data-act)), i possessori di BES2 accedono tramite **"Bosch eBike Connect user? Log in here"** (l'identità eBike Connect), **non** tramite SingleKey ID. Poi crea un'App / Client-ID come al solito e concedi il consenso Data Act: il resto della procedura è identico. Quando aggiungi l'integrazione in Home Assistant, scegli **eBike System 2** nel **primo passaggio (selezione del sistema)** e inserisci poi la Client-ID.
+
+**Set di dati ridotto rispetto allo Smart System.** BES2 fornisce meno dati:
+
+- **Disponibili:** i giri (distanza, durata, velocità media/max, cadenza, potenza, dislivello, calorie, opzionalmente la frequenza cardiaca tramite il dettaglio dell'attività), le statistiche complessive e la traccia GPS sulla mappa.
+- **Non disponibili:** chilometraggio, autonomia per modalità di assistenza, prossimo tagliando, cicli di ricarica della batteria / Wh nell'arco di vita / State of Health, furto/posizione e la bridge BLE live.
+
+Queste entità semplicemente non esistono per le bici BES2.
+
 ### Funzionalità
 
 - **Dati della bici:** chilometraggio, ore motore (totali e con assistenza), velocità massima di assistenza, modalità di assistenza attive, velocità dell'assistenza alla spinta, chilometraggio del prossimo tagliando

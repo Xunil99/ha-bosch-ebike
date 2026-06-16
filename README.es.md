@@ -28,6 +28,21 @@ Esta integración personalizada conecta tu **Bosch eBike Smart System** con Home
 
 **Solo se admiten eBikes con Bosch Smart System** (no el sistema Classic Line).
 
+### 🆕 eBike System 2 (BES2) – NUEVO, actualmente en pruebas (alpha)
+
+La integración ahora **también** admite el más antiguo **eBike System 2 (BES2)**, además del Smart System. Los usuarios actuales del Smart System **no se ven afectados**: el sistema se elige **por cada entrada de integración**, tu configuración existente permanece sin cambios.
+
+> **⚠️ Nota:** La compatibilidad con BES2 es **nueva y actualmente está en pruebas (alpha)**.
+
+**Configuración (diferencia respecto al Smart System):** en el portal Bosch Data Act ([portal.bosch-ebike.com/data-act](https://portal.bosch-ebike.com/data-act)), los propietarios de BES2 inician sesión mediante **"Bosch eBike Connect user? Log in here"** (la identidad de eBike Connect), **no** con SingleKey ID. Después crea una App / Client-ID como de costumbre y concede el consentimiento de Data Act; el resto del procedimiento es idéntico. Al añadir la integración en Home Assistant, elige **eBike System 2** en el **primer paso (selección de sistema)** y luego introduce el Client-ID.
+
+**Conjunto de datos reducido frente al Smart System.** BES2 proporciona menos datos:
+
+- **Disponible:** los trayectos (distancia, duración, velocidad media/máx., cadencia, potencia, desnivel, calorías, opcionalmente la frecuencia cardíaca a través del detalle de la actividad), las estadísticas totales y la traza GPS en el mapa.
+- **No disponible:** cuentakilómetros, autonomía por modo de asistencia, próxima revisión, ciclos de carga de la batería / Wh durante su vida útil / State of Health, robo/ubicación y el puente BLE en vivo.
+
+Estas entidades simplemente no existen para las bicis BES2.
+
 ### Funciones
 
 - **Datos de la bicicleta:** kilometraje, horas de motor (totales y con asistencia), velocidad máxima de asistencia, modos de asistencia activos, velocidad del asistente de empuje, kilometraje del próximo mantenimiento

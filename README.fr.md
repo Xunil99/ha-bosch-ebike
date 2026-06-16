@@ -28,6 +28,21 @@ Cette intégration personnalisée connecte ton **Bosch eBike Smart System** à H
 
 **Seuls les eBikes équipés du Bosch Smart System sont pris en charge** (pas le système Classic Line).
 
+### 🆕 eBike System 2 (BES2) – NOUVEAU, actuellement en test (alpha)
+
+L'intégration prend désormais **aussi** en charge l'ancien **eBike System 2 (BES2)**, en plus du Smart System. Les utilisateurs actuels du Smart System ne sont **pas affectés** : le système se choisit **par entrée d'intégration**, ta configuration existante reste inchangée.
+
+> **⚠️ Remarque :** La prise en charge du BES2 est **nouvelle et actuellement en test (alpha)**.
+
+**Configuration (différence avec le Smart System) :** sur le portail Bosch Data Act ([portal.bosch-ebike.com/data-act](https://portal.bosch-ebike.com/data-act)), les propriétaires de BES2 se connectent via **« Bosch eBike Connect user? Log in here »** (l'identité eBike Connect), et **non** via SingleKey ID. Crée ensuite une App / un Client-ID comme d'habitude et accorde le consentement Data Act – le reste de la procédure est identique. Lors de l'ajout de l'intégration dans Home Assistant, choisis **eBike System 2** à la **première étape (sélection du système)**, puis saisis le Client-ID.
+
+**Jeu de données réduit par rapport au Smart System.** Le BES2 fournit moins de données :
+
+- **Disponible :** les sorties (distance, durée, vitesse moy./max., cadence, puissance, dénivelé, calories, fréquence cardiaque en option via le détail de l'activité), les statistiques globales et la trace GPS sur la carte.
+- **Non disponible :** compteur kilométrique, autonomie par mode d'assistance, prochaine révision, cycles de charge de la batterie / Wh sur la durée de vie / State of Health, vol/localisation et la passerelle BLE en direct.
+
+Ces entités n'existent tout simplement pas pour les vélos BES2.
+
 ### Fonctionnalités
 
 - **Données du vélo :** kilométrage, heures moteur (total & avec assistance), vitesse maximale d'assistance, modes d'assistance actifs, vitesse de l'aide à la poussée, kilométrage du prochain entretien

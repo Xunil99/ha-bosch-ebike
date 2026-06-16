@@ -32,6 +32,21 @@ Diese Custom Integration verbindet dein **Bosch eBike Smart System** mit Home As
 
 **Unterstützt werden ausschließlich eBikes mit Bosch Smart System** (nicht das Classic Line System).
 
+### 🆕 eBike System 2 (BES2) – NEU, in Erprobung (Alpha)
+
+Die Integration unterstützt jetzt **zusätzlich** das ältere **eBike System 2 (BES2)** – nicht mehr nur das Smart System. Bestehende Smart-System-Nutzer sind davon **nicht betroffen**: Das System wird **pro Integrations-Eintrag** gewählt, deine vorhandene Einrichtung bleibt unverändert.
+
+> **⚠️ Hinweis:** Die BES2-Unterstützung ist **neu und befindet sich aktuell in der Erprobung (Alpha)**.
+
+**Einrichtung (Unterschied zum Smart System):** Im Bosch Data Act Portal ([portal.bosch-ebike.com/data-act](https://portal.bosch-ebike.com/data-act)) melden sich BES2-Besitzer über **„Bosch eBike Connect user? Log in here"** an (die eBike-Connect-Identität), **nicht** über die SingleKey ID. Danach legst du wie gewohnt eine App / Client-ID an und erteilst die Data-Act-Datenfreigabe – das übrige Vorgehen ist identisch. Beim Hinzufügen der Integration in Home Assistant wählst du im **ersten Schritt (Systemauswahl)** **eBike System 2** und gibst anschließend die Client-ID ein.
+
+**Reduzierter Datenumfang gegenüber dem Smart System.** BES2 liefert weniger Daten:
+
+- **Verfügbar:** Fahrten (Distanz, Dauer, Ø-/Max-Geschwindigkeit, Trittfrequenz, Fahrerleistung, Höhenmeter, Kalorien, optional Herzfrequenz über die Aktivitäts-Detaildaten), Gesamtstatistiken sowie der GPS-Track auf der Karte.
+- **Nicht verfügbar:** Tachostand (Odometer), Reichweite je Unterstützungsmodus, nächster Service, Akku-Ladezyklen / Wh über Lebensdauer / State of Health, Diebstahl/Standort sowie die Live-BLE-Bridge.
+
+Diese Entitäten existieren für BES2-Bikes schlicht nicht.
+
 ### Funktionen
 
 - **Bike-Daten:** Kilometerstand, Motorstunden (gesamt & mit Unterstützung), maximale Unterstützungsgeschwindigkeit, aktive Unterstützungsmodi, Schiebehilfe-Geschwindigkeit, nächster Service-Kilometerstand
@@ -609,6 +624,21 @@ Diese Entitäten stammen aus zusätzlichen Bosch-Data-Act-Kategorien (Reichweite
 This custom integration connects your **Bosch eBike Smart System** to Home Assistant. It reads bike data (odometer, motor hours, battery charge cycles) and activity data (last ride, speed, cadence, rider power) directly from the official Bosch Data Act API.
 
 **Only eBikes with Bosch Smart System are supported** (not the Classic Line system).
+
+### 🆕 eBike System 2 (BES2) – NEW, currently in testing (alpha)
+
+The integration now **also** supports the older **eBike System 2 (BES2)** in addition to the Smart System. Existing Smart System users are **not affected**: the system is chosen **per integration entry**, so your existing setup stays unchanged.
+
+> **⚠️ Note:** BES2 support is **new and currently in testing (alpha)**.
+
+**Setup (difference vs. Smart System):** at the Bosch Data Act portal ([portal.bosch-ebike.com/data-act](https://portal.bosch-ebike.com/data-act)), BES2 owners log in via **"Bosch eBike Connect user? Log in here"** (the eBike Connect identity), **not** SingleKey ID. Then create an App / Client ID and grant the Data Act consent as usual – the rest of the procedure is identical. In Home Assistant, when adding the integration, choose **eBike System 2** in the **first step (system selection)**, then enter the Client ID.
+
+**Reduced data set vs. Smart System.** BES2 provides fewer data points:
+
+- **Available:** rides (distance, duration, avg/max speed, cadence, rider power, elevation, calories, optional heart rate via the activity detail), totals, and the GPS track on the map.
+- **Not available:** odometer, range per assist mode, next service, battery charge cycles / Wh-over-lifetime / State of Health, theft/location, and the live BLE bridge.
+
+Those entities simply do not exist for BES2 bikes.
 
 ### Features
 

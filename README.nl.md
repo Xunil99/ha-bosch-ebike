@@ -28,6 +28,21 @@ Deze custom integratie verbindt je **Bosch eBike Smart System** met Home Assista
 
 **Alleen eBikes met Bosch Smart System worden ondersteund** (niet het Classic Line-systeem).
 
+### 🆕 eBike System 2 (BES2) – NIEUW, momenteel in test (alpha)
+
+De integratie ondersteunt nu **ook** het oudere **eBike System 2 (BES2)**, niet alleen het Smart System. Bestaande Smart-System-gebruikers worden hierdoor **niet beïnvloed**: het systeem wordt **per integratie-item** gekozen, je bestaande installatie blijft ongewijzigd.
+
+> **⚠️ Opmerking:** De BES2-ondersteuning is **nieuw en momenteel in test (alpha)**.
+
+**Installatie (verschil met Smart System):** in het Bosch Data Act-portaal ([portal.bosch-ebike.com/data-act](https://portal.bosch-ebike.com/data-act)) melden BES2-eigenaren zich aan via **"Bosch eBike Connect user? Log in here"** (de eBike Connect-identiteit), **niet** via SingleKey ID. Maak daarna zoals gebruikelijk een App / Client-ID aan en verleen de Data Act-toestemming – de rest van de procedure is identiek. Bij het toevoegen van de integratie in Home Assistant kies je in de **eerste stap (systeemkeuze)** **eBike System 2** en voer je vervolgens de Client-ID in.
+
+**Beperktere dataset dan het Smart System.** BES2 levert minder gegevens:
+
+- **Beschikbaar:** ritten (afstand, duur, gem./max. snelheid, cadans, vermogen, hoogtemeters, calorieën, optioneel hartslag via de activiteitsdetails), totalen en de GPS-track op de kaart.
+- **Niet beschikbaar:** kilometerstand, bereik per ondersteuningsmodus, volgende servicebeurt, acculaadcycli / Wh over de levensduur / State of Health, diefstal/locatie en de live-BLE-bridge.
+
+Deze entiteiten bestaan voor BES2-fietsen eenvoudigweg niet.
+
 ### Functies
 
 - **Fietsgegevens:** kilometerstand, motoruren (totaal & met ondersteuning), maximale ondersteuningssnelheid, actieve ondersteuningsmodi, loophulpsnelheid, kilometerstand volgende servicebeurt
