@@ -24,6 +24,10 @@ TO_REDACT = {
     "lat",
     "lon",
     "lng",
+    "frameNumber",
+    "frameNumberPosition",
+    "address",
+    "description",
 }
 
 
@@ -67,5 +71,9 @@ async def async_get_config_entry_diagnostics(
         "consumption_sample": dict(list(consumption.items())[:3]),
         "maintenance": maintenance,
         "service_overrides": data.get("service_overrides"),
+        "bike_pass": async_redact_data(data.get("bike_pass") or {}, TO_REDACT),
+        "service_records": async_redact_data(
+            data.get("service_records") or {}, TO_REDACT
+        ),
     }
     return diag
