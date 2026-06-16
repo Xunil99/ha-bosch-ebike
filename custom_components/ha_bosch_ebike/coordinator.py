@@ -17,6 +17,8 @@ from homeassistant.util import dt as dt_util
 from .api import BoschEBikeAPI, AuthError
 from .const import (
     DOMAIN,
+    SYSTEM_SMART,
+    SYSTEM_BES2,
     DEFAULT_SCAN_INTERVAL,
     DEFAULT_BATTERY_CAPACITY_WH,
     SERVICE_WARN_DAYS,
@@ -42,7 +44,14 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     config_entry: ConfigEntry
 
-    def __init__(self, hass: HomeAssistant, api: BoschEBikeAPI) -> None:
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        api: BoschEBikeAPI,
+        system: str = SYSTEM_SMART,
+        bes2_serial: str | None = None,
+        bes2_part: str | None = None,
+    ) -> None:
         super().__init__(
             hass,
             _LOGGER,
@@ -50,6 +59,9 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             update_interval=timedelta(minutes=DEFAULT_SCAN_INTERVAL),
         )
         self.api = api
+        self._system = system
+        self._bes2_serial = bes2_serial
+        self._bes2_part = bes2_part
         self._initial_import_done = False
         # Sorted newest-first; range_estimate and latest_activity rely on this.
         self._all_activities: list[dict[str, Any]] = []
@@ -471,8 +483,62 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         return state_changed
 
+    async def _update_bes2(self) -> dict[str, Any]:
+        """Fetch + normalize eBike System 2 data into the BES3-shaped dict."""
+        from . import bes2
+        try:
+            raw_bikes = await self.api.get_bikes_bes2(self._bes2_serial, self._bes2_part)
+        except AuthError as err:
+            raise ConfigEntryAuthFailed(str(err)) from err
+        except Exception as err:  # noqa: BLE001
+            raise UpdateFailed(f"Error fetching BES2 bikes: {err}") from err
+
+        bikes = [bes2.normalize_bike(b) for b in (raw_bikes or []) if isinstance(b, dict)]
+
+        # Token-persistence is intentionally not handled here: unlike the BES3
+        # path (where it is inlined in _async_update_data), api._get
+        # auto-refreshes the access token transparently. Persisting refreshed
+        # tokens for the BES2 path is deferred to a later phase.
+
+        activities: list[dict[str, Any]] = []
+        try:
+            raw_acts = await self.api.get_activities_bes2(limit=20, offset=0)
+            activities = [bes2.normalize_activity_summary(a) for a in (raw_acts or []) if isinstance(a, dict)]
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.debug("Could not fetch BES2 activities: %s", err)
+
+        latest_activity = activities[0] if activities else None
+        latest_details = None
+        if latest_activity is not None:
+            raw_id = latest_activity.get("id")
+            if raw_id is not None:
+                try:
+                    detail = await self.api.get_activity_detail_bes2(raw_id)
+                    latest_details = bes2.normalize_track(detail)
+                    bes2.enrich_summary_from_detail(latest_activity, detail)
+                except Exception as err:  # noqa: BLE001
+                    _LOGGER.debug("Could not fetch BES2 activity detail %s: %s", raw_id, err)
+
+        return {
+            "bikes": bikes,
+            "latest_activity": latest_activity,
+            "all_activities": activities,
+            "latest_activity_details": latest_details,
+            "activity_consumption": {},
+            "activity_bike": {},
+            "maintenance": self._maintenance,
+            "service_overrides": self._service_overrides,
+            "battery_capacity_wh": self._battery_capacity_wh,
+            "range_estimate": None,
+            "bike_pass": {},
+            "service_records": {},
+        }
+
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch bikes and activities from Bosch API."""
+        if self._system == SYSTEM_BES2:
+            return await self._update_bes2()
+
         try:
             bikes = await self.api.get_bikes()
 
