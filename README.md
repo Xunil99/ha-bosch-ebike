@@ -564,6 +564,35 @@ Auf der Lovelace-Karte gibt es einen 📚-Toggle in den Karten-Steuerelementen. 
 > /config/bosch_ebike_gps/
 > ```
 
+#### 🆕 Erweiterte Data-Act-Entitäten (ab v1.18.0)
+
+Diese Entitäten stammen aus zusätzlichen Bosch-Data-Act-Kategorien (Reichweiten-Service, Digitales Serviceheft, Bike-Pass, Diagnose). **Sie benötigen eine eigene, separate Datenfreigabe im Flow Portal** (siehe Hinweis unten).
+
+| Entität | Typ/Einheit | Beschreibung |
+|---------|-------------|--------------|
+| Reachable Range {Eco/Tour/eMTB/Turbo} | sensor / km | Offizielle Bosch-Reichweiten-Schätzung je Fahrmodus (ein Sensor pro aktivem Modus) |
+| Next Service Date | sensor / Datum | Nächster Service als Datum (ergänzt den km-basierten Next Service Odometer) |
+| State of Health | sensor / % | Akku-Gesundheit je Batterie aus dem digitalen Serviceheft |
+| Measured Capacity | sensor / Wh | Vom Händler gemessene Akkukapazität je Batterie |
+| Theft Reported | binary_sensor | Ob für das Bike ein Diebstahl gemeldet wurde (aus dem Bike-Pass) |
+| Last Known Location | device_tracker | Letzter bekannter Standort bei gemeldetem Diebstahl (aus dem Bike-Pass) |
+| Software Update Available | binary_sensor | Ob ein Software-Update für das Bike verfügbar ist |
+| Lifetime Distance {Modus} | sensor / km | Lebenszeit-Distanz je Fahrmodus (aus dem Serviceheft) |
+| Lifetime Energy {Modus} | sensor / Wh | Lebenszeit-Energie je Fahrmodus (aus dem Serviceheft) |
+| Last Service Date | sensor / Datum | Datum des letzten Services |
+| Last Service Dealer | sensor | Händler des letzten Services |
+| Last Service Odometer | sensor / km | Kilometerstand beim letzten Service |
+| Components | sensor (Diagnose) | Verbaute Komponenten laut Diagnose |
+| Last Ride Start Odometer | sensor / km | Start-Kilometerstand der letzten Fahrt |
+| Last Ride Max Altitude | sensor / m | Maximale Höhe der letzten Fahrt |
+
+> **⚠️ Wichtiger Hinweis zu diesen Entitäten:** Diese zusätzlichen Datenkategorien erfordern eine **eigene, separate Data-Act-Datenfreigabe im Flow Portal** – sie sind nicht automatisch durch die Basis-Freigabe abgedeckt. Außerdem gilt:
+> - Der **Diebstahl-Standort** (`Last Known Location`) wird **nur befüllt, wenn ein Diebstahl gemeldet wurde** – es findet **keine fortlaufende Standortverfolgung** statt.
+> - Die **Akku-Gesundheit (State of Health)** und die gemessene Kapazität sind **erst nach einer Kapazitätsmessung beim Händler** verfügbar.
+> - **Serviceheft- und Kundenbericht-Daten** (Last Service, Lifetime-Werte) erscheinen nur, wenn entsprechende Einträge existieren.
+>
+> Andernfalls zeigen diese Entitäten „unbekannt" – das ist **so beabsichtigt** (by design).
+
 ---
 
 <a id="english"></a>
@@ -1109,6 +1138,35 @@ The Lovelace card has a 📚 toggle in the map controls. When enabled, the card 
 > ```
 > /config/bosch_ebike_gps/
 > ```
+
+#### 🆕 Extended Data Act entities (from v1.18.0)
+
+These entities come from additional Bosch Data Act categories (range service, Digital Service Book, Bike Pass, diagnostics). **They require their own, separate data-sharing consent in the Flow portal** (see the note below).
+
+| Entity | Type/Unit | Description |
+|--------|-----------|-------------|
+| Reachable Range {Eco/Tour/eMTB/Turbo} | sensor / km | Official Bosch per-mode reachable-range estimate (one sensor per active mode) |
+| Next Service Date | sensor / date | Next service as a date (complements the km-based Next Service Odometer) |
+| State of Health | sensor / % | Battery state of health per battery, from the Digital Service Book |
+| Measured Capacity | sensor / Wh | Dealer-measured battery capacity per battery |
+| Theft Reported | binary_sensor | Whether a theft has been reported for the bike (from the Bike Pass) |
+| Last Known Location | device_tracker | Last known location when a theft is reported (from the Bike Pass) |
+| Software Update Available | binary_sensor | Whether a software update is available for the bike |
+| Lifetime Distance {mode} | sensor / km | Lifetime distance per assist mode (from the service book) |
+| Lifetime Energy {mode} | sensor / Wh | Lifetime energy per assist mode (from the service book) |
+| Last Service Date | sensor / date | Date of the last service |
+| Last Service Dealer | sensor | Dealer of the last service |
+| Last Service Odometer | sensor / km | Odometer reading at the last service |
+| Components | sensor (diagnostic) | Installed components per diagnostics |
+| Last Ride Start Odometer | sensor / km | Start odometer of the last ride |
+| Last Ride Max Altitude | sensor / m | Maximum altitude of the last ride |
+
+> **⚠️ Important note about these entities:** These additional data categories require their **own, separate Data Act data-sharing consent in the Flow portal** – they are not covered by the base consent automatically. In addition:
+> - The **theft location** (`Last Known Location`) is **only populated when a theft has been reported** – there is **no continuous location tracking**.
+> - **Battery State of Health** and measured capacity are **only available after a dealer capacity measurement**.
+> - **Service-book and customer-report data** (Last Service, lifetime values) only appear if such records exist.
+>
+> Otherwise these entities show "unknown" – this is **by design**.
 
 ---
 

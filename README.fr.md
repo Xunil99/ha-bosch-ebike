@@ -567,6 +567,35 @@ Sur la carte Lovelace, il y a une bascule 📚 dans les commandes de la carte. Q
 > /config/bosch_ebike_gps/
 > ```
 
+#### 🆕 Entités Data Act étendues (à partir de la v1.18.0)
+
+Ces entités proviennent de catégories Bosch Data Act supplémentaires (service d'autonomie, carnet d'entretien numérique, Bike Pass, diagnostic). **Elles nécessitent leur propre partage de données distinct dans le portail Flow** (voir la remarque ci-dessous).
+
+| Entité | Type/unité | Description |
+|--------|------------|-------------|
+| Reachable Range {Eco/Tour/eMTB/Turbo} | sensor / km | Estimation officielle Bosch de l'autonomie par mode d'assistance (un capteur par mode actif) |
+| Next Service Date | sensor / date | Prochaine révision sous forme de date (complète le Next Service Odometer en km) |
+| State of Health | sensor / % | État de santé de la batterie par batterie, issu du carnet d'entretien numérique |
+| Measured Capacity | sensor / Wh | Capacité de batterie mesurée par le revendeur, par batterie |
+| Theft Reported | binary_sensor | Indique si un vol a été signalé pour le vélo (issu du Bike Pass) |
+| Last Known Location | device_tracker | Dernière position connue en cas de vol signalé (issu du Bike Pass) |
+| Software Update Available | binary_sensor | Indique si une mise à jour logicielle est disponible pour le vélo |
+| Lifetime Distance {mode} | sensor / km | Distance sur la durée de vie par mode d'assistance (issue du carnet d'entretien) |
+| Lifetime Energy {mode} | sensor / Wh | Énergie sur la durée de vie par mode d'assistance (issue du carnet d'entretien) |
+| Last Service Date | sensor / date | Date de la dernière révision |
+| Last Service Dealer | sensor | Revendeur de la dernière révision |
+| Last Service Odometer | sensor / km | Kilométrage lors de la dernière révision |
+| Components | sensor (diagnostic) | Composants installés selon le diagnostic |
+| Last Ride Start Odometer | sensor / km | Kilométrage de départ de la dernière sortie |
+| Last Ride Max Altitude | sensor / m | Altitude maximale de la dernière sortie |
+
+> **⚠️ Remarque importante sur ces entités :** Ces catégories de données supplémentaires nécessitent leur **propre partage de données Data Act distinct dans le portail Flow** – elles ne sont pas couvertes automatiquement par le consentement de base. De plus :
+> - La **localisation en cas de vol** (`Last Known Location`) n'est **renseignée que lorsqu'un vol a été signalé** – il n'y a **aucun suivi de position continu**.
+> - L'**état de santé de la batterie (State of Health)** et la capacité mesurée ne sont **disponibles qu'après une mesure de capacité chez le revendeur**.
+> - Les données du **carnet d'entretien et des rapports client** (Last Service, valeurs sur la durée de vie) n'apparaissent que si de tels enregistrements existent.
+>
+> Sinon, ces entités affichent « inconnu » – c'est **voulu** (by design).
+
 ---
 
 ### Licence

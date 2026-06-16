@@ -557,6 +557,35 @@ Op de Lovelace-kaart zit een 📚-toggle in de kaartbediening. Is die actief, da
 > /config/bosch_ebike_gps/
 > ```
 
+#### 🆕 Uitgebreide Data Act-entiteiten (vanaf v1.18.0)
+
+Deze entiteiten komen uit aanvullende Bosch Data Act-categorieën (actieradius-service, digitaal serviceboek, Bike Pass, diagnose). **Ze vereisen een eigen, aparte gegevensdeling in het Flow-portaal** (zie de opmerking hieronder).
+
+| Entiteit | Type/eenheid | Beschrijving |
+|----------|--------------|--------------|
+| Reachable Range {Eco/Tour/eMTB/Turbo} | sensor / km | Officiële Bosch-actieradiusschatting per rijmodus (één sensor per actieve modus) |
+| Next Service Date | sensor / datum | Volgende servicebeurt als datum (aanvulling op de km-gebaseerde Next Service Odometer) |
+| State of Health | sensor / % | Accugezondheid per accu, uit het digitale serviceboek |
+| Measured Capacity | sensor / Wh | Door de dealer gemeten accucapaciteit per accu |
+| Theft Reported | binary_sensor | Of er voor de fiets diefstal is gemeld (uit de Bike Pass) |
+| Last Known Location | device_tracker | Laatst bekende locatie bij gemelde diefstal (uit de Bike Pass) |
+| Software Update Available | binary_sensor | Of er een software-update voor de fiets beschikbaar is |
+| Lifetime Distance {modus} | sensor / km | Levensduur-afstand per rijmodus (uit het serviceboek) |
+| Lifetime Energy {modus} | sensor / Wh | Levensduur-energie per rijmodus (uit het serviceboek) |
+| Last Service Date | sensor / datum | Datum van de laatste servicebeurt |
+| Last Service Dealer | sensor | Dealer van de laatste servicebeurt |
+| Last Service Odometer | sensor / km | Kilometerstand bij de laatste servicebeurt |
+| Components | sensor (diagnose) | Gemonteerde componenten volgens diagnose |
+| Last Ride Start Odometer | sensor / km | Start-kilometerstand van de laatste rit |
+| Last Ride Max Altitude | sensor / m | Maximale hoogte van de laatste rit |
+
+> **⚠️ Belangrijke opmerking over deze entiteiten:** Deze aanvullende gegevenscategorieën vereisen een **eigen, aparte Data Act-gegevensdeling in het Flow-portaal** – ze vallen niet automatisch onder de basistoestemming. Daarnaast geldt:
+> - De **diefstallocatie** (`Last Known Location`) wordt **alleen gevuld wanneer er diefstal is gemeld** – er is **geen continue locatievolging**.
+> - De **accugezondheid (State of Health)** en de gemeten capaciteit zijn **pas beschikbaar na een capaciteitsmeting bij de dealer**.
+> - **Serviceboek- en klantrapportgegevens** (Last Service, levensduurwaarden) verschijnen alleen als zulke records bestaan.
+>
+> Anders tonen deze entiteiten "onbekend" – dat is **zo bedoeld** (by design).
+
 ---
 
 ### Licentie

@@ -565,6 +565,35 @@ En la tarjeta Lovelace hay un interruptor 📚 en los controles del mapa. Si est
 > /config/bosch_ebike_gps/
 > ```
 
+#### 🆕 Entidades Data Act ampliadas (desde la v1.18.0)
+
+Estas entidades provienen de categorías adicionales de Bosch Data Act (servicio de autonomía, libro de servicio digital, Bike Pass, diagnóstico). **Requieren su propia compartición de datos independiente en el portal Flow** (consulta la nota más abajo).
+
+| Entidad | Tipo/unidad | Descripción |
+|---------|-------------|-------------|
+| Reachable Range {Eco/Tour/eMTB/Turbo} | sensor / km | Estimación oficial de Bosch de la autonomía por modo de asistencia (un sensor por modo activo) |
+| Next Service Date | sensor / fecha | Próxima revisión como fecha (complementa el Next Service Odometer en km) |
+| State of Health | sensor / % | Estado de salud de la batería por batería, del libro de servicio digital |
+| Measured Capacity | sensor / Wh | Capacidad de batería medida por el distribuidor, por batería |
+| Theft Reported | binary_sensor | Si se ha notificado un robo para la bici (del Bike Pass) |
+| Last Known Location | device_tracker | Última ubicación conocida en caso de robo notificado (del Bike Pass) |
+| Software Update Available | binary_sensor | Si hay una actualización de software disponible para la bici |
+| Lifetime Distance {modo} | sensor / km | Distancia de por vida por modo de asistencia (del libro de servicio) |
+| Lifetime Energy {modo} | sensor / Wh | Energía de por vida por modo de asistencia (del libro de servicio) |
+| Last Service Date | sensor / fecha | Fecha de la última revisión |
+| Last Service Dealer | sensor | Distribuidor de la última revisión |
+| Last Service Odometer | sensor / km | Kilometraje en la última revisión |
+| Components | sensor (diagnóstico) | Componentes instalados según el diagnóstico |
+| Last Ride Start Odometer | sensor / km | Kilometraje de inicio del último trayecto |
+| Last Ride Max Altitude | sensor / m | Altitud máxima del último trayecto |
+
+> **⚠️ Nota importante sobre estas entidades:** Estas categorías de datos adicionales requieren su **propia compartición de datos Data Act independiente en el portal Flow**: no están cubiertas automáticamente por el consentimiento básico. Además:
+> - La **ubicación en caso de robo** (`Last Known Location`) **solo se rellena cuando se ha notificado un robo**: no hay **seguimiento de ubicación continuo**.
+> - El **estado de salud de la batería (State of Health)** y la capacidad medida **solo están disponibles tras una medición de capacidad en el distribuidor**.
+> - Los datos del **libro de servicio y de los informes de cliente** (Last Service, valores de por vida) solo aparecen si existen tales registros.
+>
+> De lo contrario, estas entidades muestran «desconocido»: es **intencionado** (by design).
+
 ---
 
 ### Licencia
