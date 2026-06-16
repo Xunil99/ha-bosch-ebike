@@ -46,6 +46,7 @@ PLATFORMS = [
     Platform.BUTTON,
     Platform.NUMBER,
     Platform.DATE,
+    Platform.DEVICE_TRACKER,
 ]
 
 CARD_URL = "/ha_bosch_ebike/bosch-ebike-map-card.js"
