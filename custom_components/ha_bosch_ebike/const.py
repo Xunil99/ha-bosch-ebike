@@ -9,6 +9,8 @@ API_BASE_URL = "https://api.bosch-ebike.com"
 
 BIKES_ENDPOINT = "/bike-profile/smart-system/v1/bikes"
 ACTIVITIES_ENDPOINT = "/activity/smart-system/v1/activities"
+BIKE_PASS_ENDPOINT = "/bike-pass/smart-system/v1/bike-passes"
+SERVICE_RECORDS_ENDPOINT = "/service-book/smart-system/v1/service-records"
 
 DEFAULT_SCAN_INTERVAL = 30  # minutes
 DEFAULT_BATTERY_CAPACITY_WH = 750  # Default battery capacity in Wh

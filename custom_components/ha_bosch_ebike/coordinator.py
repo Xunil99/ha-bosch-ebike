@@ -55,6 +55,9 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._all_activities: list[dict[str, Any]] = []
         self._latest_activity_details: dict[str, Any] | None = None
         self._latest_activity_id: str | None = None
+        # Per-bike Data Act endpoints (refreshed every poll)
+        self._bike_pass: dict[str, dict[str, Any]] = {}
+        self._service_records: dict[str, dict[str, Any]] = {}
         # Battery consumption tracking (Wh delta between polls)
         self._prev_delivered_wh: float | None = None
         self._prev_activity_ids: set[str] = set()
@@ -646,6 +649,28 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if state_changed:
             await self._async_save_state()
 
+        # Per-bike Data Act endpoints (Bike Pass + Digital Service Book).
+        # Fetched every poll; each call is isolated so a failure never fails
+        # the whole update (mirrors the GPS-details handling above).
+        # Prune stale entries so a removed bike's data does not linger forever.
+        current_ids = {b.get("id") for b in bikes if b.get("id")}
+        for stale in [k for k in self._bike_pass if k not in current_ids]:
+            del self._bike_pass[stale]
+        for stale in [k for k in self._service_records if k not in current_ids]:
+            del self._service_records[stale]
+        for bike in bikes:
+            bike_id = bike.get("id")
+            if not bike_id:
+                continue
+            try:
+                self._bike_pass[bike_id] = await self.api.get_bike_pass(bike_id)
+            except Exception as err:  # noqa: BLE001
+                _LOGGER.debug("Could not fetch bike pass for %s: %s", bike_id, err)
+            try:
+                self._service_records[bike_id] = await self.api.get_service_records(bike_id)
+            except Exception as err:  # noqa: BLE001
+                _LOGGER.debug("Could not fetch service records for %s: %s", bike_id, err)
+
         return {
             "bikes": bikes,
             "latest_activity": latest_activity,
@@ -657,6 +682,8 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "service_overrides": self._service_overrides,
             "battery_capacity_wh": self._battery_capacity_wh,
             "range_estimate": range_estimate,
+            "bike_pass": self._bike_pass,
+            "service_records": self._service_records,
         }
 
     # -- Service & maintenance --

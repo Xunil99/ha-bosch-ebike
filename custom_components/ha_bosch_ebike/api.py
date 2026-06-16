@@ -10,7 +10,7 @@ from typing import Any
 
 import aiohttp
 
-from .const import API_BASE_URL, AUTH_URL, TOKEN_URL, BIKES_ENDPOINT, ACTIVITIES_ENDPOINT
+from .const import API_BASE_URL, AUTH_URL, TOKEN_URL, BIKES_ENDPOINT, ACTIVITIES_ENDPOINT, BIKE_PASS_ENDPOINT, SERVICE_RECORDS_ENDPOINT
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -179,6 +179,14 @@ class BoschEBikeAPI:
         """Fetch full activity detail including GPS track points."""
         data = await self._get(f"{ACTIVITIES_ENDPOINT}/{activity_id}/details")
         return data
+
+    async def get_bike_pass(self, bike_id: str) -> dict[str, Any]:
+        """Bike Pass (frame number + theft report logs) for one bike."""
+        return await self._get(f"{BIKE_PASS_ENDPOINT}?bikeId={bike_id}")
+
+    async def get_service_records(self, bike_id: str) -> dict[str, Any]:
+        """Digital Service Book records (battery measurements, customer reports) for one bike."""
+        return await self._get(f"{SERVICE_RECORDS_ENDPOINT}?bikeId={bike_id}")
 
     async def get_all_activity_details(
         self, activity_ids: list[str], progress_callback: Any = None
