@@ -45,6 +45,13 @@
       }
     }
   },
+  "entity": {
+    "sensor": {
+      "next_service_date": {
+        "name": "Next Service Date"
+      }
+    }
+  },
   "services": {
     "add_maintenance": {
       "name": "Add maintenance item",

@@ -68,6 +68,9 @@
       "next_service_odometer": {
         "name": "Next Service Odometer"
       },
+      "next_service_date": {
+        "name": "Next Service Date"
+      },
       "service_due_in_days": {
         "name": "Service Due In Days"
       },

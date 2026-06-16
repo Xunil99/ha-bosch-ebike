@@ -68,6 +68,9 @@
       "next_service_odometer": {
         "name": "Nächster Service (km)"
       },
+      "next_service_date": {
+        "name": "Nächster Service (Datum)"
+      },
       "service_due_in_days": {
         "name": "Service fällig in Tagen"
       },

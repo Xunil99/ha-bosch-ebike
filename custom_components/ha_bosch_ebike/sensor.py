@@ -24,6 +24,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import CONF_LIVE_SOC_ENTITY, DOMAIN
 from .coordinator import BoschEBikeCoordinator
+from .profile_extra import next_service_date, reachable_ranges
 
 RANGE_DISCLAIMER = (
     "Estimate based on your past consumption over the last ~500 km. "
@@ -167,6 +168,14 @@ BIKE_SENSORS: tuple[BoschBikeSensorDescription, ...] = (
         device_class=SensorDeviceClass.DISTANCE,
         icon="mdi:wrench-clock",
         value_fn=lambda d: round(_safe_get(d, "serviceDue", "odometer", default=0) / 1000, 1),
+    ),
+    BoschBikeSensorDescription(
+        key="next_service_date",
+        translation_key="next_service_date",
+        name="Next Service Date",
+        device_class=SensorDeviceClass.TIMESTAMP,
+        icon="mdi:wrench-clock",
+        value_fn=lambda d: next_service_date(d),
     ),
 )
 
@@ -502,6 +511,13 @@ async def async_setup_entry(
                 _create_battery_sensors(coordinator, bike_id, drive_name, battery, bat_prefix, bat_name)
             )
 
+        # Per-assist-mode reachable range sensors (one per active mode, API order)
+        for idx, mode in enumerate(reachable_ranges(bike)):
+            mode_name = mode.get("name") or f"Mode {idx + 1}"
+            entities.append(
+                BoschReachableRangeSensor(coordinator, bike_id, drive_name, idx, mode_name)
+            )
+
         # Activity sensors (attached to first bike)
         for desc in ACTIVITY_SENSORS:
             entities.append(BoschEBikeSensor(coordinator, desc, bike_id, drive_name))
@@ -621,6 +637,59 @@ class BoschEBikeSensor(CoordinatorEntity[BoschEBikeCoordinator], SensorEntity):
             if bike.get("id") == self._bike_id:
                 return self.entity_description.value_fn(bike)
         return None
+
+
+class BoschReachableRangeSensor(CoordinatorEntity[BoschEBikeCoordinator], SensorEntity):
+    """Bosch per-assist-mode reachable range (one sensor per active mode).
+
+    Uses a literal mode name (like the per-battery sensors), so no
+    translation_key is required. Resolves its value from the live bike data
+    via profile_extra.reachable_ranges by position in API order.
+    """
+
+    _attr_has_entity_name = True
+    _attr_device_class = SensorDeviceClass.DISTANCE
+    _attr_native_unit_of_measurement = UnitOfLength.KILOMETERS
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_icon = "mdi:map-marker-distance"
+    _attr_suggested_display_precision = 1
+
+    def __init__(
+        self,
+        coordinator: BoschEBikeCoordinator,
+        bike_id: str,
+        drive_name: str,
+        index: int,
+        mode_name: str,
+    ) -> None:
+        super().__init__(coordinator)
+        self._bike_id = bike_id
+        self._index = index
+        self._mode_name = mode_name
+        self._attr_name = f"Reachable Range {mode_name}"
+        self._attr_unique_id = f"{bike_id}_reachable_range_{index}"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, bike_id)},
+            name=drive_name,
+            manufacturer="Bosch",
+            model=drive_name,
+        )
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the reachable range (km) for this mode by API position."""
+        for bike in self.coordinator.data.get("bikes", []):
+            if bike.get("id") == self._bike_id:
+                ranges = reachable_ranges(bike)
+                if len(ranges) <= self._index:
+                    return None
+                return ranges[self._index]["range_km"]
+        return None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Expose the assist mode this range belongs to."""
+        return {"assist_mode": self._mode_name}
 
 
 class BoschGPSSensor(CoordinatorEntity[BoschEBikeCoordinator], SensorEntity):
