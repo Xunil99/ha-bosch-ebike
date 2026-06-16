@@ -40,7 +40,13 @@ _LOGGER = logging.getLogger(__name__)
 # never via YAML — declare that so hassfest is satisfied.
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
-PLATFORMS = [Platform.SENSOR, Platform.BUTTON, Platform.NUMBER, Platform.DATE]
+PLATFORMS = [
+    Platform.SENSOR,
+    Platform.BINARY_SENSOR,
+    Platform.BUTTON,
+    Platform.NUMBER,
+    Platform.DATE,
+]
 
 CARD_URL = "/ha_bosch_ebike/bosch-ebike-map-card.js"
 
