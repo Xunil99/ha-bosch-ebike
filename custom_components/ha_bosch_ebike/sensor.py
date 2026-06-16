@@ -15,7 +15,14 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import UnitOfLength, UnitOfSpeed, UnitOfTime, UnitOfEnergy, UnitOfPower
+from homeassistant.const import (
+    PERCENTAGE,
+    UnitOfEnergy,
+    UnitOfLength,
+    UnitOfPower,
+    UnitOfSpeed,
+    UnitOfTime,
+)
 from homeassistant.core import Event, HomeAssistant, callback
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -24,7 +31,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import CONF_LIVE_SOC_ENTITY, DOMAIN
 from .coordinator import BoschEBikeCoordinator
-from .profile_extra import next_service_date, reachable_ranges
+from .profile_extra import battery_soh, next_service_date, reachable_ranges
 
 RANGE_DISCLAIMER = (
     "Estimate based on your past consumption over the last ~500 km. "
@@ -511,6 +518,34 @@ async def async_setup_entry(
                 _create_battery_sensors(coordinator, bike_id, drive_name, battery, bat_prefix, bat_name)
             )
 
+            # State-of-Health sensors from the service book (dealer capacity
+            # measurement). serialNumber captured at creation time; values
+            # resolve from coordinator.data["service_records"]. Commonly None.
+            bat_serial = battery.get("serialNumber")
+            entities.append(
+                BoschBatterySohSensor(
+                    coordinator, bike_id, drive_name, bat_name, bat_prefix, bat_serial,
+                    field="soh_pct",
+                    name_suffix="State of Health",
+                    key_suffix="soh",
+                    native_unit_of_measurement=PERCENTAGE,
+                    state_class=SensorStateClass.MEASUREMENT,
+                    icon="mdi:battery-heart-variant",
+                    suggested_display_precision=0,
+                )
+            )
+            entities.append(
+                BoschBatterySohSensor(
+                    coordinator, bike_id, drive_name, bat_name, bat_prefix, bat_serial,
+                    field="measured_wh",
+                    name_suffix="Measured Capacity",
+                    key_suffix="measured_capacity",
+                    native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
+                    state_class=SensorStateClass.MEASUREMENT,
+                    icon="mdi:battery",
+                )
+            )
+
         # Per-assist-mode reachable range sensors (one per active mode, API order)
         for idx, mode in enumerate(reachable_ranges(bike)):
             mode_name = mode.get("name") or f"Mode {idx + 1}"
@@ -690,6 +725,90 @@ class BoschReachableRangeSensor(CoordinatorEntity[BoschEBikeCoordinator], Sensor
     def extra_state_attributes(self) -> dict[str, Any]:
         """Expose the assist mode this range belongs to."""
         return {"assist_mode": self._mode_name}
+
+
+class BoschBatterySohSensor(CoordinatorEntity[BoschEBikeCoordinator], SensorEntity):
+    """Per-battery State-of-Health / measured-capacity sensor.
+
+    Reads the dealer capacity measurement from the service book via
+    profile_extra.battery_soh(service_records, serial). The serial number is
+    captured at creation time and the value is resolved live from
+    coordinator.data["service_records"], keyed by bike_id. A measurement only
+    exists if a dealer performed a battery capacity test, so in the common case
+    battery_soh returns None and the entity reports unavailable / None.
+
+    Uses a literal name (like the other per-battery sensors), so no
+    translation_key is required.
+    """
+
+    _attr_has_entity_name = True
+
+    def __init__(
+        self,
+        coordinator: BoschEBikeCoordinator,
+        bike_id: str,
+        drive_name: str,
+        bat_name: str,
+        prefix: str,
+        serial: str | None,
+        *,
+        field: str,
+        name_suffix: str,
+        key_suffix: str,
+        native_unit_of_measurement: str | None = None,
+        device_class: SensorDeviceClass | None = None,
+        state_class: SensorStateClass | None = None,
+        icon: str | None = None,
+        suggested_display_precision: int | None = None,
+    ) -> None:
+        super().__init__(coordinator)
+        self._bike_id = bike_id
+        self._serial = serial
+        self._field = field
+        self._attr_name = f"{bat_name} {name_suffix}"
+        self._attr_unique_id = f"{bike_id}_{prefix}_{key_suffix}"
+        self._attr_native_unit_of_measurement = native_unit_of_measurement
+        self._attr_device_class = device_class
+        self._attr_state_class = state_class
+        if icon is not None:
+            self._attr_icon = icon
+        if suggested_display_precision is not None:
+            self._attr_suggested_display_precision = suggested_display_precision
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, bike_id)},
+            name=drive_name,
+            manufacturer="Bosch",
+            model=drive_name,
+        )
+
+    def _soh(self) -> dict | None:
+        """Resolve the SoH data dict for this battery, or None."""
+        if not self._serial:
+            return None
+        records = self.coordinator.data.get("service_records", {}).get(self._bike_id)
+        return battery_soh(records, self._serial)
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the requested SoH field, or None if no measurement exists."""
+        soh = self._soh()
+        if soh is None:
+            return None
+        return soh.get(self._field)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Expose the remaining SoH fields so they are not lost."""
+        if self._field != "soh_pct":
+            return {}
+        soh = self._soh()
+        if soh is None:
+            return {}
+        return {
+            "nominal_wh": soh.get("nominal_wh"),
+            "full_charge_cycles": soh.get("full_charge_cycles"),
+            "measured_at": soh.get("measured_at"),
+        }
 
 
 class BoschGPSSensor(CoordinatorEntity[BoschEBikeCoordinator], SensorEntity):
