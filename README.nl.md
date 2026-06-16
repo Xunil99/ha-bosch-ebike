@@ -559,7 +559,7 @@ Op de Lovelace-kaart zit een 📚-toggle in de kaartbediening. Is die actief, da
 
 #### 🆕 Uitgebreide Data Act-entiteiten (vanaf v1.18.0)
 
-Deze entiteiten komen uit aanvullende Bosch Data Act-categorieën (actieradius-service, digitaal serviceboek, Bike Pass, diagnose). **Ze vereisen een eigen, aparte gegevensdeling in het Flow-portaal** (zie de opmerking hieronder).
+Deze entiteiten verschijnen **automatisch** met de normale installatie. Er is **geen aanvullende of aparte Bosch-gegevensdeling nodig** – ze vallen onder de gebruikelijke autorisatie. Veel ervan staan afhankelijk van de fiets toch op "onbekend", omdat de onderliggende gegevens niet bestaan (zie de opmerking hieronder).
 
 | Entiteit | Type/eenheid | Beschrijving |
 |----------|--------------|--------------|
@@ -579,7 +579,7 @@ Deze entiteiten komen uit aanvullende Bosch Data Act-categorieën (actieradius-s
 | Last Ride Start Odometer | sensor / km | Start-kilometerstand van de laatste rit |
 | Last Ride Max Altitude | sensor / m | Maximale hoogte van de laatste rit |
 
-> **⚠️ Belangrijke opmerking over deze entiteiten:** Deze aanvullende gegevenscategorieën vereisen een **eigen, aparte Data Act-gegevensdeling in het Flow-portaal** – ze vallen niet automatisch onder de basistoestemming. Daarnaast geldt:
+> **⚠️ Belangrijke opmerking over deze entiteiten:** Er is **geen aanvullende Bosch-gegevensdeling nodig** – ze vallen onder de normale autorisatie. Ze staan echter vaak op "onbekend", omdat de onderliggende gegevens alleen in bepaalde gevallen bestaan:
 > - De **diefstallocatie** (`Last Known Location`) wordt **alleen gevuld wanneer er diefstal is gemeld** – er is **geen continue locatievolging**.
 > - De **accugezondheid (State of Health)** en de gemeten capaciteit zijn **pas beschikbaar na een capaciteitsmeting bij de dealer**.
 > - **Serviceboek- en klantrapportgegevens** (Last Service, levensduurwaarden) verschijnen alleen als zulke records bestaan.

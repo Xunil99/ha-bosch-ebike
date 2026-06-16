@@ -566,7 +566,7 @@ Auf der Lovelace-Karte gibt es einen 📚-Toggle in den Karten-Steuerelementen. 
 
 #### 🆕 Erweiterte Data-Act-Entitäten (ab v1.18.0)
 
-Diese Entitäten stammen aus zusätzlichen Bosch-Data-Act-Kategorien (Reichweiten-Service, Digitales Serviceheft, Bike-Pass, Diagnose). **Sie benötigen eine eigene, separate Datenfreigabe im Flow Portal** (siehe Hinweis unten).
+Diese Entitäten erscheinen **automatisch** mit der normalen Einrichtung. Eine **zusätzliche oder separate Bosch-Datenfreigabe ist nicht nötig** – sie sind durch die übliche Autorisierung abgedeckt. Viele stehen je nach Bike trotzdem auf „unbekannt", weil die zugrunde liegenden Daten nicht existieren (siehe Hinweis unten).
 
 | Entität | Typ/Einheit | Beschreibung |
 |---------|-------------|--------------|
@@ -586,7 +586,7 @@ Diese Entitäten stammen aus zusätzlichen Bosch-Data-Act-Kategorien (Reichweite
 | Last Ride Start Odometer | sensor / km | Start-Kilometerstand der letzten Fahrt |
 | Last Ride Max Altitude | sensor / m | Maximale Höhe der letzten Fahrt |
 
-> **⚠️ Wichtiger Hinweis zu diesen Entitäten:** Diese zusätzlichen Datenkategorien erfordern eine **eigene, separate Data-Act-Datenfreigabe im Flow Portal** – sie sind nicht automatisch durch die Basis-Freigabe abgedeckt. Außerdem gilt:
+> **⚠️ Wichtiger Hinweis zu diesen Entitäten:** Es ist **keine zusätzliche Bosch-Datenfreigabe** nötig, sie sind durch die normale Autorisierung abgedeckt. Sie stehen aber oft auf „unbekannt", weil die zugrunde liegenden Daten nur in bestimmten Fällen existieren:
 > - Der **Diebstahl-Standort** (`Last Known Location`) wird **nur befüllt, wenn ein Diebstahl gemeldet wurde** – es findet **keine fortlaufende Standortverfolgung** statt.
 > - Die **Akku-Gesundheit (State of Health)** und die gemessene Kapazität sind **erst nach einer Kapazitätsmessung beim Händler** verfügbar.
 > - **Serviceheft- und Kundenbericht-Daten** (Last Service, Lifetime-Werte) erscheinen nur, wenn entsprechende Einträge existieren.
@@ -1141,7 +1141,7 @@ The Lovelace card has a 📚 toggle in the map controls. When enabled, the card 
 
 #### 🆕 Extended Data Act entities (from v1.18.0)
 
-These entities come from additional Bosch Data Act categories (range service, Digital Service Book, Bike Pass, diagnostics). **They require their own, separate data-sharing consent in the Flow portal** (see the note below).
+These entities appear **automatically** with the normal setup. **No additional or separate Bosch data-sharing consent is required** – they are covered by the usual authorization. Many still show "unknown" depending on the bike, because the underlying data does not exist (see the note below).
 
 | Entity | Type/Unit | Description |
 |--------|-----------|-------------|
@@ -1161,7 +1161,7 @@ These entities come from additional Bosch Data Act categories (range service, Di
 | Last Ride Start Odometer | sensor / km | Start odometer of the last ride |
 | Last Ride Max Altitude | sensor / m | Maximum altitude of the last ride |
 
-> **⚠️ Important note about these entities:** These additional data categories require their **own, separate Data Act data-sharing consent in the Flow portal** – they are not covered by the base consent automatically. In addition:
+> **⚠️ Important note about these entities:** **No additional Bosch data-sharing consent is required** – they are covered by the normal authorization. They often show "unknown", though, because the underlying data only exists in certain cases:
 > - The **theft location** (`Last Known Location`) is **only populated when a theft has been reported** – there is **no continuous location tracking**.
 > - **Battery State of Health** and measured capacity are **only available after a dealer capacity measurement**.
 > - **Service-book and customer-report data** (Last Service, lifetime values) only appear if such records exist.

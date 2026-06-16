@@ -565,7 +565,7 @@ Sulla card Lovelace c'è un toggle 📚 nei controlli della mappa. Se attivato, 
 
 #### 🆕 Entità Data Act estese (da v1.18.0)
 
-Queste entità provengono da categorie Bosch Data Act aggiuntive (servizio autonomia, libretto di servizio digitale, Bike Pass, diagnostica). **Richiedono una propria, separata condivisione dei dati nel portale Flow** (vedi la nota sotto).
+Queste entità compaiono **automaticamente** con la normale configurazione. **Non è necessaria alcuna condivisione dei dati Bosch aggiuntiva o separata** – sono coperte dalla normale autorizzazione. Molte mostrano comunque "sconosciuto" a seconda della bici, perché i dati sottostanti non esistono (vedi la nota sotto).
 
 | Entità | Tipo/unità | Descrizione |
 |--------|------------|-------------|
@@ -585,7 +585,7 @@ Queste entità provengono da categorie Bosch Data Act aggiuntive (servizio auton
 | Last Ride Start Odometer | sensor / km | Chilometraggio di partenza dell'ultimo giro |
 | Last Ride Max Altitude | sensor / m | Altitudine massima dell'ultimo giro |
 
-> **⚠️ Nota importante su queste entità:** Queste categorie di dati aggiuntive richiedono una **propria, separata condivisione dei dati Data Act nel portale Flow** – non sono coperte automaticamente dal consenso di base. Inoltre:
+> **⚠️ Nota importante su queste entità:** **Non è necessaria alcuna condivisione dei dati Bosch aggiuntiva** – sono coperte dalla normale autorizzazione. Tuttavia mostrano spesso "sconosciuto", perché i dati sottostanti esistono solo in certi casi:
 > - La **posizione in caso di furto** (`Last Known Location`) viene **popolata solo quando è stato segnalato un furto** – non c'è **alcun tracciamento continuo della posizione**.
 > - Lo **stato di salute della batteria (State of Health)** e la capacità misurata sono **disponibili solo dopo una misurazione della capacità presso il rivenditore**.
 > - I dati del **libretto di servizio e dei report cliente** (Last Service, valori sull'arco di vita) compaiono solo se esistono tali record.
