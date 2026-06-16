@@ -23,6 +23,10 @@ battery_soh = profile_extra.battery_soh
 software_update_available = profile_extra.software_update_available
 special_states = profile_extra.special_states
 next_service_info = profile_extra.next_service_info
+assist_mode_stats = profile_extra.assist_mode_stats
+last_service = profile_extra.last_service
+component_inventory = profile_extra.component_inventory
+max_altitude = profile_extra.max_altitude
 
 BIKE = {
     "serviceDue": {"date": "2026-09-30T14:15:22Z", "odometer": 2000000},
@@ -270,6 +274,155 @@ def test_next_service_info_absent():
     assert next_service_info({"serviceRecords": []}) is None
     assert next_service_info({"serviceRecords": [_customer_record(
         "2026-01-01T00:00:00Z", [])]}) is None
+
+
+# ---------------------------------------------------------------------------
+# Tier-3 — assist_mode_stats
+# ---------------------------------------------------------------------------
+
+def _customer_report_with_chart(created_at, chart_data):
+    return {"id": created_at, "type": "CUSTOMER_REPORT",
+            "attributes": {"createdAt": created_at,
+                "details": {"customerReport": {
+                    "statistics": {"chartData": chart_data}}}}}
+
+
+def test_assist_mode_stats_two_modes():
+    recs = {"serviceRecords": [_customer_report_with_chart(
+        "2026-01-01T00:00:00Z", [
+            {"distanceValue": 60000, "energyValue": 500, "displayName": "Eco"},
+            {"distanceValue": 30000, "energyValue": 800, "displayName": "Turbo"},
+        ])]}
+    assert assist_mode_stats(recs) == [
+        {"name": "Eco", "distance_km": 60.0, "energy_wh": 500},
+        {"name": "Turbo", "distance_km": 30.0, "energy_wh": 800},
+    ]
+
+
+def test_assist_mode_stats_skips_missing_display_name_and_non_dict():
+    recs = {"serviceRecords": [_customer_report_with_chart(
+        "2026-01-01T00:00:00Z", [
+            {"distanceValue": 60000, "energyValue": 500, "displayName": "Eco"},
+            {"distanceValue": 10000, "energyValue": 100},
+            "not-a-dict",
+        ])]}
+    assert assist_mode_stats(recs) == [
+        {"name": "Eco", "distance_km": 60.0, "energy_wh": 500}]
+
+
+def test_assist_mode_stats_no_report_is_empty():
+    assert assist_mode_stats(None) == []
+    assert assist_mode_stats({}) == []
+    assert assist_mode_stats({"serviceRecords": []}) == []
+    assert assist_mode_stats({"serviceRecords": [_customer_report_with_chart(
+        "2026-01-01T00:00:00Z", [])]}) == []
+
+
+def test_assist_mode_stats_non_numeric_distance_is_none():
+    recs = {"serviceRecords": [_customer_report_with_chart(
+        "2026-01-01T00:00:00Z", [
+            {"distanceValue": "oops", "energyValue": 100,
+             "displayName": "Eco"},
+        ])]}
+    assert assist_mode_stats(recs) == [
+        {"name": "Eco", "distance_km": None, "energy_wh": 100}]
+
+
+# ---------------------------------------------------------------------------
+# Tier-3 — last_service
+# ---------------------------------------------------------------------------
+
+def _service_record(created_at, dealer="Bike Shop", odometer=2000000,
+                    rec_type="MAINTENANCE"):
+    attrs = {"createdAt": created_at, "bikeDealer": {"name": dealer}}
+    if odometer is not None:
+        attrs["odometerValue"] = odometer
+    return {"id": created_at, "type": rec_type, "attributes": attrs}
+
+
+def test_last_service_newest_wins_with_fields():
+    recs = {"serviceRecords": [
+        _service_record("2026-01-01T00:00:00Z", "Old Shop", 1000000),
+        _service_record("2026-05-01T00:00:00Z", "New Shop", 2500000,
+                        rec_type="CUSTOMER_REPORT"),
+    ]}
+    assert last_service(recs) == {
+        "date": "2026-05-01T00:00:00Z", "dealer": "New Shop",
+        "odometer_km": 2500.0}
+
+
+def test_last_service_missing_odometer_is_none():
+    recs = {"serviceRecords": [
+        _service_record("2026-01-01T00:00:00Z", "Shop", odometer=None)]}
+    assert last_service(recs) == {
+        "date": "2026-01-01T00:00:00Z", "dealer": "Shop",
+        "odometer_km": None}
+
+
+def test_last_service_empty_is_none():
+    assert last_service(None) is None
+    assert last_service({}) is None
+    assert last_service({"serviceRecords": []}) is None
+
+
+# ---------------------------------------------------------------------------
+# Tier-3 — component_inventory
+# ---------------------------------------------------------------------------
+
+def test_component_inventory_full_bike():
+    bike = {
+        "headUnit": {"productName": "Kiox 300"},
+        "remoteControl": {"productName": "LED Remote"},
+        "connectModule": {"productName": "ConnectModule"},
+        "antiLockBrakeSystems": [{"productName": "ABS"}],
+    }
+    assert component_inventory(bike) == {
+        "head_unit": "Kiox 300", "remote_control": "LED Remote",
+        "connect_module": "ConnectModule", "has_abs": True}
+
+
+def test_component_inventory_no_abs():
+    assert component_inventory({"antiLockBrakeSystems": []}) == {
+        "head_unit": None, "remote_control": None,
+        "connect_module": None, "has_abs": False}
+
+
+def test_component_inventory_missing_components():
+    assert component_inventory({"headUnit": {"productName": "Kiox"}}) == {
+        "head_unit": "Kiox", "remote_control": None,
+        "connect_module": None, "has_abs": False}
+
+
+def test_component_inventory_empty_dict():
+    assert component_inventory({}) == {
+        "head_unit": None, "remote_control": None,
+        "connect_module": None, "has_abs": False}
+
+
+# ---------------------------------------------------------------------------
+# Tier-3 — max_altitude
+# ---------------------------------------------------------------------------
+
+def test_max_altitude_list_of_points():
+    assert max_altitude([
+        {"altitude": 100.2}, {"altitude": 350.7}, {"altitude": 80}]) == 350.7
+
+
+def test_max_altitude_dict_wrapper():
+    assert max_altitude({"activityDetails": [
+        {"altitude": 100}, {"altitude": 250.55}]}) == 250.6
+
+
+def test_max_altitude_skips_non_numeric_and_missing():
+    assert max_altitude([
+        {"altitude": "high"}, {"foo": "bar"}, {"altitude": 42}]) == 42.0
+
+
+def test_max_altitude_empty_or_none_is_none():
+    assert max_altitude(None) is None
+    assert max_altitude([]) is None
+    assert max_altitude({"activityDetails": []}) is None
+    assert max_altitude([{"altitude": "x"}, {"foo": 1}]) is None
 
 
 if __name__ == "__main__":

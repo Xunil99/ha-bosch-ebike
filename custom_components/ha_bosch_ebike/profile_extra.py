@@ -171,3 +171,84 @@ def next_service_info(service_records: dict | None) -> dict | None:
         "meters": info.get("metersNextService"),
         "updated_at": info.get("updatedAt"),
     }
+
+
+# ---------------------------------------------------------------------------
+# Tier-3 — assist-mode stats, last service, component inventory, max altitude
+# ---------------------------------------------------------------------------
+
+def assist_mode_stats(service_records: dict | None) -> list[dict]:
+    """Per-assist-mode distance/energy from the newest CUSTOMER_REPORT chart.
+
+    Reads statistics.chartData[]; returns name/distance_km/energy_wh in order,
+    skipping entries without a displayName. [] if no report / no chartData.
+    """
+    rec = _newest_record(service_records, "CUSTOMER_REPORT")
+    if rec is None:
+        return []
+    chart = _get(rec, "attributes", "details", "customerReport",
+                 "statistics", "chartData", default=[]) or []
+    out: list[dict] = []
+    for entry in chart:
+        if not isinstance(entry, dict):
+            continue
+        name = entry.get("displayName")
+        if not name:
+            continue
+        distance = entry.get("distanceValue")
+        distance_km = round(distance / 1000, 1) if isinstance(
+            distance, (int, float)) and not isinstance(distance, bool) else None
+        out.append({
+            "name": name,
+            "distance_km": distance_km,
+            "energy_wh": entry.get("energyValue"),
+        })
+    return out
+
+
+def last_service(service_records: dict | None) -> dict | None:
+    """Newest serviceRecords entry (any type) by attributes.createdAt.
+
+    Returns date/dealer/odometer_km, or None if there are no records.
+    """
+    recs = _get(service_records, "serviceRecords", default=[]) or []
+    matching = [r for r in recs if isinstance(r, dict)]
+    if not matching:
+        return None
+    rec = max(matching,
+              key=lambda r: str(_get(r, "attributes", "createdAt", default="")))
+    odo = _get(rec, "attributes", "odometerValue")
+    return {
+        "date": _get(rec, "attributes", "createdAt"),
+        "dealer": _get(rec, "attributes", "bikeDealer", "name"),
+        "odometer_km": round(odo / 1000, 1) if isinstance(odo, (int, float))
+        else None,
+    }
+
+
+def component_inventory(bike: dict) -> dict:
+    """Component product names + ABS presence from a bike-profile object."""
+    abs_systems = bike.get("antiLockBrakeSystems") if isinstance(bike, dict) \
+        else None
+    return {
+        "head_unit": _get(bike, "headUnit", "productName"),
+        "remote_control": _get(bike, "remoteControl", "productName"),
+        "connect_module": _get(bike, "connectModule", "productName"),
+        "has_abs": bool(isinstance(abs_systems, list) and abs_systems),
+    }
+
+
+def max_altitude(details: dict | None) -> float | None:
+    """Max numeric altitude (m, 1 decimal) across activity points, or None."""
+    if isinstance(details, dict):
+        points = details.get("activityDetails") or []
+    elif isinstance(details, list):
+        points = details
+    else:
+        return None
+    alts = [p.get("altitude") for p in points if isinstance(p, dict)]
+    numeric = [a for a in alts if isinstance(a, (int, float))
+               and not isinstance(a, bool)]
+    if not numeric:
+        return None
+    return round(max(numeric), 1)
