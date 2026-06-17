@@ -19,7 +19,12 @@ def _get(d: Any, *keys: str, default: Any = None) -> Any:
 
 
 def reachable_ranges(bike: dict) -> list[dict]:
-    """Bosch per-assist-mode reachable range (in API order), km."""
+    """Bosch per-assist-mode reachable range (in API order), km.
+
+    The API delivers ``reachableRange`` already in KILOMETRES (verified
+    against real bike data, issue #35) — the OpenAPI example suggesting
+    metres is misleading. The value is therefore used as-is, NOT /1000.
+    """
     modes = _get(bike, "driveUnit", "activeAssistModes", default=[]) or []
     out: list[dict] = []
     for m in modes:
@@ -27,7 +32,7 @@ def reachable_ranges(bike: dict) -> list[dict]:
         rng = m.get("reachableRange")
         if not name or name == "0" or not isinstance(rng, (int, float)):
             continue
-        out.append({"name": name, "range_km": round(rng / 1000, 1)})
+        out.append({"name": name, "range_km": round(rng, 1)})
     return out
 
 
