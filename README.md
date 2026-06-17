@@ -109,19 +109,24 @@ Kopiere die **Client-ID** - du brauchst sie gleich.
 
 Installiere die Integration über **HACS** (siehe Abschnitt weiter unten) und starte Home Assistant neu. Erst danach kann der Freigabe-Link aus dem eBike Manager den Einrichtungs-Flow öffnen.
 
-#### Schritt 4: Datenfreigabe erteilen und Integration einrichten
+#### Schritt 4: Integration einrichten (über „Service aktivieren")
 
-Ohne Freigabe antwortet die API mit **403 Forbidden** und es erscheinen keine Entities. Die Freigabe erfolgt **pro Bike** und richtet die Integration in einem Vorgang ein:
+1. Öffne **Mein eBike → eBike Manager** und dort den Bereich **Data Act** (erreichbar über **[flow.bosch-ebike.com](https://flow.bosch-ebike.com)**).
+2. Klicke beim Eintrag für deine in Schritt 1 angelegte App auf **„Service aktivieren"**. Daraufhin öffnet sich automatisch deine Home-Assistant-Instanz (über die in Schritt 1 hinterlegte Login-URL).
+3. In Home Assistant öffnet sich der Einrichtungs-Flow: **Client-ID einfügen**, **Autorisieren**, bei Bosch anmelden und bestätigen.
+4. Die Integration ist jetzt eingerichtet - **aber die Entitäten fehlen noch**. Das ist normal, weiter mit Schritt 5.
 
-1. Öffne den **Bosch eBike Manager** über **[flow.bosch-ebike.com](https://flow.bosch-ebike.com)** → Menü **"Data Act"**.
-2. Suche deine App / Client-ID und starte die Freigabe **pro Bike** über den dort angebotenen **Link** (es gibt keinen Schieberegler mehr).
-3. Der Link öffnet `my.home-assistant.io` und startet **in deiner Home-Assistant-Instanz** den Einrichtungs-Flow: **Client-ID eingeben**, **Autorisieren**, bei Bosch anmelden und bestätigen. Dieser eine Vorgang erteilt die Freigabe **und** richtet die Integration ein.
+> **Hinweis:** Alternativ kannst du die Integration auch manuell hinzufügen (**Einstellungen → Geräte & Dienste → Integration hinzufügen → "Bosch eBike"**, Client-ID einfügen, Autorisieren). Kein localhost und kein Copy & Paste: Home Assistant übernimmt den Login-Rücksprung über die "My Home Assistant"-Weiterleitung, Access- und Refresh-Token werden danach automatisch erneuert.
 
-> **Hinweis:** Alternativ kannst du die Integration auch manuell hinzufügen (**Einstellungen → Geräte & Dienste → Integration hinzufügen → "Bosch eBike"**, Client-ID eingeben, Autorisieren). Die Freigabe pro Bike im eBike Manager ist in jedem Fall nötig. Kein localhost und kein Copy & Paste: Home Assistant übernimmt den Login-Rücksprung über die "My Home Assistant"-Weiterleitung, Access- und Refresh-Token werden danach automatisch erneuert.
+#### Schritt 5: Datenfreigabe pro Bike aktivieren
 
-#### Schritt 5: Ergebnis prüfen
+Ohne aktivierte Freigabe antwortet die API mit **403 Forbidden** und es erscheinen keine Entitäten.
 
-Die Entities sollten jetzt erscheinen (Bike-Daten, Batterie, letzte Fahrt, Gesamtstatistiken). Falls kurz noch **403** kommt oder keine Entities erscheinen: ein paar Minuten warten (die Freigabe propagiert serverseitig) und die Integration neu laden (**⋮ → Neu laden**). Bei aktiver Freigabe zeigt der eBike Manager **"Service deaktivieren"**.
+1. Gehe zurück zu **Mein eBike → eBike Manager → Data Act**.
+2. Aktiviere dort den **Schalter (Toggle)** für den in Schritt 1 angelegten Client - die Freigabe gilt **pro Bike**. Bei aktiver Freigabe wechselt die Anzeige auf **„Service deaktivieren"**.
+3. Lade in Home Assistant die **Bosch eBike** Integration neu (**⋮ → Neu laden**). Danach sind **alle Entitäten** da.
+
+> Kommt direkt nach dem Aktivieren noch ein 403 oder fehlen Entitäten: ein paar Minuten warten (die Freigabe propagiert serverseitig) und erneut neu laden.
 
 #### Schritt 6: Kartenansicht einrichten (optional)
 
@@ -467,8 +472,8 @@ Auf der Lovelace-Karte gibt es einen 📚-Toggle in den Karten-Steuerelementen. 
 
 | Problem | Lösung |
 |---------|--------|
-| Keine Entities nach Einrichtung | Datenfreigabe im eBike Manager erteilen (Schritt 4) |
-| „Client nicht gefunden" beim Login | Freigabe-Link im eBike Manager nutzen (Schritt 4) und Client-ID auf Tippfehler/Leerzeichen prüfen |
+| Keine Entities nach Einrichtung | Datenfreigabe-Toggle im eBike Manager aktivieren (Schritt 5) |
+| „Client nicht gefunden" beim Login | „Service aktivieren" im eBike Manager nutzen (Schritt 4) und Client-ID auf Tippfehler/Leerzeichen prüfen |
 | „Invalid state" / Rücksprung schlägt fehl | „My Home Assistant" in HA aktiviert? Redirect-URI im Portal muss `https://my.home-assistant.io/redirect/oauth` sein |
 | Kilometerstand unrealistisch hoch | Der Odometer wird in Metern geliefert und automatisch in km umgerechnet |
 | Aktivitätsdaten fehlen | Prüfe, ob die Aktivitäten-Freigabe im Flow Portal aktiv ist |
@@ -658,19 +663,24 @@ Copy the **Client-ID** - you will need it in a moment.
 
 Install the integration via **HACS** (see the section further down) and restart Home Assistant. Only then can the consent link from the eBike Manager open the setup flow.
 
-#### Step 4: Grant data sharing and set up the integration
+#### Step 4: Set up the integration (via "Service aktivieren")
 
-Without consent the API answers with **403 Forbidden** and no entities appear. Consent is granted **per bike** and sets up the integration in one go:
+1. Open **My eBike → eBike Manager** and go to the **Data Act** section (reachable via **[flow.bosch-ebike.com](https://flow.bosch-ebike.com)**).
+2. On the entry for the app you created in Step 1, click **"Service aktivieren"**. This automatically opens your Home Assistant instance (via the Login URL you registered in Step 1).
+3. In Home Assistant the setup flow opens: **paste the Client-ID**, **Authorize**, sign in at Bosch and confirm.
+4. The integration is now set up - **but the entities are still missing**. That is normal, continue with Step 5.
 
-1. Open the **Bosch eBike Manager** via **[flow.bosch-ebike.com](https://flow.bosch-ebike.com)** → menu **"Data Act"**.
-2. Find your app / Client-ID and start the consent **per bike** via the **link** offered there (there is no longer a toggle).
-3. The link opens `my.home-assistant.io` and starts the setup flow **in your Home Assistant instance**: **enter the Client-ID**, **Authorize**, sign in at Bosch and confirm. This single action grants consent **and** sets up the integration.
+> **Note:** Alternatively, you can add the integration manually (**Settings → Devices & Services → Add Integration → "Bosch eBike"**, paste the Client-ID, Authorize). No localhost and no copy & paste: Home Assistant handles the login round-trip via the "My Home Assistant" redirect, and the access and refresh tokens are then renewed automatically.
 
-> **Note:** Alternatively, you can add the integration manually (**Settings → Devices & Services → Add Integration → "Bosch eBike"**, enter the Client-ID, Authorize). The per-bike consent in the eBike Manager is required either way. No localhost and no copy & paste: Home Assistant handles the login round-trip via the "My Home Assistant" redirect, and the access and refresh tokens are then renewed automatically.
+#### Step 5: Activate data sharing per bike
 
-#### Step 5: Check the result
+Without active data sharing the API answers with **403 Forbidden** and no entities appear.
 
-The entities should now appear (bike data, battery, last ride, aggregate statistics). If you briefly still get a **403** or no entities appear: wait a few minutes (consent propagates server-side) and reload the integration (**⋮ → Reload**). When consent is active, the eBike Manager shows **"Deactivate service"**.
+1. Go back to **My eBike → eBike Manager → Data Act**.
+2. There, activate the **toggle (switch)** for the client you created in Step 1 - data sharing applies **per bike**. When sharing is active, the label changes to **"Service deaktivieren"**.
+3. In Home Assistant, reload the **Bosch eBike** integration (**⋮ → Reload**). All **entities** then appear.
+
+> If you still get a 403 right after activating, or entities are missing: wait a few minutes (the consent propagates server-side) and reload again.
 
 #### Step 6: Set Up the Map Card (optional)
 
@@ -1015,8 +1025,8 @@ The Lovelace card has a 📚 toggle in the map controls. When enabled, the card 
 
 | Problem | Solution |
 |---------|----------|
-| No entities after setup | Grant data sharing in the eBike Manager (step 4) |
-| "Client not found" during login | Use the consent link in the eBike Manager (step 4) and check the Client-ID for typos/spaces |
+| No entities after setup | Activate the data-sharing toggle in the eBike Manager (step 5) |
+| "Client not found" during login | Use "Service aktivieren" in the eBike Manager (step 4) and check the Client-ID for typos/spaces |
 | "Invalid state" / redirect back fails | Is "My Home Assistant" enabled in HA? The portal redirect URI must be `https://my.home-assistant.io/redirect/oauth` |
 | Odometer unrealistically high | The odometer is delivered in meters and automatically converted to km |
 | Activity data missing | Check that activity sharing is enabled in the Flow Portal |
