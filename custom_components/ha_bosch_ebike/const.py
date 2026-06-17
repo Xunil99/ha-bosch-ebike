@@ -43,8 +43,15 @@ EVENT_MAINTENANCE_OVERDUE = f"{DOMAIN}_maintenance_overdue"
 REDIRECT_URI = "http://localhost:8888/callback"
 
 # Bosch Data Act developer portal where the user registers an "app" to get a
-# Client-ID and must ACTIVATE it before the OAuth login works.
+# Client-ID. Smart System users log in here with their SingleKey ID.
 FLOW_PORTAL_URL = "https://portal.bosch-ebike.com/data-act/app"
+
+# Same Data Act portal, but eBike System 2 users register via the eBike Connect
+# login (kc_idp_hint=ebike-connect), not SingleKey ID.
+BES2_PORTAL_URL = (
+    "https://portal.bosch-ebike.com/login?returnTo=%2Fdata-act%2Fapp"
+    "&kc_idp_hint=ebike-connect"
+)
 
 # OAuth2 scope requested during authorization.
 OAUTH_SCOPE = "openid"

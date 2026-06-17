@@ -46,6 +46,7 @@ from .const import (
     TOKEN_URL,
     OAUTH_SCOPE,
     FLOW_PORTAL_URL,
+    BES2_PORTAL_URL,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -91,6 +92,15 @@ class BoschEBikeConfigFlow(AbstractOAuth2FlowHandler, domain=DOMAIN):
         """Return the options flow handler (live BLE sensor wiring)."""
         return BoschEBikeOptionsFlowHandler()
 
+    @property
+    def _portal_url(self) -> str:
+        """Data Act portal link for the chosen system.
+
+        Smart System users register via SingleKey ID; eBike System 2 users
+        register via the eBike Connect login, which is a different URL.
+        """
+        return BES2_PORTAL_URL if self._system == SYSTEM_BES2 else FLOW_PORTAL_URL
+
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
@@ -101,7 +111,7 @@ class BoschEBikeConfigFlow(AbstractOAuth2FlowHandler, domain=DOMAIN):
         return self.async_show_menu(
             step_id="user",
             menu_options=["smart_system", "ebike_system_2"],
-            description_placeholders={"portal_url": FLOW_PORTAL_URL},
+            description_placeholders={"portal_url": self._portal_url},
         )
 
     async def async_step_smart_system(
@@ -132,7 +142,7 @@ class BoschEBikeConfigFlow(AbstractOAuth2FlowHandler, domain=DOMAIN):
         return self.async_show_form(
             step_id="credentials",
             data_schema=vol.Schema({vol.Required(CONF_CLIENT_ID): str}),
-            description_placeholders={"portal_url": FLOW_PORTAL_URL},
+            description_placeholders={"portal_url": self._portal_url},
         )
 
     async def async_step_reauth(
@@ -150,7 +160,7 @@ class BoschEBikeConfigFlow(AbstractOAuth2FlowHandler, domain=DOMAIN):
         if user_input is None:
             return self.async_show_form(
                 step_id="reauth_confirm",
-                description_placeholders={"portal_url": FLOW_PORTAL_URL},
+                description_placeholders={"portal_url": self._portal_url},
             )
         if self._client_id:
             self._register_impl(self._client_id)

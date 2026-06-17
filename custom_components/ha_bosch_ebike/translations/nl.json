@@ -11,7 +11,7 @@
       },
       "credentials": {
         "title": "Bosch eBike instellen",
-        "description": "Voer de **Client-ID** in uit je app-registratie in het [Bosch Flow-portaal]({portal_url}).\n\n⚠️ **Belangrijk:** Je moet de Client-ID *vóór* het inloggen in het Flow-portaal **activeren** — anders weigert Bosch de login met \"client niet gevonden\". Na het verzenden word je naar de Bosch-login geleid en automatisch teruggebracht naar Home Assistant.",
+        "description": "Voer de **Client-ID** in uit je app-registratie in het [Bosch Data Act-portaal]({portal_url}).\n\nAfhankelijk van je systeem registreer je de app via een andere login: **Smart System** met SingleKey ID, **eBike System 2** via de eBike Connect-login.\n\nNa het verzenden word je naar de Bosch-login geleid en automatisch teruggebracht naar Home Assistant. De gegevensdeling activeer je daarna per fiets in de Bosch eBike Manager.",
         "data": {
           "client_id": "Client-ID"
         }
