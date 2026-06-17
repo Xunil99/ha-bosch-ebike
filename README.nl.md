@@ -97,71 +97,49 @@ Deze waarden vervangen de eerdere snapshot-schatting in de sensoren *Last Ride D
 
 ---
 
-#### Stap 1: app registreren in het Bosch Data Act-portaal (eerst doen!)
-
-Dit is de belangrijkste stap. Je moet een "app" aanmaken in het Bosch-portaal om een **Client-ID** te krijgen.
+#### Stap 1: app registreren in het Bosch Data Act-portaal
 
 1. Ga naar [portal.bosch-ebike.com/data-act/app](https://portal.bosch-ebike.com/data-act/app)
-2. Log in met je SingleKey ID
-3. Klik op **"Create App"** (app aanmaken)
+2. Log in met je **SingleKey ID**
+3. Klik op **"App aanmaken"**
 4. Vul het formulier in:
    - **App-naam:** bijv. `Home Assistant`
    - **Redirect URI:** `https://my.home-assistant.io/redirect/oauth`
-   - **Login URL:** willekeurig (puur informatief), bijv. `https://github.com/Xunil99/ha-bosch-ebike`
-   - **Confidential client:** **UIT** laten (Home Assistant gebruikt een public client met PKCE, zonder secret)
+   - **Login URL:** `https://my.home-assistant.io/redirect/config_flow_start/?domain=ha_bosch_ebike` (**belangrijk, niet meer willekeurig!** Via deze URL start de vrijgave in de eBike Manager de installatie-flow rechtstreeks in jouw Home Assistant-instantie.)
+   - **Confidential client:** **UIT** laten
 
    > **Belangrijk:** De **Redirect URI** moet exact `https://my.home-assistant.io/redirect/oauth` zijn – dat is de officiële "My Home Assistant"-doorverwijzing waarmee Home Assistant de login automatisch afrondt. De integratie "My Home Assistant" moet in HA ingeschakeld zijn (standaard het geval). Heb je die uitgeschakeld, registreer dan in plaats daarvan `https://<jouw-HA-URL>/auth/external/callback`.
 
-5. Na het aanmaken krijg je een **Client-ID** (formaat: `euda-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`).
+5. Na het aanmaken krijg je een **Client-ID** (formaat `euda-xxxxxxxx-...`).
 
 #### Stap 2: Client-ID bewaren
 
-Kopieer de zojuist aangemaakte **Client-ID** – je hebt hem zo meteen nodig in Home Assistant.
+Kopieer de **Client-ID** – je hebt hem zo meteen nodig.
 
-> **Let op:** Je moet de Client-ID in het Flow-portaal nog **activeren** (stap 5) voordat de login werkt. Zonder activering weigert Bosch de aanmelding met "client niet gevonden".
+#### Stap 3: integratie installeren in Home Assistant
 
----
+Installeer de integratie via **HACS** (zie de sectie hieronder) en herstart Home Assistant. Pas daarna kan de vrijgave-link uit de eBike Manager de installatie-flow openen.
 
-#### Stap 3: integratie instellen in Home Assistant
+#### Stap 4: integratie instellen (via "Service aktivieren")
 
-1. Installeer de integratie (via HACS of handmatig – zie hieronder) en herstart Home Assistant
-2. Ga naar **Instellingen → Apparaten & diensten → Integratie toevoegen**
-3. Zoek naar **"Bosch eBike"**
-4. Voer je **Client-ID** in en klik op **Verzenden**
-5. Klik op **Autoriseren** – je wordt doorgestuurd naar de **Bosch-login**
-6. Log in met je **SingleKey ID** en bevestig de toestemming
-7. Je wordt **automatisch** teruggeleid naar Home Assistant – **geen codes meer kopiëren**. De integratie is ingesteld.
+1. Open **Mijn eBike → eBike Manager** en daar het onderdeel **Data Act** (bereikbaar via **[flow.bosch-ebike.com](https://flow.bosch-ebike.com)**).
+2. Klik bij het item voor je in stap 1 aangemaakte app op **"Service aktivieren"**. Daarop opent automatisch jouw Home Assistant-instantie (via de in stap 1 ingestelde Login-URL).
+3. In Home Assistant opent de installatie-flow: **plak de Client-ID**, **Autoriseren**, log in bij Bosch en bevestig.
+4. De integratie is nu ingesteld - **maar de entiteiten ontbreken nog**. Dat is normaal, ga verder met stap 5.
 
-> **Geen localhost, geen kopieer- en plakwerk meer:** Sinds de overstap op OAuth handelt Home Assistant de volledige login-cyclus zelf af (via de "My Home Assistant"-doorverwijzing). Het access- en refresh-token worden daarna automatisch door de integratie vernieuwd.
+> **Let op:** Je kunt de integratie ook handmatig toevoegen (**Instellingen → Apparaten & diensten → Integratie toevoegen → "Bosch eBike"**, Client-ID plakken, Autoriseren). Geen localhost en geen kopiëren en plakken: Home Assistant handelt de login-terugkeer af via de "My Home Assistant"-doorverwijzing, het access- en refresh-token worden daarna automatisch vernieuwd.
 
-#### Stap 4: resultaat controleren
+#### Stap 5: gegevensdeling per fiets activeren
 
-De integratie zou nu ingesteld moeten zijn – maar **nog zonder entiteiten!** Dat is normaal. Ga verder met stap 5.
+Zonder geactiveerde vrijgave antwoordt de API met **403 Forbidden** en verschijnen er geen entiteiten.
 
----
+1. Ga terug naar **Mijn eBike → eBike Manager → Data Act**.
+2. Activeer daar de **schakelaar (toggle)** voor de in stap 1 aangemaakte client - de vrijgave geldt **per fiets**. Bij een actieve vrijgave verandert de weergave in **"Service deaktivieren"**.
+3. Herlaad in Home Assistant de **Bosch eBike** integratie (**⋮ → Herladen**). Daarna zijn **alle entiteiten** aanwezig.
 
-#### Stap 5: gegevensdeling activeren
+> Krijg je direct na het activeren nog een 403 of ontbreken er entiteiten: wacht een paar minuten (de vrijgave wordt serverzijdig doorgevoerd) en herlaad opnieuw.
 
-Zonder gegevensdeling levert de API een leeg resultaat!
-
-1. Ga naar **[flow.bosch-ebike.com](https://flow.bosch-ebike.com)**
-2. Log in met je **SingleKey ID**
-3. Kies bovenin het menu **"Data Act"**
-4. Zoek het item **"Home Assistant"** en **activeer** het
-
-Nu zou je op de bijbehorende Bosch-API-pagina de optie moeten zien om de Client-ID te activeren!
-
-#### Stap 6: integratie herladen
-
-Nadat je de Client-ID in het Flow-portaal hebt geactiveerd:
-
-1. Ga terug naar **Home Assistant → Instellingen → Apparaten & diensten**
-2. Zoek de **Bosch eBike**-integratie
-3. Klik op **⋮ (drie puntjes)** → **Herladen**
-
-De integratie wordt nu bijgewerkt met **alle beschikbare entiteiten** (fietsgegevens, accu, laatste rit, totaalstatistieken).
-
-#### 6. Kaartweergave instellen (optioneel)
+#### Stap 6: kaartweergave instellen (optioneel)
 
 De integratie bevat een interactieve Lovelace-kaart voor het weergeven van je GPS-tracks.
 
@@ -504,8 +482,8 @@ Op de Lovelace-kaart zit een 📚-toggle in de kaartbediening. Is die actief, da
 
 | Probleem | Oplossing |
 |----------|-----------|
-| Geen entiteiten na het instellen | Gegevensdeling in het Flow-portaal activeren (stap 5) |
-| "Client niet gevonden" bij het inloggen | Client-ID in het Flow-portaal activeren (stap 5) en controleren op typefouten/spaties |
+| Geen entiteiten na het instellen | De gegevensdeling-schakelaar in de eBike Manager activeren (stap 5) |
+| "Client niet gevonden" bij het inloggen | "Service aktivieren" in de eBike Manager gebruiken (stap 4) en de Client-ID controleren op typefouten/spaties |
 | "Invalid state" / terugkeer mislukt | Is "My Home Assistant" ingeschakeld in HA? De redirect-URI in het portaal moet `https://my.home-assistant.io/redirect/oauth` zijn |
 | Kilometerstand onrealistisch hoog | De odometer wordt in meters geleverd en automatisch omgerekend naar km |
 | Activiteitsgegevens ontbreken | Controleer of het delen van activiteiten in het Flow-portaal actief is |
@@ -574,7 +552,7 @@ Op de Lovelace-kaart zit een 📚-toggle in de kaartbediening. Is die actief, da
 
 #### 🆕 Uitgebreide Data Act-entiteiten (vanaf v1.18.0)
 
-Deze entiteiten komen uit aanvullende Bosch Data Act-categorieën (actieradius-service, digitaal serviceboek, Bike Pass, diagnose). **Ze vereisen een eigen, aparte gegevensdeling in het Flow-portaal** (zie de opmerking hieronder).
+Deze entiteiten verschijnen **automatisch** met de normale installatie. Er is **geen aanvullende of aparte Bosch-gegevensdeling nodig** – ze vallen onder de gebruikelijke autorisatie. Veel ervan staan afhankelijk van de fiets toch op "onbekend", omdat de onderliggende gegevens niet bestaan (zie de opmerking hieronder).
 
 | Entiteit | Type/eenheid | Beschrijving |
 |----------|--------------|--------------|
@@ -594,7 +572,7 @@ Deze entiteiten komen uit aanvullende Bosch Data Act-categorieën (actieradius-s
 | Last Ride Start Odometer | sensor / km | Start-kilometerstand van de laatste rit |
 | Last Ride Max Altitude | sensor / m | Maximale hoogte van de laatste rit |
 
-> **⚠️ Belangrijke opmerking over deze entiteiten:** Deze aanvullende gegevenscategorieën vereisen een **eigen, aparte Data Act-gegevensdeling in het Flow-portaal** – ze vallen niet automatisch onder de basistoestemming. Daarnaast geldt:
+> **⚠️ Belangrijke opmerking over deze entiteiten:** Er is **geen aanvullende Bosch-gegevensdeling nodig** – ze vallen onder de normale autorisatie. Ze staan echter vaak op "onbekend", omdat de onderliggende gegevens alleen in bepaalde gevallen bestaan:
 > - De **diefstallocatie** (`Last Known Location`) wordt **alleen gevuld wanneer er diefstal is gemeld** – er is **geen continue locatievolging**.
 > - De **accugezondheid (State of Health)** en de gemeten capaciteit zijn **pas beschikbaar na een capaciteitsmeting bij de dealer**.
 > - **Serviceboek- en klantrapportgegevens** (Last Service, levensduurwaarden) verschijnen alleen als zulke records bestaan.
