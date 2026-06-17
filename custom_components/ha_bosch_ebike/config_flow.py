@@ -95,9 +95,13 @@ class BoschEBikeConfigFlow(AbstractOAuth2FlowHandler, domain=DOMAIN):
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Step 1: choose the eBike system (Smart System or eBike System 2)."""
+        # Pass portal_url even though the menu step's own text does not use it:
+        # if a stale/cached translation still carries the old {portal_url}
+        # description on this step, this prevents a MISSING_VALUE crash.
         return self.async_show_menu(
             step_id="user",
             menu_options=["smart_system", "ebike_system_2"],
+            description_placeholders={"portal_url": FLOW_PORTAL_URL},
         )
 
     async def async_step_smart_system(
