@@ -18,12 +18,45 @@ def _get(d: Any, *keys: str, default: Any = None) -> Any:
     return cur if cur is not None else default
 
 
+# Bosch returns the assist mode in ``activeAssistModes[].name`` as an internal
+# application code (e.g. "A100M00030"), not the name shown on the display.
+# Mapping verified against a Bosch DiagnosticTool 3 dealer report
+# ("Modes d'assistance", code -> "Désignation complète").
+ASSIST_MODE_NAMES: dict[str, str] = {
+    "A100M00040": "ECO",
+    "A100ECOP37": "ECO+",
+    "A100M00030": "TOUR",
+    "A100MAAAA0": "TOUR+",
+    "A100M00020": "SPORT",
+    "A100M00010": "TURBO",
+    "A100M0AUTO": "AUTO",
+    "A100EAAAB0": "eMTB",
+    "A100MSPIC7": "eMTB+",
+    "A100MAAAB0": "eMTB-shortcrank",
+}
+
+
+def assist_mode_display_name(code: Any) -> Any:
+    """Map a Bosch assist-mode application code to its display name.
+
+    Unknown codes are returned unchanged so a yet-undocumented mode still
+    shows something instead of disappearing.
+    """
+    if isinstance(code, str):
+        return ASSIST_MODE_NAMES.get(code, code)
+    return code
+
+
 def reachable_ranges(bike: dict) -> list[dict]:
     """Bosch per-assist-mode reachable range (in API order), km.
 
     The API delivers ``reachableRange`` already in KILOMETRES (verified
     against real bike data, issue #35) — the OpenAPI example suggesting
     metres is misleading. The value is therefore used as-is, NOT /1000.
+
+    ``activeAssistModes[].name`` is an internal application code; it is
+    mapped to the display name (ECO/TOUR/TURBO/eMTB+ ...) via
+    :data:`ASSIST_MODE_NAMES`.
     """
     modes = _get(bike, "driveUnit", "activeAssistModes", default=[]) or []
     out: list[dict] = []
@@ -32,7 +65,8 @@ def reachable_ranges(bike: dict) -> list[dict]:
         rng = m.get("reachableRange")
         if not name or name == "0" or not isinstance(rng, (int, float)):
             continue
-        out.append({"name": name, "range_km": round(rng, 1)})
+        out.append({"name": assist_mode_display_name(name),
+                    "range_km": round(rng, 1)})
     return out
 
 

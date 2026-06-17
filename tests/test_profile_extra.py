@@ -24,49 +24,71 @@ software_update_available = profile_extra.software_update_available
 special_states = profile_extra.special_states
 next_service_info = profile_extra.next_service_info
 assist_mode_stats = profile_extra.assist_mode_stats
+assist_mode_display_name = profile_extra.assist_mode_display_name
 last_service = profile_extra.last_service
 component_inventory = profile_extra.component_inventory
 max_altitude = profile_extra.max_altitude
 
 BIKE = {
     "serviceDue": {"date": "2026-09-30T14:15:22Z", "odometer": 2000000},
-    # reachableRange is delivered by the Bosch API already in KILOMETERS
-    # (real values: Eco longest, Turbo shortest), despite the OpenAPI example
-    # suggesting metres. Verified against real bike data (issue #35).
+    # reachableRange is delivered by the Bosch API already in KILOMETERS,
+    # despite the OpenAPI example suggesting metres (issue #35). The mode
+    # name is the internal application code (verified against real bike data
+    # and a Bosch DiagnosticTool 3 report) and is mapped to a display name.
     "driveUnit": {"activeAssistModes": [
-        {"name": "Eco", "reachableRange": 49},
-        {"name": "Tour", "reachableRange": 36},
-        {"name": "eMTB", "reachableRange": 30},
-        {"name": "Turbo", "reachableRange": 27},
+        {"name": "A100M00040", "reachableRange": 49},
+        {"name": "A100M00030", "reachableRange": 36},
+        {"name": "A100M0AUTO", "reachableRange": 33},
+        {"name": "A100MSPIC7", "reachableRange": 30},
+        {"name": "A100M00010", "reachableRange": 27},
     ]},
 }
 
 
-def test_reachable_ranges_returns_name_and_km_in_order():
+def test_reachable_ranges_maps_codes_to_display_names_in_order():
     out = reachable_ranges(BIKE)
     assert out == [
-        {"name": "Eco", "range_km": 49.0},
-        {"name": "Tour", "range_km": 36.0},
-        {"name": "eMTB", "range_km": 30.0},
-        {"name": "Turbo", "range_km": 27.0},
+        {"name": "ECO", "range_km": 49.0},
+        {"name": "TOUR", "range_km": 36.0},
+        {"name": "AUTO", "range_km": 33.0},
+        {"name": "eMTB+", "range_km": 30.0},
+        {"name": "TURBO", "range_km": 27.0},
     ]
+
+
+def test_assist_mode_display_name_mapping_and_fallback():
+    assert assist_mode_display_name("A100M00040") == "ECO"
+    assert assist_mode_display_name("A100ECOP37") == "ECO+"
+    assert assist_mode_display_name("A100MAAAA0") == "TOUR+"
+    assert assist_mode_display_name("A100M00020") == "SPORT"
+    assert assist_mode_display_name("A100EAAAB0") == "eMTB"
+    assert assist_mode_display_name("A100MAAAB0") == "eMTB-shortcrank"
+    # unknown code is returned unchanged
+    assert assist_mode_display_name("A100M99999") == "A100M99999"
+    assert assist_mode_display_name(None) is None
+
+
+def test_reachable_ranges_unknown_code_kept_raw():
+    assert reachable_ranges({"driveUnit": {"activeAssistModes": [
+        {"name": "A100M99999", "reachableRange": 42}]}}) == [
+            {"name": "A100M99999", "range_km": 42.0}]
 
 
 def test_reachable_ranges_skips_placeholder_and_missing():
     assert reachable_ranges({"driveUnit": {"activeAssistModes": [
-        {"name": "0", "reachableRange": 1}, {"name": "Eco"}]}}) == []
+        {"name": "0", "reachableRange": 1}, {"name": "A100M00040"}]}}) == []
     assert reachable_ranges({}) == []
 
 
 def test_reachable_ranges_skips_non_numeric_range():
     assert reachable_ranges({"driveUnit": {"activeAssistModes": [
-        {"name": "Eco", "reachableRange": "abc"}]}}) == []
+        {"name": "A100M00040", "reachableRange": "abc"}]}}) == []
 
 
 def test_reachable_ranges_keeps_zero_range():
     assert reachable_ranges({"driveUnit": {"activeAssistModes": [
-        {"name": "Eco", "reachableRange": 0}]}}) == [
-            {"name": "Eco", "range_km": 0.0}]
+        {"name": "A100M00040", "reachableRange": 0}]}}) == [
+            {"name": "ECO", "range_km": 0.0}]
 
 
 def test_next_service_date_parses_iso():
