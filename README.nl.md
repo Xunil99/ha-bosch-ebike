@@ -82,71 +82,44 @@ Deze waarden vervangen de eerdere snapshot-schatting in de sensoren *Last Ride D
 
 ---
 
-#### Stap 1: app registreren in het Bosch Data Act-portaal (eerst doen!)
-
-Dit is de belangrijkste stap. Je moet een "app" aanmaken in het Bosch-portaal om een **Client-ID** te krijgen.
+#### Stap 1: app registreren in het Bosch Data Act-portaal
 
 1. Ga naar [portal.bosch-ebike.com/data-act/app](https://portal.bosch-ebike.com/data-act/app)
-2. Log in met je SingleKey ID
-3. Klik op **"Create App"** (app aanmaken)
+2. Log in met je **SingleKey ID**
+3. Klik op **"App aanmaken"**
 4. Vul het formulier in:
    - **App-naam:** bijv. `Home Assistant`
    - **Redirect URI:** `https://my.home-assistant.io/redirect/oauth`
-   - **Login URL:** `https://my.home-assistant.io/redirect/config_flow_start/?domain=ha_bosch_ebike` (**belangrijk, niet meer willekeurig!** Via deze URL start de vrijgave in de eBike Manager later de installatie-flow rechtstreeks in jouw Home Assistant-instantie.)
-   - **Confidential client:** **UIT** laten (Home Assistant gebruikt een public client met PKCE, zonder secret)
+   - **Login URL:** `https://my.home-assistant.io/redirect/config_flow_start/?domain=ha_bosch_ebike` (**belangrijk, niet meer willekeurig!** Via deze URL start de vrijgave in de eBike Manager de installatie-flow rechtstreeks in jouw Home Assistant-instantie.)
+   - **Confidential client:** **UIT** laten
 
    > **Belangrijk:** De **Redirect URI** moet exact `https://my.home-assistant.io/redirect/oauth` zijn – dat is de officiële "My Home Assistant"-doorverwijzing waarmee Home Assistant de login automatisch afrondt. De integratie "My Home Assistant" moet in HA ingeschakeld zijn (standaard het geval). Heb je die uitgeschakeld, registreer dan in plaats daarvan `https://<jouw-HA-URL>/auth/external/callback`.
 
-5. Na het aanmaken krijg je een **Client-ID** (formaat: `euda-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`).
+5. Na het aanmaken krijg je een **Client-ID** (formaat `euda-xxxxxxxx-...`).
 
 #### Stap 2: Client-ID bewaren
 
-Kopieer de zojuist aangemaakte **Client-ID** – je hebt hem zo meteen nodig in Home Assistant.
+Kopieer de **Client-ID** – je hebt hem zo meteen nodig.
 
-> **Let op:** Je moet de Client-ID in het Flow-portaal nog **activeren** (stap 5) voordat de login werkt. Zonder activering weigert Bosch de aanmelding met "client niet gevonden".
+#### Stap 3: integratie installeren in Home Assistant
 
----
+Installeer de integratie via **HACS** (zie de sectie hieronder) en herstart Home Assistant. Pas daarna kan de vrijgave-link uit de eBike Manager de installatie-flow openen.
 
-#### Stap 3: integratie instellen in Home Assistant
+#### Stap 4: gegevensdeling verlenen en integratie instellen
 
-1. Installeer de integratie (via HACS of handmatig – zie hieronder) en herstart Home Assistant
-2. Ga naar **Instellingen → Apparaten & diensten → Integratie toevoegen**
-3. Zoek naar **"Bosch eBike"**
-4. Voer je **Client-ID** in en klik op **Verzenden**
-5. Klik op **Autoriseren** – je wordt doorgestuurd naar de **Bosch-login**
-6. Log in met je **SingleKey ID** en bevestig de toestemming
-7. Je wordt **automatisch** teruggeleid naar Home Assistant – **geen codes meer kopiëren**. De integratie is ingesteld.
-
-> **Geen localhost, geen kopieer- en plakwerk meer:** Sinds de overstap op OAuth handelt Home Assistant de volledige login-cyclus zelf af (via de "My Home Assistant"-doorverwijzing). Het access- en refresh-token worden daarna automatisch door de integratie vernieuwd.
-
-#### Stap 4: resultaat controleren
-
-De integratie zou nu ingesteld moeten zijn – maar **nog zonder entiteiten!** Dat is normaal. Ga verder met stap 5.
-
----
-
-#### Stap 5: gegevensdeling verlenen in de Bosch eBike Manager (per fiets)
-
-Zonder deze toestemming antwoordt de API met **403 Forbidden** en verschijnen er geen entiteiten.
-
-> **Belangrijk (gewijzigde Bosch-procedure):** Bosch gebruikt voor het vrijgeven **geen schakelaar meer, maar een link**. Deze link leidt via de in Stap 1 ingestelde **Login URL** naar jouw Home Assistant-instantie. Daarom moet de Login URL exact de `my.home-assistant.io`-link uit Stap 1 zijn.
+Zonder vrijgave antwoordt de API met **403 Forbidden** en verschijnen er geen entiteiten. De vrijgave gebeurt **per fiets** en stelt de integratie in één keer in:
 
 1. Open de **Bosch eBike Manager** via **[flow.bosch-ebike.com](https://flow.bosch-ebike.com)** → menu **"Data Act"**.
-2. Zoek je aangemaakte app / Client-ID en start de vrijgave **per fiets** via de daar aangeboden **link**.
-3. De link opent `my.home-assistant.io` en start de installatie-flow **in jouw Home Assistant-instantie**: kies het systeem, **voer de Client-ID in**, **Autoriseren**, log in bij Bosch en bevestig.
-4. Daarna is de vrijgave actief — in de eBike Manager wordt dan **"Service deactiveren"** weergegeven. Krijg je nog kort een 403, wacht dan een paar minuten en herlaad de integratie.
+2. Zoek je app / Client-ID en start de vrijgave **per fiets** via de daar aangeboden **link** (er is geen schuifregelaar meer).
+3. De link opent `my.home-assistant.io` en start de installatie-flow **in jouw Home Assistant-instantie**: **voer de Client-ID in**, **Autoriseren**, log in bij Bosch en bevestig. Deze ene handeling verleent de vrijgave **én** stelt de integratie in.
 
-#### Stap 6: integratie herladen
+> **Let op:** Je kunt de integratie ook handmatig toevoegen (**Instellingen → Apparaten & diensten → Integratie toevoegen → "Bosch eBike"**, Client-ID invoeren, Autoriseren). De vrijgave per fiets in de eBike Manager is hoe dan ook nodig. Geen localhost en geen kopiëren en plakken: Home Assistant handelt de login-terugkeer af via de "My Home Assistant"-doorverwijzing, het access- en refresh-token worden daarna automatisch vernieuwd.
 
-Nadat je de Client-ID in het Flow-portaal hebt geactiveerd:
+#### Stap 5: resultaat controleren
 
-1. Ga terug naar **Home Assistant → Instellingen → Apparaten & diensten**
-2. Zoek de **Bosch eBike**-integratie
-3. Klik op **⋮ (drie puntjes)** → **Herladen**
+De entiteiten zouden nu moeten verschijnen (fietsgegevens, accu, laatste rit, totaalstatistieken). Krijg je nog kort een **403** of verschijnen er geen entiteiten: wacht een paar minuten (de vrijgave wordt serverzijdig doorgevoerd) en herlaad de integratie (**⋮ → Herladen**). Bij een actieve vrijgave toont de eBike Manager **"Service deactiveren"**.
 
-De integratie wordt nu bijgewerkt met **alle beschikbare entiteiten** (fietsgegevens, accu, laatste rit, totaalstatistieken).
-
-#### 6. Kaartweergave instellen (optioneel)
+#### Stap 6: kaartweergave instellen (optioneel)
 
 De integratie bevat een interactieve Lovelace-kaart voor het weergeven van je GPS-tracks.
 
@@ -489,8 +462,8 @@ Op de Lovelace-kaart zit een 📚-toggle in de kaartbediening. Is die actief, da
 
 | Probleem | Oplossing |
 |----------|-----------|
-| Geen entiteiten na het instellen | Gegevensdeling in het Flow-portaal activeren (stap 5) |
-| "Client niet gevonden" bij het inloggen | Client-ID in het Flow-portaal activeren (stap 5) en controleren op typefouten/spaties |
+| Geen entiteiten na het instellen | Gegevensdeling verlenen in de eBike Manager (stap 4) |
+| "Client niet gevonden" bij het inloggen | De vrijgave-link in de eBike Manager gebruiken (stap 4) en de Client-ID controleren op typefouten/spaties |
 | "Invalid state" / terugkeer mislukt | Is "My Home Assistant" ingeschakeld in HA? De redirect-URI in het portaal moet `https://my.home-assistant.io/redirect/oauth` zijn |
 | Kilometerstand onrealistisch hoog | De odometer wordt in meters geleverd en automatisch omgerekend naar km |
 | Activiteitsgegevens ontbreken | Controleer of het delen van activiteiten in het Flow-portaal actief is |

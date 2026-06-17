@@ -82,71 +82,44 @@ Questi valori sostituiscono la precedente stima basata su snapshot nei sensori *
 
 ---
 
-#### Passo 1: registrare l'app nel portale Bosch Data Act (da fare per primo!)
-
-Questo è il passaggio più importante. Devi creare una "app" nel portale Bosch per ottenere una **Client-ID**.
+#### Passo 1: registrare l'app nel portale Bosch Data Act
 
 1. Vai su [portal.bosch-ebike.com/data-act/app](https://portal.bosch-ebike.com/data-act/app)
-2. Accedi con la tua SingleKey ID
-3. Clicca su **"Create App"** (crea app)
+2. Accedi con la tua **SingleKey ID**
+3. Clicca su **"Crea app"**
 4. Compila il modulo:
    - **Nome app:** ad es. `Home Assistant`
    - **Redirect URI:** `https://my.home-assistant.io/redirect/oauth`
-   - **Login URL:** `https://my.home-assistant.io/redirect/config_flow_start/?domain=ha_bosch_ebike` (**importante, non più a piacere!** Tramite questo URL l'autorizzazione nell'eBike Manager avvierà in seguito il flusso di configurazione direttamente nella tua istanza Home Assistant.)
-   - **Confidential client:** lascia **OFF** (Home Assistant usa un public client con PKCE, senza secret)
+   - **Login URL:** `https://my.home-assistant.io/redirect/config_flow_start/?domain=ha_bosch_ebike` (**importante, non più a piacere!** Tramite questo URL l'autorizzazione nell'eBike Manager avvia il flusso di configurazione direttamente nella tua istanza Home Assistant.)
+   - **Confidential client:** lascia **OFF**
 
    > **Importante:** La **Redirect URI** deve essere esattamente `https://my.home-assistant.io/redirect/oauth` – è il redirect ufficiale di "My Home Assistant", tramite il quale Home Assistant completa automaticamente il login. L'integrazione "My Home Assistant" deve essere attivata in HA (lo è di default). Se l'hai disattivata, registra invece `https://<il-tuo-URL-HA>/auth/external/callback`.
 
-5. Dopo la creazione ricevi una **Client-ID** (nel formato `euda-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`).
+5. Dopo la creazione ricevi una **Client-ID** (nel formato `euda-xxxxxxxx-...`).
 
 #### Passo 2: salvare la Client-ID
 
-Copia la **Client-ID** appena creata – ti servirà tra poco in Home Assistant.
+Copia la **Client-ID** – ti servirà tra poco.
 
-> **Nota:** Devi ancora **attivare** la Client-ID nel portale Flow (passo 5) prima che il login funzioni. Senza attivazione, Bosch rifiuta l'accesso con "client non trovato".
+#### Passo 3: installare l'integrazione in Home Assistant
 
----
+Installa l'integrazione tramite **HACS** (vedi la sezione più sotto) e riavvia Home Assistant. Solo dopo il link di autorizzazione dell'eBike Manager può aprire il flusso di configurazione.
 
-#### Passo 3: configurare l'integrazione in Home Assistant
+#### Passo 4: concedere la condivisione dei dati e configurare l'integrazione
 
-1. Installa l'integrazione (tramite HACS o manualmente – vedi sotto) e riavvia Home Assistant
-2. Vai su **Impostazioni → Dispositivi e servizi → Aggiungi integrazione**
-3. Cerca **"Bosch eBike"**
-4. Inserisci la tua **Client-ID** e clicca su **Invia**
-5. Clicca su **Autorizza** – verrai reindirizzato al **login Bosch**
-6. Accedi con la tua **SingleKey ID** e conferma il consenso
-7. Verrai riportato **automaticamente** a Home Assistant – **non serve più copiare alcun codice**. L'integrazione è configurata.
-
-> **Niente più localhost, niente più copia e incolla:** Dal passaggio a OAuth, Home Assistant gestisce da solo l'intero ritorno dal login (tramite il redirect "My Home Assistant"). L'access token e il refresh token vengono poi rinnovati automaticamente dall'integrazione.
-
-#### Passo 4: verificare il risultato
-
-L'integrazione dovrebbe ora essere configurata – ma **ancora senza entità!** È normale. Prosegui con il passo 5.
-
----
-
-#### Passo 5: concedere la condivisione dei dati nel Bosch eBike Manager (per bici)
-
-Senza questo consenso l'API risponde con **403 Forbidden** e non compare alcuna entità.
-
-> **Importante (procedura Bosch modificata):** Bosch per concedere l'accesso **non usa più un interruttore, ma un link**. Questo link passa attraverso la **Login URL** impostata al Passo 1 per raggiungere la tua istanza Home Assistant. Per questo la Login URL deve essere esattamente il link `my.home-assistant.io` del Passo 1.
+Senza autorizzazione l'API risponde con **403 Forbidden** e non compare alcuna entità. L'autorizzazione avviene **per bici** e configura l'integrazione in un'unica operazione:
 
 1. Apri il **Bosch eBike Manager** tramite **[flow.bosch-ebike.com](https://flow.bosch-ebike.com)** → menu **"Data Act"**.
-2. Trova la tua app / Client-ID registrata e avvia il consenso **per bici** tramite il **link** offerto lì.
-3. Il link apre `my.home-assistant.io` e avvia il flusso di configurazione **nella tua istanza Home Assistant**: scegli il sistema, **inserisci la Client-ID**, **Autorizza**, accedi su Bosch e conferma.
-4. A quel punto il consenso è attivo — l'eBike Manager mostra quindi **"Disattiva servizio"**. Se ricevi ancora brevemente un 403, attendi qualche minuto e ricarica l'integrazione.
+2. Trova la tua app / Client-ID e avvia l'autorizzazione **per bici** tramite il **link** offerto lì (non c'è più un interruttore).
+3. Il link apre `my.home-assistant.io` e avvia il flusso di configurazione **nella tua istanza Home Assistant**: **inserisci la Client-ID**, **Autorizza**, accedi su Bosch e conferma. Questa singola operazione concede l'autorizzazione **e** configura l'integrazione.
 
-#### Passo 6: ricaricare l'integrazione
+> **Nota:** In alternativa puoi aggiungere l'integrazione manualmente (**Impostazioni → Dispositivi e servizi → Aggiungi integrazione → "Bosch eBike"**, inserisci la Client-ID, Autorizza). L'autorizzazione per bici nell'eBike Manager è comunque necessaria. Niente localhost e niente copia e incolla: Home Assistant gestisce il ritorno dal login tramite il redirect "My Home Assistant", e l'access token e il refresh token vengono poi rinnovati automaticamente.
 
-Dopo aver attivato la Client-ID nel portale Flow:
+#### Passo 5: verificare il risultato
 
-1. Torna a **Home Assistant → Impostazioni → Dispositivi e servizi**
-2. Cerca l'integrazione **Bosch eBike**
-3. Clicca su **⋮ (tre puntini)** → **Ricarica**
+Le entità dovrebbero ora comparire (dati della bici, batteria, ultimo giro, statistiche complessive). Se ricevi ancora brevemente un **403** o non compare alcuna entità: attendi qualche minuto (l'autorizzazione si propaga lato server) e ricarica l'integrazione (**⋮ → Ricarica**). Quando l'autorizzazione è attiva, l'eBike Manager mostra **"Disattiva servizio"**.
 
-L'integrazione dovrebbe ora aggiornarsi con **tutte le entità disponibili** (dati della bici, batteria, ultimo giro, statistiche complessive).
-
-#### 6. Configurare la vista mappa (opzionale)
+#### Passo 6: configurare la vista mappa (opzionale)
 
 L'integrazione include una card Lovelace interattiva per visualizzare le tue tracce GPS.
 
@@ -495,8 +468,8 @@ Sulla card Lovelace c'è un toggle 📚 nei controlli della mappa. Se attivato, 
 
 | Problema | Soluzione |
 |----------|-----------|
-| Nessuna entità dopo la configurazione | Attivare la condivisione dei dati nel portale Flow (passo 5) |
-| "Client non trovato" al login | Attivare la Client-ID nel portale Flow (passo 5) e controllare errori di battitura/spazi |
+| Nessuna entità dopo la configurazione | Concedere la condivisione dei dati nell'eBike Manager (passo 4) |
+| "Client non trovato" al login | Usare il link di autorizzazione nell'eBike Manager (passo 4) e controllare errori di battitura/spazi nella Client-ID |
 | "Invalid state" / il ritorno fallisce | "My Home Assistant" è attivato in HA? La Redirect URI nel portale deve essere `https://my.home-assistant.io/redirect/oauth` |
 | Chilometraggio irrealisticamente alto | L'odometro viene fornito in metri e convertito automaticamente in km |
 | Mancano i dati delle attività | Verifica che la condivisione delle attività sia attiva nel portale Flow |
