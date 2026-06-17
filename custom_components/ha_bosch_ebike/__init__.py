@@ -382,7 +382,7 @@ async def ws_get_track(
 
     activity_id = msg["activity_id"]
     try:
-        detail = await coordinator.api.get_activity_detail(activity_id)
+        detail = await coordinator.fetch_track_detail(activity_id)
         points = detail.get("activityDetails", [])
 
         # Filter and slim down the data
@@ -500,7 +500,7 @@ async def ws_get_all_tracks(
         if points is None:
             async with semaphore:
                 try:
-                    detail = await coord.api.get_activity_detail(aid)
+                    detail = await coord.fetch_track_detail(aid)
                 except Exception as err:  # noqa: BLE001
                     _LOGGER.warning("Bosch eBike: get_all_tracks: failed to load %s: %s", aid, err)
                     return

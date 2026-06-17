@@ -534,6 +534,20 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "service_records": {},
         }
 
+    async def fetch_track_detail(self, activity_id: Any) -> dict[str, Any]:
+        """Return an activity detail as ``{"activityDetails": [...]}``.
+
+        System-aware so the map/track websockets work for both generations:
+        BES2 uses the eBike-System-2 endpoint and is flattened via
+        ``bes2.normalize_track`` into the same point shape the Smart System
+        detail already has.
+        """
+        if self._system == SYSTEM_BES2:
+            from . import bes2
+            raw = await self.api.get_activity_detail_bes2(activity_id)
+            return bes2.normalize_track(raw)
+        return await self.api.get_activity_detail(activity_id)
+
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch bikes and activities from Bosch API."""
         if self._system == SYSTEM_BES2:
