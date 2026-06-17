@@ -30,11 +30,14 @@ max_altitude = profile_extra.max_altitude
 
 BIKE = {
     "serviceDue": {"date": "2026-09-30T14:15:22Z", "odometer": 2000000},
+    # reachableRange is delivered by the Bosch API already in KILOMETERS
+    # (real values: Eco longest, Turbo shortest), despite the OpenAPI example
+    # suggesting metres. Verified against real bike data (issue #35).
     "driveUnit": {"activeAssistModes": [
-        {"name": "Eco", "reachableRange": 60000},
-        {"name": "Tour", "reachableRange": 50000},
-        {"name": "eMTB", "reachableRange": 40000},
-        {"name": "Turbo", "reachableRange": 30000},
+        {"name": "Eco", "reachableRange": 49},
+        {"name": "Tour", "reachableRange": 36},
+        {"name": "eMTB", "reachableRange": 30},
+        {"name": "Turbo", "reachableRange": 27},
     ]},
 }
 
@@ -42,10 +45,10 @@ BIKE = {
 def test_reachable_ranges_returns_name_and_km_in_order():
     out = reachable_ranges(BIKE)
     assert out == [
-        {"name": "Eco", "range_km": 60.0},
-        {"name": "Tour", "range_km": 50.0},
-        {"name": "eMTB", "range_km": 40.0},
-        {"name": "Turbo", "range_km": 30.0},
+        {"name": "Eco", "range_km": 49.0},
+        {"name": "Tour", "range_km": 36.0},
+        {"name": "eMTB", "range_km": 30.0},
+        {"name": "Turbo", "range_km": 27.0},
     ]
 
 
