@@ -92,7 +92,7 @@ Dit is de belangrijkste stap. Je moet een "app" aanmaken in het Bosch-portaal om
 4. Vul het formulier in:
    - **App-naam:** bijv. `Home Assistant`
    - **Redirect URI:** `https://my.home-assistant.io/redirect/oauth`
-   - **Login URL:** willekeurig (puur informatief), bijv. `https://github.com/Xunil99/ha-bosch-ebike`
+   - **Login URL:** `https://my.home-assistant.io/redirect/config_flow_start/?domain=ha_bosch_ebike` (**belangrijk, niet meer willekeurig!** Via deze URL start de vrijgave in de eBike Manager later de installatie-flow rechtstreeks in jouw Home Assistant-instantie.)
    - **Confidential client:** **UIT** laten (Home Assistant gebruikt een public client met PKCE, zonder secret)
 
    > **Belangrijk:** De **Redirect URI** moet exact `https://my.home-assistant.io/redirect/oauth` zijn – dat is de officiële "My Home Assistant"-doorverwijzing waarmee Home Assistant de login automatisch afrondt. De integratie "My Home Assistant" moet in HA ingeschakeld zijn (standaard het geval). Heb je die uitgeschakeld, registreer dan in plaats daarvan `https://<jouw-HA-URL>/auth/external/callback`.
@@ -125,16 +125,16 @@ De integratie zou nu ingesteld moeten zijn – maar **nog zonder entiteiten!** D
 
 ---
 
-#### Stap 5: gegevensdeling activeren
+#### Stap 5: gegevensdeling verlenen in de Bosch eBike Manager (per fiets)
 
-Zonder gegevensdeling levert de API een leeg resultaat!
+Zonder deze toestemming antwoordt de API met **403 Forbidden** en verschijnen er geen entiteiten.
 
-1. Ga naar **[flow.bosch-ebike.com](https://flow.bosch-ebike.com)**
-2. Log in met je **SingleKey ID**
-3. Kies bovenin het menu **"Data Act"**
-4. Zoek het item **"Home Assistant"** en **activeer** het
+> **Belangrijk (gewijzigde Bosch-procedure):** Bosch gebruikt voor het vrijgeven **geen schakelaar meer, maar een link**. Deze link leidt via de in Stap 1 ingestelde **Login URL** naar jouw Home Assistant-instantie. Daarom moet de Login URL exact de `my.home-assistant.io`-link uit Stap 1 zijn.
 
-Nu zou je op de bijbehorende Bosch-API-pagina de optie moeten zien om de Client-ID te activeren!
+1. Open de **Bosch eBike Manager** via **[flow.bosch-ebike.com](https://flow.bosch-ebike.com)** → menu **"Data Act"**.
+2. Zoek je aangemaakte app / Client-ID en start de vrijgave **per fiets** via de daar aangeboden **link**.
+3. De link opent `my.home-assistant.io` en start de installatie-flow **in jouw Home Assistant-instantie**: kies het systeem, **voer de Client-ID in**, **Autoriseren**, log in bij Bosch en bevestig.
+4. Daarna is de vrijgave actief — in de eBike Manager wordt dan **"Service deactiveren"** weergegeven. Krijg je nog kort een 403, wacht dan een paar minuten en herlaad de integratie.
 
 #### Stap 6: integratie herladen
 

@@ -96,7 +96,7 @@ Dies ist der wichtigste Schritt. Du musst eine "App" im Bosch-Portal anlegen, um
 4. Fülle das Formular aus:
    - **App-Name:** z. B. `Home Assistant`
    - **Redirect URI:** `https://my.home-assistant.io/redirect/oauth`
-   - **Login URL:** beliebig (rein informativ), z. B. `https://github.com/Xunil99/ha-bosch-ebike`
+   - **Login URL:** `https://my.home-assistant.io/redirect/config_flow_start/?domain=ha_bosch_ebike` (**wichtig, nicht mehr beliebig!** Über diese URL startet die Freigabe im eBike Manager später den Einrichtungs-Flow direkt in deiner Home-Assistant-Instanz.)
    - **Confidential client:** **AUS** lassen (Home Assistant nutzt einen Public Client mit PKCE, ohne Secret)
 
    > **Wichtig:** Die **Redirect URI** muss exakt `https://my.home-assistant.io/redirect/oauth` lauten - das ist die offizielle „My Home Assistant"-Weiterleitung, über die Home Assistant den Login automatisch abschließt. Die „My Home Assistant"-Integration muss in HA aktiviert sein (Standard). Falls du sie deaktiviert hast, registriere stattdessen `https://<deine-HA-URL>/auth/external/callback`.
@@ -111,16 +111,16 @@ Kopiere die gerade erstellte **Client-ID** - du brauchst sie gleich in Home Assi
 
 ---
 
-#### Schritt 3: Datenfreigabe aktivieren
+#### Schritt 3: Datenfreigabe im Bosch eBike Manager erteilen (pro Bike)
 
-Ohne Datenfreigabe schlägt schon der Login fehl - und die API liefert später ein leeres Ergebnis!
+Ohne diese Freigabe antwortet die API mit **403 Forbidden** und es erscheinen keine Entities.
 
-1. Gehe zu **[flow.bosch-ebike.com](https://flow.bosch-ebike.com)**
-2. Melde dich mit deiner **SingleKey ID** an
-3. Wähle oben im Menü **"Data Act"** aus
-4. Suche den Eintrag **"Home Assistant"** und **aktiviere** ihn
+> **Wichtig (geänderter Bosch-Ablauf):** Bosch nutzt zum Freigeben **keinen Schalter mehr, sondern einen Link**. Dieser Link führt über die in Schritt 1 hinterlegte **Login URL** in deine Home-Assistant-Instanz. Deshalb muss die Login URL exakt der `my.home-assistant.io`-Link aus Schritt 1 sein.
 
-Jetzt solltest du auf der passenden Bosch-API Seite die Option sehen, die Client-ID zu aktivieren!
+1. Öffne den **Bosch eBike Manager** über **[flow.bosch-ebike.com](https://flow.bosch-ebike.com)** → Menü **„Data Act"**.
+2. Suche deine angelegte App / Client-ID und starte die Freigabe **pro Bike** über den dort angebotenen **Link**.
+3. Der Link öffnet `my.home-assistant.io` und startet **in deiner Home-Assistant-Instanz** den Einrichtungs-Flow: System wählen, **Client-ID eingeben**, **Autorisieren**, bei Bosch anmelden und bestätigen.
+4. Danach ist die Freigabe aktiv — im eBike Manager wird dann **„Service deaktivieren"** angezeigt. Kommt kurz noch ein 403, ein paar Minuten warten und die Integration neu laden.
 
 ---
 
@@ -674,7 +674,7 @@ This is the most important step. You need to create an "App" in the Bosch portal
 4. Fill in the form:
    - **App Name:** e.g., `Home Assistant`
    - **Redirect URI:** `https://my.home-assistant.io/redirect/oauth`
-   - **Login URL:** anything (informational only), e.g. `https://github.com/Xunil99/ha-bosch-ebike`
+   - **Login URL:** `https://my.home-assistant.io/redirect/config_flow_start/?domain=ha_bosch_ebike` (**important, no longer arbitrary!** Bosch's eBike Manager uses this URL to start the setup flow directly in your Home Assistant instance when you grant data sharing.)
    - **Confidential client:** leave **OFF** (Home Assistant uses a public client with PKCE, no secret)
 
    > **Important:** The **Redirect URI** must be exactly `https://my.home-assistant.io/redirect/oauth` - this is the official "My Home Assistant" redirect that lets Home Assistant complete the login automatically. The "My Home Assistant" integration must be enabled in HA (it is by default). If you disabled it, register `https://<your-ha-url>/auth/external/callback` instead.
@@ -707,16 +707,16 @@ The integration should now be set up - but **still without entities!** This is n
 
 ---
 
-#### Step 5: Enable Data Sharing
+#### Step 5: Grant data sharing in the Bosch eBike Manager (per bike)
 
-Without data sharing enabled, the API will return empty results!
+Without this consent the API answers with **403 Forbidden** and no entities appear.
 
-1. Go to **[flow.bosch-ebike.com](https://flow.bosch-ebike.com)**
-2. Sign in with your **SingleKey ID**
-3. Select **"Data Act"** from the top menu
-4. Find the entry **"Home Assistant"** and **activate** it
+> **Important (changed Bosch process):** Bosch no longer uses a toggle to grant access, but a **link**. That link routes through the **Login URL** you set in Step 1 into your Home Assistant instance, so the Login URL must be exactly the `my.home-assistant.io` link from Step 1.
 
-You should now see the option to activate the Client-ID on the Bosch API page!
+1. Open the **Bosch eBike Manager** via **[flow.bosch-ebike.com](https://flow.bosch-ebike.com)** → menu **"Data Act"**.
+2. Find your registered app / Client-ID and start the consent **per bike** via the **link** offered there.
+3. The link opens `my.home-assistant.io` and starts the setup flow **in your Home Assistant instance**: pick the system, **enter the Client-ID**, **Authorize**, sign in at Bosch and confirm.
+4. The consent is then active — the eBike Manager will show **"Deactivate service"**. If you briefly still get a 403, wait a few minutes and reload the integration.
 
 #### Step 6: Reload the Integration
 
