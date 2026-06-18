@@ -7277,28 +7277,24 @@ class BoschEBikeDashboardCard extends HTMLElement {
 
       // Reichweite je Fahrmodus als farbige Piles (vor Lade-/Akku-Pille).
       // Farben pro Modus aus der Karten-Konfig (mode_colors) bzw. Bosch-Default.
+      const anchor = cfg.battery_entity || cfg.odometer_entity
+        || cfg.charging_entity || cfg.range_entity;
+      const _ranges = boschReachableRanges(this._hass, anchor);
+      // BEDINGUNGSLOSE Debug-Zeile: erscheint immer, sobald dieser Code laeuft,
+      // unabhaengig vom Schalter/Config. Zum Abfotografieren. Temporaer.
+      const _dbg = document.createElement("div");
+      _dbg.style.cssText = "width:100%;font:11px/1.4 monospace;color:#b71c1c;"
+        + "white-space:pre-wrap;word-break:break-all;text-align:center;";
+      _dbg.textContent = "DEBUG v1.18.7  show=" + cfg.show_range_pills
+        + "  anchor=" + (anchor || "-") + "  count=" + _ranges.length
+        + "  modes=" + JSON.stringify(_ranges.map((r) => r.mode + "=" + r.km));
+      pills.appendChild(_dbg);
+      console.warn("[bosch-dash] range-pills:", {
+        show_range_pills: cfg.show_range_pills, anchor,
+        count: _ranges.length, modes: _ranges.map((r) => r.mode + "=" + r.km),
+      });
+      // Piles rendern: Schalter nur als Opt-out; Default = anzeigen.
       if (cfg.show_range_pills !== false) {
-        const anchor = cfg.battery_entity || cfg.odometer_entity
-          || cfg.charging_entity || cfg.range_entity;
-        const _ranges = boschReachableRanges(this._hass, anchor);
-        // Temporäre Diagnose: zeigt in der Browser-Konsole, was der
-        // Kartenkörper an Reichweite-Sensoren findet. Kann nach Klärung
-        // wieder entfernt werden.
-        console.warn("[bosch-dash] range-pills:", {
-          show_range_pills: cfg.show_range_pills,
-          anchor,
-          count: _ranges.length,
-          modes: _ranges.map((r) => r.mode + "=" + r.km),
-        });
-        // Sichtbare Debug-Zeile direkt in der Karte (kein Browser-Konsole
-        // nötig) — zum Abfotografieren. Wird nach Klärung wieder entfernt.
-        const _dbg = document.createElement("div");
-        _dbg.style.cssText = "width:100%;font:11px/1.4 monospace;color:#b71c1c;"
-          + "white-space:pre-wrap;word-break:break-all;text-align:center;";
-        _dbg.textContent = "DEBUG v1.18.6  show=" + cfg.show_range_pills
-          + "  anchor=" + (anchor || "-") + "  count=" + _ranges.length
-          + "  modes=" + JSON.stringify(_ranges.map((r) => r.mode + "=" + r.km));
-        pills.appendChild(_dbg);
         for (const r of _ranges) {
           if (r.km == null) continue;
           const hex = boschModeColorHex(r.mode, cfg.mode_colors);
