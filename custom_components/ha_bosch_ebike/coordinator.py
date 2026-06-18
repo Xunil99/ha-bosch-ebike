@@ -507,6 +507,12 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         except Exception as err:  # noqa: BLE001
             _LOGGER.debug("Could not fetch BES2 activities: %s", err)
 
+        # Newest first (the BES2 endpoint order is not guaranteed). startTime is
+        # an ISO-8601 string, so a plain reverse string sort is chronological.
+        # Ensures latest_activity is truly the newest and the map list order
+        # matches the Smart System path.
+        activities.sort(key=lambda a: str(a.get("startTime") or ""), reverse=True)
+
         latest_activity = activities[0] if activities else None
         latest_details = None
         track_probe: dict[str, Any] | None = None
