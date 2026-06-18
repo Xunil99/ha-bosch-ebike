@@ -6647,6 +6647,24 @@ class BoschEBikeCalendarCardEditor extends BoschEBikeMapCardEditor {
 // ===========================================================================
 // Dashboard card: user-uploaded image + live ESPHome data + smart-plug control
 // ===========================================================================
+// Bosch internal assist-mode application codes -> display name. Mirrors the
+// integration's profile_extra mapping; used as a frontend fallback so that
+// older integration builds (whose reachable-range entity_id still carries the
+// raw code, e.g. "…_reachable_range_a100m0auto") still show a clean label and
+// match the default colours.
+const BOSCH_ASSIST_MODE_NAMES = {
+  A100M00040: "ECO",
+  A100ECOP37: "ECO+",
+  A100M00030: "TOUR",
+  A100MAAAA0: "TOUR+",
+  A100M00020: "SPORT",
+  A100M00010: "TURBO",
+  A100M0AUTO: "AUTO",
+  A100EAAAB0: "eMTB",
+  A100MSPIC7: "eMTB+",
+  A100MAAAB0: "eMTB-shortcrank",
+};
+
 // --- Bosch assist-mode colours (range pills) --------------------------------
 // Vivid, Bosch-Flow-typical palette. Keys are stable config tokens; the hex
 // values approximate the colours the Flow app offers for custom ride modes.
@@ -6696,33 +6714,67 @@ function boschModeColorHex(modeName, modeColorsCfg) {
   return (key && BOSCH_MODE_COLORS[key]) ? BOSCH_MODE_COLORS[key] : null;
 }
 
+// Derive the assist-mode label of a reachable-range entity. Prefers the clean
+// `assist_mode` attribute (e.g. "AUTO"); falls back to the friendly name
+// ("… Reachable Range AUTO") and finally the entity_id suffix, so the card
+// still works on older integration builds that predate the attribute.
+function boschModeLabel(eid, attrs) {
+  const a = attrs || {};
+  let label = null;
+  if (a.assist_mode != null && String(a.assist_mode).trim()) {
+    label = String(a.assist_mode).trim();
+  } else {
+    const fn = a.friendly_name ? String(a.friendly_name) : "";
+    const m = /reachable\s*range\s+(.+)$/i.exec(fn);
+    if (m && m[1].trim()) {
+      label = m[1].trim();
+    } else {
+      const m2 = /reachable_range_(.+)$/.exec(eid);
+      if (m2 && m2[1]) label = m2[1].toUpperCase();
+    }
+  }
+  if (!label) return null;
+  // Normalise a raw Bosch code to its display name (no-op for clean labels).
+  return BOSCH_ASSIST_MODE_NAMES[label.toUpperCase()] || label;
+}
+
 // Auto-detect the per-mode reachable-range sensors of one bike. They are the
-// entities carrying an `assist_mode` attribute with `reachable_range` in the
-// id (state = km). When an anchor entity (battery/odometer of the same bike)
-// is known, results are restricted to that bike's device. Sorted by entity_id
-// so the order matches the integration's sensor order (API order).
+// entities with `reachable_range` in the id (state = km); the mode label comes
+// from boschModeLabel (attribute or name). Detection does NOT require the
+// `assist_mode` attribute, so it works across integration versions. When an
+// anchor entity (battery/odometer) is set, results are PREFERRED on that bike's
+// device, but if nothing matches that device (e.g. the range sensors live on a
+// separate "drive unit" device) we fall back to all matches instead of showing
+// none. Sorted by entity_id so the order matches the integration sensor order.
 function boschReachableRanges(hass, anchorEntityId) {
   if (!hass || !hass.states) return [];
-  let deviceId = null;
   const reg = hass.entities || null;
+  let anchorDevice = null;
   if (anchorEntityId && reg && reg[anchorEntityId]) {
-    deviceId = reg[anchorEntityId].device_id || null;
+    anchorDevice = reg[anchorEntityId].device_id || null;
   }
-  const out = [];
+  const all = [];
   for (const [eid, st] of Object.entries(hass.states)) {
-    const a = st && st.attributes;
-    if (!a || a.assist_mode == null) continue;
     if (!/reachable_range/.test(eid)) continue;
-    if (deviceId && reg && reg[eid] && reg[eid].device_id !== deviceId) continue;
+    const a = (st && st.attributes) || {};
+    const mode = boschModeLabel(eid, a);
+    if (!mode) continue;
     const km = Number(st.state);
-    out.push({
+    const dev = (reg && reg[eid]) ? (reg[eid].device_id || null) : null;
+    all.push({
       entity_id: eid,
-      mode: String(a.assist_mode),
+      mode,
       km: Number.isFinite(km) ? km : null,
+      device_id: dev,
     });
   }
-  out.sort((x, y) => x.entity_id.localeCompare(y.entity_id));
-  return out;
+  all.sort((x, y) => x.entity_id.localeCompare(y.entity_id));
+  let chosen = all;
+  if (anchorDevice) {
+    const same = all.filter((r) => r.device_id === anchorDevice);
+    if (same.length) chosen = same;
+  }
+  return chosen.map(({ device_id, ...r }) => r);
 }
 
 class BoschEBikeDashboardCard extends HTMLElement {
