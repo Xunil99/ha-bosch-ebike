@@ -7891,12 +7891,14 @@ class BoschEBikeDashboardCardEditor extends HTMLElement {
       applySwatch();
 
       sel.addEventListener("change", () => {
-        if (!this._config.mode_colors) this._config.mode_colors = {};
-        if (sel.value) this._config.mode_colors[r.mode] = sel.value;
-        else delete this._config.mode_colors[r.mode];
-        if (this._config.mode_colors && Object.keys(this._config.mode_colors).length === 0) {
-          delete this._config.mode_colors;
-        }
+        // Immutable update (same reasoning as the show_range_pills toggle).
+        const mc = { ...(this._config.mode_colors || {}) };
+        if (sel.value) mc[r.mode] = sel.value;
+        else delete mc[r.mode];
+        const next = { ...this._config };
+        if (Object.keys(mc).length) next.mode_colors = mc;
+        else delete next.mode_colors;
+        this._config = next;
         applySwatch();
         this._emit();
       });
@@ -8108,10 +8110,11 @@ class BoschEBikeDashboardCardEditor extends HTMLElement {
     rangeToggle.type = "checkbox";
     rangeToggle.checked = this._config.show_range_pills !== false;
     rangeToggle.addEventListener("change", () => {
-      // Always write an explicit boolean. HA merges the emitted editor config
-      // over the stored one, so deleting/omitting the key would NOT clear a
-      // previously stored `false` — toggling back on would never persist.
-      this._config.show_range_pills = rangeToggle.checked;
+      // Immutable update: replace _config with a NEW object carrying an
+      // explicit boolean. HA's edit dialog tracks the config by identity /
+      // value; mutating in place was not reliably picked up for this control,
+      // and an explicit boolean (never delete) survives HA's config merge.
+      this._config = { ...this._config, show_range_pills: rangeToggle.checked };
       this._emit();
     });
     rangeToggleWrap.appendChild(rangeToggle);
