@@ -78,5 +78,8 @@ async def async_get_config_entry_diagnostics(
         "service_records": async_redact_data(
             data.get("service_records") or {}, TO_REDACT
         ),
+        # BES2 GPS-Track-Sonde: PII-sichere Formangabe (keine echten
+        # Koordinaten), zeigt ob die Strecke im JSON-Detail steckt.
+        "bes2_track_probe": data.get("bes2_track_probe"),
     }
     return diag

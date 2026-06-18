@@ -509,6 +509,7 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         latest_activity = activities[0] if activities else None
         latest_details = None
+        track_probe: dict[str, Any] | None = None
         if latest_activity is not None:
             raw_id = latest_activity.get("id")
             if raw_id is not None:
@@ -516,6 +517,10 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     detail = await self.api.get_activity_detail_bes2(raw_id)
                     latest_details = bes2.normalize_track(detail)
                     bes2.enrich_summary_from_detail(latest_activity, detail)
+                    # Diagnose-Sonde: zeigt PII-sicher, ob/wie die GPS-Strecke
+                    # im JSON-Detail steckt (Phase-1-Beweis für die fehlende
+                    # Karten-Route). Kann nach Klärung wieder entfernt werden.
+                    track_probe = bes2.track_probe(detail)
                 except Exception as err:  # noqa: BLE001
                     _LOGGER.debug("Could not fetch BES2 activity detail %s: %s", raw_id, err)
 
@@ -524,6 +529,7 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "latest_activity": latest_activity,
             "all_activities": activities,
             "latest_activity_details": latest_details,
+            "bes2_track_probe": track_probe,
             "activity_consumption": {},
             "activity_bike": {},
             "maintenance": self._maintenance,
