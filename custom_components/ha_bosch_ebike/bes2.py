@@ -215,6 +215,29 @@ def normalize_track(detail: dict) -> dict:
     return {"activityDetails": points}
 
 
+# ---------------------------------------------------------------------------
+# Statistics — BES2 /statistics lifetime totals
+# ---------------------------------------------------------------------------
+
+def normalize_statistics(raw: dict) -> dict:
+    """Extract lifetime totals from the BES2 ``/statistics`` response.
+
+    ``totalStatistics.distance`` and ``.elevationGain`` are in METRES,
+    ``.yearlyDistance`` likewise. Returns only the numeric fields present.
+    """
+    if not isinstance(raw, dict):
+        return {}
+    tot = _get(raw, "totalStatistics", default={}) or {}
+    out: dict = {}
+    if _num(tot.get("distance")):
+        out["total_distance_m"] = tot.get("distance")
+    if _num(tot.get("elevationGain")):
+        out["total_elevation_gain_m"] = tot.get("elevationGain")
+    if _num(tot.get("yearlyDistance")):
+        out["yearly_distance_m"] = tot.get("yearlyDistance")
+    return out
+
+
 def track_probe(detail: Any) -> dict:
     """PII-safe shape report of a raw BES2 activity detail (for diagnostics).
 

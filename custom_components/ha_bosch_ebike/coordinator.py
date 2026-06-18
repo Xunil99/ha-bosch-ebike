@@ -524,6 +524,21 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 except Exception as err:  # noqa: BLE001
                     _LOGGER.debug("Could not fetch BES2 activity detail %s: %s", raw_id, err)
 
+        # Lifetime totals (Gesamt-km / Gesamt-Höhenmeter) from /statistics.
+        # totalStatistics.distance feeds the existing odometer sensor (it reads
+        # driveUnit.odometer in metres); elevationGain is exposed via a new
+        # per-bike "Total Elevation Gain" sensor created when stats are present.
+        stats: dict[str, Any] = {}
+        try:
+            stats = bes2.normalize_statistics(await self.api.get_statistics_bes2())
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.debug("Could not fetch BES2 statistics: %s", err)
+        if stats:
+            for bike in bikes:
+                if stats.get("total_distance_m") is not None:
+                    bike.setdefault("driveUnit", {})["odometer"] = stats["total_distance_m"]
+                bike["_bes2_statistics"] = stats
+
         return {
             "bikes": bikes,
             "latest_activity": latest_activity,

@@ -517,6 +517,20 @@ GPS_COORDINATE_SENSORS: tuple[BoschBikeSensorDescription, ...] = (
 )
 
 
+# Lifetime totals from the BES2 /statistics endpoint. Only created when the
+# bike carries `_bes2_statistics` (i.e. eBike System 2); the value resolves
+# live from coordinator.data. Smart System bikes never get these.
+BES2_STATISTICS_SENSORS: tuple[BoschBikeSensorDescription, ...] = (
+    BoschBikeSensorDescription(
+        key="total_elevation_gain",
+        name="Total Elevation Gain",
+        native_unit_of_measurement=UnitOfLength.METERS,
+        icon="mdi:elevation-rise",
+        value_fn=lambda d: _safe_get(d, "_bes2_statistics", "total_elevation_gain_m"),
+    ),
+)
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
@@ -536,6 +550,11 @@ async def async_setup_entry(
         # Bike hardware sensors
         for desc in BIKE_SENSORS:
             entities.append(BoschEBikeSensor(coordinator, desc, bike_id, drive_name))
+
+        # BES2 lifetime totals (only when /statistics data is present)
+        if bike.get("_bes2_statistics"):
+            for desc in BES2_STATISTICS_SENSORS:
+                entities.append(BoschEBikeSensor(coordinator, desc, bike_id, drive_name))
 
         # Battery sensors (per battery)
         for idx, battery in enumerate(bike.get("batteries", []) or []):

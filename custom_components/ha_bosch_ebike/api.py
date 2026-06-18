@@ -24,6 +24,7 @@ from .const import (
     BES2_KC_IDP_HINT,
     BES2_BIKES_ENDPOINT,
     BES2_ACTIVITIES_ENDPOINT,
+    BES2_STATISTICS_ENDPOINT,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -233,6 +234,11 @@ class BoschEBikeAPI:
     async def get_activity_detail_bes2(self, activity_id) -> dict[str, Any]:
         """Fetch full BES2 activity detail."""
         return await self._get(f"{BES2_ACTIVITIES_ENDPOINT}/{activity_id}")
+
+    async def get_statistics_bes2(self) -> dict[str, Any]:
+        """Fetch BES2 lifetime/aggregate statistics (totals, monthly)."""
+        data = await self._get(BES2_STATISTICS_ENDPOINT)
+        return data if isinstance(data, dict) else {}
 
     async def get_all_activity_details(
         self, activity_ids: list[str], progress_callback: Any = None

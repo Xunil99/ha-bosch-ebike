@@ -20,6 +20,7 @@ normalize_activity_summary = bes2.normalize_activity_summary
 enrich_summary_from_detail = bes2.enrich_summary_from_detail
 normalize_track = bes2.normalize_track
 track_probe = bes2.track_probe
+normalize_statistics = bes2.normalize_statistics
 
 
 # ---------------------------------------------------------------------------
@@ -409,6 +410,34 @@ def test_track_probe_missing_coordinates_key():
 def test_track_probe_non_dict_safe():
     assert track_probe(None) == {"detail_type": "NoneType"}
     assert track_probe([1, 2]) == {"detail_type": "list"}
+
+
+def test_normalize_statistics_totals():
+    raw = {
+        "totalStatistics": {
+            "distance": 1234567,
+            "elevationGain": 3518,
+            "yearlyDistance": 50000.5,
+        },
+        "bestMonth": 11,
+    }
+    assert normalize_statistics(raw) == {
+        "total_distance_m": 1234567,
+        "total_elevation_gain_m": 3518,
+        "yearly_distance_m": 50000.5,
+    }
+
+
+def test_normalize_statistics_partial_and_non_numeric():
+    raw = {"totalStatistics": {"distance": 1000, "elevationGain": "x"}}
+    assert normalize_statistics(raw) == {"total_distance_m": 1000}
+
+
+def test_normalize_statistics_empty_and_non_dict():
+    assert normalize_statistics({}) == {}
+    assert normalize_statistics({"totalStatistics": {}}) == {}
+    assert normalize_statistics(None) == {}
+    assert normalize_statistics([1, 2]) == {}
 
 
 if __name__ == "__main__":
