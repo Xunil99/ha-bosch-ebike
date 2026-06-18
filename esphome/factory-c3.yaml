@@ -186,7 +186,30 @@ binary_sensor:
     in_motion:
       name: "eBike In Motion"
 
+switch:
+  # Master advertising toggle (Issue #36). Off = the bridge only advertises
+  # during a pairing window (boot 5 min / button) and is otherwise fully
+  # silent (no background reconnect). Default on. Boot window is unaffected.
+  - platform: template
+    name: "eBike Advertising"
+    icon: mdi:bluetooth
+    restore_mode: RESTORE_DEFAULT_ON
+    optimistic: true
+    turn_on_action:
+      - lambda: 'id(ebike_bridge).set_advertising_enabled(true);'
+    turn_off_action:
+      - lambda: 'id(ebike_bridge).set_advertising_enabled(false);'
+
 button:
+  # Open the pairing window (~5 min): the bridge becomes discoverable so the
+  # Flow app can add it. Outside the window it advertises privately and is NOT
+  # visible to other users' Flow apps. One bridge per bike. (Issue #36)
+  - platform: template
+    name: "eBike Pairing starten"
+    icon: mdi:bluetooth-connect
+    on_press:
+      then:
+        - lambda: 'id(ebike_bridge).start_pairing();'
   - platform: template
     name: "eBike Clear Bonding"
     on_press:

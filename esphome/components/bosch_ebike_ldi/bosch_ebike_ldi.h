@@ -47,6 +47,22 @@ class BoschEbikeLdi : public Component {
 
   void clear_bonding();
 
+  // Open the discoverable pairing window (default 5 min). While it is open the
+  // bridge advertises with the LDI service solicitation so a Flow app can add
+  // it; outside the window the bridge advertises privately (no solicitation,
+  // non-discoverable, whitelist) so it is invisible to other users' Flow apps
+  // while the bonded bike can still reconnect. Exposed as an HA button.
+  void start_pairing();
+  // True while the pairing window is open (for an HA status binary_sensor).
+  bool is_pairing();
+
+  // Master advertising toggle (HA switch, default ON). When OFF the bridge
+  // only advertises during a pairing window (boot 5 min / button) and is
+  // otherwise fully silent; when ON it additionally does private reconnect
+  // advertising to the bonded bike. The 5-minute boot window runs regardless.
+  void set_advertising_enabled(bool enabled);
+  bool advertising_enabled();
+
  protected:
   std::string device_name_{"HA eBike Bridge"};
 
