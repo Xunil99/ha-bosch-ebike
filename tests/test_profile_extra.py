@@ -63,9 +63,22 @@ def test_assist_mode_display_name_mapping_and_fallback():
     assert assist_mode_display_name("A100M00020") == "SPORT"
     assert assist_mode_display_name("A100EAAAB0") == "eMTB"
     assert assist_mode_display_name("A100MAAAB0") == "eMTB-shortcrank"
-    # unknown code is returned unchanged
+    # unknown code (no AUTO/ECOP substring) is returned unchanged
     assert assist_mode_display_name("A100M99999") == "A100M99999"
     assert assist_mode_display_name(None) is None
+
+
+def test_assist_mode_display_name_gseries_and_heuristics():
+    # G-series codes reported in issue #37 (suffixes differ from M-series).
+    assert assist_mode_display_name("A100G0AUTO") == "AUTO"
+    assert assist_mode_display_name("A100GAAAA0") == "TURBO"
+    assert assist_mode_display_name("A100GAAAD0") == "ECO"
+    assert assist_mode_display_name("A100MSPIC8") == "eMTB+"
+    # Safe substring heuristics for unmapped codes that carry their own name.
+    assert assist_mode_display_name("A100X0AUTO") == "AUTO"
+    assert assist_mode_display_name("A100ECOP99") == "ECO+"
+    # An unmapped code without a name substring stays raw (no false labelling).
+    assert assist_mode_display_name("A100GAAAB0") == "A100GAAAB0"
 
 
 def test_reachable_ranges_unknown_code_kept_raw():
