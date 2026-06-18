@@ -162,6 +162,19 @@ const I18N = {
     dash_label_battery: "Battery",
     dash_label_charge_power: "Charging power",
     dash_label_range: "Range (est.)",
+    dash_editor_section_modes: "Range per ride mode (pills)",
+    dash_editor_show_range_pills: "Show range per ride mode as pills",
+    dash_editor_mode_colors_hint: "Assign a colour to each ride mode (matching the Bosch Flow app). \"Auto\" uses the Bosch default colour.",
+    dash_editor_modes_none: "No ride-mode range sensors detected yet. They appear once the bike data has loaded.",
+    dash_editor_color_auto: "Auto (Bosch default)",
+    color_red: "Red",
+    color_orange: "Orange",
+    color_yellow: "Yellow",
+    color_green: "Green",
+    color_turquoise: "Turquoise",
+    color_blue: "Blue",
+    color_purple: "Purple",
+    color_magenta: "Magenta",
     dash_editor_range: "Estimated range entity (optional)",
     dash_editor_range_hint: "Sensor \"Estimated range (current)\" of the integration. If empty, the card auto-detects it; the tile is hidden when no value is available.",
     dash_label_target_soc: "Stop charging at",
@@ -475,6 +488,19 @@ const I18N = {
     dash_label_battery: "Akku",
     dash_label_charge_power: "Ladeleistung",
     dash_label_range: "Reichweite (geschätzt)",
+    dash_editor_section_modes: "Reichweite je Fahrmodus (Piles)",
+    dash_editor_show_range_pills: "Reichweite je Fahrmodus als Piles anzeigen",
+    dash_editor_mode_colors_hint: "Ordne jedem Fahrmodus eine Farbe zu (passend zur Bosch Flow App). „Auto“ nutzt die Bosch-Standardfarbe.",
+    dash_editor_modes_none: "Noch keine Reichweite-Sensoren je Fahrmodus erkannt. Sie erscheinen, sobald die Fahrraddaten geladen sind.",
+    dash_editor_color_auto: "Auto (Bosch-Standard)",
+    color_red: "Rot",
+    color_orange: "Orange",
+    color_yellow: "Gelb",
+    color_green: "Grün",
+    color_turquoise: "Türkis",
+    color_blue: "Blau",
+    color_purple: "Violett",
+    color_magenta: "Magenta",
     dash_editor_range: "Reichweiten-Sensor (optional)",
     dash_editor_range_hint: "Sensor \"Geschätzte Reichweite (aktuell)\" der Integration. Leer = automatische Erkennung; ohne Wert wird die Kachel ausgeblendet.",
     dash_label_target_soc: "Laden stoppen bei",
@@ -787,6 +813,19 @@ const I18N = {
     dash_label_battery: "Accu",
     dash_label_charge_power: "Laadvermogen",
     dash_label_range: "Actieradius (geschat)",
+    dash_editor_section_modes: "Bereik per rijmodus (pillen)",
+    dash_editor_show_range_pills: "Bereik per rijmodus als pillen tonen",
+    dash_editor_mode_colors_hint: "Wijs elke rijmodus een kleur toe (zoals in de Bosch Flow app). \"Auto\" gebruikt de Bosch-standaardkleur.",
+    dash_editor_modes_none: "Nog geen bereiksensoren per rijmodus gevonden. Ze verschijnen zodra de fietsgegevens geladen zijn.",
+    dash_editor_color_auto: "Auto (Bosch-standaard)",
+    color_red: "Rood",
+    color_orange: "Oranje",
+    color_yellow: "Geel",
+    color_green: "Groen",
+    color_turquoise: "Turquoise",
+    color_blue: "Blauw",
+    color_purple: "Paars",
+    color_magenta: "Magenta",
     dash_editor_range: "Actieradius-sensor (optioneel)",
     dash_editor_range_hint: "Sensor \"Geschatte actieradius (actueel)\" van de integratie. Leeg = automatische detectie; zonder waarde wordt de tegel verborgen.",
     dash_label_target_soc: "Laden stoppen bij",
@@ -1111,6 +1150,19 @@ const I18N = {
     dash_label_battery: "Batterie",
     dash_label_charge_power: "Puissance de charge",
     dash_label_range: "Autonomie (estimée)",
+    dash_editor_section_modes: "Autonomie par mode de conduite (pastilles)",
+    dash_editor_show_range_pills: "Afficher l'autonomie par mode sous forme de pastilles",
+    dash_editor_mode_colors_hint: "Attribuez une couleur à chaque mode (comme dans l'app Bosch Flow). « Auto » utilise la couleur Bosch par défaut.",
+    dash_editor_modes_none: "Aucun capteur d'autonomie par mode détecté pour l'instant. Ils apparaissent une fois les données du vélo chargées.",
+    dash_editor_color_auto: "Auto (défaut Bosch)",
+    color_red: "Rouge",
+    color_orange: "Orange",
+    color_yellow: "Jaune",
+    color_green: "Vert",
+    color_turquoise: "Turquoise",
+    color_blue: "Bleu",
+    color_purple: "Violet",
+    color_magenta: "Magenta",
     dash_editor_range: "Entité d'autonomie estimée (optionnelle)",
     dash_editor_range_hint: "Capteur \"Autonomie estimée (actuelle)\" de l'intégration. Vide = détection automatique ; sans valeur, la tuile est masquée.",
     dash_label_target_soc: "Arrêter la charge à",
@@ -1435,6 +1487,19 @@ const I18N = {
     dash_label_battery: "Batteria",
     dash_label_charge_power: "Potenza di ricarica",
     dash_label_range: "Autonomia (stimata)",
+    dash_editor_section_modes: "Autonomia per modalità di guida (pillole)",
+    dash_editor_show_range_pills: "Mostra l'autonomia per modalità come pillole",
+    dash_editor_mode_colors_hint: "Assegna un colore a ciascuna modalità (come nell'app Bosch Flow). \"Auto\" usa il colore predefinito Bosch.",
+    dash_editor_modes_none: "Nessun sensore di autonomia per modalità rilevato finora. Compaiono una volta caricati i dati della bici.",
+    dash_editor_color_auto: "Auto (predefinito Bosch)",
+    color_red: "Rosso",
+    color_orange: "Arancione",
+    color_yellow: "Giallo",
+    color_green: "Verde",
+    color_turquoise: "Turchese",
+    color_blue: "Blu",
+    color_purple: "Viola",
+    color_magenta: "Magenta",
     dash_editor_range: "Entità autonomia stimata (opzionale)",
     dash_editor_range_hint: "Sensore \"Autonomia stimata (attuale)\" dell'integrazione. Vuoto = rilevamento automatico; senza valore la tessera viene nascosta.",
     dash_label_target_soc: "Interrompi ricarica a",
@@ -1759,6 +1824,19 @@ const I18N = {
     dash_label_battery: "Batería",
     dash_label_charge_power: "Potencia de carga",
     dash_label_range: "Autonomía (estimada)",
+    dash_editor_section_modes: "Autonomía por modo de conducción (píldoras)",
+    dash_editor_show_range_pills: "Mostrar la autonomía por modo como píldoras",
+    dash_editor_mode_colors_hint: "Asigna un color a cada modo (como en la app Bosch Flow). \"Auto\" usa el color predeterminado de Bosch.",
+    dash_editor_modes_none: "Aún no se detectan sensores de autonomía por modo. Aparecen cuando se cargan los datos de la bici.",
+    dash_editor_color_auto: "Auto (predeterminado Bosch)",
+    color_red: "Rojo",
+    color_orange: "Naranja",
+    color_yellow: "Amarillo",
+    color_green: "Verde",
+    color_turquoise: "Turquesa",
+    color_blue: "Azul",
+    color_purple: "Morado",
+    color_magenta: "Magenta",
     dash_editor_range: "Entidad de autonomía estimada (opcional)",
     dash_editor_range_hint: "Sensor \"Autonomía estimada (actual)\" de la integración. Vacío = detección automática; sin valor, la ficha se oculta.",
     dash_label_target_soc: "Detener carga al",
@@ -6569,6 +6647,84 @@ class BoschEBikeCalendarCardEditor extends BoschEBikeMapCardEditor {
 // ===========================================================================
 // Dashboard card: user-uploaded image + live ESPHome data + smart-plug control
 // ===========================================================================
+// --- Bosch assist-mode colours (range pills) --------------------------------
+// Vivid, Bosch-Flow-typical palette. Keys are stable config tokens; the hex
+// values approximate the colours the Flow app offers for custom ride modes.
+const BOSCH_MODE_COLORS = {
+  red: "#E2231A",
+  orange: "#F39200",
+  yellow: "#FFC107",
+  green: "#5FB733",
+  turquoise: "#00B3C8",
+  blue: "#1E9FE0",
+  purple: "#8A4FD3",
+  magenta: "#E5006D",
+};
+const BOSCH_MODE_COLOR_ORDER = [
+  "red", "orange", "yellow", "green", "turquoise", "blue", "purple", "magenta",
+];
+// Default mode-name -> colour key, matching the Flow app look out of the box.
+// Keyed by the display name the integration emits (see profile_extra).
+const BOSCH_MODE_DEFAULT_COLOR = {
+  TURBO: "red",
+  SPORT: "orange",
+  "eMTB+": "purple",
+  eMTB: "purple",
+  "eMTB-shortcrank": "purple",
+  AUTO: "blue",
+  TOUR: "green",
+  "TOUR+": "turquoise",
+  ECO: "yellow",
+  "ECO+": "yellow",
+};
+
+// Black/white text for a given background hex via the YIQ contrast rule.
+function boschContrastColor(hex) {
+  const m = /^#?([0-9a-fA-F]{6})$/.exec(hex || "");
+  if (!m) return "#ffffff";
+  const n = parseInt(m[1], 16);
+  const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+  const yiq = (r * 299 + g * 587 + b * 114) / 1000;
+  return yiq >= 150 ? "#1c1c1c" : "#ffffff";
+}
+
+// Resolve a mode name to a hex colour: explicit config wins, else the Bosch
+// default for that mode, else null (render as a neutral pill).
+function boschModeColorHex(modeName, modeColorsCfg) {
+  const cfg = modeColorsCfg || {};
+  const key = cfg[modeName] || BOSCH_MODE_DEFAULT_COLOR[modeName];
+  return (key && BOSCH_MODE_COLORS[key]) ? BOSCH_MODE_COLORS[key] : null;
+}
+
+// Auto-detect the per-mode reachable-range sensors of one bike. They are the
+// entities carrying an `assist_mode` attribute with `reachable_range` in the
+// id (state = km). When an anchor entity (battery/odometer of the same bike)
+// is known, results are restricted to that bike's device. Sorted by entity_id
+// so the order matches the integration's sensor order (API order).
+function boschReachableRanges(hass, anchorEntityId) {
+  if (!hass || !hass.states) return [];
+  let deviceId = null;
+  const reg = hass.entities || null;
+  if (anchorEntityId && reg && reg[anchorEntityId]) {
+    deviceId = reg[anchorEntityId].device_id || null;
+  }
+  const out = [];
+  for (const [eid, st] of Object.entries(hass.states)) {
+    const a = st && st.attributes;
+    if (!a || a.assist_mode == null) continue;
+    if (!/reachable_range/.test(eid)) continue;
+    if (deviceId && reg && reg[eid] && reg[eid].device_id !== deviceId) continue;
+    const km = Number(st.state);
+    out.push({
+      entity_id: eid,
+      mode: String(a.assist_mode),
+      km: Number.isFinite(km) ? km : null,
+    });
+  }
+  out.sort((x, y) => x.entity_id.localeCompare(y.entity_id));
+  return out;
+}
+
 class BoschEBikeDashboardCard extends HTMLElement {
   constructor() {
     super();
@@ -6704,6 +6860,10 @@ class BoschEBikeDashboardCard extends HTMLElement {
       .dash-pill ha-icon { --mdc-icon-size: 18px; }
       .dash-pill.charging { background: rgba(76,175,80,.18); color: #2e7d32; }
       .dash-pill.charging ha-icon { color: #2e7d32; }
+      /* Per-mode reachable-range pills (colour set inline per mode). */
+      .dash-pill.range { gap: 8px; font-weight: 600; }
+      .dash-pill.range .mode { letter-spacing: .02em; }
+      .dash-pill.range .km { font-weight: 500; opacity: .92; font-variant-numeric: tabular-nums; }
       .dash-controls {
         display: flex; gap: 10px; margin: 14px 0 12px; flex-wrap: wrap;
       }
@@ -7062,6 +7222,30 @@ class BoschEBikeDashboardCard extends HTMLElement {
     const pills = this.querySelector("#dash-pills");
     if (pills) {
       pills.innerHTML = "";
+
+      // Reichweite je Fahrmodus als farbige Piles (vor Lade-/Akku-Pille).
+      // Farben pro Modus aus der Karten-Konfig (mode_colors) bzw. Bosch-Default.
+      if (cfg.show_range_pills !== false) {
+        const anchor = cfg.battery_entity || cfg.odometer_entity
+          || cfg.charging_entity || cfg.range_entity;
+        for (const r of boschReachableRanges(this._hass, anchor)) {
+          if (r.km == null) continue;
+          const hex = boschModeColorHex(r.mode, cfg.mode_colors);
+          const rp = document.createElement("span");
+          rp.className = "dash-pill range";
+          if (hex) { rp.style.background = hex; rp.style.color = boschContrastColor(hex); }
+          const m = document.createElement("span");
+          m.className = "mode";
+          m.textContent = r.mode;
+          const km = document.createElement("span");
+          km.className = "km";
+          km.textContent = this._formatKm(r.km);
+          rp.appendChild(m);
+          rp.appendChild(km);
+          pills.appendChild(rp);
+        }
+      }
+
       const stateLabel = isCharging == null
         ? this._t("dash_state_unknown")
         : isCharging ? this._t("dash_state_charging") : this._t("dash_state_not_charging");
@@ -7546,6 +7730,18 @@ class BoschEBikeDashboardCardEditor extends HTMLElement {
       this._sharedSettingsHandler = () => this._syncSharedFields();
       _cardSettingsBus.addEventListener("changed", this._sharedSettingsHandler);
     }
+    // Rebuild the per-mode colour rows only when the detected mode set
+    // actually changes (e.g. the range sensors load after the editor opened).
+    // Guarded so an open dropdown is not reset on every hass tick.
+    if (this._modeColorsWrap) {
+      const anchor = this._config.battery_entity || this._config.odometer_entity
+        || this._config.charging_entity || this._config.range_entity;
+      const key = boschReachableRanges(hass, anchor).map((r) => r.mode).join("|");
+      if (key !== this._modeColorsKey) {
+        this._modeColorsKey = key;
+        this._renderModeColorRows();
+      }
+    }
   }
 
   disconnectedCallback() {
@@ -7584,6 +7780,73 @@ class BoschEBikeDashboardCardEditor extends HTMLElement {
   _entities(filter) {
     if (!this._hass) return [];
     return Object.keys(this._hass.states).filter(filter).sort();
+  }
+
+  // Build one "mode -> colour" row per detected reachable-range mode.
+  _renderModeColorRows() {
+    const cont = this._modeColorsWrap;
+    if (!cont) return;
+    cont.innerHTML = "";
+    const anchor = this._config.battery_entity || this._config.odometer_entity
+      || this._config.charging_entity || this._config.range_entity;
+    const modes = boschReachableRanges(this._hass, anchor);
+    if (!modes.length) {
+      const none = document.createElement("small");
+      none.textContent = this._t("dash_editor_modes_none");
+      none.style.cssText = "color:var(--secondary-text-color);font-size:11px;";
+      cont.appendChild(none);
+      return;
+    }
+    const seen = new Set();
+    for (const r of modes) {
+      if (seen.has(r.mode)) continue;
+      seen.add(r.mode);
+      const row = document.createElement("div");
+      row.style.cssText = "display:flex;align-items:center;gap:10px;";
+
+      const swatch = document.createElement("span");
+      swatch.style.cssText = "width:16px;height:16px;border-radius:4px;flex:0 0 auto;border:1px solid var(--divider-color);";
+
+      const name = document.createElement("span");
+      name.textContent = r.mode;
+      name.style.cssText = "flex:1;font-size:13px;font-weight:600;";
+
+      const sel = document.createElement("select");
+      sel.style.cssText = "padding:6px;border-radius:4px;border:1px solid var(--divider-color);background:var(--card-background-color);color:var(--primary-text-color);";
+      const optAuto = document.createElement("option");
+      optAuto.value = "";
+      optAuto.textContent = this._t("dash_editor_color_auto");
+      sel.appendChild(optAuto);
+      for (const key of BOSCH_MODE_COLOR_ORDER) {
+        const o = document.createElement("option");
+        o.value = key;
+        o.textContent = this._t("color_" + key);
+        sel.appendChild(o);
+      }
+      sel.value = (this._config.mode_colors && this._config.mode_colors[r.mode]) || "";
+
+      const applySwatch = () => {
+        const hex = boschModeColorHex(r.mode, sel.value ? { [r.mode]: sel.value } : {});
+        swatch.style.background = hex || "var(--secondary-background-color)";
+      };
+      applySwatch();
+
+      sel.addEventListener("change", () => {
+        if (!this._config.mode_colors) this._config.mode_colors = {};
+        if (sel.value) this._config.mode_colors[r.mode] = sel.value;
+        else delete this._config.mode_colors[r.mode];
+        if (this._config.mode_colors && Object.keys(this._config.mode_colors).length === 0) {
+          delete this._config.mode_colors;
+        }
+        applySwatch();
+        this._emit();
+      });
+
+      row.appendChild(swatch);
+      row.appendChild(name);
+      row.appendChild(sel);
+      cont.appendChild(row);
+    }
   }
 
   _build() {
@@ -7771,6 +8034,40 @@ class BoschEBikeDashboardCardEditor extends HTMLElement {
       target_soc_entity: mkEntity("target_soc_entity", "dash_editor_target_soc", "dash_editor_target_soc_hint",
         (e) => e.startsWith("input_number.")),
     };
+
+    // --- Reichweite je Fahrmodus (Piles) -------------------------------------
+    const rangeHead = document.createElement("div");
+    rangeHead.textContent = this._t("dash_editor_section_modes");
+    rangeHead.style.cssText =
+      "margin-top:14px;padding-top:10px;border-top:1px solid var(--divider-color);" +
+      "color:var(--secondary-text-color);font-size:12px;line-height:1.4;font-weight:600;";
+    wrap.appendChild(rangeHead);
+
+    const rangeToggleWrap = document.createElement("label");
+    rangeToggleWrap.style.cssText = "display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;";
+    const rangeToggle = document.createElement("input");
+    rangeToggle.type = "checkbox";
+    rangeToggle.checked = this._config.show_range_pills !== false;
+    rangeToggle.addEventListener("change", () => {
+      if (rangeToggle.checked) delete this._config.show_range_pills;
+      else this._config.show_range_pills = false;
+      this._emit();
+    });
+    rangeToggleWrap.appendChild(rangeToggle);
+    const rangeToggleLbl = document.createElement("span");
+    rangeToggleLbl.textContent = this._t("dash_editor_show_range_pills");
+    rangeToggleWrap.appendChild(rangeToggleLbl);
+    wrap.appendChild(rangeToggleWrap);
+
+    const modeHint = document.createElement("small");
+    modeHint.textContent = this._t("dash_editor_mode_colors_hint");
+    modeHint.style.cssText = "color:var(--secondary-text-color);font-size:11px;";
+    wrap.appendChild(modeHint);
+
+    this._modeColorsWrap = document.createElement("div");
+    this._modeColorsWrap.style.cssText = "display:flex;flex-direction:column;gap:8px;margin-top:4px;";
+    wrap.appendChild(this._modeColorsWrap);
+    this._renderModeColorRows();
 
     // --- CO2 / Fahrzeug-Vergleich --------------------------------------------
     const co2Head = document.createElement("div");
