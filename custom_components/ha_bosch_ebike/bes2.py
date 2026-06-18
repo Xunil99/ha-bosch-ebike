@@ -162,35 +162,50 @@ def enrich_summary_from_detail(summary: dict, detail: dict) -> dict:
 # Track — BES2 parallel per-ride arrays -> flat BES3 activityDetails list
 # ---------------------------------------------------------------------------
 
-def normalize_track(detail: dict) -> dict:
-    """Zip the BES2 parallel per-ride arrays into a flat activityDetails list.
+def _flatten_rides(arr: Any) -> list:
+    """Concatenate the inner per-ride lists into one flat list (skip non-lists)."""
+    out: list = []
+    for ride in (arr if isinstance(arr, list) else []):
+        if isinstance(ride, list):
+            out.extend(ride)
+    return out
 
-    coordinates is a list of rides, each ride a list of {lat,lon}-or-null
-    points. altitudes/speed are parallel ride-indexed arrays of scalars. Any
-    array (or per-ride/per-point index) may be missing or shorter; guard every
-    access so we never IndexError and skip points without lat/lon.
+
+def normalize_track(detail: dict) -> dict:
+    """Zip the BES2 parallel arrays into a flat activityDetails list.
+
+    ``coordinates`` is a list of rides, each ride a list of {lat,lon}-or-null
+    points; ``altitudes``/``speed`` are parallel scalar arrays. Real data shows
+    these may be grouped into a DIFFERENT number of rides than ``coordinates``
+    (e.g. coordinates as one merged ride while altitudes are split in two), so
+    zipping per-ride mis-aligns the tail. We instead walk the coordinate points
+    by a single GLOBAL index and look altitude/speed up at the same global index
+    in the flattened arrays. The index advances for every coordinate slot
+    (including null/invalid points) so the scalar arrays — which carry one slot
+    per coordinate point — stay aligned. Guarded so we never IndexError and skip
+    points without lat/lon.
     """
-    coords = _get(detail, "coordinates", default=[]) or []
-    altitudes = _get(detail, "altitudes", default=[]) or []
-    speeds = _get(detail, "speed", default=[]) or []
+    if not isinstance(detail, dict):
+        return {"activityDetails": []}
+    coords_rides = _get(detail, "coordinates", default=[]) or []
+    alts = _flatten_rides(_get(detail, "altitudes", default=[]))
+    spds = _flatten_rides(_get(detail, "speed", default=[]))
 
     points: list[dict] = []
-    for r, ride in enumerate(coords):
+    gi = -1  # global coordinate-point index across all coordinate rides
+    for ride in coords_rides:
         if not isinstance(ride, list):
             continue
-        alt_ride = altitudes[r] if r < len(altitudes) else None
-        spd_ride = speeds[r] if r < len(speeds) else None
-        alt_ride = alt_ride if isinstance(alt_ride, list) else []
-        spd_ride = spd_ride if isinstance(spd_ride, list) else []
-        for i, pt in enumerate(ride):
+        for pt in ride:
+            gi += 1
             if not isinstance(pt, dict):
                 continue
             lat = pt.get("latitude")
             lon = pt.get("longitude")
             if lat is None or lon is None:
                 continue
-            alt = alt_ride[i] if i < len(alt_ride) else None
-            spd = spd_ride[i] if i < len(spd_ride) else None
+            alt = alts[gi] if 0 <= gi < len(alts) else None
+            spd = spds[gi] if 0 <= gi < len(spds) else None
             points.append({
                 "latitude": lat,
                 "longitude": lon,

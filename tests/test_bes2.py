@@ -280,6 +280,27 @@ def test_normalize_track_two_rides_zipped():
     ]
 
 
+def test_normalize_track_coords_one_ride_alts_two_rides_global_align():
+    # Real BES2 shape: coordinates merged into a single ride, altitudes/speed
+    # split into two rides. Per-ride zipping would leave the tail without
+    # altitude/speed; the global-index walk fills all points.
+    detail = {
+        "coordinates": [[
+            {"latitude": 1.0, "longitude": 2.0},
+            {"latitude": 1.1, "longitude": 2.1},
+            {"latitude": 1.2, "longitude": 2.2},
+        ]],
+        "altitudes": [[100.0, 110.0], [120.0]],
+        "speed": [[5.0, 6.0], [7.0]],
+    }
+    out = normalize_track(detail)
+    assert out["activityDetails"] == [
+        {"latitude": 1.0, "longitude": 2.0, "altitude": 100.0, "speed": 5.0},
+        {"latitude": 1.1, "longitude": 2.1, "altitude": 110.0, "speed": 6.0},
+        {"latitude": 1.2, "longitude": 2.2, "altitude": 120.0, "speed": 7.0},
+    ]
+
+
 def test_normalize_track_null_point_skipped():
     detail = {
         "coordinates": [[{"latitude": 1.0, "longitude": 2.0}, None,
