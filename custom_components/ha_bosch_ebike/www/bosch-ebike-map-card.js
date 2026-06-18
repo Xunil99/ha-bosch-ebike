@@ -7290,6 +7290,15 @@ class BoschEBikeDashboardCard extends HTMLElement {
           count: _ranges.length,
           modes: _ranges.map((r) => r.mode + "=" + r.km),
         });
+        // Sichtbare Debug-Zeile direkt in der Karte (kein Browser-Konsole
+        // nötig) — zum Abfotografieren. Wird nach Klärung wieder entfernt.
+        const _dbg = document.createElement("div");
+        _dbg.style.cssText = "width:100%;font:11px/1.4 monospace;color:#b71c1c;"
+          + "white-space:pre-wrap;word-break:break-all;text-align:center;";
+        _dbg.textContent = "DEBUG v1.18.6  show=" + cfg.show_range_pills
+          + "  anchor=" + (anchor || "-") + "  count=" + _ranges.length
+          + "  modes=" + JSON.stringify(_ranges.map((r) => r.mode + "=" + r.km));
+        pills.appendChild(_dbg);
         for (const r of _ranges) {
           if (r.km == null) continue;
           const hex = boschModeColorHex(r.mode, cfg.mode_colors);
