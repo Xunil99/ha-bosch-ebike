@@ -7280,7 +7280,17 @@ class BoschEBikeDashboardCard extends HTMLElement {
       if (cfg.show_range_pills !== false) {
         const anchor = cfg.battery_entity || cfg.odometer_entity
           || cfg.charging_entity || cfg.range_entity;
-        for (const r of boschReachableRanges(this._hass, anchor)) {
+        const _ranges = boschReachableRanges(this._hass, anchor);
+        // Temporäre Diagnose: zeigt in der Browser-Konsole, was der
+        // Kartenkörper an Reichweite-Sensoren findet. Kann nach Klärung
+        // wieder entfernt werden.
+        console.warn("[bosch-dash] range-pills:", {
+          show_range_pills: cfg.show_range_pills,
+          anchor,
+          count: _ranges.length,
+          modes: _ranges.map((r) => r.mode + "=" + r.km),
+        });
+        for (const r of _ranges) {
           if (r.km == null) continue;
           const hex = boschModeColorHex(r.mode, cfg.mode_colors);
           const rp = document.createElement("span");
@@ -7826,7 +7836,13 @@ class BoschEBikeDashboardCardEditor extends HTMLElement {
   }
 
   _emit() {
-    this.dispatchEvent(new CustomEvent("config-changed", { detail: { config: this._config } }));
+    // Emit a fresh snapshot so HA always stores the current state (a shared
+    // mutable reference could be missed for boolean / removed keys).
+    this.dispatchEvent(new CustomEvent("config-changed", {
+      detail: { config: { ...this._config } },
+      bubbles: true,
+      composed: true,
+    }));
   }
 
   _entities(filter) {
