@@ -15,6 +15,7 @@ extern "C" {
 #include "host/ble_uuid.h"
 #include "host/ble_gap.h"
 #include "host/ble_gatt.h"
+#include "nimble/hci_common.h"  // BLE_HCI_ADV_FILT_* advertising filter policies
 #include "host/util/util.h"
 #include "services/gap/ble_svc_gap.h"
 #include "services/gatt/ble_svc_gatt.h"
@@ -90,11 +91,14 @@ static void log_hex(const char *prefix, const uint8_t *buf, size_t len) {
 // NimBLE's ble_hs_adv_fields struct cannot represent solicitation, so we build
 // the byte sequence by hand and pass it to ble_gap_adv_set_data().
 static int build_adv_payload(uint8_t *buf, size_t buf_len, size_t *out_len,
-                             const std::string &name) {
+                             const std::string &name, bool pairing) {
   size_t pos = 0;
-  // 1) Flags: General Discoverable + BR/EDR Not Supported = 0x06
+  // 1) Flags. Pairing window: LE General Discoverable + BR/EDR Not Supported
+  //    (0x06) so a Flow app can find and add the bridge. Private reconnect
+  //    mode: BR/EDR Not Supported only (0x04) -> NOT discoverable, so other
+  //    users' Flow apps do not list it.
   if (pos + 3 > buf_len) return -1;
-  buf[pos++] = 0x02; buf[pos++] = 0x01; buf[pos++] = 0x06;
+  buf[pos++] = 0x02; buf[pos++] = 0x01; buf[pos++] = (uint8_t) (pairing ? 0x06 : 0x04);
 
   // 2) Appearance (LE): Cycling generic = 0x0480
   if (pos + 4 > buf_len) return -1;
@@ -103,10 +107,15 @@ static int build_adv_payload(uint8_t *buf, size_t buf_len, size_t *out_len,
   buf[pos++] = (uint8_t) ((LDI_APPEARANCE_CYCLING >> 8) & 0xff);
 
   // 3) Service Solicitation – 128-bit (AD type 0x15), UUID in little-endian.
-  if (pos + 2 + 16 > buf_len) return -1;
-  buf[pos++] = 1 + 16; buf[pos++] = AD_TYPE_SOL_UUIDS128;
-  memcpy(&buf[pos], LDI_SERVICE_UUID128, 16);
-  pos += 16;
+  //    ONLY in the pairing window: the solicitation is exactly what makes a
+  //    Flow app recognise us as a pairable Bosch accessory. In private
+  //    reconnect mode we omit it; the bonded bike reconnects by our address.
+  if (pairing) {
+    if (pos + 2 + 16 > buf_len) return -1;
+    buf[pos++] = 1 + 16; buf[pos++] = AD_TYPE_SOL_UUIDS128;
+    memcpy(&buf[pos], LDI_SERVICE_UUID128, 16);
+    pos += 16;
+  }
 
   // 4) Complete Local Name (truncate if needed; total adv payload max 31 bytes).
   size_t remaining = buf_len - pos;
@@ -126,10 +135,57 @@ static int build_adv_payload(uint8_t *buf, size_t buf_len, size_t *out_len,
 // Cache for static use in start_advertising().
 extern std::string g_device_name_cache;
 
+// Pairing window. While > 0 and not yet elapsed, advertise discoverable with
+// the LDI solicitation (Flow app can add the bridge). Otherwise advertise
+// privately so other users' Flow apps never see it. Set by start_pairing()
+// and, on first boot without a bond, by on_stack_sync().
+static constexpr uint32_t PAIRING_WINDOW_MS = 5 * 60 * 1000;  // 5 minutes
+static uint32_t g_pairing_until_ms = 0;
+
+// Master advertising toggle (HA switch). Default on. When off, the bridge only
+// advertises inside a pairing window (boot / button); otherwise it stays fully
+// silent (no background reconnect). The boot window always overrides this.
+static bool g_adv_enabled = true;
+
+static bool pairing_window_open() {
+  return g_pairing_until_ms != 0 && (int32_t) (g_pairing_until_ms - millis()) > 0;
+}
+
+// Upper bound for reading bonded peers (well above NimBLE's default 3 bonds).
+static constexpr int MAX_BOND_PROBE = 8;
+
+// Number of bikes currently bonded in the NVS store.
+static int bonded_peer_count() {
+  ble_addr_t addrs[MAX_BOND_PROBE];
+  int num = 0;
+  if (ble_store_util_bonded_peers(addrs, &num, MAX_BOND_PROBE) != 0)
+    return 0;
+  return num;
+}
+
+// Restrict who may scan/connect to the bonded bike(s) only.
+static void apply_bond_whitelist() {
+  ble_addr_t addrs[MAX_BOND_PROBE];
+  int num = 0;
+  if (ble_store_util_bonded_peers(addrs, &num, MAX_BOND_PROBE) == 0 && num > 0)
+    ble_gap_wl_set(addrs, num);
+}
+
 static int start_advertising() {
+  const bool pairing = pairing_window_open();
+
+  // Outside a pairing window, advertise only if the master switch is on AND a
+  // bike is bonded (private reconnect). Otherwise stay fully silent. A pairing
+  // window (boot / button) always advertises, regardless of the switch.
+  if (!pairing && (!g_adv_enabled || bonded_peer_count() == 0)) {
+    ESP_LOGI(TAG, "Idle (advertising %s, pairing window closed). Press 'Pairing starten' to add a bike.",
+             g_adv_enabled ? "on but no bond" : "disabled");
+    return 0;
+  }
+
   uint8_t adv_buf[31];
   size_t adv_len = 0;
-  if (build_adv_payload(adv_buf, sizeof(adv_buf), &adv_len, g_device_name_cache) != 0) {
+  if (build_adv_payload(adv_buf, sizeof(adv_buf), &adv_len, g_device_name_cache, pairing) != 0) {
     ESP_LOGE(TAG, "adv payload build failed");
     return -1;
   }
@@ -142,16 +198,26 @@ static int start_advertising() {
 
   struct ble_gap_adv_params adv_params = {};
   adv_params.conn_mode = BLE_GAP_CONN_MODE_UND;
-  adv_params.disc_mode = BLE_GAP_DISC_MODE_GEN;
   adv_params.itvl_min = 0;  // use default (~1.28 s)
   adv_params.itvl_max = 0;
+  if (pairing) {
+    adv_params.disc_mode = BLE_GAP_DISC_MODE_GEN;
+    adv_params.filter_policy = BLE_HCI_ADV_FILT_NONE;
+  } else {
+    // Private reconnect: not discoverable, only the bonded bike may connect.
+    adv_params.disc_mode = BLE_GAP_DISC_MODE_NON;
+    apply_bond_whitelist();
+    adv_params.filter_policy = BLE_HCI_ADV_FILT_BOTH;
+  }
 
   rc = ble_gap_adv_start(BLE_OWN_ADDR_PUBLIC, nullptr, BLE_HS_FOREVER,
                          &adv_params, gap_event_handler, nullptr);
   if (rc != 0) {
     ESP_LOGE(TAG, "ble_gap_adv_start failed: %d", rc);
   } else {
-    ESP_LOGI(TAG, "Advertising started – Solicitation eb20, name='%s'",
+    ESP_LOGI(TAG, "Advertising started (%s), name='%s'",
+             pairing ? "PAIRING: discoverable + solicitation eb20"
+                     : "private reconnect: non-discoverable, whitelist, no solicitation",
              g_device_name_cache.c_str());
   }
   return rc;
@@ -173,6 +239,14 @@ static void on_stack_sync() {
   }
   ble_svc_gap_device_name_set(g_device_name_cache.c_str());
   ble_svc_gap_device_appearance_set(LDI_APPEARANCE_CYCLING);
+  // Open the pairing window for ~5 min after EVERY boot (not only when no bond
+  // exists). This lets the user (re-)pair or add a bike right after power-up
+  // without needing the HA button. When it elapses, loop() switches the bridge
+  // to private (non-discoverable, whitelist) advertising so it is no longer
+  // visible to other users' Flow apps. A successful connect closes it early.
+  g_pairing_until_ms = millis() + PAIRING_WINDOW_MS;
+  ESP_LOGI(TAG, "Boot pairing window open for %u min",
+           (unsigned) (PAIRING_WINDOW_MS / 60000));
   start_advertising();
 }
 
@@ -190,6 +264,9 @@ static int gap_event_handler(struct ble_gap_event *event, void *arg) {
       if (event->connect.status == 0) {
         g_conn.conn_handle = event->connect.conn_handle;
         g_conn.encrypted = false;
+        // A bike connected -> pairing succeeded; close the discoverable window
+        // so we drop to private advertising on the next disconnect.
+        g_pairing_until_ms = 0;
         if (g_instance) g_instance->on_connect_state_change(true);
 
         // Workaround for LDI-001: bike doesn't initiate DLE. We do.
@@ -474,6 +551,18 @@ void BoschEbikeLdi::loop() {
     this->data_dirty_ = false;
     this->publish_decoded_();
   }
+
+  // Pairing window auto-expiry: once it lapses and we are not connected, drop
+  // back to private (non-discoverable, whitelist) advertising so the bridge
+  // stops being visible to other users' Flow apps.
+  if (g_pairing_until_ms != 0 && (int32_t) (g_pairing_until_ms - millis()) <= 0) {
+    g_pairing_until_ms = 0;
+    if (!this->last_published_connected_) {
+      ESP_LOGI(TAG, "Pairing window expired -> private reconnect advertising");
+      ble_gap_adv_stop();
+      start_advertising();
+    }
+  }
 }
 
 void BoschEbikeLdi::publish_decoded_() {
@@ -529,7 +618,7 @@ void BoschEbikeLdi::dump_config() {
   ESP_LOGCONFIG(TAG, "  Service UUID: 0000eb20-eaa2-11e9-81b4-2a2ae2dbcce4");
   ESP_LOGCONFIG(TAG, "  Live Data Char: 0000eb21-eaa2-11e9-81b4-2a2ae2dbcce4");
   ESP_LOGCONFIG(TAG, "  Appearance: 0x0480 (Cycling)");
-  ESP_LOGCONFIG(TAG, "  Status: v0.4 – race-fix for bond-resume reconnects");
+  ESP_LOGCONFIG(TAG, "  Status: v0.5 – private advertising + manual pairing window (issue #36)");
 }
 
 float BoschEbikeLdi::get_setup_priority() const {
@@ -575,6 +664,30 @@ void BoschEbikeLdi::clear_bonding() {
   ESP_LOGW(TAG, "Clearing all bonded peers from NVS");
   ble_store_clear();
 }
+
+void BoschEbikeLdi::start_pairing() {
+  g_pairing_until_ms = millis() + PAIRING_WINDOW_MS;
+  ESP_LOGI(TAG, "Pairing window opened for %u min - discoverable for Flow app",
+           (unsigned) (PAIRING_WINDOW_MS / 60000));
+  // Re-advertise in pairing mode now (drop any private advertising first).
+  ble_gap_adv_stop();
+  start_advertising();
+}
+
+bool BoschEbikeLdi::is_pairing() { return pairing_window_open(); }
+
+void BoschEbikeLdi::set_advertising_enabled(bool enabled) {
+  g_adv_enabled = enabled;
+  ESP_LOGI(TAG, "Advertising master switch -> %s", enabled ? "ON" : "OFF");
+  // Re-evaluate immediately (no effect while connected; advertising is off
+  // during a connection and the new state applies on the next disconnect).
+  if (!this->last_published_connected_) {
+    ble_gap_adv_stop();
+    start_advertising();
+  }
+}
+
+bool BoschEbikeLdi::advertising_enabled() { return g_adv_enabled; }
 
 }  // namespace bosch_ebike_ldi
 }  // namespace esphome
