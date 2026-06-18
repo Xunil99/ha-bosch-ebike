@@ -34,6 +34,11 @@ async def async_setup_entry(
     """Create the per-bike last-known-location tracker from a config entry."""
     coordinator: BoschEBikeCoordinator = hass.data[DOMAIN][entry.entry_id]
 
+    # The only location Bosch provides is the theft location from the bike
+    # pass, which eBike System 2 does not expose. Skip the tracker for BES2.
+    if coordinator.is_bes2:
+        return
+
     entities: list[TrackerEntity] = []
     for bike in coordinator.data.get("bikes", []):
         bike_id = bike.get("id")

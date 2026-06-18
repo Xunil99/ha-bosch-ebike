@@ -86,6 +86,8 @@ class BoschBikeSensorDescription(SensorEntityDescription):
     value_fn: Callable[[dict], Any]
     is_activity: bool = False
     is_aggregate: bool = False
+    # False = Smart-System-only (data BES2 never provides); skipped for BES2.
+    bes2: bool = True
 
 
 def _calc_difficulty(activity: dict) -> float | None:
@@ -142,6 +144,7 @@ BIKE_SENSORS: tuple[BoschBikeSensorDescription, ...] = (
         state_class=SensorStateClass.TOTAL_INCREASING,
         icon="mdi:engine",
         value_fn=lambda d: _safe_get(d, "driveUnit", "powerOnTime", "total"),
+        bes2=False,
     ),
     BoschBikeSensorDescription(
         key="motor_assist_hours",
@@ -152,6 +155,7 @@ BIKE_SENSORS: tuple[BoschBikeSensorDescription, ...] = (
         state_class=SensorStateClass.TOTAL_INCREASING,
         icon="mdi:engine",
         value_fn=lambda d: _safe_get(d, "driveUnit", "powerOnTime", "withMotorSupport"),
+        bes2=False,
     ),
     BoschBikeSensorDescription(
         key="max_assist_speed",
@@ -160,6 +164,7 @@ BIKE_SENSORS: tuple[BoschBikeSensorDescription, ...] = (
         native_unit_of_measurement=UnitOfSpeed.KILOMETERS_PER_HOUR,
         icon="mdi:speedometer",
         value_fn=lambda d: _safe_get(d, "driveUnit", "maximumAssistanceSpeed"),
+        bes2=False,
     ),
     BoschBikeSensorDescription(
         key="active_assist_modes",
@@ -167,6 +172,7 @@ BIKE_SENSORS: tuple[BoschBikeSensorDescription, ...] = (
         name="Active Assist Modes",
         icon="mdi:bike-fast",
         value_fn=_format_assist_modes,
+        bes2=False,
     ),
     BoschBikeSensorDescription(
         key="walk_assist_speed",
@@ -175,6 +181,7 @@ BIKE_SENSORS: tuple[BoschBikeSensorDescription, ...] = (
         native_unit_of_measurement=UnitOfSpeed.KILOMETERS_PER_HOUR,
         icon="mdi:walk",
         value_fn=lambda d: _safe_get(d, "driveUnit", "walkAssistConfiguration", "maximumSpeed"),
+        bes2=False,
     ),
     BoschBikeSensorDescription(
         key="next_service_odometer",
@@ -184,6 +191,7 @@ BIKE_SENSORS: tuple[BoschBikeSensorDescription, ...] = (
         device_class=SensorDeviceClass.DISTANCE,
         icon="mdi:wrench-clock",
         value_fn=lambda d: round(_safe_get(d, "serviceDue", "odometer", default=0) / 1000, 1),
+        bes2=False,
     ),
     BoschBikeSensorDescription(
         key="next_service_date",
@@ -192,6 +200,7 @@ BIKE_SENSORS: tuple[BoschBikeSensorDescription, ...] = (
         device_class=SensorDeviceClass.TIMESTAMP,
         icon="mdi:wrench-clock",
         value_fn=lambda d: next_service_date(d),
+        bes2=False,
     ),
 )
 
@@ -543,12 +552,19 @@ async def async_setup_entry(
 
     bikes = coordinator.data.get("bikes", [])
     soc_entity = entry.options.get(CONF_LIVE_SOC_ENTITY)
+    # eBike System 2 has no service book / bike pass / per-mode / consumption /
+    # range-estimate data; those entities are skipped so BES2 users don't get a
+    # row of permanently-unknown sensors. GPS, activities, odometer, totals and
+    # maintenance work for both systems.
+    is_bes2 = coordinator.is_bes2
     for bike in bikes:
         bike_id = bike.get("id", "unknown")
         drive_name = _safe_get(bike, "driveUnit", "productName") or "eBike"
 
-        # Bike hardware sensors
+        # Bike hardware sensors (skip Smart-System-only ones for BES2)
         for desc in BIKE_SENSORS:
+            if is_bes2 and not desc.bes2:
+                continue
             entities.append(BoschEBikeSensor(coordinator, desc, bike_id, drive_name))
 
         # BES2 lifetime totals (only when /statistics data is present)
@@ -556,8 +572,10 @@ async def async_setup_entry(
             for desc in BES2_STATISTICS_SENSORS:
                 entities.append(BoschEBikeSensor(coordinator, desc, bike_id, drive_name))
 
-        # Battery sensors (per battery)
-        for idx, battery in enumerate(bike.get("batteries", []) or []):
+        # Battery sensors (per battery). BES2 batteries carry no cloud fields
+        # (deliveredWhOverLifetime/chargeCycles) and no service-book SoH, so the
+        # whole per-battery block is skipped for BES2.
+        for idx, battery in enumerate([] if is_bes2 else (bike.get("batteries", []) or [])):
             bat_name = battery.get("productName") or f"Battery {idx + 1}"
             bat_prefix = f"battery_{idx + 1}"
             entities.extend(
@@ -618,21 +636,21 @@ async def async_setup_entry(
                 )
             )
 
-        # Service history (always created; show unknown when no service record)
-        entities.append(
-            BoschLastServiceSensor(coordinator, bike_id, drive_name, kind="date")
-        )
-        entities.append(
-            BoschLastServiceSensor(coordinator, bike_id, drive_name, kind="dealer")
-        )
-        entities.append(
-            BoschLastServiceSensor(coordinator, bike_id, drive_name, kind="odometer")
-        )
-
-        # Component inventory (diagnostic)
-        entities.append(
-            BoschComponentInventorySensor(coordinator, bike_id, drive_name)
-        )
+        # Service history + component inventory come from the service book /
+        # bike profile, which BES2 does not provide -> skip for BES2.
+        if not is_bes2:
+            entities.append(
+                BoschLastServiceSensor(coordinator, bike_id, drive_name, kind="date")
+            )
+            entities.append(
+                BoschLastServiceSensor(coordinator, bike_id, drive_name, kind="dealer")
+            )
+            entities.append(
+                BoschLastServiceSensor(coordinator, bike_id, drive_name, kind="odometer")
+            )
+            entities.append(
+                BoschComponentInventorySensor(coordinator, bike_id, drive_name)
+            )
 
         # Last ride max altitude (single instance, derived from activity details)
         entities.append(
@@ -651,20 +669,25 @@ async def async_setup_entry(
         for desc in GPS_COORDINATE_SENSORS:
             entities.append(BoschGPSSensor(coordinator, desc, bike_id, drive_name))
 
-        # Battery consumption sensors (Wh delta tracking)
-        for desc in BATTERY_CONSUMPTION_SENSORS:
-            entities.append(BoschBatteryConsumptionSensor(coordinator, desc, bike_id, drive_name))
+        # Battery consumption (needs deliveredWhOverLifetime deltas) and the
+        # range estimate (needs consumption history) have no BES2 data source.
+        if not is_bes2:
+            # Battery consumption sensors (Wh delta tracking)
+            for desc in BATTERY_CONSUMPTION_SENSORS:
+                entities.append(BoschBatteryConsumptionSensor(coordinator, desc, bike_id, drive_name))
 
-        # Service-due derived sensors (days/km remaining)
+        # Service-due derived sensors (days/km remaining). Kept for BES2: they
+        # work off the user-editable service-due overrides (date/odometer).
         entities.append(BoschServiceDueSensor(coordinator, bike_id, drive_name, kind="days"))
         entities.append(BoschServiceDueSensor(coordinator, bike_id, drive_name, kind="km"))
 
         # Estimated range (clearly labelled estimate, derived from history)
-        entities.append(BoschRangeEstimateSensor(coordinator, bike_id, drive_name))
-        if soc_entity:
-            entities.append(
-                BoschCurrentRangeSensor(coordinator, bike_id, drive_name, soc_entity)
-            )
+        if not is_bes2:
+            entities.append(BoschRangeEstimateSensor(coordinator, bike_id, drive_name))
+            if soc_entity:
+                entities.append(
+                    BoschCurrentRangeSensor(coordinator, bike_id, drive_name, soc_entity)
+                )
 
         # Maintenance overview (count of items due/overdue + full list as attributes)
         entities.append(BoschMaintenanceOverviewSensor(coordinator, bike_id, drive_name))

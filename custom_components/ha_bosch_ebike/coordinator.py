@@ -96,6 +96,16 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # retry on the next poll — useful when the recorder catches up.
         self._live_enrichment_cache: dict[str, dict[str, bool]] = {}
 
+    @property
+    def is_bes2(self) -> bool:
+        """True for an eBike System 2 account.
+
+        Used by the entity platforms to skip Smart-System-only entities
+        (service book, theft/bike-pass, per-mode range, component inventory,
+        consumption, range estimate) that BES2 has no data for.
+        """
+        return self._system == SYSTEM_BES2
+
     async def async_load_persisted_state(self) -> None:
         """Restore battery consumption state from disk (once at startup)."""
         if self._state_loaded:
@@ -515,7 +525,6 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         latest_activity = activities[0] if activities else None
         latest_details = None
-        track_probe: dict[str, Any] | None = None
         if latest_activity is not None:
             raw_id = latest_activity.get("id")
             if raw_id is not None:
@@ -523,10 +532,6 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     detail = await self.api.get_activity_detail_bes2(raw_id)
                     latest_details = bes2.normalize_track(detail)
                     bes2.enrich_summary_from_detail(latest_activity, detail)
-                    # Diagnose-Sonde: zeigt PII-sicher, ob/wie die GPS-Strecke
-                    # im JSON-Detail steckt (Phase-1-Beweis für die fehlende
-                    # Karten-Route). Kann nach Klärung wieder entfernt werden.
-                    track_probe = bes2.track_probe(detail)
                 except Exception as err:  # noqa: BLE001
                     _LOGGER.debug("Could not fetch BES2 activity detail %s: %s", raw_id, err)
 
@@ -550,7 +555,6 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "latest_activity": latest_activity,
             "all_activities": activities,
             "latest_activity_details": latest_details,
-            "bes2_track_probe": track_probe,
             "activity_consumption": {},
             "activity_bike": {},
             "maintenance": self._maintenance,

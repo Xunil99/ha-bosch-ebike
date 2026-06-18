@@ -37,6 +37,11 @@ async def async_setup_entry(
     """Create the per-bike Data Act binary sensors from a config entry."""
     coordinator: BoschEBikeCoordinator = hass.data[DOMAIN][entry.entry_id]
 
+    # eBike System 2 has no bike-pass / service-book endpoints, so theft and
+    # software-update would always be unknown. Skip the platform entirely.
+    if coordinator.is_bes2:
+        return
+
     entities: list[BinarySensorEntity] = []
     for bike in coordinator.data.get("bikes", []):
         bike_id = bike.get("id")

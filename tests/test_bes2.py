@@ -19,7 +19,6 @@ normalize_bike = bes2.normalize_bike
 normalize_activity_summary = bes2.normalize_activity_summary
 enrich_summary_from_detail = bes2.enrich_summary_from_detail
 normalize_track = bes2.normalize_track
-track_probe = bes2.track_probe
 normalize_statistics = bes2.normalize_statistics
 
 
@@ -370,46 +369,6 @@ def test_normalize_track_ride_not_list_skipped():
     out = normalize_track(detail)
     assert out["activityDetails"] == [
         {"latitude": 1.0, "longitude": 2.0, "altitude": None, "speed": None}]
-
-
-def test_track_probe_populated_reports_shape_and_keys():
-    detail = {
-        "elevationGain": 120.0,
-        "maxAltitude": 540.0,
-        "coordinates": [[{"latitude": 1.0, "longitude": 2.0},
-                         {"latitude": 1.1, "longitude": 2.1}]],
-        "altitudes": [[500.0, 501.0]],
-        "speed": [[10.0, 11.0]],
-    }
-    p = track_probe(detail)
-    assert p["coordinates"] == {"rides": 1, "first_ride_len": 2}
-    assert p["altitudes"] == {"rides": 1, "first_ride_len": 2}
-    assert p["first_point_keys"] == ["latitude", "longitude"]
-    assert p["elevationGain_numeric"] is True
-    assert p["maxAltitude_numeric"] is True
-    assert p["normalized_point_count"] == 2
-    assert "coordinates" in p["detail_keys"]
-
-
-def test_track_probe_empty_coordinates_but_elevation_present():
-    # The exact symptom: elevation scalar present, track empty.
-    detail = {"elevationGain": 80.0, "coordinates": [], "altitudes": []}
-    p = track_probe(detail)
-    assert p["coordinates"] == {"len": 0, "first_type": None}
-    assert p["elevationGain_numeric"] is True
-    assert p["normalized_point_count"] == 0
-    assert "first_point_keys" not in p
-
-
-def test_track_probe_missing_coordinates_key():
-    p = track_probe({"elevationGain": 80.0})
-    assert p["coordinates"] is None
-    assert p["normalized_point_count"] == 0
-
-
-def test_track_probe_non_dict_safe():
-    assert track_probe(None) == {"detail_type": "NoneType"}
-    assert track_probe([1, 2]) == {"detail_type": "list"}
 
 
 def test_normalize_statistics_totals():
