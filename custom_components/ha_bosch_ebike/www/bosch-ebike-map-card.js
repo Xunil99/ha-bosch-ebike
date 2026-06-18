@@ -7277,25 +7277,11 @@ class BoschEBikeDashboardCard extends HTMLElement {
 
       // Reichweite je Fahrmodus als farbige Piles (vor Lade-/Akku-Pille).
       // Farben pro Modus aus der Karten-Konfig (mode_colors) bzw. Bosch-Default.
-      const anchor = cfg.battery_entity || cfg.odometer_entity
-        || cfg.charging_entity || cfg.range_entity;
-      const _ranges = boschReachableRanges(this._hass, anchor);
-      // BEDINGUNGSLOSE Debug-Zeile: erscheint immer, sobald dieser Code laeuft,
-      // unabhaengig vom Schalter/Config. Zum Abfotografieren. Temporaer.
-      const _dbg = document.createElement("div");
-      _dbg.style.cssText = "width:100%;font:11px/1.4 monospace;color:#b71c1c;"
-        + "white-space:pre-wrap;word-break:break-all;text-align:center;";
-      _dbg.textContent = "DEBUG v1.18.7  show=" + cfg.show_range_pills
-        + "  anchor=" + (anchor || "-") + "  count=" + _ranges.length
-        + "  modes=" + JSON.stringify(_ranges.map((r) => r.mode + "=" + r.km));
-      pills.appendChild(_dbg);
-      console.warn("[bosch-dash] range-pills:", {
-        show_range_pills: cfg.show_range_pills, anchor,
-        count: _ranges.length, modes: _ranges.map((r) => r.mode + "=" + r.km),
-      });
-      // Piles rendern: Schalter nur als Opt-out; Default = anzeigen.
+      // Schalter ist nur ein Opt-out; Default (Schlüssel fehlt) = anzeigen.
       if (cfg.show_range_pills !== false) {
-        for (const r of _ranges) {
+        const anchor = cfg.battery_entity || cfg.odometer_entity
+          || cfg.charging_entity || cfg.range_entity;
+        for (const r of boschReachableRanges(this._hass, anchor)) {
           if (r.km == null) continue;
           const hex = boschModeColorHex(r.mode, cfg.mode_colors);
           const rp = document.createElement("span");
@@ -8122,8 +8108,10 @@ class BoschEBikeDashboardCardEditor extends HTMLElement {
     rangeToggle.type = "checkbox";
     rangeToggle.checked = this._config.show_range_pills !== false;
     rangeToggle.addEventListener("change", () => {
-      if (rangeToggle.checked) delete this._config.show_range_pills;
-      else this._config.show_range_pills = false;
+      // Always write an explicit boolean. HA merges the emitted editor config
+      // over the stored one, so deleting/omitting the key would NOT clear a
+      // previously stored `false` — toggling back on would never persist.
+      this._config.show_range_pills = rangeToggle.checked;
       this._emit();
     });
     rangeToggleWrap.appendChild(rangeToggle);
