@@ -100,8 +100,8 @@ def normalize_activity_summary(a2: dict) -> dict:
 
     avg_speeds = [r.get("avgSpeed") for r in rides if _num(r.get("avgSpeed"))]
     max_speeds = [r.get("maxSpeed") for r in rides if _num(r.get("maxSpeed"))]
-    speed_avg = sum(avg_speeds) / len(avg_speeds) if avg_speeds else None
-    speed_max = max(max_speeds) if max_speeds else None
+    speed_avg = round(sum(avg_speeds) / len(avg_speeds), 1) if avg_speeds else None
+    speed_max = round(max(max_speeds), 1) if max_speeds else None
 
     calories = [r.get("caloriesBurned") for r in rides
                 if _num(r.get("caloriesBurned"))]
@@ -137,21 +137,23 @@ def enrich_summary_from_detail(summary: dict, detail: dict) -> dict:
     elevation = summary.setdefault("elevation", {})
     speed = summary.setdefault("speed", {})
 
+    # Anzeige-Rundung: Trittfrequenz/Leistung/Höhe ganzzahlig, Speed auf 1
+    # Nachkommastelle — die BES2-Detailwerte kommen sonst mit vielen Stellen.
     if _num(d.get("avgCadence")):
-        cadence["average"] = d.get("avgCadence")
+        cadence["average"] = round(d.get("avgCadence"))
     if _num(d.get("maxCadence")):
-        cadence["maximum"] = d.get("maxCadence")
+        cadence["maximum"] = round(d.get("maxCadence"))
     if _num(d.get("avgRiderPower")):
-        rider_power["average"] = d.get("avgRiderPower")
+        rider_power["average"] = round(d.get("avgRiderPower"))
     if _num(d.get("elevationGain")):
-        elevation["gain"] = d.get("elevationGain")
+        elevation["gain"] = round(d.get("elevationGain"))
     if _num(d.get("elevationLoss")):
-        elevation["loss"] = d.get("elevationLoss")
+        elevation["loss"] = round(d.get("elevationLoss"))
 
     if speed.get("maximum") is None and _num(d.get("maxSpeed")):
-        speed["maximum"] = d.get("maxSpeed")
+        speed["maximum"] = round(d.get("maxSpeed"), 1)
     if speed.get("average") is None and _num(d.get("avgSpeed")):
-        speed["average"] = d.get("avgSpeed")
+        speed["average"] = round(d.get("avgSpeed"), 1)
     if summary.get("caloriesBurned") is None and _num(d.get("caloriesBurned")):
         summary["caloriesBurned"] = d.get("caloriesBurned")
 

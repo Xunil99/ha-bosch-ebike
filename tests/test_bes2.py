@@ -214,6 +214,23 @@ def test_enrich_fills_cadence_power_elevation():
     assert out["elevation"] == {"gain": 200.0, "loss": 180.0}
 
 
+def test_enrich_rounds_noisy_detail_values():
+    # BES2-Detailwerte kommen teils mit vielen Nachkommastellen (Issue Habanatz).
+    # Anzeige-Rundung: Trittfrequenz/Leistung/Hoehe ganzzahlig, Speed 1 Stelle.
+    s = _base_summary()
+    detail = {
+        "avgCadence": 62.345678, "maxCadence": 109.9,
+        "avgRiderPower": 148.6,
+        "elevationGain": 123.456789, "elevationLoss": 98.7654,
+        "avgSpeed": 22.456, "maxSpeed": 41.249,
+    }
+    out = enrich_summary_from_detail(s, detail)
+    assert out["cadence"] == {"average": 62, "maximum": 110}
+    assert out["riderPower"]["average"] == 149
+    assert out["elevation"] == {"gain": 123, "loss": 99}
+    assert out["speed"] == {"average": 22.5, "maximum": 41.2}
+
+
 def test_enrich_fills_speed_and_calories_when_none():
     s = _base_summary()
     detail = {"avgSpeed": 18.0, "maxSpeed": 33.0, "caloriesBurned": 99.0}
