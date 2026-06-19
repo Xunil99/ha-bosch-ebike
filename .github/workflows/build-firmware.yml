@@ -3,7 +3,10 @@ name: Build ESPHome firmware
 on:
   push:
     tags:
-      - 'v*'
+      # Stabile Releases nur: vX.Y.Z. Beta-/Pre-Release-Tags (z. B. v1.19.7b1)
+      # werden bewusst NICHT gebaut/veroeffentlicht, damit eine Integrations-Beta
+      # kein Firmware-Release erzeugt, das stabile Nutzer als "Latest" saehen.
+      - 'v[0-9]+.[0-9]+.[0-9]+'
   workflow_dispatch:
 
 permissions:
