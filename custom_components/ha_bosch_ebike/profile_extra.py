@@ -23,6 +23,7 @@ def _get(d: Any, *keys: str, default: Any = None) -> Any:
 # Mapping verified against a Bosch DiagnosticTool 3 dealer report
 # ("Modes d'assistance", code -> "Désignation complète").
 ASSIST_MODE_NAMES: dict[str, str] = {
+    # M-series drive units (verified via a Bosch DiagnosticTool 3 report).
     "A100M00040": "ECO",
     "A100ECOP37": "ECO+",
     "A100M00030": "TOUR",
@@ -32,18 +33,41 @@ ASSIST_MODE_NAMES: dict[str, str] = {
     "A100M0AUTO": "AUTO",
     "A100EAAAB0": "eMTB",
     "A100MSPIC7": "eMTB+",
+    "A100MSPIC8": "eMTB+",
     "A100MAAAB0": "eMTB-shortcrank",
+    # G-series drive units (reported by users, issue #37). Note the suffixes
+    # do NOT map across series — A100GAAAA0 is TURBO while A100MAAAA0 is TOUR+.
+    "A100G0AUTO": "AUTO",
+    "A100GAAAA0": "TURBO",
+    "A100GAAAD0": "ECO",
+    "A100ECOP38": "ECO+",
+    "A100GAAAC0": "TOUR",
+    "A100GAAAF0": "TOUR+",
+    "A100GAAAB0": "eMTB",
+    "A100GAAAE0": "SPORT",
 }
 
 
 def assist_mode_display_name(code: Any) -> Any:
     """Map a Bosch assist-mode application code to its display name.
 
-    Unknown codes are returned unchanged so a yet-undocumented mode still
-    shows something instead of disappearing.
+    The Data Act API exposes only the internal code (no display name), and the
+    codes differ across motor generations (M-series, G-series, …), so the table
+    above can never be exhaustive (issue #37). After the exact lookup we apply
+    two SAFE heuristics for the only codes that literally carry their own name
+    (``…AUTO…`` and ``…ECOP…`` -> ECO+); everything else falls back to the raw
+    code so an unknown mode still shows something instead of disappearing.
     """
-    if isinstance(code, str):
-        return ASSIST_MODE_NAMES.get(code, code)
+    if not isinstance(code, str):
+        return code
+    mapped = ASSIST_MODE_NAMES.get(code)
+    if mapped is not None:
+        return mapped
+    upper = code.upper()
+    if "AUTO" in upper:
+        return "AUTO"
+    if "ECOP" in upper:
+        return "ECO+"
     return code
 
 

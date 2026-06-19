@@ -7277,6 +7277,7 @@ class BoschEBikeDashboardCard extends HTMLElement {
 
       // Reichweite je Fahrmodus als farbige Piles (vor Lade-/Akku-Pille).
       // Farben pro Modus aus der Karten-Konfig (mode_colors) bzw. Bosch-Default.
+      // Schalter ist nur ein Opt-out; Default (Schlüssel fehlt) = anzeigen.
       if (cfg.show_range_pills !== false) {
         const anchor = cfg.battery_entity || cfg.odometer_entity
           || cfg.charging_entity || cfg.range_entity;
@@ -7826,7 +7827,13 @@ class BoschEBikeDashboardCardEditor extends HTMLElement {
   }
 
   _emit() {
-    this.dispatchEvent(new CustomEvent("config-changed", { detail: { config: this._config } }));
+    // Emit a fresh snapshot so HA always stores the current state (a shared
+    // mutable reference could be missed for boolean / removed keys).
+    this.dispatchEvent(new CustomEvent("config-changed", {
+      detail: { config: { ...this._config } },
+      bubbles: true,
+      composed: true,
+    }));
   }
 
   _entities(filter) {
@@ -7884,12 +7891,14 @@ class BoschEBikeDashboardCardEditor extends HTMLElement {
       applySwatch();
 
       sel.addEventListener("change", () => {
-        if (!this._config.mode_colors) this._config.mode_colors = {};
-        if (sel.value) this._config.mode_colors[r.mode] = sel.value;
-        else delete this._config.mode_colors[r.mode];
-        if (this._config.mode_colors && Object.keys(this._config.mode_colors).length === 0) {
-          delete this._config.mode_colors;
-        }
+        // Immutable update (same reasoning as the show_range_pills toggle).
+        const mc = { ...(this._config.mode_colors || {}) };
+        if (sel.value) mc[r.mode] = sel.value;
+        else delete mc[r.mode];
+        const next = { ...this._config };
+        if (Object.keys(mc).length) next.mode_colors = mc;
+        else delete next.mode_colors;
+        this._config = next;
         applySwatch();
         this._emit();
       });
@@ -8101,8 +8110,11 @@ class BoschEBikeDashboardCardEditor extends HTMLElement {
     rangeToggle.type = "checkbox";
     rangeToggle.checked = this._config.show_range_pills !== false;
     rangeToggle.addEventListener("change", () => {
-      if (rangeToggle.checked) delete this._config.show_range_pills;
-      else this._config.show_range_pills = false;
+      // Immutable update: replace _config with a NEW object carrying an
+      // explicit boolean. HA's edit dialog tracks the config by identity /
+      // value; mutating in place was not reliably picked up for this control,
+      // and an explicit boolean (never delete) survives HA's config merge.
+      this._config = { ...this._config, show_range_pills: rangeToggle.checked };
       this._emit();
     });
     rangeToggleWrap.appendChild(rangeToggle);
