@@ -40,12 +40,31 @@ Die Integration unterstützt jetzt **zusätzlich** das ältere **eBike System 2 
 
 **Einrichtung (Unterschied zum Smart System):** Im Bosch Data Act Portal ([portal.bosch-ebike.com/data-act](https://portal.bosch-ebike.com/data-act)) melden sich BES2-Besitzer über **„Bosch eBike Connect user? Log in here"** an (die eBike-Connect-Identität), **nicht** über die SingleKey ID. Danach legst du wie gewohnt eine App / Client-ID an und erteilst die Data-Act-Datenfreigabe – das übrige Vorgehen ist identisch. Beim Hinzufügen der Integration in Home Assistant wählst du im **ersten Schritt (Systemauswahl)** **eBike System 2** und gibst anschließend die Client-ID ein.
 
-**Reduzierter Datenumfang gegenüber dem Smart System.** BES2 liefert weniger Daten:
+**Unterschiede Smart System ↔ eBike System 2 (BES2).** BES2 liefert über die Bosch Data Act API einen kleineren Datenumfang. Welche Funktionen pro System verfügbar sind:
 
-- **Verfügbar:** Fahrten (Distanz, Dauer, Ø-/Max-Geschwindigkeit, Trittfrequenz, Fahrerleistung, Höhenmeter, Kalorien, optional Herzfrequenz über die Aktivitäts-Detaildaten), Gesamtstatistiken sowie der GPS-Track auf der Karte.
-- **Nicht verfügbar:** Tachostand (Odometer), Reichweite je Unterstützungsmodus, nächster Service, Akku-Ladezyklen / Wh über Lebensdauer / State of Health, Diebstahl/Standort sowie die Live-BLE-Bridge.
+| Funktion | Smart System | eBike System 2 (BES2) |
+|----------|:---:|:---:|
+| Fahrten / letzte Fahrt (Distanz, Dauer, Ø-/Max-Geschwindigkeit, Trittfrequenz, Fahrerleistung, Höhenmeter, Kalorien, optional Herzfrequenz) | ✅ | ✅ |
+| GPS-Track auf der Karte + GPX-Export | ✅ | ✅ |
+| Gesamtstatistiken (Distanz, Fahrzeit, Kalorien, Höhenmeter, Ø-Werte) | ✅ | ✅ |
+| Gesamt-Kilometerstand (Tachostand) | ✅ | ✅ ¹ |
+| Gesamt-Höhenmeter | ✅ | ✅ ¹ |
+| Motorstunden (gesamt / mit Unterstützung) | ✅ | ❌ |
+| Max. Unterstützungsgeschwindigkeit | ✅ | ❌ |
+| Aktive Unterstützungsmodi + Reichweite je Modus | ✅ | ❌ |
+| Schiebehilfe-Geschwindigkeit | ✅ | ❌ |
+| Nächster Service (Kilometerstand / Datum) | ✅ | ❌ |
+| Akku: State of Health / Ladezyklen / Wh über Lebensdauer | ✅ | ❌ |
+| Diebstahl-Status + letzter Standort | ✅ | ❌ |
+| Komponenten-Inventar / Software-Update | ✅ | ❌ |
+| Verbrauchs- & Reichweiten-Schätzung | ✅ | ❌ |
+| Live-Daten per BLE-Bridge (ESPHome) | ✅ | ❌ |
 
-Diese Entitäten existieren für BES2-Bikes schlicht nicht.
+¹ Bei BES2 stammen Tachostand und Gesamt-Höhenmeter aus den **Gesamtstatistiken** (kein separater Live-Tachostand).
+
+Nicht verfügbare Funktionen erzeugen für BES2-Bikes **gar keine** Entitäten — sie fehlen einfach, statt „unbekannt" anzuzeigen.
+
+**Ohne die ausdauernden und genauen Beta-Tests von Habanatz** (pedelecforum.de) wäre die Unterstützung für eBike System 2 (BES2) nicht möglich gewesen. Ganz herzlichen Dank dafür!
 
 ### Funktionen
 
@@ -55,8 +74,8 @@ Diese Entitäten existieren für BES2-Bikes schlicht nicht.
 - **Gesamtstatistiken:** Anzahl aller Fahrten, Gesamtdistanz, Gesamtfahrzeit, Gesamtkalorien, Gesamthöhenmeter, Durchschnittswerte für Geschwindigkeit/Leistung/Trittfrequenz über alle Fahrten
 - **GPS-Track-Export:** Export aller Fahrten als GPX-Dateien (mit Speed, Cadence, Power als Garmin TrackPointExtension)
 - **Interaktive Kartendarstellung:** Custom Lovelace Card mit GPS-Tracks, geschwindigkeitsabhängiger Farbcodierung, Date-Picker und Prev/Next-Navigation
-- **3D-Karte mit Chase-Cam, Zeit-Slider und Gebäudeschatten:** Custom Lovelace Card (`bosch-ebike-3d-map-card`) für die Tour-Detailansicht mit 3D-Gebäuden, einer Kamera die dem Bike von hinten folgt, proportionaler Play-Geschwindigkeit (Default 60× Echtzeit) und Cast-Shadows nach Sonnenstand zur Tour-Zeit (MapLibre + OpenFreeMap, kostenlos und ohne API-Key)
-- **Dashboard-Card mit Bike-Bild, Live-Daten und Ladesteuerung:** Custom Lovelace Card (`bosch-ebike-dashboard-card`) mit eigenem Bike-Foto, Tachostand, Akkustand, Lade-Status, optionalem Ladeleistungssensor, Ziel-SoC-Schieberegler sowie Start-/Stop-Buttons über eine smarte Steckdose. Optional zeigt die Karte die **Reichweite je Fahrmodus** als farbige Piles (ECO/TOUR/TURBO/eMTB+ …); die Farbe pro Modus lässt sich im Karten-Editor passend zur Bosch Flow App zuordnen
+- **3D-Karte mit Chase-Cam, Zeit-Slider und Gebäudeschatten:** Custom Lovelace Card (`bosch-ebike-3d-map-card`) für die Tour-Detailansicht mit 3D-Gebäuden, einer Kamera, die dem Bike von hinten folgt, proportionaler Play-Geschwindigkeit (Default 60× Echtzeit) und Cast-Shadows nach Sonnenstand zur Tour-Zeit (MapLibre + OpenFreeMap, kostenlos und ohne API-Key)
+- **Dashboard-Card mit Bike-Bild, Live-Daten und Ladesteuerung:** Custom Lovelace Card (`bosch-ebike-dashboard-card`) mit eigenem Bike-Foto, Tachostand, Akkustand, Lade-Status, optionalem Ladeleistungssensor, Ziel-SoC-Schieberegler sowie Start-/Stop-Buttons über eine smarte Steckdose. Optional zeigt die Karte die **Reichweite je Fahrmodus** als farbige Pills (ECO/TOUR/TURBO/eMTB+ …); die Farbe pro Modus lässt sich im Karten-Editor passend zur Bosch Flow App zuordnen
 - **Automatische Token-Aktualisierung** über Refresh-Token
 - **30-Minuten-Polling-Intervall** (beim ersten Start werden alle Fahrten importiert)
 
@@ -93,6 +112,8 @@ Die Werte ersetzen die bisherige Snapshot-Schätzung in den Sensoren *Last Ride 
 ---
 
 ### Schritt-für-Schritt-Anleitung
+
+> **Zwei Systeme:** Die folgenden Schritte beschreiben die Einrichtung für das **Smart System**. Für **eBike System 2 (BES2)** sind die Schritte fast gleich — die wenigen Unterschiede stehen im Abschnitt **„eBike System 2 (BES2) einrichten"** weiter unten.
 
 #### Voraussetzungen
 
@@ -184,6 +205,17 @@ Die Integration enthält eine interaktive Lovelace-Karte zur Anzeige deiner GPS-
 > **Hinweis:** Wenn die Karte nach einem Update nicht korrekt angezeigt wird, leere den Browser-Cache mit `Ctrl+Shift+R` (Hard Reload).
 
 > **HACS-Update für die Karten:** Alle vier Lovelace-Karten (Map, Heatmap, Calendar, Dashboard) liegen in einer einzigen JS-Datei (`bosch-ebike-map-card.js`) und werden automatisch mit der Integration aktualisiert. Nach einem Versions-Update von HACS ein Hard Reload des Browser-Caches durchführen, sonst kann der Card-Picker eine neue Karte noch nicht anzeigen.
+
+#### eBike System 2 (BES2) einrichten
+
+Für **eBike System 2** ist die Einrichtung nahezu identisch zur obigen Smart-System-Anleitung. Es gibt genau **zwei Unterschiede**:
+
+1. **Anmeldung im Data Act Portal (Schritt 1):** BES2-Besitzer melden sich unter [portal.bosch-ebike.com/data-act/app](https://portal.bosch-ebike.com/data-act/app) über **„Bosch eBike Connect user? Log in here"** an (die **eBike-Connect-Identität**), **nicht** über die SingleKey ID. App-Name, Redirect URI, Login URL und „Confidential client" werden **genauso** ausgefüllt wie beim Smart System (Schritt 1).
+2. **Systemauswahl in Home Assistant (Schritt 4):** Sobald sich der Einrichtungs-Flow öffnet, wähle im **ersten Schritt** **eBike System 2** und gib anschließend die Client-ID ein. Der Rest (Autorisieren, Datenfreigabe pro Bike in Schritt 5, optionale Karte in Schritt 6) ist identisch.
+
+> **Voraussetzung für BES2:** ein **eBike-Connect-Konto** ([ebike-connect.com](https://www.ebike-connect.com)) statt der SingleKey ID. Die Data-Act-Verfügbarkeit ist weiterhin auf **EU-Konten** beschränkt.
+
+Welche Daten BES2 liefert (und welche nicht), zeigt die Vergleichstabelle im Abschnitt **eBike System 2 (BES2)** weiter oben.
 
 #### HACS-Installation (Alternative)
 
@@ -609,12 +641,31 @@ The integration now **also** supports the older **eBike System 2 (BES2)** in add
 
 **Setup (difference vs. Smart System):** at the Bosch Data Act portal ([portal.bosch-ebike.com/data-act](https://portal.bosch-ebike.com/data-act)), BES2 owners log in via **"Bosch eBike Connect user? Log in here"** (the eBike Connect identity), **not** SingleKey ID. Then create an App / Client ID and grant the Data Act consent as usual – the rest of the procedure is identical. In Home Assistant, when adding the integration, choose **eBike System 2** in the **first step (system selection)**, then enter the Client ID.
 
-**Reduced data set vs. Smart System.** BES2 provides fewer data points:
+**Differences Smart System ↔ eBike System 2 (BES2).** BES2 provides a smaller data set via the Bosch Data Act API. Which features are available per system:
 
-- **Available:** rides (distance, duration, avg/max speed, cadence, rider power, elevation, calories, optional heart rate via the activity detail), totals, and the GPS track on the map.
-- **Not available:** odometer, range per assist mode, next service, battery charge cycles / Wh-over-lifetime / State of Health, theft/location, and the live BLE bridge.
+| Feature | Smart System | eBike System 2 (BES2) |
+|---------|:---:|:---:|
+| Rides / last ride (distance, duration, avg/max speed, cadence, rider power, elevation, calories, optional heart rate) | ✅ | ✅ |
+| GPS track on the map + GPX export | ✅ | ✅ |
+| Aggregate statistics (distance, ride time, calories, elevation, averages) | ✅ | ✅ |
+| Total odometer | ✅ | ✅ ¹ |
+| Total elevation gain | ✅ | ✅ ¹ |
+| Motor hours (total / with assist) | ✅ | ❌ |
+| Max assist speed | ✅ | ❌ |
+| Active assist modes + range per mode | ✅ | ❌ |
+| Walk assist speed | ✅ | ❌ |
+| Next service (odometer / date) | ✅ | ❌ |
+| Battery: State of Health / charge cycles / Wh over lifetime | ✅ | ❌ |
+| Theft status + last known location | ✅ | ❌ |
+| Component inventory / software update | ✅ | ❌ |
+| Consumption & range estimation | ✅ | ❌ |
+| Live data via BLE bridge (ESPHome) | ✅ | ❌ |
 
-Those entities simply do not exist for BES2 bikes.
+¹ For BES2, odometer and total elevation gain come from the **aggregate statistics** (there is no separate live odometer).
+
+Features that are not available create **no** entities at all for BES2 bikes — they are simply absent instead of showing "unknown".
+
+**Without the persistent and meticulous beta testing by Habanatz** (pedelecforum.de), eBike System 2 (BES2) support would not have been possible. Many thanks!
 
 ### Features
 
@@ -662,6 +713,8 @@ These replace the snapshot-based estimates in *Last Ride Distance*, *Battery Con
 ---
 
 ### Step-by-Step Setup Guide
+
+> **Two systems:** the following steps describe the setup for the **Smart System**. For **eBike System 2 (BES2)** the steps are almost the same — the few differences are listed in the **"Setting up eBike System 2 (BES2)"** section further down.
 
 #### Prerequisites
 
@@ -753,6 +806,17 @@ The integration includes an interactive Lovelace card for displaying your GPS tr
 > **Note:** If the card doesn't display correctly after an update, clear your browser cache with `Ctrl+Shift+R` (hard reload).
 
 > **HACS update for the cards:** All four Lovelace cards (Map, Heatmap, Calendar, Dashboard) ship inside a single JS file (`bosch-ebike-map-card.js`) and update automatically with the integration. After a HACS version bump, hard-reload the browser cache, otherwise a newly added card may not show up in the card picker yet.
+
+#### Setting up eBike System 2 (BES2)
+
+For **eBike System 2** the setup is nearly identical to the Smart System guide above. There are exactly **two differences**:
+
+1. **Sign-in at the Data Act portal (Step 1):** BES2 owners sign in at [portal.bosch-ebike.com/data-act/app](https://portal.bosch-ebike.com/data-act/app) via **"Bosch eBike Connect user? Log in here"** (the **eBike Connect identity**), **not** SingleKey ID. App name, Redirect URI, Login URL and "Confidential client" are filled in **exactly** as for the Smart System (Step 1).
+2. **System selection in Home Assistant (Step 4):** when the setup flow opens, choose **eBike System 2** in the **first step**, then enter the Client-ID. The rest (Authorize, per-bike data sharing in Step 5, optional map in Step 6) is identical.
+
+> **BES2 prerequisite:** an **eBike Connect account** ([ebike-connect.com](https://www.ebike-connect.com)) instead of SingleKey ID. Data Act availability is still limited to **EU accounts**.
+
+Which data BES2 delivers (and which it does not) is shown in the comparison table in the **eBike System 2 (BES2)** section above.
 
 #### HACS Installation (Alternative)
 
@@ -1161,5 +1225,7 @@ MIT License - see [LICENSE](LICENSE) for details.
 ### Credits
 
 Built by [Volker Hauffe](https://github.com/Xunil99).
+
+**The eBike System 2 (BES2) support would not have been possible without the extensive beta testing by Habanatz** (pedelecforum.de). Thank you!
 
 This integration uses the official [Bosch eBike Data Act API](https://portal.bosch-ebike.com/data-act).
