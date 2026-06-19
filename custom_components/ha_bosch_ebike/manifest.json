@@ -1,6 +1,6 @@
 {
   "domain": "ha_bosch_ebike",
-  "name": "Bosch eBike (Smart System)",
+  "name": "Bosch eBike (Smart System & eBike System 2)",
   "after_dependencies": ["lovelace", "recorder"],
   "codeowners": ["@Xunil99"],
   "config_flow": true,
@@ -9,5 +9,5 @@
   "iot_class": "cloud_polling",
   "issue_tracker": "https://github.com/Xunil99/ha-bosch-ebike/issues",
   "requirements": [],
-  "version": "1.19.7"
+  "version": "1.19.7b1"
 }
