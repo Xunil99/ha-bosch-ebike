@@ -69,16 +69,21 @@ def test_assist_mode_display_name_mapping_and_fallback():
 
 
 def test_assist_mode_display_name_gseries_and_heuristics():
-    # G-series codes reported in issue #37 (suffixes differ from M-series).
+    # Full G-series set (issue #37 + PR #38); suffixes differ from M-series.
     assert assist_mode_display_name("A100G0AUTO") == "AUTO"
     assert assist_mode_display_name("A100GAAAA0") == "TURBO"
+    assert assist_mode_display_name("A100GAAAB0") == "eMTB"
+    assert assist_mode_display_name("A100GAAAC0") == "TOUR"
     assert assist_mode_display_name("A100GAAAD0") == "ECO"
+    assert assist_mode_display_name("A100GAAAE0") == "SPORT"
+    assert assist_mode_display_name("A100GAAAF0") == "TOUR+"
+    assert assist_mode_display_name("A100ECOP38") == "ECO+"
     assert assist_mode_display_name("A100MSPIC8") == "eMTB+"
     # Safe substring heuristics for unmapped codes that carry their own name.
     assert assist_mode_display_name("A100X0AUTO") == "AUTO"
     assert assist_mode_display_name("A100ECOP99") == "ECO+"
     # An unmapped code without a name substring stays raw (no false labelling).
-    assert assist_mode_display_name("A100GAAAB0") == "A100GAAAB0"
+    assert assist_mode_display_name("A100GZZZZ9") == "A100GZZZZ9"
 
 
 def test_reachable_ranges_unknown_code_kept_raw():
