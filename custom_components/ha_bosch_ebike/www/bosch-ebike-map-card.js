@@ -6746,13 +6746,33 @@ function boschModeLabel(eid, attrs) {
 // device, but if nothing matches that device (e.g. the range sensors live on a
 // separate "drive unit" device) we fall back to all matches instead of showing
 // none. Sorted by entity_id so the order matches the integration sensor order.
-function boschReachableRanges(hass, anchorEntityId) {
+function boschReachableRanges(hass, anchorEntityId, bikeId) {
   if (!hass || !hass.states) return [];
   const reg = hass.entities || null;
-  let anchorDevice = null;
-  if (anchorEntityId && reg && reg[anchorEntityId]) {
-    anchorDevice = reg[anchorEntityId].device_id || null;
+
+  // Resolve the device whose pills we want. A configured bike_id is
+  // authoritative (issue #39: a card pinned to one bike must NOT show other
+  // bikes' ranges): find the integration device with identifier
+  // (ha_bosch_ebike, bike_id) and filter STRICTLY to it. The anchor entity
+  // (odometer/battery) is only a fallback for the auto-discover case (no
+  // bike_id resolvable), where range sensors may sit on a separate device.
+  let targetDevice = null;
+  let strict = false;
+  if (bikeId && hass.devices) {
+    for (const [devId, dev] of Object.entries(hass.devices)) {
+      const ids = (dev && dev.identifiers) || [];
+      if (ids.some((t) => Array.isArray(t)
+          && t[0] === "ha_bosch_ebike" && t[1] === bikeId)) {
+        targetDevice = devId;
+        strict = true;
+        break;
+      }
+    }
   }
+  if (!targetDevice && anchorEntityId && reg && reg[anchorEntityId]) {
+    targetDevice = reg[anchorEntityId].device_id || null;
+  }
+
   const all = [];
   for (const [eid, st] of Object.entries(hass.states)) {
     if (!/reachable_range/.test(eid)) continue;
@@ -6770,9 +6790,12 @@ function boschReachableRanges(hass, anchorEntityId) {
   }
   all.sort((x, y) => x.entity_id.localeCompare(y.entity_id));
   let chosen = all;
-  if (anchorDevice) {
-    const same = all.filter((r) => r.device_id === anchorDevice);
-    if (same.length) chosen = same;
+  if (targetDevice) {
+    const same = all.filter((r) => r.device_id === targetDevice);
+    // strict (bike_id pinned): only that bike, even if that means none.
+    // non-strict (anchor only): prefer the anchor's device, but fall back to
+    // all when nothing matches (range sensors on a separate drive-unit device).
+    if (same.length || strict) chosen = same;
   }
   return chosen.map(({ device_id, ...r }) => r);
 }
@@ -7279,9 +7302,13 @@ class BoschEBikeDashboardCard extends HTMLElement {
       // Farben pro Modus aus der Karten-Konfig (mode_colors) bzw. Bosch-Default.
       // Schalter ist nur ein Opt-out; Default (Schlüssel fehlt) = anzeigen.
       if (cfg.show_range_pills !== false) {
-        const anchor = cfg.battery_entity || cfg.odometer_entity
-          || cfg.charging_entity || cfg.range_entity;
-        for (const r of boschReachableRanges(this._hass, anchor)) {
+        // Prefer anchors that live on the integration's bike device
+        // (odometer/range) over the battery/charging entities, which are often
+        // BLE-bridge sensors on a different device. bike_id (when set) is the
+        // authoritative filter inside boschReachableRanges (issue #39).
+        const anchor = cfg.odometer_entity || cfg.range_entity
+          || cfg.battery_entity || cfg.charging_entity;
+        for (const r of boschReachableRanges(this._hass, anchor, cfg.bike_id)) {
           if (r.km == null) continue;
           const hex = boschModeColorHex(r.mode, cfg.mode_colors);
           const rp = document.createElement("span");
@@ -7787,9 +7814,10 @@ class BoschEBikeDashboardCardEditor extends HTMLElement {
     // actually changes (e.g. the range sensors load after the editor opened).
     // Guarded so an open dropdown is not reset on every hass tick.
     if (this._modeColorsWrap) {
-      const anchor = this._config.battery_entity || this._config.odometer_entity
-        || this._config.charging_entity || this._config.range_entity;
-      const key = boschReachableRanges(hass, anchor).map((r) => r.mode).join("|");
+      const anchor = this._config.odometer_entity || this._config.range_entity
+        || this._config.battery_entity || this._config.charging_entity;
+      const key = boschReachableRanges(hass, anchor, this._config.bike_id)
+        .map((r) => r.mode).join("|");
       if (key !== this._modeColorsKey) {
         this._modeColorsKey = key;
         this._renderModeColorRows();
@@ -7846,9 +7874,9 @@ class BoschEBikeDashboardCardEditor extends HTMLElement {
     const cont = this._modeColorsWrap;
     if (!cont) return;
     cont.innerHTML = "";
-    const anchor = this._config.battery_entity || this._config.odometer_entity
-      || this._config.charging_entity || this._config.range_entity;
-    const modes = boschReachableRanges(this._hass, anchor);
+    const anchor = this._config.odometer_entity || this._config.range_entity
+      || this._config.battery_entity || this._config.charging_entity;
+    const modes = boschReachableRanges(this._hass, anchor, this._config.bike_id);
     if (!modes.length) {
       const none = document.createElement("small");
       none.textContent = this._t("dash_editor_modes_none");
