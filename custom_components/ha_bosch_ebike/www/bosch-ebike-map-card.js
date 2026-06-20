@@ -6695,6 +6695,16 @@ const BOSCH_MODE_DEFAULT_COLOR = {
   ECO: "yellow",
   "ECO+": "yellow",
 };
+// Default display order of the range pills, by assist level — matches the order
+// shown on the bike (ECO, TOUR, eMTB/SPORT, TURBO). Used when the user has not
+// defined an explicit order via `mode_order`. Unknown modes sort last.
+const BOSCH_MODE_DEFAULT_ORDER = {
+  ECO: 1, "ECO+": 2,
+  TOUR: 3, "TOUR+": 4,
+  SPORT: 5, eMTB: 6, "eMTB+": 7, "eMTB-shortcrank": 8,
+  TURBO: 9,
+  AUTO: 10,
+};
 
 // Black/white text for a given background hex via the YIQ contrast rule.
 function boschContrastColor(hex) {
@@ -6746,7 +6756,7 @@ function boschModeLabel(eid, attrs) {
 // device, but if nothing matches that device (e.g. the range sensors live on a
 // separate "drive unit" device) we fall back to all matches instead of showing
 // none. Sorted by entity_id so the order matches the integration sensor order.
-function boschReachableRanges(hass, anchorEntityId, bikeId) {
+function boschReachableRanges(hass, anchorEntityId, bikeId, modeOrder) {
   if (!hass || !hass.states) return [];
   const reg = hass.entities || null;
 
@@ -6788,7 +6798,28 @@ function boschReachableRanges(hass, anchorEntityId, bikeId) {
       device_id: dev,
     });
   }
-  all.sort((x, y) => x.entity_id.localeCompare(y.entity_id));
+  // Order: explicit user order (mode_order) first and in that order, then the
+  // default order by assist level (ECO, TOUR, eMTB/SPORT, TURBO — like on the
+  // bike), then entity_id as a stable tiebreaker.
+  const userIdx = (m) => {
+    if (Array.isArray(modeOrder)) {
+      const i = modeOrder.indexOf(m);
+      if (i >= 0) return i;
+    }
+    return -1;
+  };
+  all.sort((x, y) => {
+    const ux = userIdx(x.mode), uy = userIdx(y.mode);
+    if (ux !== uy) {
+      if (ux === -1) return 1;
+      if (uy === -1) return -1;
+      return ux - uy;
+    }
+    const rx = BOSCH_MODE_DEFAULT_ORDER[x.mode] ?? 99;
+    const ry = BOSCH_MODE_DEFAULT_ORDER[y.mode] ?? 99;
+    if (rx !== ry) return rx - ry;
+    return x.entity_id.localeCompare(y.entity_id);
+  });
   let chosen = all;
   if (targetDevice) {
     const same = all.filter((r) => r.device_id === targetDevice);
@@ -7308,7 +7339,7 @@ class BoschEBikeDashboardCard extends HTMLElement {
         // authoritative filter inside boschReachableRanges (issue #39).
         const anchor = cfg.odometer_entity || cfg.range_entity
           || cfg.battery_entity || cfg.charging_entity;
-        for (const r of boschReachableRanges(this._hass, anchor, cfg.bike_id)) {
+        for (const r of boschReachableRanges(this._hass, anchor, cfg.bike_id, cfg.mode_order)) {
           if (r.km == null) continue;
           const hex = boschModeColorHex(r.mode, cfg.mode_colors);
           const rp = document.createElement("span");
@@ -7816,7 +7847,7 @@ class BoschEBikeDashboardCardEditor extends HTMLElement {
     if (this._modeColorsWrap) {
       const anchor = this._config.odometer_entity || this._config.range_entity
         || this._config.battery_entity || this._config.charging_entity;
-      const key = boschReachableRanges(hass, anchor, this._config.bike_id)
+      const key = boschReachableRanges(hass, anchor, this._config.bike_id, this._config.mode_order)
         .map((r) => r.mode).join("|");
       if (key !== this._modeColorsKey) {
         this._modeColorsKey = key;
@@ -7876,7 +7907,7 @@ class BoschEBikeDashboardCardEditor extends HTMLElement {
     cont.innerHTML = "";
     const anchor = this._config.odometer_entity || this._config.range_entity
       || this._config.battery_entity || this._config.charging_entity;
-    const modes = boschReachableRanges(this._hass, anchor, this._config.bike_id);
+    const modes = boschReachableRanges(this._hass, anchor, this._config.bike_id, this._config.mode_order);
     if (!modes.length) {
       const none = document.createElement("small");
       none.textContent = this._t("dash_editor_modes_none");
@@ -7884,18 +7915,53 @@ class BoschEBikeDashboardCardEditor extends HTMLElement {
       cont.appendChild(none);
       return;
     }
-    const seen = new Set();
-    for (const r of modes) {
-      if (seen.has(r.mode)) continue;
-      seen.add(r.mode);
+
+    // Eindeutige Modus-Namen in aktueller Anzeige-Reihenfolge. Treibt sowohl die
+    // Zeilen als auch die per Auf/Ab persistierte Reihenfolge (mode_order).
+    const ordered = [];
+    for (const r of modes) if (!ordered.includes(r.mode)) ordered.push(r.mode);
+
+    // Reihenfolge speichern (immutable Update wie beim Farb-Select) + neu rendern.
+    const saveOrder = (next) => {
+      this._config = { ...this._config, mode_order: next };
+      this._emit();
+      this._renderModeColorRows();
+    };
+
+    ordered.forEach((mode, i) => {
       const row = document.createElement("div");
       row.style.cssText = "display:flex;align-items:center;gap:10px;";
+
+      // Auf/Ab-Pfeile zum Umsortieren (funktioniert auch auf Touch).
+      const arrows = document.createElement("div");
+      arrows.style.cssText = "display:flex;flex-direction:column;line-height:1;flex:0 0 auto;";
+      const mkArrow = (sym, disabled, onClick) => {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.textContent = sym;
+        b.disabled = disabled;
+        b.style.cssText = "border:none;background:none;padding:0 3px;font-size:12px;"
+          + "cursor:" + (disabled ? "default" : "pointer") + ";"
+          + "color:" + (disabled ? "var(--disabled-text-color)" : "var(--primary-text-color)") + ";";
+        if (!disabled) b.addEventListener("click", onClick);
+        return b;
+      };
+      arrows.appendChild(mkArrow("▲", i === 0, () => {
+        const next = ordered.slice();
+        [next[i - 1], next[i]] = [next[i], next[i - 1]];
+        saveOrder(next);
+      }));
+      arrows.appendChild(mkArrow("▼", i === ordered.length - 1, () => {
+        const next = ordered.slice();
+        [next[i + 1], next[i]] = [next[i], next[i + 1]];
+        saveOrder(next);
+      }));
 
       const swatch = document.createElement("span");
       swatch.style.cssText = "width:16px;height:16px;border-radius:4px;flex:0 0 auto;border:1px solid var(--divider-color);";
 
       const name = document.createElement("span");
-      name.textContent = r.mode;
+      name.textContent = mode;
       name.style.cssText = "flex:1;font-size:13px;font-weight:600;";
 
       const sel = document.createElement("select");
@@ -7910,10 +7976,10 @@ class BoschEBikeDashboardCardEditor extends HTMLElement {
         o.textContent = this._t("color_" + key);
         sel.appendChild(o);
       }
-      sel.value = (this._config.mode_colors && this._config.mode_colors[r.mode]) || "";
+      sel.value = (this._config.mode_colors && this._config.mode_colors[mode]) || "";
 
       const applySwatch = () => {
-        const hex = boschModeColorHex(r.mode, sel.value ? { [r.mode]: sel.value } : {});
+        const hex = boschModeColorHex(mode, sel.value ? { [mode]: sel.value } : {});
         swatch.style.background = hex || "var(--secondary-background-color)";
       };
       applySwatch();
@@ -7921,8 +7987,8 @@ class BoschEBikeDashboardCardEditor extends HTMLElement {
       sel.addEventListener("change", () => {
         // Immutable update (same reasoning as the show_range_pills toggle).
         const mc = { ...(this._config.mode_colors || {}) };
-        if (sel.value) mc[r.mode] = sel.value;
-        else delete mc[r.mode];
+        if (sel.value) mc[mode] = sel.value;
+        else delete mc[mode];
         const next = { ...this._config };
         if (Object.keys(mc).length) next.mode_colors = mc;
         else delete next.mode_colors;
@@ -7931,11 +7997,12 @@ class BoschEBikeDashboardCardEditor extends HTMLElement {
         this._emit();
       });
 
+      row.appendChild(arrows);
       row.appendChild(swatch);
       row.appendChild(name);
       row.appendChild(sel);
       cont.appendChild(row);
-    }
+    });
   }
 
   _build() {
