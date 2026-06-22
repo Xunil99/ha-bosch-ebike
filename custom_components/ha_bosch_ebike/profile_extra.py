@@ -45,6 +45,12 @@ ASSIST_MODE_NAMES: dict[str, str] = {
     "A100GAAAF0": "TOUR+",
     "A100GAAAB0": "eMTB",
     "A100GAAAE0": "SPORT",
+    # E-series Performance Line SX (reported by @surger13, issue #37). "SPRINT"
+    # expanded from the tester's "SPRNT" abbreviation (code ...SPNT...).
+    "A100E10040": "ECO",
+    "A100E1AAA0": "TOUR+",
+    "A100ESPNT0": "SPRINT",
+    "A100E10010": "TURBO",
 }
 
 

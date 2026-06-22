@@ -86,6 +86,14 @@ def test_assist_mode_display_name_gseries_and_heuristics():
     assert assist_mode_display_name("A100GZZZZ9") == "A100GZZZZ9"
 
 
+def test_assist_mode_display_name_sx_eseries():
+    # Performance Line SX (E-series), reported by @surger13 in issue #37.
+    assert assist_mode_display_name("A100E10040") == "ECO"
+    assert assist_mode_display_name("A100E1AAA0") == "TOUR+"
+    assert assist_mode_display_name("A100ESPNT0") == "SPRINT"
+    assert assist_mode_display_name("A100E10010") == "TURBO"
+
+
 def test_reachable_ranges_unknown_code_kept_raw():
     assert reachable_ranges({"driveUnit": {"activeAssistModes": [
         {"name": "A100M99999", "reachableRange": 42}]}}) == [
