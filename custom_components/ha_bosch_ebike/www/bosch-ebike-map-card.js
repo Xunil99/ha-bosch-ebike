@@ -175,6 +175,7 @@ const I18N = {
     color_blue: "Blue",
     color_purple: "Purple",
     color_magenta: "Magenta",
+    color_grey: "Grey",
     dash_editor_range: "Estimated range entity (optional)",
     dash_editor_range_hint: "Sensor \"Estimated range (current)\" of the integration. If empty, the card auto-detects it; the tile is hidden when no value is available.",
     dash_label_target_soc: "Stop charging at",
@@ -501,6 +502,7 @@ const I18N = {
     color_blue: "Blau",
     color_purple: "Violett",
     color_magenta: "Magenta",
+    color_grey: "Grau",
     dash_editor_range: "Reichweiten-Sensor (optional)",
     dash_editor_range_hint: "Sensor \"Geschätzte Reichweite (aktuell)\" der Integration. Leer = automatische Erkennung; ohne Wert wird die Kachel ausgeblendet.",
     dash_label_target_soc: "Laden stoppen bei",
@@ -826,6 +828,7 @@ const I18N = {
     color_blue: "Blauw",
     color_purple: "Paars",
     color_magenta: "Magenta",
+    color_grey: "Grijs",
     dash_editor_range: "Actieradius-sensor (optioneel)",
     dash_editor_range_hint: "Sensor \"Geschatte actieradius (actueel)\" van de integratie. Leeg = automatische detectie; zonder waarde wordt de tegel verborgen.",
     dash_label_target_soc: "Laden stoppen bij",
@@ -1163,6 +1166,7 @@ const I18N = {
     color_blue: "Bleu",
     color_purple: "Violet",
     color_magenta: "Magenta",
+    color_grey: "Gris",
     dash_editor_range: "Entité d'autonomie estimée (optionnelle)",
     dash_editor_range_hint: "Capteur \"Autonomie estimée (actuelle)\" de l'intégration. Vide = détection automatique ; sans valeur, la tuile est masquée.",
     dash_label_target_soc: "Arrêter la charge à",
@@ -1500,6 +1504,7 @@ const I18N = {
     color_blue: "Blu",
     color_purple: "Viola",
     color_magenta: "Magenta",
+    color_grey: "Grigio",
     dash_editor_range: "Entità autonomia stimata (opzionale)",
     dash_editor_range_hint: "Sensore \"Autonomia stimata (attuale)\" dell'integrazione. Vuoto = rilevamento automatico; senza valore la tessera viene nascosta.",
     dash_label_target_soc: "Interrompi ricarica a",
@@ -1837,6 +1842,7 @@ const I18N = {
     color_blue: "Azul",
     color_purple: "Morado",
     color_magenta: "Magenta",
+    color_grey: "Gris",
     dash_editor_range: "Entidad de autonomía estimada (opcional)",
     dash_editor_range_hint: "Sensor \"Autonomía estimada (actual)\" de la integración. Vacío = detección automática; sin valor, la ficha se oculta.",
     dash_label_target_soc: "Detener carga al",
@@ -6677,14 +6683,16 @@ const BOSCH_MODE_COLORS = {
   blue: "#1E9FE0",
   purple: "#8A4FD3",
   magenta: "#E5006D",
+  grey: "#8C9196",
 };
 const BOSCH_MODE_COLOR_ORDER = [
-  "red", "orange", "yellow", "green", "turquoise", "blue", "purple", "magenta",
+  "red", "orange", "yellow", "green", "turquoise", "blue", "purple", "magenta", "grey",
 ];
 // Default mode-name -> colour key, matching the Flow app look out of the box.
 // Keyed by the display name the integration emits (see profile_extra).
 const BOSCH_MODE_DEFAULT_COLOR = {
   TURBO: "red",
+  SPRINT: "grey",
   SPORT: "orange",
   "eMTB+": "purple",
   eMTB: "purple",
@@ -6702,8 +6710,9 @@ const BOSCH_MODE_DEFAULT_ORDER = {
   ECO: 1, "ECO+": 2,
   TOUR: 3, "TOUR+": 4,
   SPORT: 5, eMTB: 6, "eMTB+": 7, "eMTB-shortcrank": 8,
-  TURBO: 9,
-  AUTO: 10,
+  SPRINT: 9,
+  TURBO: 10,
+  AUTO: 11,
 };
 
 // Black/white text for a given background hex via the YIQ contrast rule.
