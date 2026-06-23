@@ -1,0 +1,378 @@
+# Factory firmware configuration for the pre-built Bosch eBike LDI *dual* bridge.
+#
+# This is the two-bike variant of factory.yaml: one ESP32 bridges TWO Bosch
+# eBikes at once (two simultaneous BLE links). It uses the
+# `bosch_ebike_ldi_dual` external component instead of `bosch_ebike_ldi`.
+#
+# Like the single-bike factory build, this YAML produces a binary distributed
+# via ESP Web Tools. End users do NOT need to run ESPHome themselves. After
+# flashing, the device boots into Improv-Serial WiFi setup so the same browser
+# flow can hand over the network credentials.
+#
+# DIY users who want to tweak entity names, build flags, or add automations
+# should adapt example-bridge.yaml (single) or this file (dual) instead.
+
+esphome:
+  name: ha-ebike-dual-bridge
+  friendly_name: HA eBike Dual Bridge
+  min_version: 2025.11.0
+  name_add_mac_suffix: true
+  project:
+    name: "xunil99.bosch_ebike_ldi_dual"
+    version: "1.0.0"
+
+esp32:
+  variant: esp32
+  # board: esp32dev pins PlatformIO to the standard ESP32-DevKitC defaults
+  # (40 MHz crystal, DIO flash, standard partition table). Without this,
+  # some ESPHome + ESP-IDF combinations fall back to defaults that cause
+  # subtle WiFi RF instability after a successful flash (symptom: device
+  # boots but the ESPHome API in HA reports "connection issues").
+  board: esp32dev
+  framework:
+    type: esp-idf
+    sdkconfig_options:
+      CONFIG_BT_ENABLED: y
+      CONFIG_BT_NIMBLE_ENABLED: y
+      CONFIG_BT_BLUEDROID_ENABLED: n
+      CONFIG_BT_CONTROLLER_ENABLED: y
+      CONFIG_BTDM_CTRL_MODE_BLE_ONLY: y
+      CONFIG_BTDM_CTRL_MODE_BR_EDR_ONLY: n
+      CONFIG_BTDM_CTRL_MODE_BTDM: n
+      # Two simultaneous BLE connections: one per bridged eBike. This is the
+      # key delta vs the single-bike factory.yaml (which uses "1").
+      CONFIG_BT_NIMBLE_MAX_CONNECTIONS: "2"
+      CONFIG_BT_NIMBLE_ROLE_PERIPHERAL: y
+      CONFIG_BT_NIMBLE_ROLE_BROADCASTER: y
+      CONFIG_BT_NIMBLE_ROLE_CENTRAL: y
+      CONFIG_BT_NIMBLE_ROLE_OBSERVER: y
+      CONFIG_BT_NIMBLE_SM_LEGACY: n
+      CONFIG_BT_NIMBLE_SM_SC: y
+      CONFIG_BT_NIMBLE_NVS_PERSIST: y
+      CONFIG_BT_NIMBLE_ATT_PREFERRED_MTU: "247"
+
+logger:
+  # Component-level log levels must not be more verbose than the global
+  # level. We want DEBUG output from the bridge component so users can
+  # debug pairing or BLE link issues, hence the global level is DEBUG too.
+  level: DEBUG
+  logs:
+    bosch_ebike_ldi_dual: DEBUG
+
+# No baked-in WiFi credentials. The end user supplies them via:
+#   1. Improv-Serial (same browser session that flashed the firmware), or
+#   2. The AP fallback (eBike Dual Bridge Setup) plus captive portal.
+wifi:
+  ap:
+    ssid: "eBike Dual Bridge Setup"
+
+captive_portal:
+
+improv_serial:
+
+api:
+
+# Optional: MQTT zusätzlich zur Native-API.
+#
+# Bestehende Setups müssen NICHTS ändern - dieser Block ist auskommentiert
+# und rein opt-in. Die Native-API (oben) bleibt der Standard.
+#
+# Wann MQTT sinnvoll ist: beim mobilen Einsatz (ESP roamt zwischen Heim-WLAN
+# und Handy-Hotspot, z.B. an einer Powerbank in der Fahrradtasche). Bei der
+# Native-API baut Home Assistant die Verbindung zum ESP auf und muss dessen
+# IP kennen - die wechselt aber unterwegs (Hotspot-DHCP / WireGuard-Tunnel-IP),
+# wodurch HA das Gerät nicht mehr erreicht. Bei MQTT PUSHT der ESP seine Daten
+# aktiv an den Broker, daher ist die wechselnde IP egal.
+#
+# Voraussetzung: MQTT-Broker in HA (z.B. das Mosquitto-Add-on).
+#
+# Hinweis: Wenn api: aktiv bleibt UND mqtt: an ist, kann das Gerät in HA
+# doppelt auftauchen (einmal über die ESPHome-Integration, einmal über
+# MQTT-Discovery). Für reinen Roaming-Betrieb daher ggf. das api:-Schlüsselwort
+# oben auskommentieren.
+#
+# MQTT-spezifischer Hinweis fuer den Dual-Betrieb: Da jede Entity einen
+# eindeutigen "eBike 1 ..." / "eBike 2 ..." Namen traegt, bleiben die beiden
+# Bikes auch ueber MQTT sauber getrennt - es gibt keine Namenskollision.
+#
+# mqtt:
+#   broker: 192.168.2.10           # IP des HA-/Mosquitto-Brokers
+#   username: !secret mqtt_user
+#   password: !secret mqtt_password
+#   # discovery: true ist Default - Entities erscheinen automatisch in HA
+
+ota:
+  - platform: esphome
+
+# Lokale Quelle: baut die Dual-Komponente aus dem ausgecheckten Repo-Workspace
+# (statt github@main). So findet die Firmware-CI sie unabhaengig vom Ref
+# (Branch-Compile-Test wie Produktion nach Merge), ohne Ref-Umschalten.
+external_components:
+  - source:
+      type: local
+      path: components
+    components: [bosch_ebike_ldi_dual]
+
+bosch_ebike_ldi_dual:
+  id: ebike_dual_bridge
+  device_name: "HA eBike Dual Bridge"
+
+# Charge-time estimate (per bike): while charging, measure the charging rate
+# (%/min) from the rising SoC and extrapolate the remaining time to 80 % and to
+# 100 %. Because the two bikes charge independently, each bike has its own set of
+# rate-tracking globals (suffix _1 / _2) feeding its own template sensors below.
+globals:
+  # --- eBike 1 ---
+  - id: chg_rate_1        # smoothed charging rate in %/min, -1 = unknown
+    type: float
+    restore_value: no
+    initial_value: '-1'
+  - id: chg_last_soc_1    # last SoC reference point
+    type: float
+    restore_value: no
+    initial_value: '-1'
+  - id: chg_last_ms_1     # timestamp (millis) of the last SoC reference point
+    type: uint32_t
+    restore_value: no
+    initial_value: '0'
+  # --- eBike 2 ---
+  - id: chg_rate_2
+    type: float
+    restore_value: no
+    initial_value: '-1'
+  - id: chg_last_soc_2
+    type: float
+    restore_value: no
+    initial_value: '-1'
+  - id: chg_last_ms_2
+    type: uint32_t
+    restore_value: no
+    initial_value: '0'
+
+sensor:
+  # ===== eBike 1 (bike: 1) =====
+  - platform: bosch_ebike_ldi_dual
+    bosch_ebike_ldi_dual_id: ebike_dual_bridge
+    bike: 1
+    speed:
+      name: "eBike 1 Speed"
+    cadence:
+      name: "eBike 1 Cadence"
+    rider_power:
+      name: "eBike 1 Rider Power"
+    ambient_brightness:
+      name: "eBike 1 Ambient Brightness"
+    battery_soc:
+      name: "eBike 1 Battery SoC (Live)"
+      id: batt_soc_1
+      on_value:
+        - lambda: |-
+            if (!id(charger_conn_1).state || std::isnan(x)) return;
+            if (id(chg_last_soc_1) < 0) {
+              id(chg_last_soc_1) = x; id(chg_last_ms_1) = millis(); return;
+            }
+            float dsoc = x - id(chg_last_soc_1);
+            if (dsoc >= 1.0f) {
+              float dmin = (millis() - id(chg_last_ms_1)) / 60000.0f;
+              if (dmin > 0.01f) {
+                float r = dsoc / dmin;
+                if (r > 0)
+                  id(chg_rate_1) = (id(chg_rate_1) < 0) ? r
+                                                        : (0.3f * r + 0.7f * id(chg_rate_1));
+              }
+              id(chg_last_soc_1) = x;
+              id(chg_last_ms_1) = millis();
+            }
+    odometer:
+      name: "eBike 1 Odometer (Live)"
+
+  # ===== eBike 2 (bike: 2) =====
+  - platform: bosch_ebike_ldi_dual
+    bosch_ebike_ldi_dual_id: ebike_dual_bridge
+    bike: 2
+    speed:
+      name: "eBike 2 Speed"
+    cadence:
+      name: "eBike 2 Cadence"
+    rider_power:
+      name: "eBike 2 Rider Power"
+    ambient_brightness:
+      name: "eBike 2 Ambient Brightness"
+    battery_soc:
+      name: "eBike 2 Battery SoC (Live)"
+      id: batt_soc_2
+      on_value:
+        - lambda: |-
+            if (!id(charger_conn_2).state || std::isnan(x)) return;
+            if (id(chg_last_soc_2) < 0) {
+              id(chg_last_soc_2) = x; id(chg_last_ms_2) = millis(); return;
+            }
+            float dsoc = x - id(chg_last_soc_2);
+            if (dsoc >= 1.0f) {
+              float dmin = (millis() - id(chg_last_ms_2)) / 60000.0f;
+              if (dmin > 0.01f) {
+                float r = dsoc / dmin;
+                if (r > 0)
+                  id(chg_rate_2) = (id(chg_rate_2) < 0) ? r
+                                                        : (0.3f * r + 0.7f * id(chg_rate_2));
+              }
+              id(chg_last_soc_2) = x;
+              id(chg_last_ms_2) = millis();
+            }
+    odometer:
+      name: "eBike 2 Odometer (Live)"
+
+  # ----- Charge-time estimates per bike -----
+  # NAN -> "unknown" until a reliable rate has built up. 80 % stays in the linear
+  # CC region (accurate); 100 % adds a slowdown factor for the CV tail.
+  - platform: template
+    name: "eBike 1 Charge Time to 80% (Estimate)"
+    id: chg_eta_80_1
+    unit_of_measurement: "min"
+    device_class: duration
+    state_class: measurement
+    accuracy_decimals: 0
+    update_interval: 30s
+    lambda: |-
+      if (!id(charger_conn_1).state) return NAN;
+      float soc = id(batt_soc_1).state;
+      float rate = id(chg_rate_1);
+      if (rate <= 0 || std::isnan(soc) || soc >= 80.0f) return NAN;
+      return (80.0f - soc) / rate;
+  - platform: template
+    name: "eBike 1 Charge Time to 100% (Estimate)"
+    id: chg_eta_100_1
+    unit_of_measurement: "min"
+    device_class: duration
+    state_class: measurement
+    accuracy_decimals: 0
+    update_interval: 30s
+    lambda: |-
+      if (!id(charger_conn_1).state) return NAN;
+      float soc = id(batt_soc_1).state;
+      float rate = id(chg_rate_1);
+      if (rate <= 0 || std::isnan(soc) || soc >= 100.0f) return NAN;
+      const float cv_start = 85.0f, cv_factor = 2.5f;
+      float mins = 0.0f, s = soc;
+      if (s < cv_start) { mins += (cv_start - s) / rate; s = cv_start; }
+      mins += (100.0f - s) / (rate / cv_factor);
+      return mins;
+
+  - platform: template
+    name: "eBike 2 Charge Time to 80% (Estimate)"
+    id: chg_eta_80_2
+    unit_of_measurement: "min"
+    device_class: duration
+    state_class: measurement
+    accuracy_decimals: 0
+    update_interval: 30s
+    lambda: |-
+      if (!id(charger_conn_2).state) return NAN;
+      float soc = id(batt_soc_2).state;
+      float rate = id(chg_rate_2);
+      if (rate <= 0 || std::isnan(soc) || soc >= 80.0f) return NAN;
+      return (80.0f - soc) / rate;
+  - platform: template
+    name: "eBike 2 Charge Time to 100% (Estimate)"
+    id: chg_eta_100_2
+    unit_of_measurement: "min"
+    device_class: duration
+    state_class: measurement
+    accuracy_decimals: 0
+    update_interval: 30s
+    lambda: |-
+      if (!id(charger_conn_2).state) return NAN;
+      float soc = id(batt_soc_2).state;
+      float rate = id(chg_rate_2);
+      if (rate <= 0 || std::isnan(soc) || soc >= 100.0f) return NAN;
+      const float cv_start = 85.0f, cv_factor = 2.5f;
+      float mins = 0.0f, s = soc;
+      if (s < cv_start) { mins += (cv_start - s) / rate; s = cv_start; }
+      mins += (100.0f - s) / (rate / cv_factor);
+      return mins;
+
+binary_sensor:
+  # ===== eBike 1 (bike: 1) =====
+  - platform: bosch_ebike_ldi_dual
+    bosch_ebike_ldi_dual_id: ebike_dual_bridge
+    bike: 1
+    connected:
+      name: "eBike 1 Connected"
+    light:
+      name: "eBike 1 Light"
+    system_locked:
+      name: "eBike 1 System Locked"
+    charger_connected:
+      name: "eBike 1 Charger Connected"
+      id: charger_conn_1
+      on_state:
+        - lambda: |-
+            id(chg_rate_1) = -1;
+            id(chg_last_soc_1) = -1;
+            id(chg_last_ms_1) = millis();
+    light_reserve:
+      name: "eBike 1 Light Reserve"
+    diagnosis_active:
+      name: "eBike 1 Diagnosis Active"
+    in_motion:
+      name: "eBike 1 In Motion"
+
+  # ===== eBike 2 (bike: 2) =====
+  - platform: bosch_ebike_ldi_dual
+    bosch_ebike_ldi_dual_id: ebike_dual_bridge
+    bike: 2
+    connected:
+      name: "eBike 2 Connected"
+    light:
+      name: "eBike 2 Light"
+    system_locked:
+      name: "eBike 2 System Locked"
+    charger_connected:
+      name: "eBike 2 Charger Connected"
+      id: charger_conn_2
+      on_state:
+        - lambda: |-
+            id(chg_rate_2) = -1;
+            id(chg_last_soc_2) = -1;
+            id(chg_last_ms_2) = millis();
+    light_reserve:
+      name: "eBike 2 Light Reserve"
+    diagnosis_active:
+      name: "eBike 2 Diagnosis Active"
+    in_motion:
+      name: "eBike 2 In Motion"
+
+switch:
+  # Master advertising toggle (Issue #36). Bridge-wide: there is ONE radio /
+  # advertising state for the whole dual bridge, so this stays single. Off = the
+  # bridge only advertises during a pairing window (boot 5 min / button) and is
+  # otherwise fully silent (no background reconnect). Default on. Boot window is
+  # unaffected.
+  - platform: template
+    name: "eBike Advertising"
+    icon: mdi:bluetooth
+    restore_mode: RESTORE_DEFAULT_ON
+    optimistic: true
+    turn_on_action:
+      - lambda: 'id(ebike_dual_bridge).set_advertising_enabled(true);'
+    turn_off_action:
+      - lambda: 'id(ebike_dual_bridge).set_advertising_enabled(false);'
+
+button:
+  # Open the pairing window (~5 min): the bridge becomes discoverable so the Flow
+  # app can add it. Outside the window it advertises privately and is NOT visible
+  # to other users' Flow apps. Bridge-wide control (one radio), so single.
+  # Pair the bikes one after another: press, add the next eBike in the Flow app,
+  # repeat for the second bike.
+  - platform: template
+    name: "eBike Pair next eBike"
+    icon: mdi:bluetooth-connect
+    on_press:
+      then:
+        - lambda: 'id(ebike_dual_bridge).start_pairing();'
+  - platform: template
+    name: "eBike Clear Bonding"
+    on_press:
+      then:
+        - lambda: |-
+            id(ebike_dual_bridge).clear_bonding();

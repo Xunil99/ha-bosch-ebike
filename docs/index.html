@@ -222,6 +222,40 @@
 
     <div class="install-card">
       <h2 style="margin-top:0;font-size:1.15rem;">
+        <span class="lang-de">eBike-Bridge (2 Räder, experimentell)</span>
+        <span class="lang-en">eBike Bridge (2 bikes, experimental)</span>
+      </h2>
+      <p class="subtitle" style="margin:.25rem 0 1rem;">
+        <span class="lang-de">Ein einzelner ESP32 verbindet sich gleichzeitig mit zwei Bosch eBikes (zwei BLE-Verbindungen parallel) und liefert für beide Räder getrennte Sensoren in Home Assistant. Nur klassischer ESP32, kein ESP32-C3.</span>
+        <span class="lang-en">A single ESP32 links to two Bosch eBikes at once (two simultaneous BLE connections) and provides separate sensors for both bikes in Home Assistant. Classic ESP32 only, no ESP32-C3.</span>
+      </p>
+      <p class="subtitle" style="margin:.25rem 0 1rem;">
+        <span class="lang-de"><strong>Warnhinweis:</strong> Diese Variante ist experimentell und wurde noch NICHT mit zwei Rädern gleichzeitig getestet. Wenn zwei Räder parallel Probleme machen (Verbindungsabbrüche, fehlende Werte), verwende stattdessen die Einzel-Bridge-Firmware oben auf zwei getrennten ESP32-Boards. Nur klassischer ESP32, kein ESP32-C3.</span>
+        <span class="lang-en"><strong>Warning:</strong> This variant is experimental and has NOT yet been tested with two bikes at the same time. If two bikes misbehave in parallel (dropouts, missing values), use the single-bike bridge firmware above on two separate ESP32 boards instead. Classic ESP32 only, no ESP32-C3.</span>
+      </p>
+      <esp-web-install-button manifest="manifest-bridge-dual.json">
+        <button slot="activate" type="button">
+          <span class="lang-de">Dual-Bridge auf ESP32 flashen</span>
+          <span class="lang-en">Install dual bridge onto ESP32</span>
+        </button>
+        <span slot="unsupported" class="unsupported">
+          <span class="lang-de">Dein Browser unterstützt kein Web Serial. Bitte Chrome oder Edge auf einem Desktop verwenden.</span>
+          <span class="lang-en">Your browser does not support Web Serial. Please use Chrome or Edge on a desktop computer.</span>
+        </span>
+        <span slot="not-allowed" class="not-allowed">
+          <span class="lang-de">Diese Seite muss über HTTPS aufgerufen werden.</span>
+          <span class="lang-en">This page must be opened over HTTPS.</span>
+        </span>
+      </esp-web-install-button>
+      <a class="fallback-link"
+         href="./firmware/ebike-bridge-dual.factory.bin">
+        <span class="lang-de">Alternativ: Dual-factory.bin manuell herunterladen und mit esptool flashen</span>
+        <span class="lang-en">Alternatively: download the dual factory.bin and flash it manually with esptool</span>
+      </a>
+    </div>
+
+    <div class="install-card">
+      <h2 style="margin-top:0;font-size:1.15rem;">
         <span class="lang-de">eBike-Display (JC4827W543)</span>
         <span class="lang-en">eBike Display (JC4827W543)</span>
       </h2>
