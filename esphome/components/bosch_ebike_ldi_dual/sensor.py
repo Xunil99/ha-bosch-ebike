@@ -20,6 +20,11 @@ from . import BoschEbikeLdiDual
 
 CONF_BOSCH_EBIKE_LDI_DUAL_ID = "bosch_ebike_ldi_dual_id"
 
+# Which bike this platform block configures: 1 -> slot 0 ("eBike 1"),
+# 2 -> slot 1 ("eBike 2"). Two `- platform:` blocks (bike: 1 / bike: 2),
+# each with its own distinct `name:`, yield two distinct entity sets.
+CONF_BIKE = "bike"
+
 CONF_SPEED = "speed"
 CONF_CADENCE = "cadence"
 CONF_RIDER_POWER = "rider_power"
@@ -33,6 +38,7 @@ UNIT_RPM = "rpm"
 CONFIG_SCHEMA = cv.Schema(
     {
         cv.GenerateID(CONF_BOSCH_EBIKE_LDI_DUAL_ID): cv.use_id(BoschEbikeLdiDual),
+        cv.Required(CONF_BIKE): cv.int_range(min=1, max=2),
         cv.Optional(CONF_SPEED): sensor.sensor_schema(
             unit_of_measurement=UNIT_KMH,
             accuracy_decimals=2,
@@ -85,7 +91,8 @@ _SETTERS = {
 
 async def to_code(config):
     parent = await cg.get_variable(config[CONF_BOSCH_EBIKE_LDI_DUAL_ID])
+    slot = config[CONF_BIKE] - 1
     for key, setter in _SETTERS.items():
         if key in config:
             sens = await sensor.new_sensor(config[key])
-            cg.add(getattr(parent, setter)(sens))
+            cg.add(getattr(parent, setter)(slot, sens))

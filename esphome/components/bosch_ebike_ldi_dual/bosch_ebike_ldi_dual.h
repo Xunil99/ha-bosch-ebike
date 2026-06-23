@@ -66,24 +66,25 @@ class BoschEbikeLdiDual : public Component {
   void set_device_name(const std::string &name) { this->device_name_ = name; }
 
   // ---- Sensor wiring (set from sensor.py / binary_sensor.py codegen) ----
-  // NOTE: the public setter API is intentionally left single-bike for now.
-  // Distinct entities per bike (and thus slot-indexed setters) arrive in
-  // Phase 2; until then these target the "eBike 1" view of slot 0 so the
-  // existing single-bike YAML keeps compiling and publishing.
-  void set_speed_sensor(sensor::Sensor *s)              { speed_sensor_ = s; }
-  void set_cadence_sensor(sensor::Sensor *s)            { cadence_sensor_ = s; }
-  void set_rider_power_sensor(sensor::Sensor *s)        { rider_power_sensor_ = s; }
-  void set_ambient_brightness_sensor(sensor::Sensor *s) { ambient_brightness_sensor_ = s; }
-  void set_battery_soc_sensor(sensor::Sensor *s)        { battery_soc_sensor_ = s; }
-  void set_odometer_sensor(sensor::Sensor *s)           { odometer_sensor_ = s; }
+  // Every exposed entity is per-bike, so each setter takes the target slot
+  // (0 = "eBike 1", 1 = "eBike 2"). The Python codegen computes the slot from
+  // the YAML `bike:` key (1->0, 2->1) so two `- platform:` blocks declare two
+  // distinct, separately-named entity sets. The bridge-wide pairing/advertising
+  // status is NOT routed here (it is exposed via template/switch/button in YAML).
+  void set_speed_sensor(int slot, sensor::Sensor *s)              { speed_sensor_[slot] = s; }
+  void set_cadence_sensor(int slot, sensor::Sensor *s)            { cadence_sensor_[slot] = s; }
+  void set_rider_power_sensor(int slot, sensor::Sensor *s)        { rider_power_sensor_[slot] = s; }
+  void set_ambient_brightness_sensor(int slot, sensor::Sensor *s) { ambient_brightness_sensor_[slot] = s; }
+  void set_battery_soc_sensor(int slot, sensor::Sensor *s)        { battery_soc_sensor_[slot] = s; }
+  void set_odometer_sensor(int slot, sensor::Sensor *s)           { odometer_sensor_[slot] = s; }
 
-  void set_connected_sensor(binary_sensor::BinarySensor *s)         { connected_sensor_ = s; }
-  void set_light_sensor(binary_sensor::BinarySensor *s)             { light_sensor_ = s; }
-  void set_system_locked_sensor(binary_sensor::BinarySensor *s)     { system_locked_sensor_ = s; }
-  void set_charger_connected_sensor(binary_sensor::BinarySensor *s) { charger_connected_sensor_ = s; }
-  void set_light_reserve_sensor(binary_sensor::BinarySensor *s)     { light_reserve_sensor_ = s; }
-  void set_diagnosis_active_sensor(binary_sensor::BinarySensor *s)  { diagnosis_active_sensor_ = s; }
-  void set_bike_in_motion_sensor(binary_sensor::BinarySensor *s)    { bike_in_motion_sensor_ = s; }
+  void set_connected_sensor(int slot, binary_sensor::BinarySensor *s)         { connected_sensor_[slot] = s; }
+  void set_light_sensor(int slot, binary_sensor::BinarySensor *s)             { light_sensor_[slot] = s; }
+  void set_system_locked_sensor(int slot, binary_sensor::BinarySensor *s)     { system_locked_sensor_[slot] = s; }
+  void set_charger_connected_sensor(int slot, binary_sensor::BinarySensor *s) { charger_connected_sensor_[slot] = s; }
+  void set_light_reserve_sensor(int slot, binary_sensor::BinarySensor *s)     { light_reserve_sensor_[slot] = s; }
+  void set_diagnosis_active_sensor(int slot, binary_sensor::BinarySensor *s)  { diagnosis_active_sensor_[slot] = s; }
+  void set_bike_in_motion_sensor(int slot, binary_sensor::BinarySensor *s)    { bike_in_motion_sensor_[slot] = s; }
 
   // ---- Called from NimBLE callback context (always slot-routed) ----
   // Routing: each callback receives the connecting conn_handle; slot_for_conn()
@@ -162,21 +163,23 @@ class BoschEbikeLdiDual : public Component {
   PeerMac slot_mac_[NUM_SLOTS];
   ESPPreferenceObject slot_mac_pref_[NUM_SLOTS];
 
-  // Sensors (single-bike view, see note on the setters above).
-  sensor::Sensor *speed_sensor_{nullptr};
-  sensor::Sensor *cadence_sensor_{nullptr};
-  sensor::Sensor *rider_power_sensor_{nullptr};
-  sensor::Sensor *ambient_brightness_sensor_{nullptr};
-  sensor::Sensor *battery_soc_sensor_{nullptr};
-  sensor::Sensor *odometer_sensor_{nullptr};
+  // Per-bike entities, one pointer per slot. slot 0 = "eBike 1", 1 = "eBike 2".
+  // publish_decoded_(slot) / the connection publisher only ever touch the
+  // pointer at [slot], so bike 1's data can never reach bike 2's entity.
+  sensor::Sensor *speed_sensor_[NUM_SLOTS]{nullptr, nullptr};
+  sensor::Sensor *cadence_sensor_[NUM_SLOTS]{nullptr, nullptr};
+  sensor::Sensor *rider_power_sensor_[NUM_SLOTS]{nullptr, nullptr};
+  sensor::Sensor *ambient_brightness_sensor_[NUM_SLOTS]{nullptr, nullptr};
+  sensor::Sensor *battery_soc_sensor_[NUM_SLOTS]{nullptr, nullptr};
+  sensor::Sensor *odometer_sensor_[NUM_SLOTS]{nullptr, nullptr};
 
-  binary_sensor::BinarySensor *connected_sensor_{nullptr};
-  binary_sensor::BinarySensor *light_sensor_{nullptr};
-  binary_sensor::BinarySensor *system_locked_sensor_{nullptr};
-  binary_sensor::BinarySensor *charger_connected_sensor_{nullptr};
-  binary_sensor::BinarySensor *light_reserve_sensor_{nullptr};
-  binary_sensor::BinarySensor *diagnosis_active_sensor_{nullptr};
-  binary_sensor::BinarySensor *bike_in_motion_sensor_{nullptr};
+  binary_sensor::BinarySensor *connected_sensor_[NUM_SLOTS]{nullptr, nullptr};
+  binary_sensor::BinarySensor *light_sensor_[NUM_SLOTS]{nullptr, nullptr};
+  binary_sensor::BinarySensor *system_locked_sensor_[NUM_SLOTS]{nullptr, nullptr};
+  binary_sensor::BinarySensor *charger_connected_sensor_[NUM_SLOTS]{nullptr, nullptr};
+  binary_sensor::BinarySensor *light_reserve_sensor_[NUM_SLOTS]{nullptr, nullptr};
+  binary_sensor::BinarySensor *diagnosis_active_sensor_[NUM_SLOTS]{nullptr, nullptr};
+  binary_sensor::BinarySensor *bike_in_motion_sensor_[NUM_SLOTS]{nullptr, nullptr};
 
   // Load/persist the slot->MAC mapping.
   void load_slot_macs_();

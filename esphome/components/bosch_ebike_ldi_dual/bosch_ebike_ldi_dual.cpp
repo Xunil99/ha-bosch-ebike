@@ -680,18 +680,17 @@ void BoschEbikeLdiDual::setup() {
 }
 
 void BoschEbikeLdiDual::loop() {
-  // Process both slots' connection-state changes. We track per-slot
-  // last_published_connected_ for each bike; the single connected_sensor_ is
-  // a Phase-1 "eBike 1" view of slot 0 (per-bike entities come in Phase 2),
-  // so only slot 0's transitions drive that sensor.
+  // Process both slots' connection-state changes. Each slot tracks its own
+  // last_published_connected_ and drives its own per-bike connected_sensor_[s],
+  // so eBike 1 and eBike 2 report connectivity independently.
   for (int s = 0; s < NUM_SLOTS; s++) {
     if (this->connection_dirty_[s]) {
       this->connection_dirty_[s] = false;
       bool connected = this->pending_connected_state_[s];
       if (connected != this->last_published_connected_[s]) {
         this->last_published_connected_[s] = connected;
-        if (s == 0 && this->connected_sensor_ != nullptr) {
-          this->connected_sensor_->publish_state(connected);
+        if (this->connected_sensor_[s] != nullptr) {
+          this->connected_sensor_[s]->publish_state(connected);
         }
         ESP_LOGI(TAG, "Connection state slot %d (eBike %d) -> %s",
                  s, s + 1, connected ? "connected" : "disconnected");
@@ -721,60 +720,53 @@ void BoschEbikeLdiDual::loop() {
 void BoschEbikeLdiDual::publish_decoded_(int slot) {
   const LiveData &latest = this->latest_[slot];
 
-  // Phase 1: only slot 0 ("eBike 1") drives the single entity set. Slot 1's
-  // decoded snapshot is kept in latest_[1] (and logged) so the data layer is
-  // coherent; per-bike entities for slot 1 arrive in Phase 2.
-  if (slot != 0) {
-    ESP_LOGD(TAG, "Decoded slot %d (eBike %d) data (no Phase-1 entity yet): "
-                  "speed_raw=%u soc=%u",
-             slot, slot + 1,
-             (unsigned) latest.speed_raw, (unsigned) latest.battery_soc);
-    return;
-  }
-
+  // Publish this slot's decoded snapshot to this slot's own entity set. Every
+  // pointer is indexed by `slot`, so eBike 1's data only ever reaches eBike 1's
+  // entities and eBike 2's only eBike 2's – no cross-slot writes.
+  //
   // Convert raw scales into HA-friendly units. Each sensor publishes
   // unconditionally (ESPHome itself dedupes on equal values).
-  if (latest.speed_present && this->speed_sensor_) {
-    this->speed_sensor_->publish_state(latest.speed_raw / 100.0f);
+  if (latest.speed_present && this->speed_sensor_[slot]) {
+    this->speed_sensor_[slot]->publish_state(latest.speed_raw / 100.0f);
   }
-  if (latest.cadence_present && this->cadence_sensor_) {
-    this->cadence_sensor_->publish_state(latest.cadence);
+  if (latest.cadence_present && this->cadence_sensor_[slot]) {
+    this->cadence_sensor_[slot]->publish_state(latest.cadence);
   }
-  if (latest.rider_power_present && this->rider_power_sensor_) {
-    this->rider_power_sensor_->publish_state(latest.rider_power);
+  if (latest.rider_power_present && this->rider_power_sensor_[slot]) {
+    this->rider_power_sensor_[slot]->publish_state(latest.rider_power);
   }
-  if (latest.ambient_brightness_present && this->ambient_brightness_sensor_) {
-    this->ambient_brightness_sensor_->publish_state(latest.ambient_brightness_raw / 1000.0f);
+  if (latest.ambient_brightness_present && this->ambient_brightness_sensor_[slot]) {
+    this->ambient_brightness_sensor_[slot]->publish_state(latest.ambient_brightness_raw / 1000.0f);
   }
-  if (latest.battery_soc_present && this->battery_soc_sensor_) {
-    this->battery_soc_sensor_->publish_state(latest.battery_soc);
+  if (latest.battery_soc_present && this->battery_soc_sensor_[slot]) {
+    this->battery_soc_sensor_[slot]->publish_state(latest.battery_soc);
   }
-  if (latest.odometer_present && this->odometer_sensor_) {
+  if (latest.odometer_present && this->odometer_sensor_[slot]) {
     // publish in km (one decimal will be obvious in HA)
-    this->odometer_sensor_->publish_state(latest.odometer / 1000.0f);
+    this->odometer_sensor_[slot]->publish_state(latest.odometer / 1000.0f);
   }
 
-  if (latest.bike_light_present && this->light_sensor_) {
+  if (latest.bike_light_present && this->light_sensor_[slot]) {
     // 1 = OFF, 2 = ON, 0 = INVALID -> treat invalid as off
-    this->light_sensor_->publish_state(latest.bike_light == 2);
+    this->light_sensor_[slot]->publish_state(latest.bike_light == 2);
   }
-  if (latest.system_locked_present && this->system_locked_sensor_) {
+  if (latest.system_locked_present && this->system_locked_sensor_[slot]) {
     // HA device_class=lock: ON=unlocked, OFF=locked. We invert here so
     // the user sees "Abgeschlossen" when the bike is actually locked.
-    this->system_locked_sensor_->publish_state(!latest.system_locked);
+    this->system_locked_sensor_[slot]->publish_state(!latest.system_locked);
   }
-  if (latest.charger_connected_present && this->charger_connected_sensor_) {
-    this->charger_connected_sensor_->publish_state(latest.charger_connected);
+  if (latest.charger_connected_present && this->charger_connected_sensor_[slot]) {
+    this->charger_connected_sensor_[slot]->publish_state(latest.charger_connected);
   }
-  if (latest.light_reserve_present && this->light_reserve_sensor_) {
-    this->light_reserve_sensor_->publish_state(latest.light_reserve);
+  if (latest.light_reserve_present && this->light_reserve_sensor_[slot]) {
+    this->light_reserve_sensor_[slot]->publish_state(latest.light_reserve);
   }
-  if (latest.diagnosis_active_present && this->diagnosis_active_sensor_) {
-    this->diagnosis_active_sensor_->publish_state(latest.diagnosis_active);
+  if (latest.diagnosis_active_present && this->diagnosis_active_sensor_[slot]) {
+    this->diagnosis_active_sensor_[slot]->publish_state(latest.diagnosis_active);
   }
-  if (latest.bike_not_driving_present && this->bike_in_motion_sensor_) {
+  if (latest.bike_not_driving_present && this->bike_in_motion_sensor_[slot]) {
     // Spec field is "bike_not_driving" – we expose the inverse, "in motion"
-    this->bike_in_motion_sensor_->publish_state(!latest.bike_not_driving);
+    this->bike_in_motion_sensor_[slot]->publish_state(!latest.bike_not_driving);
   }
 }
 
