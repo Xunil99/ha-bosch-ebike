@@ -64,16 +64,10 @@ static int on_chr_read(uint16_t conn_handle, const struct ble_gatt_error *error,
 static int on_mtu_exchange(uint16_t conn_handle, const struct ble_gatt_error *error,
                            uint16_t mtu, void *arg);
 
-// ---- Per-connection discovery state -----------------------------------------
-struct ConnectionContext {
-  uint16_t conn_handle{BLE_HS_CONN_HANDLE_NONE};
-  uint16_t live_chr_val_handle{0};
-  uint16_t live_chr_end_handle{0};
-  uint16_t live_svc_start_handle{0};
-  uint16_t live_svc_end_handle{0};
-  bool encrypted{false};
-};
-static ConnectionContext g_conn_dual;
+// Per-connection / per-bike state (ConnectionContext, LiveData latest_[]) lives
+// on the single component instance (see header). The static C-callbacks below
+// reach it through g_instance_dual and always operate on a slot routed from the
+// event's conn_handle — never on a single shared struct.
 
 // ---- Helpers ----------------------------------------------------------------
 static void log_hex(const char *prefix, const uint8_t *buf, size_t len) {
@@ -270,15 +264,56 @@ static int gap_event_handler(struct ble_gap_event *event, void *arg) {
       ESP_LOGI(TAG, "GAP CONNECT status=%d conn_handle=%u",
                event->connect.status, event->connect.conn_handle);
       if (event->connect.status == 0) {
-        g_conn_dual.conn_handle = event->connect.conn_handle;
-        g_conn_dual.encrypted = false;
+        uint16_t handle = event->connect.conn_handle;
+        int slot = -1;
+        if (g_instance_dual) {
+          // If ENC_CHANGE already routed this handle (it can arrive before
+          // CONNECT on bond-resume), reuse that slot instead of routing again.
+          slot = g_instance_dual->slot_for_conn(handle);
+          if (slot < 0) {
+            // Route this peer to a stable slot by its identity address (matching
+            // a persisted MAC, or claiming the next free slot). Falling back to
+            // the OTA address keeps us working before identity is resolved.
+            struct ble_gap_conn_desc desc;
+            if (ble_gap_conn_find(handle, &desc) == 0) {
+              const ble_addr_t &id = desc.peer_id_addr;
+              const ble_addr_t &ota = desc.peer_ota_addr;
+              const ble_addr_t &use =
+                  (id.type == 0 && id.val[0] == 0 && id.val[1] == 0 && id.val[2] == 0 &&
+                   id.val[3] == 0 && id.val[4] == 0 && id.val[5] == 0)
+                      ? ota
+                      : id;
+              slot = g_instance_dual->free_or_matching_slot(use.type, use.val);
+            } else {
+              ESP_LOGW(TAG, "conn_find failed for handle=%u", handle);
+            }
+          }
+        }
+        if (slot < 0) {
+          ESP_LOGW(TAG, "No free slot for connecting peer (both bikes occupied) – dropping");
+          ble_gap_terminate(handle, BLE_ERR_REM_USER_CONN_TERM);
+          return 0;
+        }
+
+        ConnectionContext &peer = g_instance_dual->peer(slot);
+        if (peer.conn_handle != handle) {
+          // Newly assigned slot: start discovery from a clean context.
+          peer = ConnectionContext{};
+          peer.conn_handle = handle;
+        }
+        peer.encrypted = false;
+        ESP_LOGI(TAG, "Peer assigned to slot %d (eBike %d)", slot, slot + 1);
         // A bike connected -> pairing succeeded; close the discoverable window
         // so we drop to private advertising on the next disconnect.
         g_pairing_until_ms_dual = 0;
-        if (g_instance_dual) g_instance_dual->on_connect_state_change(true);
+        g_instance_dual->on_connect_state_change(slot, true);
 
         // Workaround for LDI-001: bike doesn't initiate DLE. We do.
-        ble_gap_set_data_len(event->connect.conn_handle, 251, 2120);
+        ble_gap_set_data_len(handle, 251, 2120);
+
+        // Keep advertising so the OTHER bike can still be found / reconnect.
+        // (start_advertising() is a no-op while not applicable.)
+        start_advertising();
       } else {
         // Connection failed – resume advertising.
         start_advertising();
@@ -286,31 +321,64 @@ static int gap_event_handler(struct ble_gap_event *event, void *arg) {
       return 0;
     }
     case BLE_GAP_EVENT_DISCONNECT: {
-      ESP_LOGW(TAG, "GAP DISCONNECT reason=0x%02x",
-               event->disconnect.reason);
-      g_conn_dual = ConnectionContext{};
-      if (g_instance_dual) g_instance_dual->on_connect_state_change(false);
+      ESP_LOGW(TAG, "GAP DISCONNECT reason=0x%02x conn_handle=%u",
+               event->disconnect.reason, event->disconnect.conn.conn_handle);
+      // Clear ONLY the slot owning this conn_handle, never both.
+      if (g_instance_dual) {
+        int slot = g_instance_dual->slot_for_conn(event->disconnect.conn.conn_handle);
+        if (slot >= 0) {
+          g_instance_dual->peer(slot) = ConnectionContext{};
+          g_instance_dual->on_connect_state_change(slot, false);
+        } else {
+          ESP_LOGW(TAG, "DISCONNECT for unknown conn_handle=%u (no slot)",
+                   event->disconnect.conn.conn_handle);
+        }
+      }
       start_advertising();
       return 0;
     }
     case BLE_GAP_EVENT_ENC_CHANGE: {
       ESP_LOGI(TAG, "Encryption changed status=%d conn_handle=%u",
                event->enc_change.status, event->enc_change.conn_handle);
-      if (event->enc_change.status == 0) {
-        // IMPORTANT: use the conn_handle from the event itself, NOT
-        // g_conn_dual.conn_handle. On bond-resume reconnects NimBLE delivers
-        // ENC_CHANGE before BLE_GAP_EVENT_CONNECT to user-space, so our
-        // global state may still hold the previous (NONE) handle. The
-        // event handle is always valid.
+      if (event->enc_change.status == 0 && g_instance_dual) {
+        // IMPORTANT: use the conn_handle from the event itself. On bond-resume
+        // reconnects NimBLE may deliver ENC_CHANGE before BLE_GAP_EVENT_CONNECT
+        // to user-space, so the slot may not be assigned yet — resolve it from
+        // the peer's identity address in that case (same routing as CONNECT).
         uint16_t handle = event->enc_change.conn_handle;
-        g_conn_dual.conn_handle = handle;
-        g_conn_dual.encrypted = true;
+        int slot = g_instance_dual->slot_for_conn(handle);
+        if (slot < 0) {
+          struct ble_gap_conn_desc desc;
+          if (ble_gap_conn_find(handle, &desc) == 0) {
+            const ble_addr_t &id = desc.peer_id_addr;
+            const ble_addr_t &ota = desc.peer_ota_addr;
+            const ble_addr_t &use =
+                (id.type == 0 && id.val[0] == 0 && id.val[1] == 0 && id.val[2] == 0 &&
+                 id.val[3] == 0 && id.val[4] == 0 && id.val[5] == 0)
+                    ? ota
+                    : id;
+            slot = g_instance_dual->free_or_matching_slot(use.type, use.val);
+          }
+          if (slot >= 0) {
+            ConnectionContext &peer = g_instance_dual->peer(slot);
+            peer = ConnectionContext{};
+            peer.conn_handle = handle;
+            g_instance_dual->on_connect_state_change(slot, true);
+            ESP_LOGI(TAG, "ENC_CHANGE assigned peer to slot %d (eBike %d)", slot, slot + 1);
+          }
+        }
+        if (slot < 0) {
+          ESP_LOGW(TAG, "ENC_CHANGE for unroutable conn_handle=%u – ignoring", handle);
+          return 0;
+        }
+        g_instance_dual->peer(slot).conn_handle = handle;
+        g_instance_dual->peer(slot).encrypted = true;
         // Workaround for LDI-001/003: initiate MTU ourselves.
         int rc = ble_gattc_exchange_mtu(handle, on_mtu_exchange, nullptr);
         if (rc != 0) {
           ESP_LOGE(TAG, "exchange_mtu start failed: %d (handle=%u)", rc, handle);
         }
-      } else {
+      } else if (event->enc_change.status != 0) {
         ESP_LOGE(TAG, "Pairing failed; consider clearing bonding on both sides.");
       }
       return 0;
@@ -321,16 +389,26 @@ static int gap_event_handler(struct ble_gap_event *event, void *arg) {
       return 0;
     }
     case BLE_GAP_EVENT_NOTIFY_RX: {
-      // The eBike is GATT server – it sends notifications on eb21.
+      // The eBike is GATT server – it sends notifications on eb21. Route the
+      // payload to the slot that owns this connection so the two bikes' live
+      // data never gets merged together.
       uint16_t handle = event->notify_rx.attr_handle;
       uint16_t len = OS_MBUF_PKTLEN(event->notify_rx.om);
       uint8_t buf[256];
       uint16_t copy_len = len < sizeof(buf) ? len : sizeof(buf);
       os_mbuf_copydata(event->notify_rx.om, 0, copy_len, buf);
       log_hex("NOTIFY_RX raw", buf, copy_len);
-      ESP_LOGI(TAG, "NOTIFY handle=0x%04x len=%u indication=%d",
-               handle, len, event->notify_rx.indication);
-      if (g_instance_dual) g_instance_dual->on_live_data_notify(buf, copy_len);
+      ESP_LOGI(TAG, "NOTIFY conn_handle=%u attr=0x%04x len=%u indication=%d",
+               event->notify_rx.conn_handle, handle, len, event->notify_rx.indication);
+      if (g_instance_dual) {
+        int slot = g_instance_dual->slot_for_conn(event->notify_rx.conn_handle);
+        if (slot >= 0) {
+          g_instance_dual->on_live_data_notify(slot, buf, copy_len);
+        } else {
+          ESP_LOGW(TAG, "NOTIFY for unknown conn_handle=%u – dropping",
+                   event->notify_rx.conn_handle);
+        }
+      }
       return 0;
     }
     case BLE_GAP_EVENT_REPEAT_PAIRING: {
@@ -391,9 +469,15 @@ static int on_mtu_exchange(uint16_t conn_handle, const struct ble_gatt_error *er
 static int on_disc_svc(uint16_t conn_handle, const struct ble_gatt_error *error,
                        const struct ble_gatt_svc *svc, void *arg) {
   if (error == nullptr) return 0;
+  int slot = g_instance_dual ? g_instance_dual->slot_for_conn(conn_handle) : -1;
+  if (slot < 0) {
+    ESP_LOGW(TAG, "disc_svc for unknown conn_handle=%u – dropping", conn_handle);
+    return 0;
+  }
+  ConnectionContext &peer = g_instance_dual->peer(slot);
   if (error->status == BLE_HS_EDONE) {
-    if (g_conn_dual.live_svc_start_handle == 0) {
-      ESP_LOGE(TAG, "Service eb20 NOT found on peer. Is the eBike v19+?");
+    if (peer.live_svc_start_handle == 0) {
+      ESP_LOGE(TAG, "Service eb20 NOT found on peer (slot %d). Is the eBike v19+?", slot);
       return 0;
     }
     // Service found – discover its characteristics.
@@ -401,8 +485,8 @@ static int on_disc_svc(uint16_t conn_handle, const struct ble_gatt_error *error,
     chr_uuid.u.type = BLE_UUID_TYPE_128;
     memcpy(chr_uuid.value, LDI_LIVE_DATA_CHR_UUID128, 16);
     int rc = ble_gattc_disc_chrs_by_uuid(conn_handle,
-                                         g_conn_dual.live_svc_start_handle,
-                                         g_conn_dual.live_svc_end_handle,
+                                         peer.live_svc_start_handle,
+                                         peer.live_svc_end_handle,
                                          &chr_uuid.u, on_disc_chr, nullptr);
     if (rc != 0) ESP_LOGE(TAG, "disc_chrs_by_uuid failed: %d", rc);
     return 0;
@@ -412,10 +496,10 @@ static int on_disc_svc(uint16_t conn_handle, const struct ble_gatt_error *error,
     return 0;
   }
   if (svc != nullptr) {
-    g_conn_dual.live_svc_start_handle = svc->start_handle;
-    g_conn_dual.live_svc_end_handle = svc->end_handle;
-    ESP_LOGI(TAG, "Service eb20 found, handles 0x%04x-0x%04x",
-             svc->start_handle, svc->end_handle);
+    peer.live_svc_start_handle = svc->start_handle;
+    peer.live_svc_end_handle = svc->end_handle;
+    ESP_LOGI(TAG, "Service eb20 found (slot %d), handles 0x%04x-0x%04x",
+             slot, svc->start_handle, svc->end_handle);
   }
   return 0;
 }
@@ -423,15 +507,21 @@ static int on_disc_svc(uint16_t conn_handle, const struct ble_gatt_error *error,
 static int on_disc_chr(uint16_t conn_handle, const struct ble_gatt_error *error,
                        const struct ble_gatt_chr *chr, void *arg) {
   if (error == nullptr) return 0;
+  int slot = g_instance_dual ? g_instance_dual->slot_for_conn(conn_handle) : -1;
+  if (slot < 0) {
+    ESP_LOGW(TAG, "disc_chr for unknown conn_handle=%u – dropping", conn_handle);
+    return 0;
+  }
+  ConnectionContext &peer = g_instance_dual->peer(slot);
   if (error->status == BLE_HS_EDONE) {
-    if (g_conn_dual.live_chr_val_handle == 0) {
-      ESP_LOGE(TAG, "Characteristic eb21 NOT found on peer.");
+    if (peer.live_chr_val_handle == 0) {
+      ESP_LOGE(TAG, "Characteristic eb21 NOT found on peer (slot %d).", slot);
       return 0;
     }
     // Find the CCCD via descriptor discovery.
     int rc = ble_gattc_disc_all_dscs(conn_handle,
-                                     g_conn_dual.live_chr_val_handle,
-                                     g_conn_dual.live_chr_end_handle,
+                                     peer.live_chr_val_handle,
+                                     peer.live_chr_end_handle,
                                      on_disc_dsc, nullptr);
     if (rc != 0) ESP_LOGE(TAG, "disc_all_dscs failed: %d", rc);
     return 0;
@@ -441,10 +531,10 @@ static int on_disc_chr(uint16_t conn_handle, const struct ble_gatt_error *error,
     return 0;
   }
   if (chr != nullptr) {
-    g_conn_dual.live_chr_val_handle = chr->val_handle;
-    g_conn_dual.live_chr_end_handle = g_conn_dual.live_svc_end_handle;
-    ESP_LOGI(TAG, "Char eb21 found val_handle=0x%04x props=0x%02x",
-             chr->val_handle, chr->properties);
+    peer.live_chr_val_handle = chr->val_handle;
+    peer.live_chr_end_handle = peer.live_svc_end_handle;
+    ESP_LOGI(TAG, "Char eb21 found (slot %d) val_handle=0x%04x props=0x%02x",
+             slot, chr->val_handle, chr->properties);
   }
   return 0;
 }
@@ -478,11 +568,18 @@ static int on_cccd_write(uint16_t conn_handle, const struct ble_gatt_error *erro
   }
   ESP_LOGI(TAG, "CCCD written – issuing initial read for full snapshot");
 
+  int slot = g_instance_dual ? g_instance_dual->slot_for_conn(conn_handle) : -1;
+  if (slot < 0) {
+    ESP_LOGW(TAG, "on_cccd_write for unknown conn_handle=%u – dropping", conn_handle);
+    return 0;
+  }
+  ConnectionContext &peer = g_instance_dual->peer(slot);
+
   // Per Spec §2.2.3.2 a Read returns the latest values of ALL available
   // LiveData fields. Notifications only carry changed fields, so without
   // this read we'd never see steady-state values like battery_soc or speed=0.
-  if (g_conn_dual.live_chr_val_handle != 0) {
-    int rc = ble_gattc_read(conn_handle, g_conn_dual.live_chr_val_handle,
+  if (peer.live_chr_val_handle != 0) {
+    int rc = ble_gattc_read(conn_handle, peer.live_chr_val_handle,
                             on_chr_read, nullptr);
     if (rc != 0) {
       ESP_LOGE(TAG, "ble_gattc_read failed: %d", rc);
@@ -507,7 +604,14 @@ static int on_chr_read(uint16_t conn_handle, const struct ble_gatt_error *error,
   os_mbuf_copydata(attr->om, 0, copy_len, buf);
   log_hex("INITIAL_READ raw", buf, copy_len);
   ESP_LOGI(TAG, "Initial read got %u bytes – parsing as full snapshot", len);
-  if (g_instance_dual) g_instance_dual->on_live_data_notify(buf, copy_len);
+  if (g_instance_dual) {
+    int slot = g_instance_dual->slot_for_conn(conn_handle);
+    if (slot >= 0) {
+      g_instance_dual->on_live_data_notify(slot, buf, copy_len);
+    } else {
+      ESP_LOGW(TAG, "Initial read for unknown conn_handle=%u – dropping", conn_handle);
+    }
+  }
   return 0;
 }
 
@@ -515,6 +619,10 @@ static int on_chr_read(uint16_t conn_handle, const struct ble_gatt_error *error,
 void BoschEbikeLdiDual::setup() {
   g_instance_dual = this;
   g_device_name_cache_dual = this->device_name_;
+
+  // Restore the persisted bike->slot (MAC) assignment so "eBike 1"/"eBike 2"
+  // stay stable across reboots.
+  this->load_slot_macs_();
 
   ESP_LOGI(TAG, "Initializing Bosch eBike LDI bridge (v0.1)");
 
@@ -544,28 +652,37 @@ void BoschEbikeLdiDual::setup() {
 }
 
 void BoschEbikeLdiDual::loop() {
-  if (this->connection_dirty_) {
-    this->connection_dirty_ = false;
-    bool s = this->pending_connected_state_;
-    if (s != this->last_published_connected_) {
-      this->last_published_connected_ = s;
-      if (this->connected_sensor_ != nullptr) {
-        this->connected_sensor_->publish_state(s);
+  // Process both slots' connection-state changes. We track per-slot
+  // last_published_connected_ for each bike; the single connected_sensor_ is
+  // a Phase-1 "eBike 1" view of slot 0 (per-bike entities come in Phase 2),
+  // so only slot 0's transitions drive that sensor.
+  for (int s = 0; s < NUM_SLOTS; s++) {
+    if (this->connection_dirty_[s]) {
+      this->connection_dirty_[s] = false;
+      bool connected = this->pending_connected_state_[s];
+      if (connected != this->last_published_connected_[s]) {
+        this->last_published_connected_[s] = connected;
+        if (s == 0 && this->connected_sensor_ != nullptr) {
+          this->connected_sensor_->publish_state(connected);
+        }
+        ESP_LOGI(TAG, "Connection state slot %d (eBike %d) -> %s",
+                 s, s + 1, connected ? "connected" : "disconnected");
       }
-      ESP_LOGI(TAG, "Connection state -> %s", s ? "connected" : "disconnected");
+    }
+    if (this->data_dirty_[s]) {
+      this->data_dirty_[s] = false;
+      this->publish_decoded_(s);
     }
   }
-  if (this->data_dirty_) {
-    this->data_dirty_ = false;
-    this->publish_decoded_();
-  }
 
-  // Pairing window auto-expiry: once it lapses and we are not connected, drop
+  // Pairing window auto-expiry: once it lapses and NO bike is connected, drop
   // back to private (non-discoverable, whitelist) advertising so the bridge
-  // stops being visible to other users' Flow apps.
+  // stops being visible to other users' Flow apps. If a bike IS connected we
+  // keep the window closed but advertising is governed by the connect/
+  // disconnect flow (so a second bike can still be added).
   if (g_pairing_until_ms_dual != 0 && (int32_t) (g_pairing_until_ms_dual - millis()) <= 0) {
     g_pairing_until_ms_dual = 0;
-    if (!this->last_published_connected_) {
+    if (!this->any_connected()) {
       ESP_LOGI(TAG, "Pairing window expired -> private reconnect advertising");
       ble_gap_adv_stop();
       start_advertising();
@@ -573,50 +690,63 @@ void BoschEbikeLdiDual::loop() {
   }
 }
 
-void BoschEbikeLdiDual::publish_decoded_() {
-  // Convert raw scales into HA-friendly units. Each sensor publishes
-  // unconditionally (ESPHome itself dedupes on equal values).
-  if (this->latest_.speed_present && this->speed_sensor_) {
-    this->speed_sensor_->publish_state(this->latest_.speed_raw / 100.0f);
-  }
-  if (this->latest_.cadence_present && this->cadence_sensor_) {
-    this->cadence_sensor_->publish_state(this->latest_.cadence);
-  }
-  if (this->latest_.rider_power_present && this->rider_power_sensor_) {
-    this->rider_power_sensor_->publish_state(this->latest_.rider_power);
-  }
-  if (this->latest_.ambient_brightness_present && this->ambient_brightness_sensor_) {
-    this->ambient_brightness_sensor_->publish_state(this->latest_.ambient_brightness_raw / 1000.0f);
-  }
-  if (this->latest_.battery_soc_present && this->battery_soc_sensor_) {
-    this->battery_soc_sensor_->publish_state(this->latest_.battery_soc);
-  }
-  if (this->latest_.odometer_present && this->odometer_sensor_) {
-    // publish in km (one decimal will be obvious in HA)
-    this->odometer_sensor_->publish_state(this->latest_.odometer / 1000.0f);
+void BoschEbikeLdiDual::publish_decoded_(int slot) {
+  const LiveData &latest = this->latest_[slot];
+
+  // Phase 1: only slot 0 ("eBike 1") drives the single entity set. Slot 1's
+  // decoded snapshot is kept in latest_[1] (and logged) so the data layer is
+  // coherent; per-bike entities for slot 1 arrive in Phase 2.
+  if (slot != 0) {
+    ESP_LOGD(TAG, "Decoded slot %d (eBike %d) data (no Phase-1 entity yet): "
+                  "speed_raw=%u soc=%u",
+             slot, slot + 1,
+             (unsigned) latest.speed_raw, (unsigned) latest.battery_soc);
+    return;
   }
 
-  if (this->latest_.bike_light_present && this->light_sensor_) {
-    // 1 = OFF, 2 = ON, 0 = INVALID -> treat invalid as off
-    this->light_sensor_->publish_state(this->latest_.bike_light == 2);
+  // Convert raw scales into HA-friendly units. Each sensor publishes
+  // unconditionally (ESPHome itself dedupes on equal values).
+  if (latest.speed_present && this->speed_sensor_) {
+    this->speed_sensor_->publish_state(latest.speed_raw / 100.0f);
   }
-  if (this->latest_.system_locked_present && this->system_locked_sensor_) {
+  if (latest.cadence_present && this->cadence_sensor_) {
+    this->cadence_sensor_->publish_state(latest.cadence);
+  }
+  if (latest.rider_power_present && this->rider_power_sensor_) {
+    this->rider_power_sensor_->publish_state(latest.rider_power);
+  }
+  if (latest.ambient_brightness_present && this->ambient_brightness_sensor_) {
+    this->ambient_brightness_sensor_->publish_state(latest.ambient_brightness_raw / 1000.0f);
+  }
+  if (latest.battery_soc_present && this->battery_soc_sensor_) {
+    this->battery_soc_sensor_->publish_state(latest.battery_soc);
+  }
+  if (latest.odometer_present && this->odometer_sensor_) {
+    // publish in km (one decimal will be obvious in HA)
+    this->odometer_sensor_->publish_state(latest.odometer / 1000.0f);
+  }
+
+  if (latest.bike_light_present && this->light_sensor_) {
+    // 1 = OFF, 2 = ON, 0 = INVALID -> treat invalid as off
+    this->light_sensor_->publish_state(latest.bike_light == 2);
+  }
+  if (latest.system_locked_present && this->system_locked_sensor_) {
     // HA device_class=lock: ON=unlocked, OFF=locked. We invert here so
     // the user sees "Abgeschlossen" when the bike is actually locked.
-    this->system_locked_sensor_->publish_state(!this->latest_.system_locked);
+    this->system_locked_sensor_->publish_state(!latest.system_locked);
   }
-  if (this->latest_.charger_connected_present && this->charger_connected_sensor_) {
-    this->charger_connected_sensor_->publish_state(this->latest_.charger_connected);
+  if (latest.charger_connected_present && this->charger_connected_sensor_) {
+    this->charger_connected_sensor_->publish_state(latest.charger_connected);
   }
-  if (this->latest_.light_reserve_present && this->light_reserve_sensor_) {
-    this->light_reserve_sensor_->publish_state(this->latest_.light_reserve);
+  if (latest.light_reserve_present && this->light_reserve_sensor_) {
+    this->light_reserve_sensor_->publish_state(latest.light_reserve);
   }
-  if (this->latest_.diagnosis_active_present && this->diagnosis_active_sensor_) {
-    this->diagnosis_active_sensor_->publish_state(this->latest_.diagnosis_active);
+  if (latest.diagnosis_active_present && this->diagnosis_active_sensor_) {
+    this->diagnosis_active_sensor_->publish_state(latest.diagnosis_active);
   }
-  if (this->latest_.bike_not_driving_present && this->bike_in_motion_sensor_) {
+  if (latest.bike_not_driving_present && this->bike_in_motion_sensor_) {
     // Spec field is "bike_not_driving" – we expose the inverse, "in motion"
-    this->bike_in_motion_sensor_->publish_state(!this->latest_.bike_not_driving);
+    this->bike_in_motion_sensor_->publish_state(!latest.bike_not_driving);
   }
 }
 
@@ -633,44 +763,120 @@ float BoschEbikeLdiDual::get_setup_priority() const {
   return setup_priority::AFTER_WIFI;
 }
 
-void BoschEbikeLdiDual::on_connect_state_change(bool connected) {
-  this->pending_connected_state_ = connected;
-  this->connection_dirty_ = true;
+void BoschEbikeLdiDual::on_connect_state_change(int slot, bool connected) {
+  this->pending_connected_state_[slot] = connected;
+  this->connection_dirty_[slot] = true;
   if (!connected) {
     // Reset "present" flags so stale values don't get re-published on reconnect.
-    this->latest_ = LiveData{};
+    this->latest_[slot] = LiveData{};
   }
 }
 
-void BoschEbikeLdiDual::on_live_data_notify(const uint8_t *data, size_t len) {
+void BoschEbikeLdiDual::on_live_data_notify(int slot, const uint8_t *data, size_t len) {
   LiveData snapshot;
   if (!decode_live_data(data, len, snapshot)) {
-    ESP_LOGW(TAG, "Protobuf decode failed (len=%u)", (unsigned) len);
+    ESP_LOGW(TAG, "Protobuf decode failed (slot %d, len=%u)", slot, (unsigned) len);
     return;
   }
 
-  // Merge into latest_: only overwrite fields that were actually present
-  // in this notification (per Spec §2.2.4.3).
-  if (snapshot.speed_present)              { latest_.speed_present = true;              latest_.speed_raw = snapshot.speed_raw; }
-  if (snapshot.cadence_present)            { latest_.cadence_present = true;            latest_.cadence = snapshot.cadence; }
-  if (snapshot.rider_power_present)        { latest_.rider_power_present = true;        latest_.rider_power = snapshot.rider_power; }
-  if (snapshot.ambient_brightness_present) { latest_.ambient_brightness_present = true; latest_.ambient_brightness_raw = snapshot.ambient_brightness_raw; }
-  if (snapshot.battery_soc_present)        { latest_.battery_soc_present = true;        latest_.battery_soc = snapshot.battery_soc; }
-  if (snapshot.time_present)               { latest_.time_present = true;               latest_.time = snapshot.time; }
-  if (snapshot.odometer_present)           { latest_.odometer_present = true;           latest_.odometer = snapshot.odometer; }
-  if (snapshot.bike_light_present)         { latest_.bike_light_present = true;         latest_.bike_light = snapshot.bike_light; }
-  if (snapshot.system_locked_present)      { latest_.system_locked_present = true;      latest_.system_locked = snapshot.system_locked; }
-  if (snapshot.charger_connected_present)  { latest_.charger_connected_present = true;  latest_.charger_connected = snapshot.charger_connected; }
-  if (snapshot.light_reserve_present)      { latest_.light_reserve_present = true;      latest_.light_reserve = snapshot.light_reserve; }
-  if (snapshot.diagnosis_active_present)   { latest_.diagnosis_active_present = true;   latest_.diagnosis_active = snapshot.diagnosis_active; }
-  if (snapshot.bike_not_driving_present)   { latest_.bike_not_driving_present = true;   latest_.bike_not_driving = snapshot.bike_not_driving; }
+  LiveData &latest = this->latest_[slot];
 
-  this->data_dirty_ = true;
+  // Merge into latest_[slot]: only overwrite fields that were actually present
+  // in this notification (per Spec §2.2.4.3).
+  if (snapshot.speed_present)              { latest.speed_present = true;              latest.speed_raw = snapshot.speed_raw; }
+  if (snapshot.cadence_present)            { latest.cadence_present = true;            latest.cadence = snapshot.cadence; }
+  if (snapshot.rider_power_present)        { latest.rider_power_present = true;        latest.rider_power = snapshot.rider_power; }
+  if (snapshot.ambient_brightness_present) { latest.ambient_brightness_present = true; latest.ambient_brightness_raw = snapshot.ambient_brightness_raw; }
+  if (snapshot.battery_soc_present)        { latest.battery_soc_present = true;        latest.battery_soc = snapshot.battery_soc; }
+  if (snapshot.time_present)               { latest.time_present = true;               latest.time = snapshot.time; }
+  if (snapshot.odometer_present)           { latest.odometer_present = true;           latest.odometer = snapshot.odometer; }
+  if (snapshot.bike_light_present)         { latest.bike_light_present = true;         latest.bike_light = snapshot.bike_light; }
+  if (snapshot.system_locked_present)      { latest.system_locked_present = true;      latest.system_locked = snapshot.system_locked; }
+  if (snapshot.charger_connected_present)  { latest.charger_connected_present = true;  latest.charger_connected = snapshot.charger_connected; }
+  if (snapshot.light_reserve_present)      { latest.light_reserve_present = true;      latest.light_reserve = snapshot.light_reserve; }
+  if (snapshot.diagnosis_active_present)   { latest.diagnosis_active_present = true;   latest.diagnosis_active = snapshot.diagnosis_active; }
+  if (snapshot.bike_not_driving_present)   { latest.bike_not_driving_present = true;   latest.bike_not_driving = snapshot.bike_not_driving; }
+
+  this->data_dirty_[slot] = true;
+}
+
+// ---- Slot routing + bike->slot persistence ---------------------------------
+int BoschEbikeLdiDual::slot_for_conn(uint16_t conn_handle) const {
+  if (conn_handle == CONN_HANDLE_NONE) return -1;
+  for (int i = 0; i < NUM_SLOTS; i++) {
+    if (this->peer_[i].conn_handle == conn_handle) return i;
+  }
+  return -1;
+}
+
+bool BoschEbikeLdiDual::any_connected() const {
+  for (int i = 0; i < NUM_SLOTS; i++) {
+    if (this->peer_[i].conn_handle != CONN_HANDLE_NONE) return true;
+  }
+  return false;
+}
+
+int BoschEbikeLdiDual::free_or_matching_slot(uint8_t addr_type, const uint8_t *addr) {
+  // 1) Slot whose persisted MAC matches this peer -> always reuse it. This is
+  //    THE stable bike->slot binding; it wins even if the slot still holds a
+  //    stale handle (reconnect before the old DISCONNECT was seen), so the same
+  //    bike never lands in two slots.
+  for (int i = 0; i < NUM_SLOTS; i++) {
+    if (this->slot_mac_[i].equals(addr_type, addr)) return i;
+  }
+  // 2) No persisted match: claim the lowest slot that is neither live nor
+  //    already assigned to a different bike, then persist its MAC.
+  for (int i = 0; i < NUM_SLOTS; i++) {
+    if (this->peer_[i].conn_handle == CONN_HANDLE_NONE && !this->slot_mac_[i].valid) {
+      this->slot_mac_[i].valid = true;
+      this->slot_mac_[i].type = addr_type;
+      std::memcpy(this->slot_mac_[i].addr, addr, 6);
+      this->persist_slot_mac_(i);
+      ESP_LOGI(TAG, "Claimed slot %d (eBike %d) for new peer "
+                    "%02x:%02x:%02x:%02x:%02x:%02x (type %u)",
+               i, i + 1, addr[5], addr[4], addr[3], addr[2], addr[1], addr[0], addr_type);
+      return i;
+    }
+  }
+  // 3) Both slots are owned by other bikes and not free.
+  return -1;
+}
+
+void BoschEbikeLdiDual::load_slot_macs_() {
+  for (int i = 0; i < NUM_SLOTS; i++) {
+    // Stable, distinct preference key per slot.
+    uint32_t key = fnv1_hash(std::string("bosch_ebike_ldi_dual_slot_mac_") +
+                             std::to_string(i));
+    this->slot_mac_pref_[i] = global_preferences->make_preference<PeerMac>(key);
+    PeerMac stored;
+    if (this->slot_mac_pref_[i].load(&stored)) {
+      this->slot_mac_[i] = stored;
+      if (stored.valid) {
+        ESP_LOGI(TAG, "Restored slot %d (eBike %d) MAC "
+                      "%02x:%02x:%02x:%02x:%02x:%02x (type %u)",
+                 i, i + 1, stored.addr[5], stored.addr[4], stored.addr[3],
+                 stored.addr[2], stored.addr[1], stored.addr[0], stored.type);
+      }
+    }
+  }
+}
+
+void BoschEbikeLdiDual::persist_slot_mac_(int slot) {
+  if (!this->slot_mac_pref_[slot].save(&this->slot_mac_[slot])) {
+    ESP_LOGW(TAG, "Failed to persist slot %d MAC", slot);
+  }
 }
 
 void BoschEbikeLdiDual::clear_bonding() {
-  ESP_LOGW(TAG, "Clearing all bonded peers from NVS");
+  ESP_LOGW(TAG, "Clearing all bonded peers from NVS and slot->MAC mapping");
   ble_store_clear();
+  // Wipe the persisted bike->slot assignment too, so re-pairing starts fresh
+  // and a re-added bike can take slot 0 again (otherwise a stale slot_mac_
+  // would force it into the previously assigned slot or reject it).
+  for (int i = 0; i < NUM_SLOTS; i++) {
+    this->slot_mac_[i] = PeerMac{};
+    this->persist_slot_mac_(i);
+  }
 }
 
 void BoschEbikeLdiDual::start_pairing() {
@@ -695,7 +901,7 @@ void BoschEbikeLdiDual::set_advertising_enabled(bool enabled) {
   // Guard on g_ble_synced_dual: the HA switch restores its persisted state during
   // early boot, before the NimBLE stack is up — calling GAP/the bond store then
   // crashes (Issue #41). on_stack_sync() applies the current g_adv_enabled_dual.
-  if (g_ble_synced_dual && !this->last_published_connected_) {
+  if (g_ble_synced_dual && !this->any_connected()) {
     ble_gap_adv_stop();
     start_advertising();
   }
