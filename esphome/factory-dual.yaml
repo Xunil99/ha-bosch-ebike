@@ -104,10 +104,14 @@ api:
 ota:
   - platform: esphome
 
+# Lokale Quelle: baut die Dual-Komponente aus dem ausgecheckten Repo-Workspace
+# (statt github@main). So findet die Firmware-CI sie unabhaengig vom Ref
+# (Branch-Compile-Test wie Produktion nach Merge), ohne Ref-Umschalten.
 external_components:
-  - source: github://Xunil99/ha-bosch-ebike@main
+  - source:
+      type: local
+      path: components
     components: [bosch_ebike_ldi_dual]
-    refresh: 1d
 
 bosch_ebike_ldi_dual:
   id: ebike_dual_bridge
