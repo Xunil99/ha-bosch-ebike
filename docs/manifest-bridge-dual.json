@@ -1,0 +1,19 @@
+{
+  "name": "Bosch eBike LDI Bridge — 2 Räder (experimentell)",
+  "version": "latest",
+  "home_assistant_domain": "esphome",
+  "funding_url": "https://github.com/Xunil99/ha-bosch-ebike",
+  "new_install_prompt_erase": true,
+  "builds": [
+    {
+      "chipFamily": "ESP32",
+      "improv": true,
+      "parts": [
+        {
+          "path": "./firmware/ebike-bridge-dual.factory.bin",
+          "offset": 0
+        }
+      ]
+    }
+  ]
+}
