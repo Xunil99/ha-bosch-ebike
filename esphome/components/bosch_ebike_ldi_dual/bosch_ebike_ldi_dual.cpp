@@ -278,6 +278,9 @@ static int gap_event_handler(struct ble_gap_event *event, void *arg) {
             if (ble_gap_conn_find(handle, &desc) == 0) {
               const ble_addr_t &id = desc.peer_id_addr;
               const ble_addr_t &ota = desc.peer_ota_addr;
+              // An all-zero identity address is NimBLE's canonical "not yet
+              // resolved" marker; a (practically nonexistent) legitimately
+              // all-zero public address would be misclassified as unresolved.
               const ble_addr_t &use =
                   (id.type == 0 && id.val[0] == 0 && id.val[1] == 0 && id.val[2] == 0 &&
                    id.val[3] == 0 && id.val[4] == 0 && id.val[5] == 0)
@@ -346,17 +349,25 @@ static int gap_event_handler(struct ble_gap_event *event, void *arg) {
         // to user-space, so the slot may not be assigned yet — resolve it from
         // the peer's identity address in that case (same routing as CONNECT).
         uint16_t handle = event->enc_change.conn_handle;
+        // Resolve the peer's identity address now: after a successful pairing
+        // the bike has distributed its IRK/identity, so peer_id_addr is the
+        // stable address all future reconnects will route by.
+        struct ble_gap_conn_desc desc;
+        bool have_desc = ble_gap_conn_find(handle, &desc) == 0;
+        // An all-zero identity address is NimBLE's canonical "not yet resolved"
+        // marker; a (practically nonexistent) legitimately all-zero public
+        // address would be misclassified as unresolved.
+        bool id_resolved =
+            have_desc &&
+            !(desc.peer_id_addr.type == 0 && desc.peer_id_addr.val[0] == 0 &&
+              desc.peer_id_addr.val[1] == 0 && desc.peer_id_addr.val[2] == 0 &&
+              desc.peer_id_addr.val[3] == 0 && desc.peer_id_addr.val[4] == 0 &&
+              desc.peer_id_addr.val[5] == 0);
+
         int slot = g_instance_dual->slot_for_conn(handle);
         if (slot < 0) {
-          struct ble_gap_conn_desc desc;
-          if (ble_gap_conn_find(handle, &desc) == 0) {
-            const ble_addr_t &id = desc.peer_id_addr;
-            const ble_addr_t &ota = desc.peer_ota_addr;
-            const ble_addr_t &use =
-                (id.type == 0 && id.val[0] == 0 && id.val[1] == 0 && id.val[2] == 0 &&
-                 id.val[3] == 0 && id.val[4] == 0 && id.val[5] == 0)
-                    ? ota
-                    : id;
+          if (have_desc) {
+            const ble_addr_t &use = id_resolved ? desc.peer_id_addr : desc.peer_ota_addr;
             slot = g_instance_dual->free_or_matching_slot(use.type, use.val);
           }
           if (slot >= 0) {
@@ -370,6 +381,23 @@ static int gap_event_handler(struct ble_gap_event *event, void *arg) {
         if (slot < 0) {
           ESP_LOGW(TAG, "ENC_CHANGE for unroutable conn_handle=%u – ignoring", handle);
           return 0;
+        }
+        // First-bond MAC convergence: a brand-new bike is initially claimed/
+        // persisted under its OTA/random address (identity not yet resolved at
+        // CONNECT time). Now that the identity address is known, overwrite the
+        // routed slot's persisted MAC with it and re-persist, so future
+        // reconnects — which match by the IDENTITY MAC — route to THIS slot
+        // instead of grabbing the other free slot (which would leave the bike
+        // occupying both slots over its first bond lifecycle).
+        if (id_resolved) {
+          const ble_addr_t &id = desc.peer_id_addr;
+          if (!g_instance_dual->slot_mac_equals(slot, id.type, id.val)) {
+            g_instance_dual->set_slot_mac(slot, id.type, id.val);
+            ESP_LOGI(TAG, "Slot %d (eBike %d) MAC converged to identity "
+                          "%02x:%02x:%02x:%02x:%02x:%02x (type %u)",
+                     slot, slot + 1, id.val[5], id.val[4], id.val[3], id.val[2],
+                     id.val[1], id.val[0], id.type);
+          }
         }
         g_instance_dual->peer(slot).conn_handle = handle;
         g_instance_dual->peer(slot).encrypted = true;
@@ -624,7 +652,7 @@ void BoschEbikeLdiDual::setup() {
   // stay stable across reboots.
   this->load_slot_macs_();
 
-  ESP_LOGI(TAG, "Initializing Bosch eBike LDI bridge (v0.1)");
+  ESP_LOGI(TAG, "Initializing Bosch eBike LDI Dual (2-bike) bridge (dual v0.1)");
 
   // NVS is already initialized by ESPHome before our setup() runs.
   esp_err_t ret = nimble_port_init();
@@ -751,12 +779,13 @@ void BoschEbikeLdiDual::publish_decoded_(int slot) {
 }
 
 void BoschEbikeLdiDual::dump_config() {
-  ESP_LOGCONFIG(TAG, "Bosch eBike LDI Bridge:");
+  ESP_LOGCONFIG(TAG, "Bosch eBike LDI Dual (2-bike) Bridge:");
   ESP_LOGCONFIG(TAG, "  Device name: %s", this->device_name_.c_str());
+  ESP_LOGCONFIG(TAG, "  Slots: 2 (eBike 1 + eBike 2)");
   ESP_LOGCONFIG(TAG, "  Service UUID: 0000eb20-eaa2-11e9-81b4-2a2ae2dbcce4");
   ESP_LOGCONFIG(TAG, "  Live Data Char: 0000eb21-eaa2-11e9-81b4-2a2ae2dbcce4");
   ESP_LOGCONFIG(TAG, "  Appearance: 0x0480 (Cycling)");
-  ESP_LOGCONFIG(TAG, "  Status: v0.5 – private advertising + manual pairing window (issue #36)");
+  ESP_LOGCONFIG(TAG, "  Status: dual v0.1 – per-peer slot routing + private advertising + manual pairing window");
 }
 
 float BoschEbikeLdiDual::get_setup_priority() const {

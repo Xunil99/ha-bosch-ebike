@@ -102,6 +102,21 @@ class BoschEbikeLdiDual : public Component {
   // Direct slot accessors for the static C-callbacks (one component instance).
   ConnectionContext &peer(int slot) { return this->peer_[slot]; }
 
+  // True if the slot's persisted MAC already equals this peer address. Used by
+  // the ENC_CHANGE handler to detect whether the persisted MAC still needs to
+  // converge to the resolved identity address.
+  bool slot_mac_equals(int slot, uint8_t addr_type, const uint8_t *addr) const {
+    return this->slot_mac_[slot].equals(addr_type, addr);
+  }
+  // Overwrite a slot's MAC with the resolved identity address and re-persist it,
+  // so future reconnects (which match by identity MAC) route to this slot.
+  void set_slot_mac(int slot, uint8_t addr_type, const uint8_t *addr) {
+    this->slot_mac_[slot].valid = true;
+    this->slot_mac_[slot].type = addr_type;
+    std::memcpy(this->slot_mac_[slot].addr, addr, 6);
+    this->persist_slot_mac_(slot);
+  }
+
   // True if ANY slot currently holds an active connection. Drives advertising
   // decisions: while only one of two bikes is connected we must keep
   // advertising so the second can still be found/reconnect.
