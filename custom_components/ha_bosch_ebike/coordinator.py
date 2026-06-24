@@ -29,7 +29,11 @@ from .const import (
     CONF_LIVE_SOC_ENTITY,
 )
 from .live_enrichment import get_state_at, parse_iso_utc
-from .range_estimate import compute_range_estimate, track_distance_m
+from .range_estimate import (
+    compute_range_estimate,
+    track_distance_m,
+    corrected_track_distance,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -471,6 +475,63 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         return state_changed
 
+    async def _recheck_recent_activity_distances(self) -> None:
+        """Issue #31: correct recent NON-latest activities from their GPS track.
+
+        The latest-activity check only fixes _all_activities[0]. But a ride's
+        full cloud GPS track can finish uploading only AFTER a newer ride has
+        appeared (the morning commute, finalized only in the evening), so the
+        morning ride would otherwise freeze on its partial summary forever.
+        Refetch the track of the most recent still-unconfirmed activities
+        (bounded by a 48 h window and a fetch cap) every poll and correct them
+        upwards once their full track is available. Index 0 is handled above;
+        BLE/GPS-confirmed distances are skipped.
+        """
+        if getattr(self, "is_bes2", False):
+            return  # BES2 uses a different track endpoint (handled elsewhere).
+        if len(self._all_activities) < 2:
+            return
+        cutoff = dt_util.utcnow() - timedelta(hours=48)
+        max_fetches = 5
+        fetched = 0
+        for act in self._all_activities[1:30]:
+            if fetched >= max_fetches:
+                break
+            if act.get("_distance_source") in ("ble_live", "gps_track"):
+                continue
+            aid = act.get("id")
+            if not aid:
+                continue
+            end_time = parse_iso_utc(act.get("endTime")) or parse_iso_utc(
+                act.get("startTime")
+            )
+            if end_time is None or end_time < cutoff:
+                continue
+            fetched += 1
+            try:
+                details = await self.api.get_activity_detail(aid)
+            except Exception as err:  # noqa: BLE001
+                _LOGGER.debug(
+                    "issue#31 recheck: detail fetch failed for %s: %s", aid, err
+                )
+                continue
+            track_m = track_distance_m(details)
+            summary_m = float(act.get("distance") or 0)
+            _LOGGER.debug(
+                "issue#31 recheck activity %s: summary=%.0f m track=%s",
+                aid, summary_m,
+                ("%.0f" % track_m) if track_m is not None else None,
+            )
+            corrected = corrected_track_distance(summary_m, track_m)
+            if corrected is not None:
+                act["distance"] = corrected
+                act["_distance_source"] = "gps_track"
+                _LOGGER.info(
+                    "Distance for activity %s corrected from GPS track "
+                    "(recheck): %.0f m (summary said %.0f m)",
+                    aid, corrected, summary_m,
+                )
+
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch bikes and activities from Bosch API."""
         try:
@@ -578,27 +639,26 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             ):
                 track_m = track_distance_m(self._latest_activity_details)
                 summary_m = float(latest_activity.get("distance") or 0)
-                if (
-                    track_m is not None
-                    and track_m > summary_m * 1.05
-                    and track_m - summary_m > 200.0
-                    # Absolute Plausibilitäts-Obergrenze (max. 500 km) gegen
-                    # echten Müll (Einheiten-Überraschung im Track-Feld, GPS-
-                    # Ausreißer in der Haversine-Summe). KEINE relative Grenze
-                    # mehr (früher: max. 2x Summary): eine in der Flow App noch
-                    # nicht beendete Tour meldet als Summary nur ein Teilstück,
-                    # sodass der vollständige Track ein Vielfaches betragen kann
-                    # — genau dieser Fall (0,9 km gemeldet, 5,4 km gefahren)
-                    # wurde von der 2x-Grenze faelschlich blockiert (issue #31).
-                    and track_m <= 500_000.0
-                ):
-                    latest_activity["distance"] = round(track_m, 1)
+                # Diagnostic (issue #31): record what we compared each poll, so a
+                # future failure shows whether the cloud track was still partial.
+                _LOGGER.debug(
+                    "issue#31 latest activity %s: summary=%.0f m track=%s",
+                    activity_id, summary_m,
+                    ("%.0f" % track_m) if track_m is not None else None,
+                )
+                corrected = corrected_track_distance(summary_m, track_m)
+                if corrected is not None:
+                    latest_activity["distance"] = corrected
                     latest_activity["_distance_source"] = "gps_track"
                     _LOGGER.info(
                         "Distance for activity %s corrected from GPS track: "
                         "%.0f m (summary said %.0f m)",
-                        activity_id, track_m, summary_m,
+                        activity_id, corrected, summary_m,
                     )
+
+        # Issue #31: also recheck recent NON-latest activities, whose full GPS
+        # track can finish uploading only after a newer ride has appeared.
+        await self._recheck_recent_activity_distances()
 
         # Restore persisted consumption state on first run
         await self.async_load_persisted_state()

@@ -12,6 +12,34 @@ _spec = importlib.util.spec_from_file_location("range_estimate", _MODULE_PATH)
 _mod = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_mod)
 compute_range_estimate = _mod.compute_range_estimate
+corrected_track_distance = _mod.corrected_track_distance
+
+
+def test_corrected_track_distance_partial_summary():
+    # Issue #31 matscheck case: summary reports a partial 1.2 km, the full GPS
+    # track is 5.4 km -> correct upwards to the track distance.
+    assert corrected_track_distance(1200.0, 5400.0) == 5400.0
+
+
+def test_corrected_track_distance_keeps_when_track_not_longer():
+    # Track shorter/equal (still uploading) -> keep the summary (never shrink).
+    assert corrected_track_distance(5400.0, 1200.0) is None
+    assert corrected_track_distance(5400.0, 5400.0) is None
+
+
+def test_corrected_track_distance_ignores_noise():
+    # Within the 5 % / 200 m noise band -> no correction.
+    assert corrected_track_distance(5000.0, 5100.0) is None   # +2 %
+    assert corrected_track_distance(10000.0, 10150.0) is None  # +150 m
+
+
+def test_corrected_track_distance_absolute_cap():
+    # Absurd track (unit surprise / GPS outliers) above 500 km -> reject.
+    assert corrected_track_distance(1000.0, 600_000.0) is None
+
+
+def test_corrected_track_distance_none_track():
+    assert corrected_track_distance(1200.0, None) is None
 
 
 def act(aid, km, start="2026-06-01T10:00:00Z"):
