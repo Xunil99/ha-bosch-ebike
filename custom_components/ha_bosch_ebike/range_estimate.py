@@ -122,3 +122,26 @@ def track_distance_m(details: dict[str, Any]) -> float | None:
         )
         total += 2 * 6371000.0 * math.asin(math.sqrt(a))
     return total if total > 0 else None
+
+
+def corrected_track_distance(
+    summary_m: float, track_m: float | None
+) -> float | None:
+    """GPS-track distance to use, or None to keep the summary (issue #31).
+
+    Corrects the cloud summary UPWARDS only — a partial/uploading track must
+    never shrink a value — past small noise (>5 % and >200 m), with an absolute
+    sanity cap (500 km) against unit surprises or haversine outliers. There is
+    deliberately NO relative cap: an unfinished ride reports only a partial
+    summary, so the full track can be many times longer (the case that the old
+    "max 2x summary" guard wrongly blocked).
+    """
+    if track_m is None:
+        return None
+    if (
+        track_m > summary_m * 1.05
+        and track_m - summary_m > 200.0
+        and track_m <= 500_000.0
+    ):
+        return round(track_m, 1)
+    return None
