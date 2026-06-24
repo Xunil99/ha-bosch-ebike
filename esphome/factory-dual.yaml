@@ -343,36 +343,42 @@ binary_sensor:
       name: "eBike 2 In Motion"
 
 switch:
-  # Master advertising toggle (Issue #36). Bridge-wide: there is ONE radio /
-  # advertising state for the whole dual bridge, so this stays single. Off = the
-  # bridge only advertises during a pairing window (boot 5 min / button) and is
-  # otherwise fully silent (no background reconnect). Default on. Boot window is
-  # unaffected.
+  # Per-bike pairing windows (Issue #36). Each switch opens a discoverable
+  # ~5-minute window TARGETING that bike's slot, so a NEW bike that connects is
+  # bound to eBike 1 or eBike 2 deterministically. Turn it on, add the bike in
+  # the Flow app; it auto-resets once the bike is paired or after 5 minutes.
+  # Outside any window the bridge advertises privately (invisible to other
+  # users' Flow apps) while already bonded bikes keep reconnecting automatically.
   - platform: template
-    name: "eBike Advertising"
-    icon: mdi:bluetooth
-    restore_mode: RESTORE_DEFAULT_ON
-    optimistic: true
+    name: "eBike 1 Pairing"
+    icon: mdi:bluetooth-connect
+    lambda: 'return id(ebike_dual_bridge).is_pairing(0);'
     turn_on_action:
-      - lambda: 'id(ebike_dual_bridge).set_advertising_enabled(true);'
+      - lambda: 'id(ebike_dual_bridge).start_pairing(0);'
     turn_off_action:
-      - lambda: 'id(ebike_dual_bridge).set_advertising_enabled(false);'
+      - lambda: 'id(ebike_dual_bridge).stop_pairing(0);'
+  - platform: template
+    name: "eBike 2 Pairing"
+    icon: mdi:bluetooth-connect
+    lambda: 'return id(ebike_dual_bridge).is_pairing(1);'
+    turn_on_action:
+      - lambda: 'id(ebike_dual_bridge).start_pairing(1);'
+    turn_off_action:
+      - lambda: 'id(ebike_dual_bridge).stop_pairing(1);'
 
 button:
-  # Open the pairing window (~5 min): the bridge becomes discoverable so the Flow
-  # app can add it. Outside the window it advertises privately and is NOT visible
-  # to other users' Flow apps. Bridge-wide control (one radio), so single.
-  # Pair the bikes one after another: press, add the next eBike in the Flow app,
-  # repeat for the second bike.
+  # Per-bike bond reset: deletes only that bike's bond + slot mapping (and
+  # disconnects it if connected), so you can re-pair a replacement bike to that
+  # slot. The other bike stays paired.
   - platform: template
-    name: "eBike Pair next eBike"
-    icon: mdi:bluetooth-connect
+    name: "eBike 1 Bond löschen"
+    icon: mdi:link-off
     on_press:
       then:
-        - lambda: 'id(ebike_dual_bridge).start_pairing();'
+        - lambda: 'id(ebike_dual_bridge).clear_bonding(0);'
   - platform: template
-    name: "eBike Clear Bonding"
+    name: "eBike 2 Bond löschen"
+    icon: mdi:link-off
     on_press:
       then:
-        - lambda: |-
-            id(ebike_dual_bridge).clear_bonding();
+        - lambda: 'id(ebike_dual_bridge).clear_bonding(1);'
