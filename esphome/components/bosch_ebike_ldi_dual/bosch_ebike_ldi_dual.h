@@ -124,15 +124,24 @@ class BoschEbikeLdiDual : public Component {
   bool any_connected() const;
 
   void clear_bonding();
+  // Per-slot: delete only THIS slot's bond + MAC mapping, disconnect it if live,
+  // and refresh advertising. Exposed as a per-bike "Bond löschen" HA button.
+  void clear_bonding(int slot);
 
   // Open the discoverable pairing window (default 5 min). While it is open the
   // bridge advertises with the LDI service solicitation so a Flow app can add
   // it; outside the window the bridge advertises privately (no solicitation,
   // non-discoverable, whitelist) so it is invisible to other users' Flow apps
   // while the bonded bike can still reconnect. Exposed as an HA button.
-  void start_pairing();
-  // True while the pairing window is open (for an HA status binary_sensor).
-  bool is_pairing();
+  // Open a discoverable 5-minute pairing window TARGETING a specific slot. A new
+  // (unbonded) bike that connects during the window is bound to this slot, so
+  // the user pairs eBike 1 vs eBike 2 deterministically via its own switch.
+  void start_pairing(int slot);
+  // Close the pairing window if it currently targets this slot.
+  void stop_pairing(int slot);
+  // True while a pairing window is open AND targets this slot. Drives the
+  // per-bike pairing switch so it auto-resets when the window closes/expires.
+  bool is_pairing(int slot);
 
   // Master advertising toggle (HA switch, default ON). When OFF the bridge
   // only advertises during a pairing window (boot 5 min / button) and is

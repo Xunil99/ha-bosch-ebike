@@ -135,6 +135,11 @@ extern std::string g_device_name_cache_dual;
 // and, on first boot without a bond, by on_stack_sync().
 static constexpr uint32_t PAIRING_WINDOW_MS = 5 * 60 * 1000;  // 5 minutes
 static uint32_t g_pairing_until_ms_dual = 0;
+// Slot the currently-open pairing window targets (-1 = none). A NEW (unbonded)
+// bike that connects during the window is assigned to THIS slot, so the user
+// picks eBike 1 vs eBike 2 via the per-bike pairing switch. A reconnecting
+// already-bonded bike always routes by its persisted MAC and ignores this.
+static int g_pairing_target_slot_dual = -1;
 
 // Master advertising toggle (HA switch). Default on. When off, the bridge only
 // advertises inside a pairing window (boot / button); otherwise it stays fully
@@ -306,9 +311,14 @@ static int gap_event_handler(struct ble_gap_event *event, void *arg) {
         }
         peer.encrypted = false;
         ESP_LOGI(TAG, "Peer assigned to slot %d (eBike %d)", slot, slot + 1);
-        // A bike connected -> pairing succeeded; close the discoverable window
-        // so we drop to private advertising on the next disconnect.
-        g_pairing_until_ms_dual = 0;
+        // Close the discoverable window ONLY when the TARGETED bike connected.
+        // A reconnecting bonded bike on the OTHER slot must not close a window
+        // the user opened to add the second bike (that was the bug: any connect
+        // closed the window, so the unbonded second bike could never be found).
+        if (pairing_window_open() && slot == g_pairing_target_slot_dual) {
+          g_pairing_until_ms_dual = 0;
+          g_pairing_target_slot_dual = -1;
+        }
         g_instance_dual->on_connect_state_change(slot, true);
 
         // Workaround for LDI-001: bike doesn't initiate DLE. We do.
@@ -845,8 +855,23 @@ int BoschEbikeLdiDual::free_or_matching_slot(uint8_t addr_type, const uint8_t *a
   for (int i = 0; i < NUM_SLOTS; i++) {
     if (this->slot_mac_[i].equals(addr_type, addr)) return i;
   }
-  // 2) No persisted match: claim the lowest slot that is neither live nor
-  //    already assigned to a different bike, then persist its MAC.
+  // 2) No persisted match: this is a NEW bike. If a pairing window targets a
+  //    specific, currently-free slot, claim THAT (the user picked eBike 1 vs 2
+  //    via its pairing switch); otherwise fall back to the lowest free slot.
+  {
+    int target = g_pairing_target_slot_dual;
+    if (pairing_window_open() && target >= 0 && target < NUM_SLOTS &&
+        this->peer_[target].conn_handle == CONN_HANDLE_NONE && !this->slot_mac_[target].valid) {
+      this->slot_mac_[target].valid = true;
+      this->slot_mac_[target].type = addr_type;
+      std::memcpy(this->slot_mac_[target].addr, addr, 6);
+      this->persist_slot_mac_(target);
+      ESP_LOGI(TAG, "Claimed target slot %d (eBike %d) for new peer "
+                    "%02x:%02x:%02x:%02x:%02x:%02x (type %u)",
+               target, target + 1, addr[5], addr[4], addr[3], addr[2], addr[1], addr[0], addr_type);
+      return target;
+    }
+  }
   for (int i = 0; i < NUM_SLOTS; i++) {
     if (this->peer_[i].conn_handle == CONN_HANDLE_NONE && !this->slot_mac_[i].valid) {
       this->slot_mac_[i].valid = true;
@@ -900,10 +925,38 @@ void BoschEbikeLdiDual::clear_bonding() {
   }
 }
 
-void BoschEbikeLdiDual::start_pairing() {
+void BoschEbikeLdiDual::clear_bonding(int slot) {
+  if (slot < 0 || slot >= NUM_SLOTS) return;
+  ESP_LOGW(TAG, "Clearing bond + slot->MAC mapping for slot %d (eBike %d)", slot, slot + 1);
+  // Delete ONLY this slot's bonded peer from the NVS store, by its persisted MAC.
+  if (this->slot_mac_[slot].valid) {
+    ble_addr_t addr;
+    addr.type = this->slot_mac_[slot].type;
+    std::memcpy(addr.val, this->slot_mac_[slot].addr, 6);
+    int rc = ble_store_util_delete_peer(&addr);
+    if (rc != 0)
+      ESP_LOGW(TAG, "ble_store_util_delete_peer slot %d rc=%d", slot, rc);
+  }
+  // Disconnect the bike if it is currently connected on this slot.
+  if (this->peer_[slot].conn_handle != CONN_HANDLE_NONE && g_ble_synced_dual) {
+    ble_gap_terminate(this->peer_[slot].conn_handle, BLE_ERR_REM_USER_CONN_TERM);
+  }
+  // Wipe the persisted assignment so re-pairing this slot starts fresh.
+  this->slot_mac_[slot] = PeerMac{};
+  this->persist_slot_mac_(slot);
+  // Refresh advertising/whitelist so the removed peer is no longer allowed.
+  if (g_ble_synced_dual) {
+    ble_gap_adv_stop();
+    start_advertising();
+  }
+}
+
+void BoschEbikeLdiDual::start_pairing(int slot) {
+  if (slot < 0 || slot >= NUM_SLOTS) return;
+  g_pairing_target_slot_dual = slot;
   g_pairing_until_ms_dual = millis() + PAIRING_WINDOW_MS;
-  ESP_LOGI(TAG, "Pairing window opened for %u min - discoverable for Flow app",
-           (unsigned) (PAIRING_WINDOW_MS / 60000));
+  ESP_LOGI(TAG, "Pairing window opened for eBike %d for %u min - discoverable for Flow app",
+           slot + 1, (unsigned) (PAIRING_WINDOW_MS / 60000));
   // Re-advertise in pairing mode now (drop any private advertising first).
   // Only touch GAP once the stack is up; before sync on_stack_sync() handles it.
   if (g_ble_synced_dual) {
@@ -912,7 +965,21 @@ void BoschEbikeLdiDual::start_pairing() {
   }
 }
 
-bool BoschEbikeLdiDual::is_pairing() { return pairing_window_open(); }
+void BoschEbikeLdiDual::stop_pairing(int slot) {
+  // Only the slot that currently owns the window may close it.
+  if (g_pairing_target_slot_dual != slot) return;
+  g_pairing_until_ms_dual = 0;
+  g_pairing_target_slot_dual = -1;
+  ESP_LOGI(TAG, "Pairing window for eBike %d closed by user", slot + 1);
+  if (g_ble_synced_dual) {
+    ble_gap_adv_stop();
+    start_advertising();  // drops to private reconnect advertising
+  }
+}
+
+bool BoschEbikeLdiDual::is_pairing(int slot) {
+  return pairing_window_open() && g_pairing_target_slot_dual == slot;
+}
 
 void BoschEbikeLdiDual::set_advertising_enabled(bool enabled) {
   g_adv_enabled_dual = enabled;
