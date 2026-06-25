@@ -6692,7 +6692,7 @@ const BOSCH_MODE_COLOR_ORDER = [
 // Keyed by the display name the integration emits (see profile_extra).
 const BOSCH_MODE_DEFAULT_COLOR = {
   TURBO: "red",
-  SPRINT: "grey",
+  SPRINT: "purple",
   SPORT: "orange",
   "eMTB+": "purple",
   eMTB: "purple",
@@ -7985,6 +7985,7 @@ class BoschEBikeDashboardCardEditor extends HTMLElement {
         o.textContent = this._t("color_" + key);
         sel.appendChild(o);
       }
+      sel.dataset.mode = mode;
       sel.value = (this._config.mode_colors && this._config.mode_colors[mode]) || "";
 
       const applySwatch = () => {
@@ -7994,10 +7995,15 @@ class BoschEBikeDashboardCardEditor extends HTMLElement {
       applySwatch();
 
       sel.addEventListener("change", () => {
-        // Immutable update (same reasoning as the show_range_pills toggle).
-        const mc = { ...(this._config.mode_colors || {}) };
-        if (sel.value) mc[mode] = sel.value;
-        else delete mc[mode];
+        // Rebuild mode_colors from the CURRENT state of every row, so the saved
+        // config always mirrors the UI exactly: reverting a mode to "Auto"
+        // (empty value) reliably drops its entry, and modes no longer present
+        // are pruned. Incrementally deleting a single key could leave a stale
+        // entry behind on revert-to-default (issue #37).
+        const mc = {};
+        cont.querySelectorAll("select[data-mode]").forEach((s) => {
+          if (s.value) mc[s.dataset.mode] = s.value;
+        });
         const next = { ...this._config };
         if (Object.keys(mc).length) next.mode_colors = mc;
         else delete next.mode_colors;
