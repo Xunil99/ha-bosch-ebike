@@ -147,6 +147,13 @@ static uint32_t g_pairing_until_ms = 0;
 // silent (no background reconnect). The boot window always overrides this.
 static bool g_adv_enabled = true;
 
+// True once the NimBLE host has synced (on_stack_sync ran). Until then NO GAP
+// or bond-store call is safe. The 'eBike Advertising' switch restores its
+// persisted state during early boot (RESTORE_DEFAULT_ON) and would otherwise
+// call ble_gap_*/the bond store before the stack is ready -> boot crash on the
+// 2nd boot once the NVS store is populated (Issue #41).
+static bool g_ble_synced = false;
+
 static bool pairing_window_open() {
   return g_pairing_until_ms != 0 && (int32_t) (g_pairing_until_ms - millis()) > 0;
 }
@@ -247,6 +254,7 @@ static void on_stack_sync() {
   g_pairing_until_ms = millis() + PAIRING_WINDOW_MS;
   ESP_LOGI(TAG, "Boot pairing window open for %u min",
            (unsigned) (PAIRING_WINDOW_MS / 60000));
+  g_ble_synced = true;  // host is up now; switch/button BLE calls are safe
   start_advertising();
 }
 
@@ -670,8 +678,11 @@ void BoschEbikeLdi::start_pairing() {
   ESP_LOGI(TAG, "Pairing window opened for %u min - discoverable for Flow app",
            (unsigned) (PAIRING_WINDOW_MS / 60000));
   // Re-advertise in pairing mode now (drop any private advertising first).
-  ble_gap_adv_stop();
-  start_advertising();
+  // Only touch GAP once the stack is up; before sync on_stack_sync() handles it.
+  if (g_ble_synced) {
+    ble_gap_adv_stop();
+    start_advertising();
+  }
 }
 
 bool BoschEbikeLdi::is_pairing() { return pairing_window_open(); }
@@ -681,7 +692,10 @@ void BoschEbikeLdi::set_advertising_enabled(bool enabled) {
   ESP_LOGI(TAG, "Advertising master switch -> %s", enabled ? "ON" : "OFF");
   // Re-evaluate immediately (no effect while connected; advertising is off
   // during a connection and the new state applies on the next disconnect).
-  if (!this->last_published_connected_) {
+  // Guard on g_ble_synced: the HA switch restores its persisted state during
+  // early boot, before the NimBLE stack is up — calling GAP/the bond store then
+  // crashes (Issue #41). on_stack_sync() applies the current g_adv_enabled.
+  if (g_ble_synced && !this->last_published_connected_) {
     ble_gap_adv_stop();
     start_advertising();
   }
