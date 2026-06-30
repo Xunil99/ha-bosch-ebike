@@ -1,7 +1,11 @@
 #include "livedata_decoder.h"
+#include "esphome/core/log.h"
+#include <set>
 
 namespace esphome {
 namespace bosch_ebike_ldi_dual {
+
+static const char *const TAG = "bosch_ebike_ldi_dual";
 
 namespace {
 
@@ -55,6 +59,23 @@ bool skip_value(const uint8_t *data, size_t len, size_t *pos, uint32_t wire_type
 // as their two's-complement uint64 -> just truncate to int32.
 inline int32_t to_int32(uint64_t v) { return (int32_t) v; }
 
+// Log each undocumented (field number, wire type) combination ONCE per boot at
+// INFO, so unknown LDI fields surface in the log without spamming on every
+// notification. Lets us map new Bosch fields across firmware / motor versions
+// over time (issue #42) instead of silently dropping them.
+void log_unknown_field(uint32_t field_no, uint32_t wire_type, uint64_t value) {
+  static std::set<uint32_t> seen;
+  uint32_t key = (field_no << 3) | (wire_type & 0x07);
+  if (!seen.insert(key).second) return;  // already reported this combination
+  if (wire_type == 0) {
+    ESP_LOGI(TAG, "LDI: undocumented field %u (varint) = %llu - please report",
+             field_no, (unsigned long long) value);
+  } else {
+    ESP_LOGI(TAG, "LDI: undocumented field %u (wire type %u) - please report",
+             field_no, wire_type);
+  }
+}
+
 }  // namespace
 
 bool decode_live_data(const uint8_t *data, size_t len, LiveData &out) {
@@ -65,8 +86,10 @@ bool decode_live_data(const uint8_t *data, size_t len, LiveData &out) {
     uint32_t field_no = (uint32_t) (tag >> 3);
     uint32_t wire_type = (uint32_t) (tag & 0x07);
 
-    // All fields we care about are wire_type=0 (varint).
+    // All fields we care about are wire_type=0 (varint). Any other wire type
+    // is necessarily an undocumented field - log it once, then skip.
     if (wire_type != 0) {
+      log_unknown_field(field_no, wire_type, 0);
       if (!skip_value(data, len, &pos, wire_type)) return false;
       continue;
     }
@@ -89,7 +112,9 @@ bool decode_live_data(const uint8_t *data, size_t len, LiveData &out) {
       case 24:  out.diagnosis_active_present = true;   out.diagnosis_active = (v != 0);          break;
       case 25:  out.bike_not_driving_present = true;   out.bike_not_driving = (v != 0);          break;
       default:
-        // Unknown field – proto3 says ignore.
+        // Unknown varint field. proto3 says ignore for decoding, but we log it
+        // once so undocumented LDI fields can be discovered (issue #42).
+        log_unknown_field(field_no, 0, v);
         break;
     }
   }
