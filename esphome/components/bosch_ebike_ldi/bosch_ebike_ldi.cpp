@@ -739,18 +739,20 @@ static void diag_subscribe_next() {
     const DiagChar &c = g_diag_chars[g_diag_idx];
     if ((c.props & CHR_PROP_NOTIFY) && c.val_handle != g_conn.live_chr_val_handle &&
         c.val_handle != 0xffff) {
-      // The CCCD sits between this characteristic's value handle and the next
-      // characteristic, but never beyond the owning service. Bounding to the
-      // service end (and tightening to the next char) means a CCCD write can
-      // never target a descriptor outside this characteristic.
-      uint16_t start = (uint16_t) (c.val_handle + 1);
+      // NimBLE's disc_all_dscs scans (start_handle, end_handle] - it begins AFTER
+      // start_handle - so we pass the value handle itself as the anchor (exactly
+      // like the proven eb21 path in on_disc_dsc). Passing val_handle+1 made the
+      // internal request start at val_handle+2 > end -> synchronous EINVAL (3).
+      // end is bounded to the owning service (and tightened to the next char) so
+      // a CCCD write can never target a descriptor outside this characteristic.
+      uint16_t start = c.val_handle;
       uint16_t end = diag_service_end_for(c.def_handle);
       if (g_diag_idx + 1 < g_diag_chars.size()) {
         uint16_t next_def = g_diag_chars[g_diag_idx + 1].def_handle;
         if (next_def > 0 && (uint16_t) (next_def - 1) < end) end = (uint16_t) (next_def - 1);
       }
       g_diag_pending_cccd = 0;
-      if (start <= end) {
+      if (end > c.val_handle) {  // at least one handle after the value -> room for a CCCD
         int rc = ble_gattc_disc_all_dscs(g_conn.conn_handle, start, end,
                                          on_diag_sub_dsc, nullptr);
         if (rc == 0) return;  // wait for descriptor discovery
