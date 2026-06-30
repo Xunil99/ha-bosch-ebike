@@ -776,7 +776,7 @@ static int on_diag_sub_dsc(uint16_t conn_handle, const struct ble_gatt_error *er
       uint8_t value[2] = {0x01, 0x00};  // enable notifications
       int rc = ble_gattc_write_flat(conn_handle, cccd, value, sizeof(value),
                                     on_diag_sub_write, nullptr);
-      if (rc == 0) return;  // wait for write callback
+      if (rc == 0) return 0;  // wait for write callback
       ESP_LOGW(TAG, "GATT dump: CCCD write start failed: %d", rc);
     }
     g_diag_idx++;
