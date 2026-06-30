@@ -63,6 +63,14 @@ static int on_chr_read(uint16_t conn_handle, const struct ble_gatt_error *error,
                        struct ble_gatt_attr *attr, void *arg);
 static int on_mtu_exchange(uint16_t conn_handle, const struct ble_gatt_error *error,
                            uint16_t mtu, void *arg);
+// One-time diagnostic full-GATT scan (issue #42): enumerate every service and
+// characteristic the bike exposes over the LDI accessory link, logged once per
+// boot. Read-only; runs after the eb20/eb21 live-data path is already up.
+static int on_diag_svc(uint16_t conn_handle, const struct ble_gatt_error *error,
+                       const struct ble_gatt_svc *svc, void *arg);
+static int on_diag_chr(uint16_t conn_handle, const struct ble_gatt_error *error,
+                       const struct ble_gatt_chr *chr, void *arg);
+static bool g_diag_scan_done = false;
 
 // ---- Per-connection discovery state -----------------------------------------
 struct ConnectionContext {
@@ -508,6 +516,62 @@ static int on_chr_read(uint16_t conn_handle, const struct ble_gatt_error *error,
   log_hex("INITIAL_READ raw", buf, copy_len);
   ESP_LOGI(TAG, "Initial read got %u bytes – parsing as full snapshot", len);
   if (g_instance) g_instance->on_live_data_notify(buf, copy_len);
+
+  // One-time diagnostic: enumerate ALL GATT services + characteristics so any
+  // undocumented surface beyond eb20/eb21 shows up in the log (issue #42). Runs
+  // once per boot, here (after the live-data path is up), so it never competes
+  // with the connect/discovery/read procedures above. Read-only.
+  if (!g_diag_scan_done) {
+    ESP_LOGI(TAG, "Running one-time full GATT scan (diagnostic, issue #42)");
+    int rc = ble_gattc_disc_all_svcs(conn_handle, on_diag_svc, nullptr);
+    if (rc == 0) {
+      g_diag_scan_done = true;
+    } else {
+      ESP_LOGW(TAG, "diag disc_all_svcs start failed: %d (will retry on reconnect)", rc);
+    }
+  }
+  return 0;
+}
+
+static int on_diag_svc(uint16_t conn_handle, const struct ble_gatt_error *error,
+                       const struct ble_gatt_svc *svc, void *arg) {
+  if (error == nullptr) return 0;
+  if (error->status == BLE_HS_EDONE) {
+    // All services listed; now enumerate every characteristic on the device.
+    int rc = ble_gattc_disc_all_chrs(conn_handle, 0x0001, 0xffff, on_diag_chr, nullptr);
+    if (rc != 0) ESP_LOGW(TAG, "diag disc_all_chrs start failed: %d", rc);
+    return 0;
+  }
+  if (error->status != 0) {
+    ESP_LOGW(TAG, "diag disc_all_svcs error 0x%x", error->status);
+    return 0;
+  }
+  if (svc != nullptr) {
+    char buf[BLE_UUID_STR_LEN];
+    ble_uuid_to_str(&svc->uuid.u, buf);
+    ESP_LOGI(TAG, "GATT scan: service %s handles 0x%04x-0x%04x",
+             buf, svc->start_handle, svc->end_handle);
+  }
+  return 0;
+}
+
+static int on_diag_chr(uint16_t conn_handle, const struct ble_gatt_error *error,
+                       const struct ble_gatt_chr *chr, void *arg) {
+  if (error == nullptr) return 0;
+  if (error->status == BLE_HS_EDONE) {
+    ESP_LOGI(TAG, "GATT scan complete");
+    return 0;
+  }
+  if (error->status != 0) {
+    ESP_LOGW(TAG, "diag disc_all_chrs error 0x%x", error->status);
+    return 0;
+  }
+  if (chr != nullptr) {
+    char buf[BLE_UUID_STR_LEN];
+    ble_uuid_to_str(&chr->uuid.u, buf);
+    ESP_LOGI(TAG, "GATT scan: characteristic %s def=0x%04x val=0x%04x props=0x%02x",
+             buf, chr->def_handle, chr->val_handle, chr->properties);
+  }
   return 0;
 }
 
