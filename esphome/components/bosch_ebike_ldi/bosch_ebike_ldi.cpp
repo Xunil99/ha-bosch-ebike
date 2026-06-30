@@ -5,6 +5,9 @@
 #include "esphome/core/helpers.h"
 #include "esphome/core/application.h"
 
+#include <set>
+#include <vector>
+
 extern "C" {
 #include "esp_bt.h"
 #include "esp_log.h"
@@ -72,6 +75,45 @@ static int on_diag_chr(uint16_t conn_handle, const struct ble_gatt_error *error,
                        const struct ble_gatt_chr *chr, void *arg);
 static bool g_diag_scan_done = false;
 
+// One-time read-only raw dump (issue #42): after the scan, read every readable
+// characteristic once and subscribe to every notify characteristic, logging the
+// raw bytes so the payloads of the undocumented Bosch services (eb10/eb40/ebd0/
+// 00000010) become visible. Never writes to a data characteristic; the writable
+// 00000012 is left untouched on purpose (a write could change bike state).
+static void diag_dump_start();
+static void diag_read_next();
+static int on_diag_read(uint16_t conn_handle, const struct ble_gatt_error *error,
+                        struct ble_gatt_attr *attr, void *arg);
+static void diag_subscribe_next();
+static int on_diag_sub_dsc(uint16_t conn_handle, const struct ble_gatt_error *error,
+                           uint16_t chr_val_handle,
+                           const struct ble_gatt_dsc *dsc, void *arg);
+static int on_diag_sub_write(uint16_t conn_handle, const struct ble_gatt_error *error,
+                             struct ble_gatt_attr *attr, void *arg);
+
+// Raw GATT characteristic property bits (per Bluetooth GATT spec); chr->properties
+// from discovery carries exactly these. Local constants avoid depending on which
+// NimBLE flag macros happen to be defined in this build.
+static constexpr uint8_t CHR_PROP_READ = 0x02;
+static constexpr uint8_t CHR_PROP_NOTIFY = 0x10;
+
+// Characteristics collected during the scan; drives the dump above.
+struct DiagChar {
+  uint16_t def_handle{0};
+  uint16_t val_handle{0};
+  uint8_t props{0};
+  bool redact{false};  // device-unique id char: value logged at DEBUG only
+  char uuid[BLE_UUID_STR_LEN]{};
+};
+struct DiagSvc {
+  uint16_t start{0};
+  uint16_t end{0};
+};
+static std::vector<DiagChar> g_diag_chars;
+static std::vector<DiagSvc> g_diag_svcs;  // service handle ranges, to bound CCCD scans
+static size_t g_diag_idx = 0;
+static uint16_t g_diag_pending_cccd = 0;
+
 // ---- Per-connection discovery state -----------------------------------------
 struct ConnectionContext {
   uint16_t conn_handle{BLE_HS_CONN_HANDLE_NONE};
@@ -93,6 +135,24 @@ static void log_hex(const char *prefix, const uint8_t *buf, size_t len) {
   }
   hex[to_print > 0 ? (to_print * 3 - 1) : 0] = '\0';
   ESP_LOGD(TAG, "%s len=%u: %s%s", prefix, (unsigned) len, hex, len > 64 ? " …" : "");
+}
+
+// INFO-level hex + ASCII dump for the one-time diagnostic pass, so the raw
+// payloads of the non-LDI characteristics are visible at the default log level.
+// (The high-frequency LDI hex stays at DEBUG via log_hex above.)
+static void diag_log_value(const char *what, const char *uuid, uint16_t handle,
+                           const uint8_t *buf, size_t len) {
+  char hex[3 * 48 + 1];
+  char asc[48 + 1];
+  size_t n = len < 48 ? len : 48;
+  for (size_t i = 0; i < n; i++) {
+    snprintf(&hex[i * 3], 4, "%02x ", buf[i]);
+    asc[i] = (buf[i] >= 0x20 && buf[i] < 0x7f) ? (char) buf[i] : '.';
+  }
+  hex[n > 0 ? (n * 3 - 1) : 0] = '\0';
+  asc[n] = '\0';
+  ESP_LOGI(TAG, "GATT dump: %s %s handle=0x%04x len=%u: %s%s | \"%s\"",
+           what, uuid, handle, (unsigned) len, hex, len > 48 ? " …" : "", asc);
 }
 
 // Build raw advertising payload including Service Solicitation 128-bit (AD 0x15).
@@ -297,6 +357,10 @@ static int gap_event_handler(struct ble_gap_event *event, void *arg) {
       ESP_LOGW(TAG, "GAP DISCONNECT reason=0x%02x",
                event->disconnect.reason);
       g_conn = ConnectionContext{};
+      // Abort any in-flight diagnostic dump so its callbacks stop cleanly (the
+      // conn_handle is now NONE; the next diag_*_next() early-outs as well).
+      g_diag_pending_cccd = 0;
+      g_diag_idx = g_diag_chars.size();
       if (g_instance) g_instance->on_connect_state_change(false);
       start_advertising();
       return 0;
@@ -335,10 +399,23 @@ static int gap_event_handler(struct ble_gap_event *event, void *arg) {
       uint8_t buf[256];
       uint16_t copy_len = len < sizeof(buf) ? len : sizeof(buf);
       os_mbuf_copydata(event->notify_rx.om, 0, copy_len, buf);
-      log_hex("NOTIFY_RX raw", buf, copy_len);
-      ESP_LOGI(TAG, "NOTIFY handle=0x%04x len=%u indication=%d",
-               handle, len, event->notify_rx.indication);
-      if (g_instance) g_instance->on_live_data_notify(buf, copy_len);
+      if (handle == g_conn.live_chr_val_handle) {
+        log_hex("NOTIFY_RX raw", buf, copy_len);  // LDI: high frequency -> DEBUG
+        ESP_LOGI(TAG, "NOTIFY handle=0x%04x len=%u indication=%d",
+                 handle, len, event->notify_rx.indication);
+        if (g_instance) g_instance->on_live_data_notify(buf, copy_len);
+      } else {
+        // A non-LDI characteristic we subscribed to during the diagnostic dump
+        // fired. Log the first payload per handle at INFO (with bytes) so it is
+        // visible, then drop to DEBUG to avoid spamming. NEVER fed to the LDI
+        // decoder, which would misparse it and pollute the sensors.
+        static std::set<uint16_t> diag_seen;
+        if (diag_seen.insert(handle).second) {
+          diag_log_value("notify", "(non-LDI)", handle, buf, copy_len);
+        } else {
+          log_hex("NOTIFY_RX (non-LDI)", buf, copy_len);
+        }
+      }
       return 0;
     }
     case BLE_GAP_EVENT_REPEAT_PAIRING: {
@@ -523,6 +600,8 @@ static int on_chr_read(uint16_t conn_handle, const struct ble_gatt_error *error,
   // with the connect/discovery/read procedures above. Read-only.
   if (!g_diag_scan_done) {
     ESP_LOGI(TAG, "Running one-time full GATT scan (diagnostic, issue #42)");
+    g_diag_chars.clear();
+    g_diag_svcs.clear();
     int rc = ble_gattc_disc_all_svcs(conn_handle, on_diag_svc, nullptr);
     if (rc == 0) {
       g_diag_scan_done = true;
@@ -549,6 +628,7 @@ static int on_diag_svc(uint16_t conn_handle, const struct ble_gatt_error *error,
   if (svc != nullptr) {
     char buf[BLE_UUID_STR_LEN];
     ble_uuid_to_str(&svc->uuid.u, buf);
+    g_diag_svcs.push_back(DiagSvc{svc->start_handle, svc->end_handle});
     ESP_LOGI(TAG, "GATT scan: service %s handles 0x%04x-0x%04x",
              buf, svc->start_handle, svc->end_handle);
   }
@@ -560,6 +640,8 @@ static int on_diag_chr(uint16_t conn_handle, const struct ble_gatt_error *error,
   if (error == nullptr) return 0;
   if (error->status == BLE_HS_EDONE) {
     ESP_LOGI(TAG, "GATT scan complete");
+    // Now run the read-only raw dump over the characteristics we just collected.
+    diag_dump_start();
     return 0;
   }
   if (error->status != 0) {
@@ -567,11 +649,166 @@ static int on_diag_chr(uint16_t conn_handle, const struct ble_gatt_error *error,
     return 0;
   }
   if (chr != nullptr) {
-    char buf[BLE_UUID_STR_LEN];
-    ble_uuid_to_str(&chr->uuid.u, buf);
+    DiagChar dc;
+    dc.def_handle = chr->def_handle;
+    dc.val_handle = chr->val_handle;
+    dc.props = chr->properties;
+    // Redact only device-UNIQUE identifiers (value to DEBUG, not the public INFO
+    // log): Serial Number 0x2a25 and System ID 0x2a23 (a MAC-derived EUI). Model
+    // number, firmware/software revision and manufacturer stay at INFO - they are
+    // per-model diagnostics, not per-bike identifiers.
+    dc.redact = (chr->uuid.u.type == BLE_UUID_TYPE_16 &&
+                 (chr->uuid.u16.value == 0x2a25 || chr->uuid.u16.value == 0x2a23));
+    ble_uuid_to_str(&chr->uuid.u, dc.uuid);
+    g_diag_chars.push_back(dc);
     ESP_LOGI(TAG, "GATT scan: characteristic %s def=0x%04x val=0x%04x props=0x%02x",
-             buf, chr->def_handle, chr->val_handle, chr->properties);
+             dc.uuid, chr->def_handle, chr->val_handle, chr->properties);
   }
+  return 0;
+}
+
+// ---- One-time read-only raw dump (issue #42) -------------------------------
+// NimBLE allows only ONE client procedure per connection at a time, so we walk
+// the collected characteristics strictly sequentially: each callback starts the
+// next step. Pass 1 reads every readable characteristic once; pass 2 subscribes
+// to every notify characteristic (find its CCCD, write 0x0001). The LDI eb21 is
+// skipped in both passes (already read + subscribed by the normal path), and the
+// write-only 00000012 is never touched (no READ and no NOTIFY bit).
+// End handle of the service that owns `handle` (0xffff if unknown). Used to keep
+// a CCCD descriptor scan strictly inside the owning service.
+static uint16_t diag_service_end_for(uint16_t handle) {
+  for (const DiagSvc &s : g_diag_svcs) {
+    if (handle >= s.start && handle <= s.end) return s.end;
+  }
+  return 0xffff;
+}
+
+static void diag_dump_start() {
+  ESP_LOGI(TAG, "Starting read-only raw dump of %u characteristics (issue #42)",
+           (unsigned) g_diag_chars.size());
+  g_diag_idx = 0;
+  diag_read_next();
+}
+
+static void diag_read_next() {
+  if (g_conn.conn_handle == BLE_HS_CONN_HANDLE_NONE) return;  // link dropped mid-dump
+  while (g_diag_idx < g_diag_chars.size()) {
+    const DiagChar &c = g_diag_chars[g_diag_idx];
+    if ((c.props & CHR_PROP_READ) && c.val_handle != g_conn.live_chr_val_handle) {
+      int rc = ble_gattc_read(g_conn.conn_handle, c.val_handle, on_diag_read, nullptr);
+      if (rc == 0) return;  // wait for callback; index NOT advanced yet
+      ESP_LOGW(TAG, "GATT dump: read start failed for %s: %d", c.uuid, rc);
+    }
+    g_diag_idx++;  // not readable, is the LDI char, or read failed to start
+  }
+  // Reads done -> begin the subscribe pass.
+  g_diag_idx = 0;
+  diag_subscribe_next();
+}
+
+static int on_diag_read(uint16_t conn_handle, const struct ble_gatt_error *error,
+                        struct ble_gatt_attr *attr, void *arg) {
+  if (g_diag_idx >= g_diag_chars.size()) return 0;  // defensive
+  const DiagChar &c = g_diag_chars[g_diag_idx];
+  if (error != nullptr && error->status != 0) {
+    ESP_LOGW(TAG, "GATT dump: read failed for %s status=0x%x", c.uuid, error->status);
+  } else if (attr != nullptr && attr->om != nullptr) {
+    uint16_t len = OS_MBUF_PKTLEN(attr->om);
+    uint8_t buf[64];
+    uint16_t n = len < sizeof(buf) ? len : sizeof(buf);
+    os_mbuf_copydata(attr->om, 0, n, buf);
+    if (c.redact) {
+      // Device-unique identifier (Serial Number / System ID): can identify the
+      // bike. Keep it out of the default INFO log (which a user may paste
+      // publicly); the value goes to DEBUG only.
+      ESP_LOGI(TAG, "GATT dump: read %s handle=0x%04x len=%u (identifying value at DEBUG)",
+               c.uuid, attr->handle, len);
+      log_hex("  id", buf, n);
+    } else {
+      diag_log_value("read", c.uuid, attr->handle, buf, n);
+    }
+  }
+  g_diag_idx++;
+  diag_read_next();
+  return 0;
+}
+
+static void diag_subscribe_next() {
+  if (g_conn.conn_handle == BLE_HS_CONN_HANDLE_NONE) return;  // link dropped mid-dump
+  while (g_diag_idx < g_diag_chars.size()) {
+    const DiagChar &c = g_diag_chars[g_diag_idx];
+    if ((c.props & CHR_PROP_NOTIFY) && c.val_handle != g_conn.live_chr_val_handle &&
+        c.val_handle != 0xffff) {
+      // The CCCD sits between this characteristic's value handle and the next
+      // characteristic, but never beyond the owning service. Bounding to the
+      // service end (and tightening to the next char) means a CCCD write can
+      // never target a descriptor outside this characteristic.
+      uint16_t start = (uint16_t) (c.val_handle + 1);
+      uint16_t end = diag_service_end_for(c.def_handle);
+      if (g_diag_idx + 1 < g_diag_chars.size()) {
+        uint16_t next_def = g_diag_chars[g_diag_idx + 1].def_handle;
+        if (next_def > 0 && (uint16_t) (next_def - 1) < end) end = (uint16_t) (next_def - 1);
+      }
+      g_diag_pending_cccd = 0;
+      if (start <= end) {
+        int rc = ble_gattc_disc_all_dscs(g_conn.conn_handle, start, end,
+                                         on_diag_sub_dsc, nullptr);
+        if (rc == 0) return;  // wait for descriptor discovery
+        ESP_LOGW(TAG, "GATT dump: dsc disc start failed for %s: %d", c.uuid, rc);
+      }
+    }
+    g_diag_idx++;
+  }
+  ESP_LOGI(TAG, "GATT raw dump complete (read all readable, subscribed all notify)");
+}
+
+static int on_diag_sub_dsc(uint16_t conn_handle, const struct ble_gatt_error *error,
+                           uint16_t chr_val_handle,
+                           const struct ble_gatt_dsc *dsc, void *arg) {
+  if (error == nullptr) return 0;
+  if (error->status == BLE_HS_EDONE) {
+    // Descriptor discovery for this char finished. If we found a CCCD, enable
+    // notifications now. (Writing inside the disc callback would collide with the
+    // still-active procedure, so the write is deferred to here.)
+    if (g_diag_pending_cccd != 0) {
+      uint16_t cccd = g_diag_pending_cccd;
+      g_diag_pending_cccd = 0;
+      uint8_t value[2] = {0x01, 0x00};  // enable notifications
+      int rc = ble_gattc_write_flat(conn_handle, cccd, value, sizeof(value),
+                                    on_diag_sub_write, nullptr);
+      if (rc == 0) return;  // wait for write callback
+      ESP_LOGW(TAG, "GATT dump: CCCD write start failed: %d", rc);
+    }
+    g_diag_idx++;
+    diag_subscribe_next();
+    return 0;
+  }
+  if (error->status != 0) {
+    g_diag_pending_cccd = 0;
+    g_diag_idx++;
+    diag_subscribe_next();
+    return 0;
+  }
+  if (dsc != nullptr && dsc->uuid.u.type == BLE_UUID_TYPE_16 &&
+      dsc->uuid.u16.value == 0x2902) {
+    g_diag_pending_cccd = dsc->handle;  // CCCD; write happens on EDONE above
+  }
+  return 0;
+}
+
+static int on_diag_sub_write(uint16_t conn_handle, const struct ble_gatt_error *error,
+                             struct ble_gatt_attr *attr, void *arg) {
+  if (g_diag_idx < g_diag_chars.size()) {
+    const DiagChar &c = g_diag_chars[g_diag_idx];
+    if (error != nullptr && error->status != 0) {
+      ESP_LOGW(TAG, "GATT dump: subscribe failed for %s status=0x%x", c.uuid, error->status);
+    } else {
+      ESP_LOGI(TAG, "GATT dump: subscribed to %s (notify); any data appears as 'notify (non-LDI)'",
+               c.uuid);
+    }
+  }
+  g_diag_idx++;
+  diag_subscribe_next();
   return 0;
 }
 
