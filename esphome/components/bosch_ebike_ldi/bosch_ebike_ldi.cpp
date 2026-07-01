@@ -7,6 +7,7 @@
 
 #include <set>
 #include <vector>
+#include <cstdarg>
 
 extern "C" {
 #include "esp_bt.h"
@@ -40,6 +41,18 @@ const uint8_t LDI_SERVICE_UUID128[16] = {
 const uint8_t LDI_LIVE_DATA_CHR_UUID128[16] = {
     0xe4, 0xcc, 0xdb, 0xe2, 0x2a, 0x2a, 0xb4, 0x81,
     0xe9, 0x11, 0xa2, 0xea, 0x21, 0xeb, 0x00, 0x00,
+};
+
+// Experimental (issue #42): the non-LDI Bosch "ride data" profile on the same
+// eaa2 base. Little-endian 128-bit form of 00000011 (ride/notify) and 00000021
+// (config/notify). Used only to recognise these characteristics in the scan.
+const uint8_t EAA2_RIDE_CHR_UUID128[16] = {
+    0xe4, 0xcc, 0xdb, 0xe2, 0x2a, 0x2a, 0xb4, 0x81,
+    0xe9, 0x11, 0xa2, 0xea, 0x11, 0x00, 0x00, 0x00,
+};
+const uint8_t EAA2_CONFIG_CHR_UUID128[16] = {
+    0xe4, 0xcc, 0xdb, 0xe2, 0x2a, 0x2a, 0xb4, 0x81,
+    0xe9, 0x11, 0xa2, 0xea, 0x21, 0x00, 0x00, 0x00,
 };
 
 // AD type for 128-bit Service Solicitation list (BT Core Suppl. Part A §1.10).
@@ -113,6 +126,15 @@ static std::vector<DiagChar> g_diag_chars;
 static std::vector<DiagSvc> g_diag_svcs;  // service handle ranges, to bound CCCD scans
 static size_t g_diag_idx = 0;
 static uint16_t g_diag_pending_cccd = 0;
+
+// eaa2 ride-data profile (EXPERIMENTAL, issue #42): a non-LDI Bosch profile that
+// also carries motor power and a numeric assist mode. Handles are captured during
+// the scan; notifications are decoded read-only in decode_eaa2() and only logged.
+// This channel is silent on a stationary bike and streams only while riding on
+// some motor generations (SX / CX Gen5, per the Nilogax/SmartBridge project).
+static uint16_t g_eaa2_ride_handle = 0;    // 00000011 value handle
+static uint16_t g_eaa2_config_handle = 0;  // 00000021 value handle
+static void decode_eaa2(const uint8_t *data, size_t len, const char *src);
 
 // ---- Per-connection discovery state -----------------------------------------
 struct ConnectionContext {
@@ -404,6 +426,10 @@ static int gap_event_handler(struct ble_gap_event *event, void *arg) {
         ESP_LOGI(TAG, "NOTIFY handle=0x%04x len=%u indication=%d",
                  handle, len, event->notify_rx.indication);
         if (g_instance) g_instance->on_live_data_notify(buf, copy_len);
+      } else if (g_eaa2_ride_handle != 0 && handle == g_eaa2_ride_handle) {
+        decode_eaa2(buf, copy_len, "ride");  // experimental, issue #42
+      } else if (g_eaa2_config_handle != 0 && handle == g_eaa2_config_handle) {
+        decode_eaa2(buf, copy_len, "config");
       } else {
         // A non-LDI characteristic we subscribed to during the diagnostic dump
         // fired. Log the first payload per handle at INFO (with bytes) so it is
@@ -602,6 +628,8 @@ static int on_chr_read(uint16_t conn_handle, const struct ble_gatt_error *error,
     ESP_LOGI(TAG, "Running one-time full GATT scan (diagnostic, issue #42)");
     g_diag_chars.clear();
     g_diag_svcs.clear();
+    g_eaa2_ride_handle = 0;
+    g_eaa2_config_handle = 0;
     int rc = ble_gattc_disc_all_svcs(conn_handle, on_diag_svc, nullptr);
     if (rc == 0) {
       g_diag_scan_done = true;
@@ -660,6 +688,14 @@ static int on_diag_chr(uint16_t conn_handle, const struct ble_gatt_error *error,
     dc.redact = (chr->uuid.u.type == BLE_UUID_TYPE_16 &&
                  (chr->uuid.u16.value == 0x2a25 || chr->uuid.u16.value == 0x2a23));
     ble_uuid_to_str(&chr->uuid.u, dc.uuid);
+    // Capture the eaa2 ride/config characteristics so their notifications can be
+    // decoded (experiment). They are subscribed to by the read-only dump below.
+    if (chr->uuid.u.type == BLE_UUID_TYPE_128) {
+      if (memcmp(chr->uuid.u128.value, EAA2_RIDE_CHR_UUID128, 16) == 0)
+        g_eaa2_ride_handle = chr->val_handle;
+      else if (memcmp(chr->uuid.u128.value, EAA2_CONFIG_CHR_UUID128, 16) == 0)
+        g_eaa2_config_handle = chr->val_handle;
+    }
     g_diag_chars.push_back(dc);
     ESP_LOGI(TAG, "GATT scan: characteristic %s def=0x%04x val=0x%04x props=0x%02x",
              dc.uuid, chr->def_handle, chr->val_handle, chr->properties);
@@ -812,6 +848,80 @@ static int on_diag_sub_write(uint16_t conn_handle, const struct ble_gatt_error *
   g_diag_idx++;
   diag_subscribe_next();
   return 0;
+}
+
+// ---- eaa2 ride-data decoder (EXPERIMENTAL, issue #42) ----------------------
+// Read-only: decode the non-LDI Bosch "ride data" notifications and log the
+// recognised fields. Frame layout, repeated within one notification:
+//   0x30, len, id_hi, id_lo, [type, value...]   (type 0x08 = varint, 0x0A = string)
+// The field map and framing are protocol facts observed by the Nilogax/SmartBridge
+// project; this is an independent reimplementation. NOTHING is written to the bike.
+
+// Bounded base-128 varint. Reads from data[*pos] up to (but not including) limit,
+// advancing *pos. Returns false on truncation.
+static bool eaa2_varint(const uint8_t *data, size_t limit, size_t *pos, uint32_t *out) {
+  uint32_t result = 0;
+  int shift = 0, consumed = 0;
+  while (*pos < limit && consumed < 5) {
+    uint8_t b = data[(*pos)++];
+    result |= (uint32_t) (b & 0x7f) << shift;
+    consumed++;
+    if ((b & 0x80) == 0) { *out = result; return true; }
+    shift += 7;
+  }
+  return false;
+}
+
+// Append to a bounded log line without overflowing.
+static void eaa2_append(char *line, size_t *lp, size_t cap, const char *fmt, ...) {
+  if (*lp >= cap - 1) return;
+  va_list ap;
+  va_start(ap, fmt);
+  int m = vsnprintf(line + *lp, cap - *lp, fmt, ap);
+  va_end(ap);
+  if (m > 0) *lp += (size_t) m;
+}
+
+static void decode_eaa2(const uint8_t *data, size_t len, const char *src) {
+  char line[200];
+  size_t lp = 0;
+  eaa2_append(line, &lp, sizeof(line), "eaa2 %s:", src);
+  int known = 0;
+  size_t i = 0;
+  while (i < len) {
+    if (data[i] != 0x30) { i++; continue; }
+    if (i + 1 >= len) break;                    // need at least 0x30 + length byte
+    uint8_t msg_len = data[i + 1];
+    size_t total = (size_t) msg_len + 2;
+    if (msg_len < 2 || msg_len > 50 || i + total > len) { i++; continue; }
+    uint16_t id = (uint16_t) ((data[i + 2] << 8) | data[i + 3]);  // total>=4 -> in range
+    uint32_t value = 0;
+    if (msg_len > 2 && total > 5) {
+      uint8_t type = data[i + 4];
+      if (type == 0x08) { size_t p = i + 5; eaa2_varint(data, i + total, &p, &value); }
+    }
+    switch (id) {
+      case 0x985B: eaa2_append(line, &lp, sizeof(line), " rider=%uW", (unsigned) value); known++; break;
+      case 0x985D: eaa2_append(line, &lp, sizeof(line), " motor=%uW", (unsigned) value); known++; break;
+      case 0x985A: eaa2_append(line, &lp, sizeof(line), " cad=%u", (unsigned) (value / 2)); known++; break;
+      case 0x8088: eaa2_append(line, &lp, sizeof(line), " batt=%u%%", (unsigned) value); known++; break;
+      case 0x9809: eaa2_append(line, &lp, sizeof(line), " assist=%u", (unsigned) value); known++; break;
+      case 0x9818: eaa2_append(line, &lp, sizeof(line), " odo=%um", (unsigned) (value & 0xffffff)); known++; break;
+      case 0x9808: eaa2_append(line, &lp, sizeof(line), " spd=%u.%02ukmh",
+                               (unsigned) (value / 100), (unsigned) (value % 100)); known++; break;
+      case 0x009B: eaa2_append(line, &lp, sizeof(line), " battname"); known++; break;
+      default: {
+        // Surface any not-yet-known message id once, so new fields can be mapped.
+        static std::set<uint16_t> eaa2_seen;
+        if (eaa2_seen.insert(id).second)
+          ESP_LOGI(TAG, "eaa2 %s: unknown id=0x%04x len=%u value=%u",
+                   src, id, (unsigned) msg_len, (unsigned) value);
+        break;
+      }
+    }
+    i += total;
+  }
+  if (known > 0) ESP_LOGI(TAG, "%s", line);
 }
 
 // ---- ESPHome Component lifecycle -------------------------------------------
