@@ -129,11 +129,16 @@ Die Werte ersetzen die bisherige Snapshot-Schätzung in den Sensoren *Last Ride 
 3. Klicke auf **"App erstellen"**
 4. Fülle das Formular aus:
    - **App-Name:** z. B. `Home Assistant`
-   - **Redirect URI:** `https://my.home-assistant.io/redirect/oauth`
-   - **Login URL:** `https://my.home-assistant.io/redirect/config_flow_start/?domain=ha_bosch_ebike` (**wichtig, nicht mehr beliebig!** Über diese URL startet die Freigabe im eBike Manager den Einrichtungs-Flow direkt in deiner Home-Assistant-Instanz.)
    - **Confidential client:** **AUS** lassen
 
-   > **Wichtig:** Die **Redirect URI** muss exakt `https://my.home-assistant.io/redirect/oauth` lauten - das ist die offizielle „My Home Assistant"-Weiterleitung, über die Home Assistant den Login automatisch abschließt. Die „My Home Assistant"-Integration muss in HA aktiviert sein (Standard). Falls du sie deaktiviert hast, registriere stattdessen `https://<deine-HA-URL>/auth/external/callback`.
+   > **Achtung, Verwechslungsgefahr:** Die folgenden zwei Felder sind beides `my.home-assistant.io`-Adressen und sehen auf den ersten Blick ähnlich aus. Die **Reihenfolge im Bosch-Formular kann von dieser Tabelle abweichen** - trage jeden Wert exakt in das Feld mit dem **passenden Namen** ein, nicht nach Position. Vertauscht bekommst du beim Klick auf „Service aktivieren" die Meldung „Invalid parameters are given", bzw. beim Autorisieren in Home Assistant „Invalid parameter: redirect_uri" von Bosch.
+
+   | Feld im Bosch-Formular | Wert | Wofür |
+   |---|---|---|
+   | **Redirect URI** | `https://my.home-assistant.io/redirect/oauth` | Rücksprung-Adresse **nach** dem Bosch-Login (OAuth-Callback) - muss exakt so lauten, das ist die offizielle „My Home Assistant"-Weiterleitung, über die Home Assistant den Login automatisch abschließt. |
+   | **Login URL** | `https://my.home-assistant.io/redirect/config_flow_start/?domain=ha_bosch_ebike` | Link, den **„Service aktivieren"** im eBike Manager öffnet, um den Einrichtungs-Flow direkt in deiner Home-Assistant-Instanz zu **starten**. |
+
+   > **Hinweis:** Die „My Home Assistant"-Integration muss in HA aktiviert sein (Standard). Falls du sie deaktiviert hast, trage bei **Redirect URI** stattdessen `https://<deine-HA-URL>/auth/external/callback` ein.
 
 5. Nach dem Erstellen erhältst du eine **Client-ID** (Format `euda-xxxxxxxx-...`).
 
@@ -522,6 +527,7 @@ Auf der Lovelace-Karte gibt es einen 📚-Toggle in den Karten-Steuerelementen. 
 | Keine Entities nach Einrichtung | Datenfreigabe-Toggle im eBike Manager aktivieren (Schritt 5) |
 | „Client nicht gefunden" beim Login | „Service aktivieren" im eBike Manager nutzen (Schritt 4) und Client-ID auf Tippfehler/Leerzeichen prüfen |
 | „Invalid state" / Rücksprung schlägt fehl | „My Home Assistant" in HA aktiviert? Redirect-URI im Portal muss `https://my.home-assistant.io/redirect/oauth` sein |
+| „Invalid parameters are given" beim Klick auf „Service aktivieren", oder „Invalid parameter: redirect_uri" von Bosch beim Autorisieren | Redirect URI und Login URL im Bosch-Portal vertauscht? Prüfe Schritt 1 - beide sind `my.home-assistant.io`-Adressen und sehen ähnlich aus, die Werte müssen exakt im Feld mit dem passenden Namen stehen |
 | Kilometerstand unrealistisch hoch | Der Odometer wird in Metern geliefert und automatisch in km umgerechnet |
 | Aktivitätsdaten fehlen | Prüfe, ob die Aktivitäten-Freigabe im Flow Portal aktiv ist |
 | Token nicht akzeptiert | Prüfe, ob die Client-ID korrekt eingegeben wurde |
@@ -730,11 +736,16 @@ These replace the snapshot-based estimates in *Last Ride Distance*, *Battery Con
 3. Click **"Create App"**
 4. Fill in the form:
    - **App Name:** e.g., `Home Assistant`
-   - **Redirect URI:** `https://my.home-assistant.io/redirect/oauth`
-   - **Login URL:** `https://my.home-assistant.io/redirect/config_flow_start/?domain=ha_bosch_ebike` (**important, no longer arbitrary!** Bosch's eBike Manager uses this URL to start the setup flow directly in your Home Assistant instance.)
    - **Confidential client:** leave **OFF**
 
-   > **Important:** The **Redirect URI** must be exactly `https://my.home-assistant.io/redirect/oauth` - this is the official "My Home Assistant" redirect that lets Home Assistant complete the login automatically. The "My Home Assistant" integration must be enabled in HA (it is by default). If you disabled it, register `https://<your-ha-url>/auth/external/callback` instead.
+   > **Watch out, easy to mix up:** the next two fields are both `my.home-assistant.io` addresses and look similar at a glance. **The order in the Bosch form may differ from this table** - enter each value in the field with the **matching name**, not by position. Swap them and you will get "Invalid parameters are given" when clicking "Service aktivieren", or "Invalid parameter: redirect_uri" from Bosch when authorizing in Home Assistant.
+
+   | Field in the Bosch form | Value | Purpose |
+   |---|---|---|
+   | **Redirect URI** | `https://my.home-assistant.io/redirect/oauth` | The callback address used **after** the Bosch login (OAuth callback) - must be exactly this, it is the official "My Home Assistant" redirect that lets Home Assistant complete the login automatically. |
+   | **Login URL** | `https://my.home-assistant.io/redirect/config_flow_start/?domain=ha_bosch_ebike` | The link that **"Service aktivieren"** in the eBike Manager opens to **start** the setup flow directly in your Home Assistant instance. |
+
+   > **Note:** The "My Home Assistant" integration must be enabled in HA (it is by default). If you disabled it, enter `https://<your-ha-url>/auth/external/callback` for **Redirect URI** instead.
 
 5. After creating the app, you will receive a **Client-ID** (format `euda-xxxxxxxx-...`).
 
@@ -1122,6 +1133,7 @@ The Lovelace card has a 📚 toggle in the map controls. When enabled, the card 
 | No entities after setup | Activate the data-sharing toggle in the eBike Manager (step 5) |
 | "Client not found" during login | Use "Service aktivieren" in the eBike Manager (step 4) and check the Client-ID for typos/spaces |
 | "Invalid state" / redirect back fails | Is "My Home Assistant" enabled in HA? The portal redirect URI must be `https://my.home-assistant.io/redirect/oauth` |
+| "Invalid parameters are given" when clicking "Service aktivieren", or "Invalid parameter: redirect_uri" from Bosch during authorize | Did you swap Redirect URI and Login URL in the Bosch portal? Check step 1 - both are `my.home-assistant.io` addresses and look similar; each value must go in the field with the matching name |
 | Odometer unrealistically high | The odometer is delivered in meters and automatically converted to km |
 | Activity data missing | Check that activity sharing is enabled in the Flow Portal |
 | Token not accepted | Check that the Client-ID was entered correctly |
