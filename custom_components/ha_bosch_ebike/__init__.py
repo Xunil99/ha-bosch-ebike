@@ -22,6 +22,7 @@ from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.start import async_at_started
 from homeassistant.helpers.storage import Store
+from homeassistant.loader import async_get_integration
 
 from .api import BoschEBikeAPI
 from .brouter import (
@@ -73,6 +74,11 @@ async def _async_register_card_resource(hass: HomeAssistant) -> None:
     so the save persisted ONLY our entry and wiped every other Lovelace
     resource. By guaranteeing the existing entries are loaded first, the save
     always contains the full set plus ours.
+
+    The registered URL carries a `?v=<integration version>` suffix so browsers
+    fetch a fresh copy of the card JS on every update instead of serving a
+    stale cached module under the same unversioned URL (the actual cause of
+    users seeing old card UI after updating).
     """
     try:
         lovelace_data = hass.data.get("lovelace")
@@ -95,13 +101,53 @@ async def _async_register_card_resource(hass: HomeAssistant) -> None:
             )
             return
 
-        if any(item.get("url") == CARD_URL for item in resources.async_items()):
-            return  # already present, nothing to do
+        try:
+            integration = await async_get_integration(hass, DOMAIN)
+            card_version = str(integration.version) if integration.version else ""
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.debug(
+                "Could not determine %s version; resource URL will not be "
+                "re-versioned this run: %s",
+                DOMAIN,
+                err,
+            )
+            card_version = ""
 
-        await resources.async_create_item(
-            {"res_type": "module", "url": CARD_URL}
+        existing = next(
+            (
+                item
+                for item in resources.async_items()
+                if item.get("url", "").split("?", 1)[0] == CARD_URL
+            ),
+            None,
         )
-        _LOGGER.info("Registered Lovelace resource: %s", CARD_URL)
+
+        if not card_version:
+            # Version lookup failed this run (e.g. a startup race reading the
+            # integration registry). Register a bare URL if nothing exists
+            # yet, but never downgrade an already-versioned entry back to an
+            # unversioned one just because this one run couldn't confirm the
+            # version - that would be a spurious write, and it self-heals on
+            # the next run where the lookup succeeds.
+            if existing is None:
+                await resources.async_create_item(
+                    {"res_type": "module", "url": CARD_URL}
+                )
+                _LOGGER.info("Registered Lovelace resource: %s", CARD_URL)
+            return
+
+        target_url = f"{CARD_URL}?v={card_version}"
+
+        if existing is None:
+            await resources.async_create_item(
+                {"res_type": "module", "url": target_url}
+            )
+            _LOGGER.info("Registered Lovelace resource: %s", target_url)
+        elif existing.get("url") != target_url:
+            await resources.async_update_item(
+                existing["id"], {"url": target_url}
+            )
+            _LOGGER.info("Updated Lovelace resource to: %s", target_url)
     except Exception:  # noqa: BLE001
         _LOGGER.debug(
             "Could not auto-register Lovelace resource; add it manually "
