@@ -11150,6 +11150,26 @@ class BoschEBike3DMapCard extends HTMLElement {
     return ((a + diff * f) + 360) % 360;
   }
 
+  // Elevation `aheadMeters` further along the track than the current
+  // interpolated position, via the precomputed cumulative-distance array.
+  // Used as the FPV look-ahead target's altitude fallback while its own
+  // DEM tile has not loaded yet - closer to the truth than freezing the
+  // target at the bike's current elevation, since the road can climb or
+  // descend meaningfully within the (3-80 m) look-ahead distance.
+  _elevationAlongTrackAhead(i0, currentDist, aheadMeters) {
+    const cum = this._cumDist;
+    const pts = this._currentTrack;
+    if (!cum || !pts || !pts.length || !Number.isFinite(currentDist)) return NaN;
+    const targetDist = currentDist + aheadMeters;
+    const N = pts.length - 1;
+    let j = Math.max(0, Math.min(N, i0));
+    while (j < N && cum[j + 1] < targetDist) j++;
+    if (j >= N) return Number.isFinite(pts[N].ele) ? pts[N].ele : NaN;
+    const segStart = cum[j], segEnd = cum[j + 1];
+    const segF = segEnd > segStart ? (targetDist - segStart) / (segEnd - segStart) : 0;
+    return this._lerpFinite(pts[j].ele, pts[j + 1].ele, segF);
+  }
+
   // Fractional version of _bearingAt: looks up two adjacent smoothed
   // bearings and shortest-arc-interpolates between them. The chase cam
   // then turns smoothly across the gap between two GPS samples instead
@@ -11236,18 +11256,38 @@ class BoschEBike3DMapCard extends HTMLElement {
             this._dispLat, this._dispLon, travelBearing, this._fpvLookahead
           );
           const groundEle = this._map.queryTerrainElevation([camPoint.lon, camPoint.lat]);
+          const lookGroundEle = this._map.queryTerrainElevation([lookPoint.lon, lookPoint.lat]);
           const bikeEle = Number.isFinite(p.ele) ? p.ele : 0;
           // Number.isFinite (not just != null) so a NaN from an
           // unloaded DEM tile also falls back to the GPS elevation,
           // instead of poisoning the camera altitude.
           const camAltitude = (Number.isFinite(groundEle) ? groundEle : bikeEle) + this._fpvHeight;
-          // 4th arg (target altitude) omitted on purpose: with terrain
-          // active, MapLibre queries the ground elevation at lookPoint
-          // itself, i.e. the camera aims at the road surface ahead, not a
-          // fixed height above it.
+          // calculateCameraOptionsFromTo's target-altitude arg defaults to
+          // literally 0 when omitted (verified against the actual MapLibre
+          // bundle - it does NOT auto-query terrain at the target). Passing
+          // the DEM's own ground elevation ahead keeps camera and target on
+          // the same real-world altitude scale; without this, on any route
+          // with meaningful elevation above sea level the calculated pitch
+          // collapses toward a straight-down top view once the DEM tile
+          // finishes loading (the camera altitude jumps to the real terrain
+          // height while the target stays pinned at 0).
+          // If the DEM tile at lookPoint itself has not loaded yet, prefer
+          // the track's OWN elevation ~fpvLookahead metres ahead (via the
+          // precomputed cumulative-distance array) over freezing the target
+          // at the bike's current elevation - a route can climb or descend
+          // meaningfully within the 3-80 m look-ahead distance, and reusing
+          // the current elevation would reintroduce a smaller version of the
+          // same altitude-mismatch artefact this fix addresses.
+          const cumDistHere = this._cumDist
+            ? this._lerpFinite(this._cumDist[i0], this._cumDist[i1], f)
+            : NaN;
+          const trackLookEle = this._elevationAlongTrackAhead(i0, cumDistHere, this._fpvLookahead);
+          const lookAltitude = Number.isFinite(lookGroundEle)
+            ? lookGroundEle
+            : (Number.isFinite(trackLookEle) ? trackLookEle : bikeEle);
           camera = this._map.calculateCameraOptionsFromTo(
             [camPoint.lon, camPoint.lat], camAltitude,
-            [lookPoint.lon, lookPoint.lat]
+            [lookPoint.lon, lookPoint.lat], lookAltitude
           );
           if (northUp) camera.bearing = 0;
           // The pixel-offset framing trick below is a chase-cam-only hack;
