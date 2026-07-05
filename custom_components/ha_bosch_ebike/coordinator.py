@@ -29,6 +29,7 @@ from .const import (
     EVENT_MAINTENANCE_OVERDUE,
     CONF_LIVE_ODOMETER_ENTITY,
     CONF_LIVE_SOC_ENTITY,
+    CONF_LIVE_SENSORS,
 )
 from .live_enrichment import get_state_at, parse_iso_utc
 from .range_estimate import (
@@ -391,19 +392,35 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     # -- Live BLE enrichment (optional) --
 
-    def _live_odometer_entity(self) -> str | None:
-        """Configured live odometer sensor entity_id, or None."""
-        if not self.config_entry:
-            return None
-        value = self.config_entry.options.get(CONF_LIVE_ODOMETER_ENTITY)
-        return value or None
+    def _live_sensor_entity(self, bike_id: str | None, key: str) -> str | None:
+        """Configured live sensor entity_id for *bike_id*, or None.
 
-    def _live_soc_entity(self) -> str | None:
-        """Configured live battery SoC sensor entity_id, or None."""
+        Per-bike config (issue #44) lives under ``options[CONF_LIVE_SENSORS]``,
+        keyed by bike_id. The legacy flat ``options[key]`` value (pre-#44,
+        applied to the whole account) is used ONLY as a fallback while no
+        per-bike config has been saved yet — once any bike is configured via
+        the per-bike options flow, an unconfigured bike gets no live sensor
+        rather than silently inheriting another bike's value.
+        """
         if not self.config_entry:
             return None
-        value = self.config_entry.options.get(CONF_LIVE_SOC_ENTITY)
-        return value or None
+        options = self.config_entry.options
+        per_bike = options.get(CONF_LIVE_SENSORS) or {}
+        if bike_id is not None and bike_id in per_bike:
+            value = per_bike[bike_id].get(key)
+            return value or None
+        if not per_bike:
+            value = options.get(key)
+            return value or None
+        return None
+
+    def live_odometer_entity(self, bike_id: str | None = None) -> str | None:
+        """Configured live odometer sensor entity_id for *bike_id*, or None."""
+        return self._live_sensor_entity(bike_id, CONF_LIVE_ODOMETER_ENTITY)
+
+    def live_soc_entity(self, bike_id: str | None = None) -> str | None:
+        """Configured live battery SoC sensor entity_id for *bike_id*, or None."""
+        return self._live_sensor_entity(bike_id, CONF_LIVE_SOC_ENTITY)
 
     def invalidate_live_enrichment_cache(self) -> None:
         """Clear the per-activity enrichment cache.
@@ -417,22 +434,32 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """Override distance / consumption from live BLE sensors where possible.
 
         For each activity that has not yet been enriched, query the HA
-        recorder for the configured sensors at startTime and endTime. If a
-        fresh sample exists at both points, derive the exact value and
-        replace the cloud-derived one. Falls back transparently when no
-        live data is available.
+        recorder for the sensors configured for THAT activity's bike (issue
+        #44: multi-bike accounts can wire a different bridge per bike) at
+        startTime and endTime. If a fresh sample exists at both points,
+        derive the exact value and replace the cloud-derived one. Falls back
+        transparently when no live data is available.
+
+        Requires ``self._activity_bike`` to already reflect the CURRENT
+        ``self._all_activities`` (attribution must run before this).
 
         Returns True if persistent state changed (consumption entries).
         """
-        odo_entity = self._live_odometer_entity()
-        soc_entity = self._live_soc_entity()
-        if not odo_entity and not soc_entity:
+        options = self.config_entry.options if self.config_entry else {}
+        if not options.get(CONF_LIVE_SENSORS) and not options.get(
+            CONF_LIVE_ODOMETER_ENTITY
+        ) and not options.get(CONF_LIVE_SOC_ENTITY):
             return False
 
         state_changed = False
         for activity in self._all_activities:
             aid = activity.get("id")
             if not aid:
+                continue
+            bike_id = self._activity_bike.get(aid)
+            odo_entity = self.live_odometer_entity(bike_id)
+            soc_entity = self.live_soc_entity(bike_id)
+            if not odo_entity and not soc_entity:
                 continue
             cache = self._live_enrichment_cache.setdefault(aid, {})
 
@@ -777,18 +804,21 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # Battery consumption tracking via Wh delta
         state_changed = self._track_battery_consumption(bikes)
 
+        # Bike attribution via odometer-matching (only meaningful for multi-bike accounts;
+        # for single-bike accounts every activity is attributed to that bike).
+        # Runs BEFORE live-data enrichment below, which needs the current
+        # attribution to pick the right bike's live sensors per activity
+        # (issue #44).
+        new_attribution = self.attribute_activities_to_bikes(bikes, self._all_activities)
+        if new_attribution != self._activity_bike:
+            self._activity_bike = new_attribution
+            state_changed = True
+
         # Optional: override distance / consumption with live BLE values
         # from the user-configured sensors. Replaces cloud-derived numbers
         # for any activity where a fresh recorder sample exists at both
         # tour start and end.
         if await self._enrich_activities_with_live_data():
-            state_changed = True
-
-        # Bike attribution via odometer-matching (only meaningful for multi-bike accounts;
-        # for single-bike accounts every activity is attributed to that bike)
-        new_attribution = self.attribute_activities_to_bikes(bikes, self._all_activities)
-        if new_attribution != self._activity_bike:
-            self._activity_bike = new_attribution
             state_changed = True
 
         # Seed service-due overrides from Bosch on first sight of a bike

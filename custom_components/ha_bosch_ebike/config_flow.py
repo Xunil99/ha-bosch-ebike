@@ -38,6 +38,7 @@ from .const import (
     CONF_CLIENT_ID,
     CONF_LIVE_ODOMETER_ENTITY,
     CONF_LIVE_SOC_ENTITY,
+    CONF_LIVE_SENSORS,
     CONF_SYSTEM,
     SYSTEM_SMART,
     SYSTEM_BES2,
@@ -48,6 +49,7 @@ from .const import (
     FLOW_PORTAL_URL,
     BES2_PORTAL_URL,
 )
+from .profile_extra import bike_label
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -210,47 +212,112 @@ class BoschEBikeConfigFlow(AbstractOAuth2FlowHandler, domain=DOMAIN):
 class BoschEBikeOptionsFlowHandler(OptionsFlow):
     """Options flow: optional wiring of live BLE sensors for tour enrichment.
 
-    If both ``live_odometer_entity`` and ``live_soc_entity`` are left empty,
-    the integration keeps the existing cloud-derived behavior. When set, the
-    coordinator queries the HA recorder for these sensors at every tour's
-    start and end and uses the deltas as ground truth for distance and
-    consumption.
+    If a bike's odometer/SoC fields are left empty, the integration keeps the
+    cloud-derived behavior for that bike. When set, the coordinator queries
+    the HA recorder for these sensors at every tour's start and end and uses
+    the deltas as ground truth for distance and consumption.
 
-    Note: we deliberately do NOT override ``__init__`` here - the framework
-    sets ``self.config_entry`` automatically since HA 2024.11.
+    Multi-bike accounts (issue #44): a single ESP32 LDI bridge can only ever
+    be paired to one physical bike, so the account-wide flat option from
+    before this fix could not tell two bikes' bridges apart. This flow walks
+    every bike on the account as its own step (step_id "bike", reused per
+    bike - HA calls the matching ``async_step_<id>`` for whichever step is
+    currently shown, regardless of how many times the same id is shown), and
+    saves the result nested by bike_id under ``CONF_LIVE_SENSORS``. Existing
+    single-bike accounts that already had the old flat option keep working
+    unchanged (see ``BoschEBikeCoordinator.live_odometer_entity``/
+    ``live_soc_entity`` for the fallback) until they save this flow once,
+    which is when they transparently move onto the new per-bike storage.
+
+    Note: we deliberately do NOT override ``__init__`` for ``config_entry``
+    - the framework sets that automatically since HA 2024.11. We DO need an
+    ``__init__`` for the wizard's own walk-through state.
     """
 
-    async def async_step_init(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        if user_input is not None:
-            cleaned: dict[str, Any] = {}
-            for key in (CONF_LIVE_ODOMETER_ENTITY, CONF_LIVE_SOC_ENTITY):
-                value = user_input.get(key)
-                if isinstance(value, str) and value.strip():
-                    cleaned[key] = value.strip()
-            return self.async_create_entry(title="", data=cleaned)
+    def __init__(self) -> None:
+        self._bikes: list[dict[str, Any]] = []
+        self._bike_index: int = 0
+        self._live_sensors: dict[str, dict[str, Any]] = {}
 
-        current = self.config_entry.options or {}
-
+    @staticmethod
+    def _entity_schema(suggested: dict[str, Any]) -> vol.Schema:
         sensor_selector = EntitySelector(
             EntitySelectorConfig(domain="sensor", multiple=False)
         )
-
-        schema = vol.Schema(
+        return vol.Schema(
             {
                 vol.Optional(
                     CONF_LIVE_ODOMETER_ENTITY,
                     description={
-                        "suggested_value": current.get(CONF_LIVE_ODOMETER_ENTITY)
+                        "suggested_value": suggested.get(CONF_LIVE_ODOMETER_ENTITY)
                     },
                 ): sensor_selector,
                 vol.Optional(
                     CONF_LIVE_SOC_ENTITY,
                     description={
-                        "suggested_value": current.get(CONF_LIVE_SOC_ENTITY)
+                        "suggested_value": suggested.get(CONF_LIVE_SOC_ENTITY)
                     },
                 ): sensor_selector,
             }
         )
-        return self.async_show_form(step_id="init", data_schema=schema)
+
+    def _store_step_result(self, user_input: dict[str, Any]) -> None:
+        bike_id = self._bikes[self._bike_index]["id"]
+        cleaned: dict[str, Any] = {}
+        for key in (CONF_LIVE_ODOMETER_ENTITY, CONF_LIVE_SOC_ENTITY):
+            value = user_input.get(key)
+            if isinstance(value, str) and value.strip():
+                cleaned[key] = value.strip()
+        if cleaned:
+            self._live_sensors[bike_id] = cleaned
+        else:
+            self._live_sensors.pop(bike_id, None)
+
+    async def _async_show_bike_step(self) -> ConfigFlowResult:
+        if self._bike_index >= len(self._bikes):
+            return self.async_create_entry(
+                title="", data={CONF_LIVE_SENSORS: self._live_sensors}
+            )
+        bike = self._bikes[self._bike_index]
+        return self.async_show_form(
+            step_id="bike",
+            data_schema=self._entity_schema(self._live_sensors.get(bike["id"], {})),
+            description_placeholders={"bike_name": bike_label(bike)},
+        )
+
+    async def async_step_init(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Discover the account's bikes, then start the per-bike wizard."""
+        coordinator = self.hass.data.get(DOMAIN, {}).get(self.config_entry.entry_id)
+        bikes = coordinator.data.get("bikes", []) if coordinator and coordinator.data else []
+        self._bikes = [b for b in bikes if b.get("id")]
+        self._bike_index = 0
+
+        current = self.config_entry.options or {}
+        self._live_sensors = {
+            bid: dict(cfg)
+            for bid, cfg in (current.get(CONF_LIVE_SENSORS) or {}).items()
+        }
+        # Single-bike account still on the pre-#44 flat option: seed the
+        # wizard from it so the field does not appear to have been cleared.
+        # Saving the form migrates it onto the per-bike storage below.
+        if not self._live_sensors and len(self._bikes) == 1:
+            legacy = {
+                key: current.get(key)
+                for key in (CONF_LIVE_ODOMETER_ENTITY, CONF_LIVE_SOC_ENTITY)
+                if current.get(key)
+            }
+            if legacy:
+                self._live_sensors[self._bikes[0]["id"]] = legacy
+
+        return await self._async_show_bike_step()
+
+    async def async_step_bike(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """One step per bike; step_id is reused, advancing an internal index."""
+        if user_input is not None:
+            self._store_step_result(user_input)
+            self._bike_index += 1
+        return await self._async_show_bike_step()

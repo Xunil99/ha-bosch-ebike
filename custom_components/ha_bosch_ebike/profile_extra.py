@@ -51,6 +51,14 @@ ASSIST_MODE_NAMES: dict[str, str] = {
     "A100E1AAA0": "TOUR+",
     "A100ESPNT0": "SPRINT",
     "A100E10010": "TURBO",
+    # M3-series drive units (reported by @johnlucajf, issue #37).
+    "A100M3AUTO": "AUTO",
+    "A100M30020": "TURBO",
+    "A100M3AAB0": "eMTB",
+    "A100M30010": "TOUR",
+    # Further motor variant codes (reported by @ToPa451, issue #37).
+    "A100E34AA0": "TOUR+",
+    "A100M40010": "TURBO",
 }
 
 
@@ -149,6 +157,21 @@ def frame_number(bike_pass: dict | None) -> str | None:
     if not passes:
         return None
     return _get(passes[0], "frameNumber")
+
+
+def bike_label(bike: dict) -> str:
+    """Human-readable label for a bike (issue #44: disambiguate per-bike UI).
+
+    Falls back to the drive unit's product name; when a serial number is
+    available, its last 4 characters are appended so two identically-modeled
+    bikes on the same account are still distinguishable.
+    """
+    drive = _get(bike, "driveUnit", default={}) or {}
+    name = drive.get("productName") or bike.get("productName") or "eBike"
+    serial = drive.get("serialNumber")
+    if serial:
+        return f"{name} (…{serial[-4:]})"
+    return name
 
 
 # ---------------------------------------------------------------------------

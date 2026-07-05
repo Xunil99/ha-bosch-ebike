@@ -40,6 +40,7 @@ from .const import (
     CONF_BES2_PART,
 )
 from .coordinator import BoschEBikeCoordinator
+from .profile_extra import bike_label as _bike_label
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -241,17 +242,6 @@ def _get_coordinator(
     if config_entry_id and config_entry_id in coords:
         return coords[config_entry_id]
     return next(iter(coords.values()), None)
-
-
-def _bike_label(bike: dict) -> str:
-    """Build a human-readable label for a bike."""
-    drive = bike.get("driveUnit") or {}
-    name = drive.get("productName") or bike.get("productName") or "eBike"
-    serial = drive.get("serialNumber")
-    if serial:
-        # Show last 4 chars of serial as disambiguator
-        return f"{name} (…{serial[-4:]})"
-    return name
 
 
 def _account_label(coordinator: BoschEBikeCoordinator) -> str:
@@ -827,6 +817,17 @@ async def ws_set_card_settings(
         "smooth_window", "track_smooth_window",
         "terrain_exaggeration", "satellite_tile_url", "satellite_max_zoom",
         "north_up",
+        # FPV/action-cam chase mode (issue #43): camera positioned real
+        # metres behind + above the bike via MapLibre's
+        # calculateCameraOptionsFromTo, instead of the classic pitch/zoom
+        # chase camera above. "camera_mode" selects which one applies.
+        "camera_mode", "fpv_height_m", "fpv_distance_m", "fpv_lookahead_m",
+        # Named, user-saveable combinations of the camera fields above
+        # (issue #43). "camera_presets" is a list of
+        # {id, name, values: {<subset of the camera keys above>}};
+        # "active_camera_preset_id" tracks which one is currently applied
+        # (None once the user hand-tweaks a slider away from a saved preset).
+        "camera_presets", "active_camera_preset_id",
         "show_date", "show_time", "show_sun",
         "show_speed", "show_distance", "show_elevation",
         "stats_as_chips",

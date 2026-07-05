@@ -39,9 +39,9 @@
   },
   "options": {
     "step": {
-      "init": {
-        "title": "Live-databronnen (optioneel)",
-        "description": "Koppel optioneel de live kilometerstand- en accusensor uit de ESPHome Bosch eBike LDI-bridge. Indien ingesteld berekent de integratie de exacte ritafstand en het werkelijke verbruik uit deze live-waarden in plaats van de cloud-schattingen. Leeg laten om het bestaande gedrag te behouden.",
+      "bike": {
+        "title": "Live-databronnen voor {bike_name} (optioneel)",
+        "description": "Koppel optioneel de live kilometerstand- en accusensor van de eigen ESPHome Bosch eBike LDI-bridge van deze fiets. Elke fiets op dit account wordt apart geconfigureerd, zodat twee fietsen nooit dezelfde bridge delen. Indien ingesteld berekent de integratie de exacte ritafstand en het werkelijke verbruik uit deze live-waarden in plaats van de cloud-schattingen. Leeg laten om het bestaande gedrag voor deze fiets te behouden.",
         "data": {
           "live_odometer_entity": "Live kilometerstand-sensor (km)",
           "live_soc_entity": "Live accuniveau-sensor (%)"

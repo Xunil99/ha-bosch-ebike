@@ -19,6 +19,7 @@ reachable_ranges = profile_extra.reachable_ranges
 next_service_date = profile_extra.next_service_date
 theft_status = profile_extra.theft_status
 frame_number = profile_extra.frame_number
+bike_label = profile_extra.bike_label
 battery_soh = profile_extra.battery_soh
 software_update_available = profile_extra.software_update_available
 special_states = profile_extra.special_states
@@ -92,6 +93,20 @@ def test_assist_mode_display_name_sx_eseries():
     assert assist_mode_display_name("A100E1AAA0") == "TOUR+"
     assert assist_mode_display_name("A100ESPNT0") == "SPRINT"
     assert assist_mode_display_name("A100E10010") == "TURBO"
+
+
+def test_assist_mode_display_name_m3series():
+    # M3-series drive units, reported by @johnlucajf in issue #37.
+    assert assist_mode_display_name("A100M3AUTO") == "AUTO"
+    assert assist_mode_display_name("A100M30020") == "TURBO"
+    assert assist_mode_display_name("A100M3AAB0") == "eMTB"
+    assert assist_mode_display_name("A100M30010") == "TOUR"
+
+
+def test_assist_mode_display_name_topa451_codes():
+    # Further motor variant codes, reported by @ToPa451 in issue #37.
+    assert assist_mode_display_name("A100E34AA0") == "TOUR+"
+    assert assist_mode_display_name("A100M40010") == "TURBO"
 
 
 def test_reachable_ranges_unknown_code_kept_raw():
@@ -207,6 +222,20 @@ def test_frame_number_present_and_absent():
     assert frame_number({"bikePasses": []}) is None
     assert frame_number({}) is None
     assert frame_number(None) is None
+
+
+def test_bike_label_with_serial_disambiguates():
+    bike = {"driveUnit": {"productName": "Performance Line CX", "serialNumber": "ABCD1234EF56"}}
+    assert bike_label(bike) == "Performance Line CX (…EF56)"
+
+
+def test_bike_label_without_serial_falls_back_to_name_only():
+    assert bike_label({"driveUnit": {"productName": "Performance Line SX"}}) == "Performance Line SX"
+
+
+def test_bike_label_missing_drive_unit_defaults_to_ebike():
+    assert bike_label({}) == "eBike"
+    assert bike_label({"driveUnit": None}) == "eBike"
 
 
 # ---------------------------------------------------------------------------

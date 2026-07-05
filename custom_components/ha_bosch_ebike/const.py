@@ -64,3 +64,9 @@ CONF_CLIENT_ID = "client_id"
 # distance and consumption — overriding the cloud-derived values.
 CONF_LIVE_ODOMETER_ENTITY = "live_odometer_entity"
 CONF_LIVE_SOC_ENTITY = "live_soc_entity"
+
+# Per-bike live sensor config for multi-bike accounts (issue #44):
+# options[CONF_LIVE_SENSORS] = {bike_id: {CONF_LIVE_ODOMETER_ENTITY: ..., CONF_LIVE_SOC_ENTITY: ...}}.
+# The flat CONF_LIVE_ODOMETER_ENTITY/CONF_LIVE_SOC_ENTITY keys above remain as
+# a legacy fallback for accounts that saved options before this key existed.
+CONF_LIVE_SENSORS = "live_sensors"

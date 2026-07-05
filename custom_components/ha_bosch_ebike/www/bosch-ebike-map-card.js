@@ -282,12 +282,36 @@ const I18N = {
     map3d_editor_height: "Card height (px)",
     map3d_editor_account: "Pin to account (optional)",
     map3d_editor_bike: "Pin to bike (optional)",
-    map3d_editor_default_pitch: "Chase-cam pitch (20-65°)",
-    map3d_editor_default_pitch_hint: "Camera tilt while following the bike. 20 = nearly top-down, 55 = third-person, 65 = almost first-person.",
+    map3d_editor_default_pitch: "Chase-cam pitch (20-80°)",
+    map3d_editor_default_pitch_hint: "Camera tilt while following the bike. 20 = nearly top-down, 55 = third-person, 80 = close to the horizon.",
     map3d_editor_chase_zoom: "Chase-cam zoom (14-19)",
     map3d_editor_chase_zoom_hint: "Higher zoom = closer to the bike. 17 ≈ 100 m ahead visible.",
     map3d_editor_chase_lookahead: "Chase-cam look-ahead (m)",
     map3d_editor_chase_lookahead_hint: "How many metres in front of the bike the camera target sits. Smaller value = bike sits higher in the frame. 0 = camera centred on the bike. Default 30.",
+    map3d_editor_camera_mode: "Camera mode",
+    map3d_editor_camera_mode_hint: "Chase: the classic pitch/zoom camera above. FPV: an action-cam style camera positioned real metres behind and above the bike (fields below), for a lower, closer feel that pitch and zoom alone cannot reach.",
+    map3d_camera_mode_chase: "Chase (classic)",
+    map3d_camera_mode_fpv: "FPV / action cam",
+    map3d_editor_fpv_height: "FPV camera height (m)",
+    map3d_editor_fpv_height_hint: "Height of the FPV camera above the ground, in metres. Lower = closer to a true first-person view. Only used in FPV mode.",
+    map3d_editor_fpv_distance: "FPV camera distance (m)",
+    map3d_editor_fpv_distance_hint: "How far behind the bike the FPV camera sits, in metres. 0 = right at the bike. Only used in FPV mode.",
+    map3d_editor_fpv_lookahead: "FPV look-ahead (m)",
+    map3d_editor_fpv_lookahead_hint: "How far ahead of the bike the FPV camera aims, in metres. Only used in FPV mode.",
+    map3d_editor_preset_label: "Camera preset",
+    map3d_editor_preset_hint: "Pick a preset to apply it immediately, or tweak the sliders below and save your own under a name. Presets are shared across all cards, same as the other settings on this page.",
+    map3d_preset_btn_save: "Save as new",
+    map3d_preset_btn_update: "Update current",
+    map3d_preset_btn_rename: "Rename",
+    map3d_preset_btn_delete: "Delete",
+    map3d_preset_custom: "— custom (not from a preset) —",
+    map3d_preset_prompt_name: "Name for this preset:",
+    map3d_preset_pick_custom_first: "Pick one of your own saved presets first (this does not work on the built-in ones).",
+    map3d_preset_confirm_delete: "Delete this preset? This cannot be undone.",
+    map3d_preset_classic: "Classic chase",
+    map3d_preset_cinematic: "Cinematic overview",
+    map3d_preset_action: "Action cam",
+    map3d_preset_drone_fpv: "Drone FPV",
     map3d_editor_animate_seconds: "Playback duration (seconds)",
     map3d_editor_animate_seconds_hint: "How long a full Play-cycle takes from tour start to tour end.",
     map3d_editor_smooth_window: "Bearing-smoothing window",
@@ -609,12 +633,36 @@ const I18N = {
     map3d_editor_height: "Karten-Höhe (px)",
     map3d_editor_account: "Auf Konto fixieren (optional)",
     map3d_editor_bike: "Auf Bike fixieren (optional)",
-    map3d_editor_default_pitch: "Chase-Cam-Neigung (20-65°)",
-    map3d_editor_default_pitch_hint: "Kamera-Neigung beim Verfolgen des Bikes. 20 = fast Vogelperspektive, 55 = Third-Person, 65 = fast First-Person.",
+    map3d_editor_default_pitch: "Chase-Cam-Neigung (20-80°)",
+    map3d_editor_default_pitch_hint: "Kamera-Neigung beim Verfolgen des Bikes. 20 = fast Vogelperspektive, 55 = Third-Person, 80 = nahe am Horizont.",
     map3d_editor_chase_zoom: "Chase-Cam-Zoom (14-19)",
     map3d_editor_chase_zoom_hint: "Höherer Zoom = näher am Bike. 17 ≈ 100 m Sicht nach vorne.",
     map3d_editor_chase_lookahead: "Chase-Cam Look-Ahead (m)",
     map3d_editor_chase_lookahead_hint: "Wie viele Meter vor dem Bike das Kameraziel liegt. Kleinerer Wert = Bike sitzt höher im Bild. 0 = Kamera direkt aufs Bike zentriert. Default 30.",
+    map3d_editor_camera_mode: "Kameramodus",
+    map3d_editor_camera_mode_hint: "Chase: die klassische Pitch/Zoom-Kamera oben. FPV: eine Actioncam-artige Kamera, in echten Metern hinter und über dem Bike positioniert (Felder unten) - für ein tieferes, näheres Gefühl, das mit Pitch/Zoom allein nicht erreichbar ist.",
+    map3d_camera_mode_chase: "Chase (klassisch)",
+    map3d_camera_mode_fpv: "FPV / Actioncam",
+    map3d_editor_fpv_height: "FPV-Kamerahöhe (m)",
+    map3d_editor_fpv_height_hint: "Höhe der FPV-Kamera über dem Boden, in Metern. Niedriger = näher an einer echten Ich-Perspektive. Nur im FPV-Modus wirksam.",
+    map3d_editor_fpv_distance: "FPV-Kameraabstand (m)",
+    map3d_editor_fpv_distance_hint: "Wie weit hinter dem Bike die FPV-Kamera sitzt, in Metern. 0 = direkt am Bike. Nur im FPV-Modus wirksam.",
+    map3d_editor_fpv_lookahead: "FPV-Blickziel voraus (m)",
+    map3d_editor_fpv_lookahead_hint: "Wie weit vor dem Bike die FPV-Kamera hinzielt, in Metern. Nur im FPV-Modus wirksam.",
+    map3d_editor_preset_label: "Kamera-Vorlage",
+    map3d_editor_preset_hint: "Wähle eine Vorlage, um sie sofort anzuwenden, oder passe die Regler unten an und speichere sie unter eigenem Namen. Vorlagen gelten geräteübergreifend, genau wie die anderen Einstellungen auf dieser Seite.",
+    map3d_preset_btn_save: "Speichern unter…",
+    map3d_preset_btn_update: "Aktualisieren",
+    map3d_preset_btn_rename: "Umbenennen",
+    map3d_preset_btn_delete: "Löschen",
+    map3d_preset_custom: "— eigene Werte (keine Vorlage) —",
+    map3d_preset_prompt_name: "Name für diese Vorlage:",
+    map3d_preset_pick_custom_first: "Wähle zuerst eine deiner eigenen gespeicherten Vorlagen aus (bei den mitgelieferten geht das nicht).",
+    map3d_preset_confirm_delete: "Diese Vorlage löschen? Das kann nicht rückgängig gemacht werden.",
+    map3d_preset_classic: "Klassische Verfolgung",
+    map3d_preset_cinematic: "Kinoreif",
+    map3d_preset_action: "Actioncam",
+    map3d_preset_drone_fpv: "Drohnen-FPV",
     map3d_editor_animate_seconds: "Abspieldauer (Sekunden)",
     map3d_editor_animate_seconds_hint: "Wie lange ein voller Play-Durchlauf von Tour-Start bis Tour-Ende dauert.",
     map3d_editor_smooth_window: "Bearing-Glättungsfenster",
@@ -935,12 +983,36 @@ const I18N = {
     map3d_editor_height: "Kaart-hoogte (px)",
     map3d_editor_account: "Account vastzetten (optioneel)",
     map3d_editor_bike: "Bike vastzetten (optioneel)",
-    map3d_editor_default_pitch: "Chase-cam helling (20-65°)",
-    map3d_editor_default_pitch_hint: "Camerakanteling tijdens het volgen van de fiets. 20 = bijna van bovenaf, 55 = third-person, 65 = bijna first-person.",
+    map3d_editor_default_pitch: "Chase-cam helling (20-80°)",
+    map3d_editor_default_pitch_hint: "Camerakanteling tijdens het volgen van de fiets. 20 = bijna van bovenaf, 55 = third-person, 80 = dicht bij de horizon.",
     map3d_editor_chase_zoom: "Chase-cam zoom (14-19)",
     map3d_editor_chase_zoom_hint: "Hogere zoom = dichter bij de fiets. 17 ≈ 100 m vooruit zichtbaar.",
     map3d_editor_chase_lookahead: "Chase-cam look-ahead (m)",
     map3d_editor_chase_lookahead_hint: "Hoeveel meter voor de fiets het cameramidden ligt. Lagere waarde = fiets staat hoger in beeld. 0 = camera direct op de fiets. Default 30.",
+    map3d_editor_camera_mode: "Cameramodus",
+    map3d_editor_camera_mode_hint: "Chase: de klassieke pitch/zoom-camera hierboven. FPV: een actioncam-achtige camera die in echte meters achter en boven de fiets wordt geplaatst (velden hieronder), voor een lager, dichterbij gevoel dat pitch en zoom alleen niet kunnen bereiken.",
+    map3d_camera_mode_chase: "Chase (klassiek)",
+    map3d_camera_mode_fpv: "FPV / actioncam",
+    map3d_editor_fpv_height: "FPV-camerahoogte (m)",
+    map3d_editor_fpv_height_hint: "Hoogte van de FPV-camera boven de grond, in meters. Lager = dichter bij een echt eerstepersoonsperspectief. Alleen actief in FPV-modus.",
+    map3d_editor_fpv_distance: "FPV-cameraafstand (m)",
+    map3d_editor_fpv_distance_hint: "Hoe ver achter de fiets de FPV-camera staat, in meters. 0 = direct bij de fiets. Alleen actief in FPV-modus.",
+    map3d_editor_fpv_lookahead: "FPV-blikpunt vooruit (m)",
+    map3d_editor_fpv_lookahead_hint: "Hoe ver voor de fiets de FPV-camera op richt, in meters. Alleen actief in FPV-modus.",
+    map3d_editor_preset_label: "Cameravoorinstelling",
+    map3d_editor_preset_hint: "Kies een voorinstelling om die direct toe te passen, of pas de schuifregelaars hieronder aan en sla ze op onder een eigen naam. Voorinstellingen gelden kaartoverstijgend, net als de andere instellingen op deze pagina.",
+    map3d_preset_btn_save: "Opslaan als nieuw",
+    map3d_preset_btn_update: "Bijwerken",
+    map3d_preset_btn_rename: "Hernoemen",
+    map3d_preset_btn_delete: "Verwijderen",
+    map3d_preset_custom: "— eigen waarden (geen voorinstelling) —",
+    map3d_preset_prompt_name: "Naam voor deze voorinstelling:",
+    map3d_preset_pick_custom_first: "Kies eerst een van je eigen opgeslagen voorinstellingen (bij de meegeleverde werkt dit niet).",
+    map3d_preset_confirm_delete: "Deze voorinstelling verwijderen? Dit kan niet ongedaan worden gemaakt.",
+    map3d_preset_classic: "Klassiek volgen",
+    map3d_preset_cinematic: "Filmisch overzicht",
+    map3d_preset_action: "Actioncam",
+    map3d_preset_drone_fpv: "Drone-FPV",
     map3d_editor_animate_seconds: "Afspeelduur (seconden)",
     map3d_editor_animate_seconds_hint: "Hoe lang een volledige Play-cyclus duurt van begin tot einde van de tour.",
     map3d_editor_smooth_window: "Bearing-smoothingvenster",
@@ -1273,12 +1345,36 @@ const I18N = {
     map3d_editor_height: "Hauteur de la carte (px)",
     map3d_editor_account: "Épingler à un compte (optionnel)",
     map3d_editor_bike: "Épingler à un vélo (optionnel)",
-    map3d_editor_default_pitch: "Inclinaison chase-cam (20-65°)",
-    map3d_editor_default_pitch_hint: "Inclinaison de la caméra en suivant le vélo. 20 = presque vue du dessus, 55 = troisième personne, 65 = presque première personne.",
+    map3d_editor_default_pitch: "Inclinaison chase-cam (20-80°)",
+    map3d_editor_default_pitch_hint: "Inclinaison de la caméra en suivant le vélo. 20 = presque vue du dessus, 55 = troisième personne, 80 = proche de l'horizon.",
     map3d_editor_chase_zoom: "Zoom chase-cam (14-19)",
     map3d_editor_chase_zoom_hint: "Zoom plus élevé = plus près du vélo. 17 ≈ 100 m visibles devant.",
     map3d_editor_chase_lookahead: "Avance chase-cam (m)",
     map3d_editor_chase_lookahead_hint: "Combien de mètres devant le vélo se trouve la cible de la caméra. Valeur plus petite = vélo plus haut dans le cadre. 0 = caméra centrée sur le vélo. Défaut 30.",
+    map3d_editor_camera_mode: "Mode caméra",
+    map3d_editor_camera_mode_hint: "Chase : la caméra classique pitch/zoom ci-dessus. FPV : une caméra style caméra embarquée, positionnée en mètres réels derrière et au-dessus du vélo (champs ci-dessous), pour une sensation plus basse et plus proche que pitch et zoom seuls ne peuvent atteindre.",
+    map3d_camera_mode_chase: "Chase (classique)",
+    map3d_camera_mode_fpv: "FPV / caméra embarquée",
+    map3d_editor_fpv_height: "Hauteur caméra FPV (m)",
+    map3d_editor_fpv_height_hint: "Hauteur de la caméra FPV au-dessus du sol, en mètres. Plus bas = plus proche d'une vraie vue à la première personne. Utilisé uniquement en mode FPV.",
+    map3d_editor_fpv_distance: "Distance caméra FPV (m)",
+    map3d_editor_fpv_distance_hint: "À quelle distance derrière le vélo se trouve la caméra FPV, en mètres. 0 = juste au niveau du vélo. Utilisé uniquement en mode FPV.",
+    map3d_editor_fpv_lookahead: "Avance du regard FPV (m)",
+    map3d_editor_fpv_lookahead_hint: "À quelle distance devant le vélo la caméra FPV vise, en mètres. Utilisé uniquement en mode FPV.",
+    map3d_editor_preset_label: "Préréglage caméra",
+    map3d_editor_preset_hint: "Choisis un préréglage pour l'appliquer immédiatement, ou ajuste les curseurs ci-dessous et enregistre-les sous un nom. Les préréglages sont partagés entre toutes les cartes, comme les autres réglages de cette page.",
+    map3d_preset_btn_save: "Enregistrer sous…",
+    map3d_preset_btn_update: "Mettre à jour",
+    map3d_preset_btn_rename: "Renommer",
+    map3d_preset_btn_delete: "Supprimer",
+    map3d_preset_custom: "— valeurs personnalisées (aucun préréglage) —",
+    map3d_preset_prompt_name: "Nom de ce préréglage :",
+    map3d_preset_pick_custom_first: "Choisis d'abord un de tes propres préréglages enregistrés (impossible avec les préréglages fournis).",
+    map3d_preset_confirm_delete: "Supprimer ce préréglage ? Cette action est irréversible.",
+    map3d_preset_classic: "Poursuite classique",
+    map3d_preset_cinematic: "Vue d'ensemble cinématique",
+    map3d_preset_action: "Caméra embarquée",
+    map3d_preset_drone_fpv: "Drone FPV",
     map3d_editor_animate_seconds: "Durée de lecture (secondes)",
     map3d_editor_animate_seconds_hint: "Combien de temps prend un cycle complet de lecture du début à la fin de la sortie.",
     map3d_editor_smooth_window: "Fenêtre de lissage de l'orientation",
@@ -1611,12 +1707,36 @@ const I18N = {
     map3d_editor_height: "Altezza della scheda (px)",
     map3d_editor_account: "Fissa a un account (opzionale)",
     map3d_editor_bike: "Fissa a una bici (opzionale)",
-    map3d_editor_default_pitch: "Inclinazione chase-cam (20-65°)",
-    map3d_editor_default_pitch_hint: "Inclinazione della camera mentre segue la bici. 20 = quasi dall'alto, 55 = terza persona, 65 = quasi prima persona.",
+    map3d_editor_default_pitch: "Inclinazione chase-cam (20-80°)",
+    map3d_editor_default_pitch_hint: "Inclinazione della camera mentre segue la bici. 20 = quasi dall'alto, 55 = terza persona, 80 = vicino all'orizzonte.",
     map3d_editor_chase_zoom: "Zoom chase-cam (14-19)",
     map3d_editor_chase_zoom_hint: "Zoom più alto = più vicino alla bici. 17 ≈ 100 m visibili davanti.",
     map3d_editor_chase_lookahead: "Anticipo chase-cam (m)",
     map3d_editor_chase_lookahead_hint: "Quanti metri davanti alla bici si trova il target della camera. Valore più piccolo = bici più in alto nell'inquadratura. 0 = camera centrata sulla bici. Default 30.",
+    map3d_editor_camera_mode: "Modalità camera",
+    map3d_editor_camera_mode_hint: "Chase: la classica camera pitch/zoom qui sopra. FPV: una camera in stile action cam, posizionata in metri reali dietro e sopra la bici (campi sotto), per una sensazione più bassa e ravvicinata che pitch e zoom da soli non possono raggiungere.",
+    map3d_camera_mode_chase: "Chase (classica)",
+    map3d_camera_mode_fpv: "FPV / action cam",
+    map3d_editor_fpv_height: "Altezza camera FPV (m)",
+    map3d_editor_fpv_height_hint: "Altezza della camera FPV sopra il terreno, in metri. Più bassa = più vicina a una vera visuale in prima persona. Usata solo in modalità FPV.",
+    map3d_editor_fpv_distance: "Distanza camera FPV (m)",
+    map3d_editor_fpv_distance_hint: "Quanto dietro la bici si trova la camera FPV, in metri. 0 = proprio sulla bici. Usata solo in modalità FPV.",
+    map3d_editor_fpv_lookahead: "Anticipo mira FPV (m)",
+    map3d_editor_fpv_lookahead_hint: "Quanto davanti alla bici punta la camera FPV, in metri. Usata solo in modalità FPV.",
+    map3d_editor_preset_label: "Preset camera",
+    map3d_editor_preset_hint: "Scegli un preset per applicarlo subito, oppure regola i cursori sotto e salvali con un nome a tua scelta. I preset sono condivisi tra tutte le schede, come le altre impostazioni di questa pagina.",
+    map3d_preset_btn_save: "Salva come nuovo",
+    map3d_preset_btn_update: "Aggiorna",
+    map3d_preset_btn_rename: "Rinomina",
+    map3d_preset_btn_delete: "Elimina",
+    map3d_preset_custom: "— valori personalizzati (nessun preset) —",
+    map3d_preset_prompt_name: "Nome per questo preset:",
+    map3d_preset_pick_custom_first: "Scegli prima uno dei tuoi preset salvati (non funziona con quelli predefiniti).",
+    map3d_preset_confirm_delete: "Eliminare questo preset? L'operazione non può essere annullata.",
+    map3d_preset_classic: "Inseguimento classico",
+    map3d_preset_cinematic: "Panoramica cinematografica",
+    map3d_preset_action: "Action cam",
+    map3d_preset_drone_fpv: "Drone FPV",
     map3d_editor_animate_seconds: "Durata riproduzione (secondi)",
     map3d_editor_animate_seconds_hint: "Quanto dura un ciclo completo di Play dall'inizio alla fine dell'uscita.",
     map3d_editor_smooth_window: "Finestra di smoothing orientamento",
@@ -1949,12 +2069,36 @@ const I18N = {
     map3d_editor_height: "Altura de la tarjeta (px)",
     map3d_editor_account: "Fijar a una cuenta (opcional)",
     map3d_editor_bike: "Fijar a una bici (opcional)",
-    map3d_editor_default_pitch: "Inclinación chase-cam (20-65°)",
-    map3d_editor_default_pitch_hint: "Inclinación de la cámara mientras sigue a la bici. 20 = casi cenital, 55 = tercera persona, 65 = casi primera persona.",
+    map3d_editor_default_pitch: "Inclinación chase-cam (20-80°)",
+    map3d_editor_default_pitch_hint: "Inclinación de la cámara mientras sigue a la bici. 20 = casi cenital, 55 = tercera persona, 80 = cerca del horizonte.",
     map3d_editor_chase_zoom: "Zoom chase-cam (14-19)",
     map3d_editor_chase_zoom_hint: "Mayor zoom = más cerca de la bici. 17 ≈ 100 m visibles por delante.",
     map3d_editor_chase_lookahead: "Anticipación chase-cam (m)",
     map3d_editor_chase_lookahead_hint: "Cuántos metros por delante de la bici está el objetivo de la cámara. Valor menor = bici más arriba en el encuadre. 0 = cámara centrada en la bici. Predeterminado 30.",
+    map3d_editor_camera_mode: "Modo de cámara",
+    map3d_editor_camera_mode_hint: "Chase: la cámara clásica de pitch/zoom de arriba. FPV: una cámara estilo cámara de acción, colocada en metros reales detrás y encima de la bici (campos de abajo), para una sensación más baja y cercana que pitch y zoom por sí solos no pueden lograr.",
+    map3d_camera_mode_chase: "Chase (clásico)",
+    map3d_camera_mode_fpv: "FPV / cámara de acción",
+    map3d_editor_fpv_height: "Altura de cámara FPV (m)",
+    map3d_editor_fpv_height_hint: "Altura de la cámara FPV sobre el suelo, en metros. Menor = más cerca de una vista en primera persona real. Solo se usa en modo FPV.",
+    map3d_editor_fpv_distance: "Distancia de cámara FPV (m)",
+    map3d_editor_fpv_distance_hint: "A qué distancia detrás de la bici se sitúa la cámara FPV, en metros. 0 = justo en la bici. Solo se usa en modo FPV.",
+    map3d_editor_fpv_lookahead: "Anticipación de mira FPV (m)",
+    map3d_editor_fpv_lookahead_hint: "A qué distancia por delante de la bici apunta la cámara FPV, en metros. Solo se usa en modo FPV.",
+    map3d_editor_preset_label: "Preajuste de cámara",
+    map3d_editor_preset_hint: "Elige un preajuste para aplicarlo de inmediato, o ajusta los controles de abajo y guárdalos con un nombre propio. Los preajustes se comparten entre todas las tarjetas, igual que el resto de ajustes de esta página.",
+    map3d_preset_btn_save: "Guardar como nuevo",
+    map3d_preset_btn_update: "Actualizar",
+    map3d_preset_btn_rename: "Renombrar",
+    map3d_preset_btn_delete: "Eliminar",
+    map3d_preset_custom: "— valores propios (sin preajuste) —",
+    map3d_preset_prompt_name: "Nombre para este preajuste:",
+    map3d_preset_pick_custom_first: "Elige primero uno de tus propios preajustes guardados (no funciona con los predefinidos).",
+    map3d_preset_confirm_delete: "¿Eliminar este preajuste? Esta acción no se puede deshacer.",
+    map3d_preset_classic: "Seguimiento clásico",
+    map3d_preset_cinematic: "Panorámica cinematográfica",
+    map3d_preset_action: "Cámara de acción",
+    map3d_preset_drone_fpv: "FPV de dron",
     map3d_editor_animate_seconds: "Duración de reproducción (segundos)",
     map3d_editor_animate_seconds_hint: "Cuánto dura un ciclo completo de Play desde el inicio hasta el final de la ruta.",
     map3d_editor_smooth_window: "Ventana de suavizado de orientación",
@@ -2274,6 +2418,9 @@ const SHARED_SETTING_KEYS = [
   "smooth_window", "track_smooth_window",
   "terrain_exaggeration", "satellite_tile_url", "satellite_max_zoom",
   "north_up",
+  // FPV/action-cam chase mode (issue #43)
+  "camera_mode", "fpv_height_m", "fpv_distance_m", "fpv_lookahead_m",
+  "camera_presets", "active_camera_preset_id",
   "show_date", "show_time", "show_sun",
   "show_speed", "show_distance", "show_elevation",
   "stats_as_chips",
@@ -2314,6 +2461,83 @@ async function saveCardSetting(hass, key, value) {
     console.warn("[Bosch eBike] set_card_settings failed:", err?.message || err);
   }
 }
+
+// Same as saveCardSetting but writes several keys in one WS round trip and
+// one "changed" event - used when applying a whole camera preset at once
+// (issue #43), so the fields do not visibly update one at a time.
+async function saveCardSettings(hass, changes) {
+  if (!hass) return;
+  const filtered = {};
+  for (const [key, value] of Object.entries(changes || {})) {
+    if (SHARED_SETTING_KEYS.includes(key)) filtered[key] = value;
+  }
+  if (!Object.keys(filtered).length) return;
+  try {
+    const res = await hass.callWS({
+      type: "bosch_ebike/set_card_settings",
+      changes: filtered,
+    });
+    _cardSettingsCache.data = (res && res.settings) || _cardSettingsCache.data || {};
+    _cardSettingsBus.dispatchEvent(new Event("changed"));
+  } catch (err) {
+    console.warn("[Bosch eBike] set_card_settings failed:", err?.message || err);
+  }
+}
+
+// Destination point (issue #43 FPV camera): given a start lat/lon, a
+// bearing in degrees and a distance in metres, returns the resulting
+// lat/lon. Standard great-circle "destination point given distance and
+// bearing" formula (spherical Earth, radius 6371 km - the small error vs.
+// an ellipsoid is irrelevant at the few-metre distances used for the
+// camera). Verified numerically: distance 0 returns the input point,
+// bearing 0/90 only move lat/lon respectively, and a there-and-back trip
+// returns to the start within floating point precision.
+function destinationPoint(lat, lon, bearingDeg, distanceM) {
+  const R = 6371000;
+  const brng = bearingDeg * Math.PI / 180;
+  const lat1 = lat * Math.PI / 180;
+  const lon1 = lon * Math.PI / 180;
+  const dR = distanceM / R;
+  const lat2 = Math.asin(
+    Math.sin(lat1) * Math.cos(dR) + Math.cos(lat1) * Math.sin(dR) * Math.cos(brng)
+  );
+  const lon2 = lon1 + Math.atan2(
+    Math.sin(brng) * Math.sin(dR) * Math.cos(lat1),
+    Math.cos(dR) - Math.sin(lat1) * Math.sin(lat2)
+  );
+  return { lat: lat2 * 180 / Math.PI, lon: ((lon2 * 180 / Math.PI) + 540) % 360 - 180 };
+}
+
+// The camera fields a preset captures/restores (issue #43). Kept as one
+// list so "capture current values" and "apply a preset" always agree on
+// exactly which shared settings are preset-controlled.
+const CAMERA_PRESET_FIELDS = [
+  "camera_mode", "default_pitch", "chase_zoom", "chase_lookahead",
+  "fpv_height_m", "fpv_distance_m", "fpv_lookahead_m",
+];
+
+// Factory camera presets (issue #43): sensible starting combinations users
+// can apply as-is or duplicate under their own name. "factory" presets are
+// never deleted (delete just resets them to these values); ids are stable
+// so re-selecting one after an edit always finds the same entry.
+const FACTORY_CAMERA_PRESETS = [
+  {
+    id: "factory_classic", factory: true, name_key: "map3d_preset_classic",
+    values: { camera_mode: "chase", default_pitch: 55, chase_zoom: 17, chase_lookahead: 30 },
+  },
+  {
+    id: "factory_cinematic", factory: true, name_key: "map3d_preset_cinematic",
+    values: { camera_mode: "chase", default_pitch: 30, chase_zoom: 15, chase_lookahead: 10 },
+  },
+  {
+    id: "factory_action", factory: true, name_key: "map3d_preset_action",
+    values: { camera_mode: "fpv", fpv_height_m: 2.5, fpv_distance_m: 4, fpv_lookahead_m: 20 },
+  },
+  {
+    id: "factory_drone_fpv", factory: true, name_key: "map3d_preset_drone_fpv",
+    values: { camera_mode: "fpv", fpv_height_m: 1.2, fpv_distance_m: 1.5, fpv_lookahead_m: 12 },
+  },
+];
 
 // Lookup mit Cascade: shared store > local card config > fallback.
 // Wenn der shared store noch nicht geladen ist (data === null), liefert
@@ -5941,11 +6165,20 @@ class BoschEBikeMapCardEditor extends HTMLElement {
         </div>
       </div>
 
+      ${this._renderPresetControls(labelStyle, hintStyle, inputStyle)}
+
+      ${this._renderSharedSelectField("camera_mode", "map3d_editor_camera_mode", "map3d_editor_camera_mode_hint", [
+        ["chase", "map3d_camera_mode_chase"],
+        ["fpv", "map3d_camera_mode_fpv"],
+      ], inputStyle, labelStyle, hintStyle)}
       ${this._renderSharedField("playback_speed", "map3d_editor_playback_speed", "map3d_editor_playback_speed_hint", "number", inputStyle, labelStyle, hintStyle)}
       ${this._renderSharedField("animate_seconds", "map3d_editor_animate_seconds", "map3d_editor_animate_seconds_override_hint", "number", inputStyle, labelStyle, hintStyle)}
       ${this._renderSharedField("default_pitch", "map3d_editor_default_pitch", "map3d_editor_default_pitch_hint", "number", inputStyle, labelStyle, hintStyle)}
       ${this._renderSharedField("chase_zoom", "map3d_editor_chase_zoom", "map3d_editor_chase_zoom_hint", "number", inputStyle, labelStyle, hintStyle)}
       ${this._renderSharedField("chase_lookahead", "map3d_editor_chase_lookahead", "map3d_editor_chase_lookahead_hint", "number", inputStyle, labelStyle, hintStyle)}
+      ${this._renderSharedField("fpv_height_m", "map3d_editor_fpv_height", "map3d_editor_fpv_height_hint", "number", inputStyle, labelStyle, hintStyle)}
+      ${this._renderSharedField("fpv_distance_m", "map3d_editor_fpv_distance", "map3d_editor_fpv_distance_hint", "number", inputStyle, labelStyle, hintStyle)}
+      ${this._renderSharedField("fpv_lookahead_m", "map3d_editor_fpv_lookahead", "map3d_editor_fpv_lookahead_hint", "number", inputStyle, labelStyle, hintStyle)}
       ${this._renderSharedField("smooth_window", "map3d_editor_smooth_window", "map3d_editor_smooth_window_hint", "number", inputStyle, labelStyle, hintStyle)}
       ${this._renderSharedField("track_smooth_window", "map3d_editor_track_smooth", "map3d_editor_track_smooth_hint", "number", inputStyle, labelStyle, hintStyle)}
       ${this._renderSharedField("terrain_exaggeration", "map3d_editor_terrain_exag", "map3d_editor_terrain_exag_hint", "number", inputStyle, labelStyle, hintStyle)}
@@ -6013,11 +6246,18 @@ class BoschEBikeMapCardEditor extends HTMLElement {
     // Shared playback fields: einmal hass-Settings nachladen, dann
     // Werte in die Inputs schreiben + Listener mit Debounce-Save.
     this._wireSharedFields();
+    this._wirePresetControls();
     if (!this._sharedSettingsHandler) {
-      this._sharedSettingsHandler = () => this._syncSharedFields();
+      this._sharedSettingsHandler = () => {
+        this._syncSharedFields();
+        this._syncPresetSelect();
+      };
       _cardSettingsBus.addEventListener("changed", this._sharedSettingsHandler);
     }
-    ensureCardSettingsLoaded(this._hass).then(() => this._syncSharedFields()).catch(() => {});
+    ensureCardSettingsLoaded(this._hass).then(() => {
+      this._syncSharedFields();
+      this._syncPresetSelect();
+    }).catch(() => {});
   }
 
   disconnectedCallback() {
@@ -6043,6 +6283,26 @@ class BoschEBikeMapCardEditor extends HTMLElement {
     return `
       <label style="${labelStyle}">${this._escapeHtml(t(labelKey))}</label>
       <input type="${type}"${step} id="${id}" data-shared-key="${key}" data-shared-type="${type}" style="${inputStyle}">
+      ${hintHtml}
+    `;
+  }
+
+  // Same shared-key/shared-type wiring as _renderSharedField, but a
+  // <select> instead of an <input> (e.g. camera_mode). "input" events also
+  // fire on <select> value changes in current browsers, so it is picked up
+  // by the exact same _wireSharedFields/_syncSharedFields loop below
+  // without any changes there - matched purely by the [data-shared-key]
+  // attribute, not by tag name.
+  _renderSharedSelectField(key, labelKey, hintKey, options, inputStyle, labelStyle, hintStyle) {
+    const t = (k) => ebT(this._hass, k);
+    const id = `cs-${key}`;
+    const hintHtml = hintKey ? `<span style="${hintStyle}">${this._escapeHtml(t(hintKey))}</span>` : "";
+    const optionsHtml = options
+      .map(([value, labelKeyForOption]) => `<option value="${this._escapeHtml(value)}">${this._escapeHtml(t(labelKeyForOption))}</option>`)
+      .join("");
+    return `
+      <label style="${labelStyle}">${this._escapeHtml(t(labelKey))}</label>
+      <select id="${id}" data-shared-key="${key}" data-shared-type="text" style="${inputStyle}">${optionsHtml}</select>
       ${hintHtml}
     `;
   }
@@ -6078,6 +6338,133 @@ class BoschEBikeMapCardEditor extends HTMLElement {
       const key = input.dataset.sharedKey;
       const v = readCardSetting(this._config, key, "");
       input.value = v !== "" && v != null ? String(v) : "";
+    }
+  }
+
+  // -- Camera presets (issue #43) -------------------------------------
+  // Custom presets are user data stored under the "camera_presets" shared
+  // key; factory ones are the FACTORY_CAMERA_PRESETS constant above and
+  // are never written to storage, so they cannot be corrupted or lost.
+
+  _customCameraPresets() {
+    const raw = readCardSetting(this._config, "camera_presets", []);
+    return Array.isArray(raw) ? raw : [];
+  }
+
+  _allCameraPresets() {
+    return [...FACTORY_CAMERA_PRESETS, ...this._customCameraPresets()];
+  }
+
+  _currentCameraValues() {
+    const values = {};
+    for (const key of CAMERA_PRESET_FIELDS) {
+      const v = readCardSetting(this._config, key, undefined);
+      if (v !== undefined && v !== "") values[key] = v;
+    }
+    return values;
+  }
+
+  _renderPresetControls(labelStyle, hintStyle, inputStyle) {
+    const t = (k) => ebT(this._hass, k);
+    const btnStyle = "padding:6px 10px;border:1px solid var(--divider-color);border-radius:4px;background:var(--card-background-color,#fff);color:var(--primary-text-color,#222);cursor:pointer;font-size:12px;";
+    return `
+      <label style="${labelStyle}">${t("map3d_editor_preset_label")}</label>
+      <select id="cam-preset-select" style="${inputStyle}"></select>
+      <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">
+        <button type="button" id="cam-preset-save" style="${btnStyle}">${t("map3d_preset_btn_save")}</button>
+        <button type="button" id="cam-preset-update" style="${btnStyle}">${t("map3d_preset_btn_update")}</button>
+        <button type="button" id="cam-preset-rename" style="${btnStyle}">${t("map3d_preset_btn_rename")}</button>
+        <button type="button" id="cam-preset-delete" style="${btnStyle}">${t("map3d_preset_btn_delete")}</button>
+      </div>
+      <span style="${hintStyle}">${t("map3d_editor_preset_hint")}</span>
+    `;
+  }
+
+  // Rebuilds the <option> list (factory presets first, translated, then
+  // custom ones by name) and selects whichever is active_camera_preset_id,
+  // or the blank "not from a preset" option if none/unknown.
+  _syncPresetSelect() {
+    const select = this.querySelector("#cam-preset-select");
+    if (!select || document.activeElement === select) return;
+    const t = (k) => ebT(this._hass, k);
+    const activeId = readCardSetting(this._config, "active_camera_preset_id", "");
+    let html = `<option value="">${this._escapeHtml(t("map3d_preset_custom"))}</option>`;
+    for (const preset of this._allCameraPresets()) {
+      const label = preset.factory ? t(preset.name_key) : preset.name;
+      const selected = preset.id === activeId ? " selected" : "";
+      html += `<option value="${this._escapeHtml(preset.id)}"${selected}>${this._escapeHtml(label)}</option>`;
+    }
+    select.innerHTML = html;
+    if (!activeId) select.value = "";
+  }
+
+  _wirePresetControls() {
+    this._syncPresetSelect();
+    const select = this.querySelector("#cam-preset-select");
+    if (select && !select.dataset.wired) {
+      select.dataset.wired = "1";
+      select.addEventListener("change", () => {
+        const id = select.value;
+        if (!id) { saveCardSetting(this._hass, "active_camera_preset_id", null); return; }
+        const preset = this._allCameraPresets().find((p) => p.id === id);
+        if (!preset) return;
+        saveCardSettings(this._hass, { ...preset.values, active_camera_preset_id: id });
+      });
+    }
+
+    const saveBtn = this.querySelector("#cam-preset-save");
+    if (saveBtn && !saveBtn.dataset.wired) {
+      saveBtn.dataset.wired = "1";
+      saveBtn.addEventListener("click", () => {
+        const name = (window.prompt(ebT(this._hass, "map3d_preset_prompt_name")) || "").trim();
+        if (!name) return;
+        const id = `custom_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+        const list = this._customCameraPresets();
+        list.push({ id, name, factory: false, values: this._currentCameraValues() });
+        saveCardSettings(this._hass, { camera_presets: list, active_camera_preset_id: id });
+      });
+    }
+
+    const updateBtn = this.querySelector("#cam-preset-update");
+    if (updateBtn && !updateBtn.dataset.wired) {
+      updateBtn.dataset.wired = "1";
+      updateBtn.addEventListener("click", () => {
+        const activeId = readCardSetting(this._config, "active_camera_preset_id", "");
+        const list = this._customCameraPresets();
+        const entry = list.find((p) => p.id === activeId);
+        if (!entry) { window.alert(ebT(this._hass, "map3d_preset_pick_custom_first")); return; }
+        entry.values = this._currentCameraValues();
+        saveCardSettings(this._hass, { camera_presets: list });
+      });
+    }
+
+    const renameBtn = this.querySelector("#cam-preset-rename");
+    if (renameBtn && !renameBtn.dataset.wired) {
+      renameBtn.dataset.wired = "1";
+      renameBtn.addEventListener("click", () => {
+        const activeId = readCardSetting(this._config, "active_camera_preset_id", "");
+        const list = this._customCameraPresets();
+        const entry = list.find((p) => p.id === activeId);
+        if (!entry) { window.alert(ebT(this._hass, "map3d_preset_pick_custom_first")); return; }
+        const name = (window.prompt(ebT(this._hass, "map3d_preset_prompt_name"), entry.name) || "").trim();
+        if (!name) return;
+        entry.name = name;
+        saveCardSettings(this._hass, { camera_presets: list });
+      });
+    }
+
+    const deleteBtn = this.querySelector("#cam-preset-delete");
+    if (deleteBtn && !deleteBtn.dataset.wired) {
+      deleteBtn.dataset.wired = "1";
+      deleteBtn.addEventListener("click", () => {
+        const activeId = readCardSetting(this._config, "active_camera_preset_id", "");
+        const list = this._customCameraPresets();
+        const idx = list.findIndex((p) => p.id === activeId);
+        if (idx < 0) { window.alert(ebT(this._hass, "map3d_preset_pick_custom_first")); return; }
+        if (!window.confirm(ebT(this._hass, "map3d_preset_confirm_delete"))) return;
+        list.splice(idx, 1);
+        saveCardSettings(this._hass, { camera_presets: list, active_camera_preset_id: null });
+      });
     }
   }
 }
@@ -10267,10 +10654,25 @@ class BoschEBike3DMapCard extends HTMLElement {
     const canvas = this._root.querySelector("#m3d-canvas");
     // Chase-cam: pitch ~55° (looking forward over the bike) and zoom ~17
     // (about 100 m of road visible ahead). User can override via config.
-    const chasePitch = Math.max(20, Math.min(65, Number(readCardSetting(this._config, "default_pitch", undefined)) || 55));
+    // Upper bound raised from 65 to 80 (issue #43): MapLibre's own default
+    // maxPitch is 60, so anything above that was already being silently
+    // clamped by the map itself regardless of this setting - see the
+    // matching maxPitch: 80 on the Map constructor below, which is what
+    // actually lets values in the new 65-80 range take effect.
+    const chasePitch = Math.max(20, Math.min(80, Number(readCardSetting(this._config, "default_pitch", undefined)) || 55));
     const chaseZoom = Math.max(14, Math.min(19, Number(readCardSetting(this._config, "chase_zoom", undefined)) || 17));
     this._chasePitch = chasePitch;
     this._chaseZoom = chaseZoom;
+
+    // FPV/action-cam mode (issue #43): an alternative camera driven by real
+    // metre distances instead of pitch/zoom, computed per frame in
+    // _applyIndex via calculateCameraOptionsFromTo. "chase" (default)
+    // leaves ALL existing behavior above unchanged.
+    const cameraModeRaw = readCardSetting(this._config, "camera_mode", "chase");
+    this._cameraMode = cameraModeRaw === "fpv" ? "fpv" : "chase";
+    this._fpvHeight = Math.max(0.3, Math.min(10, Number(readCardSetting(this._config, "fpv_height_m", undefined)) || 2));
+    this._fpvDistance = Math.max(0, Math.min(30, Number(readCardSetting(this._config, "fpv_distance_m", undefined)) || 4));
+    this._fpvLookahead = Math.max(3, Math.min(80, Number(readCardSetting(this._config, "fpv_lookahead_m", undefined)) || 20));
 
     // Wait for layout to settle so the canvas has a real height. Without
     // this, MapLibre boots with a 0x0 WebGL viewport.
@@ -10307,6 +10709,11 @@ class BoschEBike3DMapCard extends HTMLElement {
       attributionControl: false,
       maxTileCacheSize: 200,
       preserveDrawingBuffer: true,
+      // Default maxPitch is 60 (issue #43): raised so the extended
+      // 65-80° chase-cam range and the FPV camera's own steep pitch
+      // (derived from height/distance, can exceed 60 at close range)
+      // are not silently clamped back down by the map itself.
+      maxPitch: 80,
     });
     this._map = myMap;
     myMap.addControl(new mlib.AttributionControl({ compact: true }), "bottom-right");
@@ -10812,22 +11219,59 @@ class BoschEBike3DMapCard extends HTMLElement {
         // bearing minus map bearing, which collapses to 0 in the
         // default mode and to the travel bearing in north-up mode.
         const northUp = this._currentNorthUp();
-        const mapBearing = northUp ? 0 : travelBearing;
-        const offY = this._chaseLookAhead != null ? this._chaseLookAhead : 30;
-        const camera = {
-          center: [this._dispLon, this._dispLat],
-          zoom: this._chaseZoom != null ? this._chaseZoom : 17,
-          pitch: this._chasePitch != null ? this._chasePitch : 55,
-          bearing: mapBearing,
-          offset: [0, offY],
-        };
+        let camera;
+        if (this._cameraMode === "fpv") {
+          // FPV/action-cam (issue #43): camera positioned real metres
+          // behind + above the bike, aimed at a point ahead along the
+          // travel bearing. MapLibre GL JS has no free/quaternion camera
+          // (verified against the actual bundled source - no
+          // FreeCameraOptions), so this uses calculateCameraOptionsFromTo,
+          // the supported helper that turns two 3D points (lng/lat +
+          // altitude in real metres) into the classic center/zoom/pitch/
+          // bearing this map already understands.
+          const camPoint = destinationPoint(
+            this._dispLat, this._dispLon, (travelBearing + 180) % 360, this._fpvDistance
+          );
+          const lookPoint = destinationPoint(
+            this._dispLat, this._dispLon, travelBearing, this._fpvLookahead
+          );
+          const groundEle = this._map.queryTerrainElevation([camPoint.lon, camPoint.lat]);
+          const bikeEle = Number.isFinite(p.ele) ? p.ele : 0;
+          // Number.isFinite (not just != null) so a NaN from an
+          // unloaded DEM tile also falls back to the GPS elevation,
+          // instead of poisoning the camera altitude.
+          const camAltitude = (Number.isFinite(groundEle) ? groundEle : bikeEle) + this._fpvHeight;
+          // 4th arg (target altitude) omitted on purpose: with terrain
+          // active, MapLibre queries the ground elevation at lookPoint
+          // itself, i.e. the camera aims at the road surface ahead, not a
+          // fixed height above it.
+          camera = this._map.calculateCameraOptionsFromTo(
+            [camPoint.lon, camPoint.lat], camAltitude,
+            [lookPoint.lon, lookPoint.lat]
+          );
+          if (northUp) camera.bearing = 0;
+          // The pixel-offset framing trick below is a chase-cam-only hack;
+          // the FPV camera's own 3D placement already frames the bike.
+          camera.offset = [0, 0];
+        } else {
+          const mapBearing = northUp ? 0 : travelBearing;
+          const offY = this._chaseLookAhead != null ? this._chaseLookAhead : 30;
+          camera = {
+            center: [this._dispLon, this._dispLat],
+            zoom: this._chaseZoom != null ? this._chaseZoom : 17,
+            pitch: this._chasePitch != null ? this._chasePitch : 55,
+            bearing: mapBearing,
+            offset: [0, offY],
+          };
+        }
         if (isInitial) {
           this._map.easeTo({ ...camera, duration: 900 });
         } else {
           this._map.jumpTo(camera);
         }
         if (this._markerArrowEl) {
-          const rel = ((travelBearing - mapBearing) % 360 + 360) % 360;
+          const mapBearingForArrow = camera.bearing != null ? camera.bearing : travelBearing;
+          const rel = ((travelBearing - mapBearingForArrow) % 360 + 360) % 360;
           this._markerArrowEl.style.transform = `translate(-50%,-58%) rotate(${rel}deg)`;
         }
       } catch (e) { console.warn("[Bosch eBike 3D] chase-cam update failed", e); }

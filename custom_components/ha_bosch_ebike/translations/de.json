@@ -39,9 +39,9 @@
   },
   "options": {
     "step": {
-      "init": {
-        "title": "Live-Datenquellen (optional)",
-        "description": "Optional kannst du den Tachostand- und Akkustand-Sensor der ESPHome-Bosch-eBike-LDI-Bridge verknüpfen. Wenn gesetzt, berechnet die Integration aus den Live-Werten die exakte Tourdistanz und den genauen Akkuverbrauch — anstelle der Cloud-Schätzungen. Leer lassen, um das bisherige Verhalten beizubehalten.",
+      "bike": {
+        "title": "Live-Datenquellen für {bike_name} (optional)",
+        "description": "Optional kannst du den Tachostand- und Akkustand-Sensor der eigenen ESPHome-Bosch-eBike-LDI-Bridge dieses Bikes verknüpfen. Jedes Bike auf diesem Konto wird separat konfiguriert, sodass sich zwei Bikes nie dieselbe Bridge teilen. Wenn gesetzt, berechnet die Integration aus den Live-Werten die exakte Tourdistanz und den genauen Akkuverbrauch — anstelle der Cloud-Schätzungen. Leer lassen, um das bisherige Verhalten für dieses Bike beizubehalten.",
         "data": {
           "live_odometer_entity": "Live-Tachostand-Sensor (km)",
           "live_soc_entity": "Live-Akkustand-Sensor (%)"

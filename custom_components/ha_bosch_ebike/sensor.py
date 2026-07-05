@@ -30,7 +30,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import async_track_state_change_event
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import CONF_LIVE_SOC_ENTITY, DOMAIN
+from .const import DOMAIN
 from .coordinator import BoschEBikeCoordinator
 from .profile_extra import (
     assist_mode_stats,
@@ -551,7 +551,6 @@ async def async_setup_entry(
     entities: list[BoschEBikeSensor] = []
 
     bikes = coordinator.data.get("bikes", [])
-    soc_entity = entry.options.get(CONF_LIVE_SOC_ENTITY)
     # eBike System 2 has no service book / bike pass / per-mode / consumption /
     # range-estimate data; those entities are skipped so BES2 users don't get a
     # row of permanently-unknown sensors. GPS, activities, odometer, totals and
@@ -684,6 +683,9 @@ async def async_setup_entry(
         # Estimated range (clearly labelled estimate, derived from history)
         if not is_bes2:
             entities.append(BoschRangeEstimateSensor(coordinator, bike_id, drive_name))
+            # Per-bike live SoC sensor (issue #44): each bike's own bridge, not
+            # a single account-wide entity, so two bikes never share a value.
+            soc_entity = coordinator.live_soc_entity(bike_id)
             if soc_entity:
                 entities.append(
                     BoschCurrentRangeSensor(coordinator, bike_id, drive_name, soc_entity)
