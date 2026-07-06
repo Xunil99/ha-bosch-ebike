@@ -76,7 +76,6 @@ def test_assist_mode_display_name_gseries_and_heuristics():
     assert assist_mode_display_name("A100GAAAB0") == "eMTB"
     assert assist_mode_display_name("A100GAAAC0") == "TOUR"
     assert assist_mode_display_name("A100GAAAD0") == "ECO"
-    assert assist_mode_display_name("A100GAAAE0") == "SPORT"
     assert assist_mode_display_name("A100GAAAF0") == "TOUR+"
     assert assist_mode_display_name("A100ECOP38") == "ECO+"
     assert assist_mode_display_name("A100MSPIC8") == "eMTB+"
@@ -85,6 +84,51 @@ def test_assist_mode_display_name_gseries_and_heuristics():
     assert assist_mode_display_name("A100ECOP99") == "ECO+"
     # An unmapped code without a name substring stays raw (no false labelling).
     assert assist_mode_display_name("A100GZZZZ9") == "A100GZZZZ9"
+
+
+def test_assist_mode_display_name_gaaae0_is_ambiguous_by_design():
+    # issue #46: A100GAAAE0 was reported as SPORT on one real bike whose
+    # active modes also included the distinct eMTB code A100GAAAB0, and as
+    # eMTB on another real bike whose active modes did NOT include
+    # A100GAAAB0 at all. Neither report is wrong - the same slot is reused
+    # for eMTB when a bike's tune has no separate eMTB mode - so the result
+    # must depend on sibling_codes, not a single fixed table entry.
+    assert assist_mode_display_name(
+        "A100GAAAE0", sibling_codes={"A100GAAAB0", "A100GAAAA0"}
+    ) == "SPORT"
+    assert assist_mode_display_name(
+        "A100GAAAE0", sibling_codes={"A100GAAAD0", "A100GAAAF0", "A100GAAAA0"}
+    ) == "eMTB"
+    # Without sibling context we genuinely cannot tell - stay raw rather
+    # than silently guess (a guess is wrong for one of the two real bikes).
+    assert assist_mode_display_name("A100GAAAE0") == "A100GAAAE0"
+    assert assist_mode_display_name("A100GAAAE0", sibling_codes=None) == "A100GAAAE0"
+
+
+def test_reachable_ranges_resolves_gaaae0_per_bike():
+    # The two real, conflicting bikes from issue #46, end to end through
+    # reachable_ranges() rather than the unit directly.
+    derlangemarkus_bike = {"driveUnit": {"activeAssistModes": [
+        {"name": "A100GAAAB0", "reachableRange": 40},  # distinct eMTB present
+        {"name": "A100GAAAE0", "reachableRange": 35},
+    ]}}
+    assert reachable_ranges(derlangemarkus_bike) == [
+        {"name": "eMTB", "range_km": 40.0},
+        {"name": "SPORT", "range_km": 35.0},
+    ]
+
+    crazy_joe28_bike = {"driveUnit": {"activeAssistModes": [
+        {"name": "A100GAAAD0", "reachableRange": 60},
+        {"name": "A100GAAAF0", "reachableRange": 45},
+        {"name": "A100GAAAE0", "reachableRange": 32},  # no A100GAAAB0 sibling
+        {"name": "A100GAAAA0", "reachableRange": 20},
+    ]}}
+    assert reachable_ranges(crazy_joe28_bike) == [
+        {"name": "ECO", "range_km": 60.0},
+        {"name": "TOUR+", "range_km": 45.0},
+        {"name": "eMTB", "range_km": 32.0},
+        {"name": "TURBO", "range_km": 20.0},
+    ]
 
 
 def test_assist_mode_display_name_sx_eseries():

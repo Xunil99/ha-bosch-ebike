@@ -44,7 +44,8 @@ ASSIST_MODE_NAMES: dict[str, str] = {
     "A100GAAAC0": "TOUR",
     "A100GAAAF0": "TOUR+",
     "A100GAAAB0": "eMTB",
-    "A100GAAAE0": "SPORT",
+    # A100GAAAE0 is intentionally NOT in this table - see the sibling_codes
+    # handling in assist_mode_display_name() below (issue #46).
     # E-series Performance Line SX (reported by @surger13, issue #37). "SPRINT"
     # expanded from the tester's "SPRNT" abbreviation (code ...SPNT...).
     "A100E10040": "ECO",
@@ -62,7 +63,7 @@ ASSIST_MODE_NAMES: dict[str, str] = {
 }
 
 
-def assist_mode_display_name(code: Any) -> Any:
+def assist_mode_display_name(code: Any, sibling_codes: set[str] | None = None) -> Any:
     """Map a Bosch assist-mode application code to its display name.
 
     The Data Act API exposes only the internal code (no display name), and the
@@ -71,8 +72,23 @@ def assist_mode_display_name(code: Any) -> Any:
     two SAFE heuristics for the only codes that literally carry their own name
     (``…AUTO…`` and ``…ECOP…`` -> ECO+); everything else falls back to the raw
     code so an unknown mode still shows something instead of disappearing.
+
+    ``A100GAAAE0`` is a genuinely ambiguous exception (issue #46): one real
+    bike reported it as SPORT while its active modes also included the
+    distinct eMTB code ``A100GAAAB0``; another real bike reported it as eMTB,
+    and that bike's active modes did NOT include ``A100GAAAB0`` at all - the
+    same slot is apparently reused for eMTB on tunes that have no separate
+    eMTB mode. ``sibling_codes`` (the OTHER codes active on the same bike,
+    see :func:`reachable_ranges`) disambiguates: SPORT if a distinct eMTB
+    code is also present, eMTB otherwise. Without that context we cannot
+    tell, so we fall back to the raw code rather than silently guessing -
+    a guess would be wrong for one of the two real reports we already have.
     """
     if not isinstance(code, str):
+        return code
+    if code == "A100GAAAE0":
+        if sibling_codes is not None:
+            return "SPORT" if "A100GAAAB0" in sibling_codes else "eMTB"
         return code
     mapped = ASSIST_MODE_NAMES.get(code)
     if mapped is not None:
@@ -97,13 +113,14 @@ def reachable_ranges(bike: dict) -> list[dict]:
     :data:`ASSIST_MODE_NAMES`.
     """
     modes = _get(bike, "driveUnit", "activeAssistModes", default=[]) or []
+    sibling_codes = {m.get("name") for m in modes if isinstance(m, dict) and m.get("name")}
     out: list[dict] = []
     for m in modes:
         name = m.get("name")
         rng = m.get("reachableRange")
         if not name or name == "0" or not isinstance(rng, (int, float)):
             continue
-        out.append({"name": assist_mode_display_name(name),
+        out.append({"name": assist_mode_display_name(name, sibling_codes),
                     "range_km": round(rng, 1)})
     return out
 
