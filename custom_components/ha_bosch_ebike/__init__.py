@@ -326,6 +326,7 @@ async def ws_list_instances(
     hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict
 ) -> None:
     """Return list of all configured Bosch eBike accounts and their bikes."""
+    device_registry = dr.async_get(hass)
     instances = []
     for entry_id, coordinator in _all_coordinators(hass).items():
         bikes = coordinator.data.get("bikes", []) if coordinator.data else []
@@ -334,7 +335,19 @@ async def ws_list_instances(
             bid = bike.get("id")
             if not bid:
                 continue
-            bike_list.append({"id": bid, "label": _bike_label(bike)})
+            # Prefer the user's own device name over the generic drive-unit
+            # label, if they renamed the bike's device (issue #44 follow-up):
+            # two bikes sharing the same motor looked identical in every
+            # bike-picker dropdown across the map/heatmap/calendar card
+            # editors, since they all resolve their options through this
+            # same WS call. Mirrors BoschEBikeOptionsFlowHandler's
+            # _display_name_for_bike() in config_flow.py.
+            device = device_registry.async_get_device(identifiers={(DOMAIN, bid)})
+            if device and (device.name_by_user or device.name):
+                label = device.name_by_user or device.name
+            else:
+                label = _bike_label(bike)
+            bike_list.append({"id": bid, "label": label})
         instances.append({
             "config_entry_id": entry_id,
             "label": _account_label(coordinator),
