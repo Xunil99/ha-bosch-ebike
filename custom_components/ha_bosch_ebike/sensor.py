@@ -1302,7 +1302,7 @@ class BoschRangeEstimateSensor(CoordinatorEntity[BoschEBikeCoordinator], SensorE
         est = self._estimate()
         if not est or not est.get("wh_per_km"):
             return None
-        capacity = self.coordinator.data.get("battery_capacity_wh")
+        capacity = self.coordinator.battery_capacity_wh(self._bike_id)
         if not capacity:
             return None
         return round(capacity / est["wh_per_km"])
@@ -1318,7 +1318,7 @@ class BoschRangeEstimateSensor(CoordinatorEntity[BoschEBikeCoordinator], SensorE
             "tours_used": est.get("tours_used"),
             "window_km": est.get("window_km"),
             "newest_tour_date": est.get("newest_tour_date"),
-            "battery_capacity_wh": self.coordinator.data.get("battery_capacity_wh"),
+            "battery_capacity_wh": self.coordinator.battery_capacity_wh(self._bike_id),
         }
 
 

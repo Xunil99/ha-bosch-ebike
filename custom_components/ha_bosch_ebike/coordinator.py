@@ -75,10 +75,17 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # Per-bike Data Act endpoints (refreshed every poll)
         self._bike_pass: dict[str, dict[str, Any]] = {}
         self._service_records: dict[str, dict[str, Any]] = {}
-        # Battery consumption tracking (Wh delta between polls)
-        self._prev_delivered_wh: float | None = None
+        # Battery consumption tracking (Wh delta between polls), per bike:
+        # each bike has its own independent lifetime energy counter, and a
+        # single shared scalar previously mixed up bikes whenever more than
+        # one had a new activity in the same poll.
+        self._prev_delivered_wh: dict[str, float] = {}
         self._prev_activity_ids: set[str] = set()
-        self._battery_capacity_wh: float = DEFAULT_BATTERY_CAPACITY_WH
+        # Per-bike battery capacity in Wh (issue #44 follow-up): a single
+        # account-wide value was wrong for multi-bike accounts whose bikes
+        # have different battery sizes. See battery_capacity_wh() for the
+        # per-bike / legacy-flat / default fallback chain.
+        self._battery_capacity_wh: dict[str, float] = {}
         self._activity_consumption: dict[str, dict[str, Any]] = {}
         # Per-activity bike attribution (activity_id -> bike_id) for multi-bike accounts
         self._activity_bike: dict[str, str] = {}
@@ -118,8 +125,18 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         data = await self._store.async_load()
         if isinstance(data, dict):
             prev_wh = data.get("prev_delivered_wh")
-            if isinstance(prev_wh, (int, float)):
-                self._prev_delivered_wh = float(prev_wh)
+            if isinstance(prev_wh, dict):
+                self._prev_delivered_wh = {
+                    bid: float(v) for bid, v in prev_wh.items()
+                    if isinstance(bid, str) and isinstance(v, (int, float))
+                }
+            elif isinstance(prev_wh, (int, float)):
+                # Pre-migration store: one global scalar, not attributed to
+                # any bike. Nothing to migrate - skipping it just means the
+                # first poll after upgrading establishes a fresh per-bike
+                # baseline instead of computing one (possibly bike-ambiguous)
+                # delta immediately, which is the safe choice.
+                pass
             prev_ids = data.get("prev_activity_ids")
             if isinstance(prev_ids, list):
                 self._prev_activity_ids = {x for x in prev_ids if isinstance(x, str)}
@@ -147,8 +164,18 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     if isinstance(bid, str) and isinstance(ov, dict)
                 }
             capacity = data.get("battery_capacity_wh")
-            if isinstance(capacity, (int, float)) and capacity > 0:
-                self._battery_capacity_wh = float(capacity)
+            if isinstance(capacity, dict):
+                self._battery_capacity_wh = {
+                    bid: float(v) for bid, v in capacity.items()
+                    if isinstance(bid, str) and isinstance(v, (int, float)) and v > 0
+                }
+            elif isinstance(capacity, (int, float)) and capacity > 0:
+                # Pre-migration store: one global scalar, not attributed to
+                # any bike. Nothing to migrate into the per-bike dict here -
+                # we don't know which bike it was for - the legacy flat
+                # entry.data value is the fallback every bike reads until
+                # explicitly overridden; see battery_capacity_wh().
+                pass
             _LOGGER.debug(
                 "Loaded persisted consumption state: prev_wh=%s, activities=%d",
                 self._prev_delivered_wh,
@@ -160,13 +187,13 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """Persist the battery consumption state to disk."""
         await self._store.async_save(
             {
-                "prev_delivered_wh": self._prev_delivered_wh,
+                "prev_delivered_wh": dict(self._prev_delivered_wh),
                 "prev_activity_ids": sorted(self._prev_activity_ids),
                 "activity_consumption": self._activity_consumption,
                 "activity_bike": self._activity_bike,
                 "maintenance": self._maintenance,
                 "service_overrides": self._service_overrides,
-                "battery_capacity_wh": self._battery_capacity_wh,
+                "battery_capacity_wh": dict(self._battery_capacity_wh),
             }
         )
 
@@ -288,22 +315,41 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         return attribution
 
-    def set_battery_capacity(self, capacity_wh: float) -> None:
-        """Set the battery capacity and refresh all dependent consumption entries.
+    def battery_capacity_wh(self, bike_id: str | None) -> float:
+        """Effective battery capacity in Wh for *bike_id*.
 
-        Older consumption records still hold the previous capacity_wh and the
-        derived percentage in their dict. We rewrite both in place so existing
-        rides immediately reflect the new capacity. The raw consumed_wh value
-        stays as recorded.
+        A per-bike override (set via that bike's Battery Capacity number
+        entity) takes priority. A bike that was never overridden falls back
+        to the legacy flat value on the config entry (pre-multi-bike,
+        account wide), then to the hardcoded default. This mirrors the
+        live-sensor fallback chain from issue #44 (see _live_sensor_entity).
+        """
+        if bike_id is not None and bike_id in self._battery_capacity_wh:
+            return self._battery_capacity_wh[bike_id]
+        legacy = self.config_entry.data.get("battery_capacity_wh") if self.config_entry else None
+        if isinstance(legacy, (int, float)) and legacy > 0:
+            return float(legacy)
+        return DEFAULT_BATTERY_CAPACITY_WH
+
+    def set_battery_capacity(self, bike_id: str, capacity_wh: float) -> None:
+        """Set *bike_id*'s battery capacity and refresh its consumption entries.
+
+        Older consumption records for THIS bike still hold the previous
+        capacity_wh and the derived percentage in their dict. We rewrite both
+        in place so existing rides immediately reflect the new capacity. The
+        raw consumed_wh value stays as recorded. Other bikes' entries are
+        untouched, since their capacity has not changed.
         """
         # Live-enrichment cache holds consumed_wh derived from the previous
         # capacity. Wipe it so the next poll recomputes from live SoC deltas.
         self.invalidate_live_enrichment_cache()
 
-        if capacity_wh == self._battery_capacity_wh:
+        if self._battery_capacity_wh.get(bike_id) == capacity_wh:
             return
-        self._battery_capacity_wh = capacity_wh
-        for entry in self._activity_consumption.values():
+        self._battery_capacity_wh[bike_id] = capacity_wh
+        for aid, entry in self._activity_consumption.items():
+            if self._activity_bike.get(aid) != bike_id:
+                continue
             entry["capacity_wh"] = capacity_wh
             try:
                 consumed = float(entry.get("consumed_wh", 0) or 0)
@@ -315,75 +361,127 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if self.data is not None:
             new_data = dict(self.data)
             new_data["activity_consumption"] = self._activity_consumption
-            new_data["battery_capacity_wh"] = capacity_wh
+            new_data["battery_capacity_wh"] = dict(self._battery_capacity_wh)
             self.async_set_updated_data(new_data)
 
     def _track_battery_consumption(self, bikes: list[dict[str, Any]]) -> bool:
-        """Track deliveredWhOverLifetime changes and allocate to activities.
+        """Track each bike's own deliveredWhOverLifetime and allocate to activities.
+
+        Every bike has its own independent lifetime energy counter. A single
+        shared delta previously mixed up bikes: if two bikes each finished a
+        ride between polls, one bike's actual Wh draw could get fractionally
+        attributed to the OTHER bike's activity, and that wrong share was
+        then divided by that other bike's own (correct) capacity to produce a
+        confidently wrong percentage. Fixed by tracking current_wh/delta_wh
+        per bike, and only ever allocating a bike's delta across that SAME
+        bike's own new activities.
+
+        Requires self._activity_bike to already reflect the CURRENT
+        self._all_activities (attribution must run before this - see
+        _async_update_data).
 
         Returns True if persistent state changed and should be saved.
         """
-        current_wh: float | None = None
+        current_wh_by_bike: dict[str, float] = {}
         for bike in bikes:
+            bike_id = bike.get("id")
+            if not bike_id:
+                continue
             for battery in bike.get("batteries", []) or []:
                 wh = battery.get("deliveredWhOverLifetime")
                 if wh is not None:
-                    current_wh = wh
+                    current_wh_by_bike[bike_id] = wh
                     break
-            if current_wh is not None:
-                break
 
-        if current_wh is None:
+        if not current_wh_by_bike:
             return False
 
         current_ids = {a.get("id") for a in self._all_activities if a.get("id")}
+        new_ids = current_ids - self._prev_activity_ids
+        new_activities = [a for a in self._all_activities if a.get("id") in new_ids]
+
         state_changed = False
+        # Ids that stayed unresolved this poll (no bike attribution yet, or
+        # that bike's delta_wh was not usable) MUST NOT be folded into
+        # self._prev_activity_ids below, or they would count as "already
+        # seen" forever and never get a second chance - attribution and a
+        # currently-non-positive delta can both genuinely resolve on a later
+        # poll (cloud data catching up, mirroring issue #31's GPS-track-lag
+        # handling), so leaving them out here is what actually makes the
+        # "retried next poll" behaviour true instead of just a comment.
+        unresolved_ids: set[str] = set()
 
-        if self._prev_delivered_wh is not None:
-            delta_wh = current_wh - self._prev_delivered_wh
-            if delta_wh > 0:
-                new_ids = current_ids - self._prev_activity_ids
-                new_activities = [
-                    a for a in self._all_activities if a.get("id") in new_ids
-                ]
+        if new_activities:
+            # Single-bike accounts get a fallback to that one bike when an
+            # activity could not (yet) be attributed - same reasoning as
+            # compute_range_estimate's fallback_all - since there is no
+            # ambiguity about which bike it could be. Multi-bike accounts
+            # leave it unattributed rather than guess which of several bikes
+            # it belongs to.
+            single_bike_id = bikes[0].get("id") if len(bikes) == 1 else None
 
-                if new_activities:
-                    total_distance = sum(
-                        a.get("distance", 0) or 0 for a in new_activities
+            by_bike: dict[str, list[dict[str, Any]]] = {}
+            for activity in new_activities:
+                aid = activity.get("id")
+                if not aid:
+                    continue
+                bike_id = self._activity_bike.get(aid) or single_bike_id
+                if not bike_id:
+                    unresolved_ids.add(aid)
+                    continue
+                by_bike.setdefault(bike_id, []).append(activity)
+
+            for bike_id, bike_activities in by_bike.items():
+                current_wh = current_wh_by_bike.get(bike_id)
+                prev_wh = self._prev_delivered_wh.get(bike_id)
+                delta_wh = (
+                    current_wh - prev_wh
+                    if current_wh is not None and prev_wh is not None
+                    else None
+                )
+                if delta_wh is None or delta_wh <= 0:
+                    unresolved_ids.update(
+                        a.get("id") for a in bike_activities if a.get("id")
+                    )
+                    continue
+
+                total_distance = sum(
+                    a.get("distance", 0) or 0 for a in bike_activities
+                )
+                capacity_wh = self.battery_capacity_wh(bike_id)
+
+                for activity in bike_activities:
+                    aid = activity.get("id")
+                    dist = activity.get("distance", 0) or 0
+                    if total_distance > 0 and len(bike_activities) > 1:
+                        share = delta_wh * (dist / total_distance)
+                        is_exact = False
+                    else:
+                        share = delta_wh
+                        is_exact = len(bike_activities) == 1
+
+                    self._activity_consumption[aid] = {
+                        "consumed_wh": round(share, 1),
+                        "capacity_wh": capacity_wh,
+                        "is_exact": is_exact,
+                        "percentage": round(
+                            (share / capacity_wh) * 100, 1
+                        ) if capacity_wh > 0 else 0,
+                    }
+                    state_changed = True
+                    _LOGGER.info(
+                        "Battery consumption for activity %s (bike %s): %.1f Wh (%.1f%%)",
+                        aid, bike_id, share,
+                        (share / capacity_wh) * 100
+                        if capacity_wh > 0 else 0,
                     )
 
-                    for activity in new_activities:
-                        aid = activity.get("id")
-                        if not aid:
-                            continue
-                        dist = activity.get("distance", 0) or 0
-                        if total_distance > 0 and len(new_activities) > 1:
-                            share = delta_wh * (dist / total_distance)
-                            is_exact = False
-                        else:
-                            share = delta_wh
-                            is_exact = len(new_activities) == 1
-
-                        self._activity_consumption[aid] = {
-                            "consumed_wh": round(share, 1),
-                            "capacity_wh": self._battery_capacity_wh,
-                            "is_exact": is_exact,
-                            "percentage": round(
-                                (share / self._battery_capacity_wh) * 100, 1
-                            ) if self._battery_capacity_wh > 0 else 0,
-                        }
-                        state_changed = True
-                        _LOGGER.info(
-                            "Battery consumption for activity %s: %.1f Wh (%.1f%%)",
-                            aid, share,
-                            (share / self._battery_capacity_wh) * 100
-                            if self._battery_capacity_wh > 0 else 0,
-                        )
-
-        # Basislinie aktualisieren
-        if self._prev_delivered_wh != current_wh:
-            self._prev_delivered_wh = current_wh
-            state_changed = True
+        # Basislinien pro Bike aktualisieren
+        for bike_id, current_wh in current_wh_by_bike.items():
+            if self._prev_delivered_wh.get(bike_id) != current_wh:
+                self._prev_delivered_wh[bike_id] = current_wh
+                state_changed = True
+        current_ids = current_ids - unresolved_ids
         if self._prev_activity_ids != current_ids:
             self._prev_activity_ids = current_ids
             state_changed = True
@@ -496,21 +594,22 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if soc_entity and not cache.get("soc"):
                 start_soc = await get_state_at(self.hass, soc_entity, start_time)
                 end_soc = await get_state_at(self.hass, soc_entity, end_time)
+                capacity_wh = self.battery_capacity_wh(bike_id)
                 if (
                     start_soc is not None
                     and end_soc is not None
-                    and self._battery_capacity_wh > 0
+                    and capacity_wh > 0
                 ):
                     delta_pct = start_soc - end_soc
                     # Allow tiny negative drifts (regen, sensor noise).
                     if -2.0 <= delta_pct <= 100.0:
                         consumed_pct = max(0.0, delta_pct)
                         consumed_wh = (
-                            consumed_pct * self._battery_capacity_wh / 100.0
+                            consumed_pct * capacity_wh / 100.0
                         )
                         self._activity_consumption[aid] = {
                             "consumed_wh": round(consumed_wh, 1),
-                            "capacity_wh": self._battery_capacity_wh,
+                            "capacity_wh": capacity_wh,
                             "is_exact": True,
                             "percentage": round(consumed_pct, 1),
                             "source": "ble_live",
@@ -801,17 +900,20 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # Restore persisted consumption state on first run
         await self.async_load_persisted_state()
 
-        # Battery consumption tracking via Wh delta
-        state_changed = self._track_battery_consumption(bikes)
-
         # Bike attribution via odometer-matching (only meaningful for multi-bike accounts;
         # for single-bike accounts every activity is attributed to that bike).
-        # Runs BEFORE live-data enrichment below, which needs the current
-        # attribution to pick the right bike's live sensors per activity
-        # (issue #44).
+        # Runs BEFORE battery consumption tracking and live-data enrichment
+        # below, both of which need the current attribution to pick the right
+        # bike's capacity / live sensors per activity (issue #44). Getting
+        # this order wrong once already caused live enrichment to use stale
+        # attribution from the prior poll; the same applies to consumption.
         new_attribution = self.attribute_activities_to_bikes(bikes, self._all_activities)
-        if new_attribution != self._activity_bike:
+        state_changed = new_attribution != self._activity_bike
+        if state_changed:
             self._activity_bike = new_attribution
+
+        # Battery consumption tracking via Wh delta
+        if self._track_battery_consumption(bikes):
             state_changed = True
 
         # Optional: override distance / consumption with live BLE values

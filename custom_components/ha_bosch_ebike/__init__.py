@@ -19,6 +19,8 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.start import async_at_started
 from homeassistant.helpers.storage import Store
@@ -248,6 +250,26 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
+    # Retire the old account-level "ghost device" (issue #44 follow-up):
+    # Battery Capacity used to attach to a fake device identified by
+    # entry.entry_id instead of a real bike. Now that every entity is
+    # per-bike, that device has no entities left, but Home Assistant does
+    # not auto-prune a device just because it lost its last entity - remove
+    # it explicitly. No-op after the first run, once it no longer exists.
+    # Only remove it if it is genuinely empty: async_get_device/
+    # async_remove_device match by identifiers alone with no ownership
+    # check, and HA devices can in principle be shared across config
+    # entries/integrations (manual "combine devices"), so double-check no
+    # entity still points at it before deleting it from the registry.
+    device_registry = dr.async_get(hass)
+    ghost_device = device_registry.async_get_device(
+        identifiers={(DOMAIN, entry.entry_id)}
+    )
+    if ghost_device is not None:
+        entity_registry = er.async_get(hass)
+        if not er.async_entries_for_device(entity_registry, ghost_device.id):
+            device_registry.async_remove_device(ghost_device.id)
+
     # React to OptionsFlow changes (live BLE sensor wiring): reload the
     # entry so entities depending on options (e.g. the current-range
     # sensor) are created/removed immediately. The coordinator — and with
@@ -353,11 +375,6 @@ async def ws_list_activities(
         all_activities = coordinator.data.get("all_activities", []) if coordinator.data else []
         activity_consumption = coordinator.data.get("activity_consumption", {}) if coordinator.data else {}
         activity_bike = coordinator.data.get("activity_bike", {}) if coordinator.data else {}
-        # Current capacity acts as the source of truth — older persisted
-        # consumption entries may carry a stale capacity_wh / percentage.
-        current_capacity = float(
-            coordinator.data.get("battery_capacity_wh", 0) or 0
-        ) if coordinator.data else 0
         account_label = _account_label(coordinator)
         for a in all_activities:
             aid = a.get("id")
@@ -378,8 +395,14 @@ async def ws_list_activities(
                 entry["bikeId"] = activity_bike[aid]
             if aid and aid in activity_consumption:
                 cons = dict(activity_consumption[aid])
-                # Always recompute against the current capacity so a later
-                # capacity change doesn't leave stale percentages on the card
+                # Always recompute against THIS activity's bike's current
+                # capacity so a later capacity change doesn't leave stale
+                # percentages on the card. Falls back like
+                # coordinator.battery_capacity_wh() for activities not (yet)
+                # attributed to a specific bike.
+                current_capacity = coordinator.battery_capacity_wh(
+                    activity_bike.get(aid)
+                )
                 if current_capacity > 0:
                     consumed = float(cons.get("consumed_wh", 0) or 0)
                     cons["capacity_wh"] = current_capacity
