@@ -24,6 +24,7 @@ from homeassistant.config_entries import (
     OptionsFlow,
 )
 from homeassistant.core import callback
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.config_entry_oauth2_flow import (
     AbstractOAuth2FlowHandler,
     LocalOAuth2ImplementationWithPkce,
@@ -284,7 +285,16 @@ class BoschEBikeOptionsFlowHandler(OptionsFlow):
                 title="", data={CONF_LIVE_SENSORS: self._live_sensors}
             )
         bike = self._bikes[self._bike_index]
-        label = bike_label(bike)
+        label = self._display_name_for_bike(bike)
+        # Issue #44 follow-up: two bikes sharing the same drive-unit model
+        # produced near-identical step titles/descriptions (only a serial
+        # suffix differed), which a real multi-bike user described as "the
+        # exact same generic description text" - easy to mistake for the
+        # form not advancing at all. A step counter makes this unmistakable
+        # regardless of naming; only shown when there is more than one bike
+        # to walk through.
+        if len(self._bikes) > 1:
+            label = f"{label} (bike {self._bike_index + 1} of {len(self._bikes)})"
         _LOGGER.debug(
             "Options flow showing step for bike_id=%s label=%r", bike["id"], label
         )
@@ -293,6 +303,18 @@ class BoschEBikeOptionsFlowHandler(OptionsFlow):
             data_schema=self._entity_schema(self._live_sensors.get(bike["id"], {})),
             description_placeholders={"bike_name": label},
         )
+
+    def _display_name_for_bike(self, bike: dict[str, Any]) -> str:
+        """Prefer the user's own device name over the generic drive-unit
+        label, if they renamed the bike's device (issue #44 follow-up).
+        Falls back to bike_label() when the device is not yet registered
+        or was never renamed.
+        """
+        registry = dr.async_get(self.hass)
+        device = registry.async_get_device(identifiers={(DOMAIN, bike["id"])})
+        if device and (device.name_by_user or device.name):
+            return device.name_by_user or device.name
+        return bike_label(bike)
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
