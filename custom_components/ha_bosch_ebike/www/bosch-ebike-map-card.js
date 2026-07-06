@@ -192,6 +192,7 @@ const I18N = {
     dash_editor_image_uploading: "Uploading…",
     dash_editor_image_upload_failed: "Upload failed: ",
     dash_editor_image_clear: "Clear",
+    dash_editor_show_bike_image: "Show bike image",
     dash_editor_bike_name: "Bike name (optional)",
     dash_editor_bike_name_hint: "Defaults to the title if empty.",
     dash_editor_odo: "Odometer entity",
@@ -543,6 +544,7 @@ const I18N = {
     dash_editor_image_uploading: "Wird hochgeladen…",
     dash_editor_image_upload_failed: "Upload fehlgeschlagen: ",
     dash_editor_image_clear: "Entfernen",
+    dash_editor_show_bike_image: "Fahrradbild anzeigen",
     dash_editor_bike_name: "Bike-Name (optional)",
     dash_editor_bike_name_hint: "Fällt auf den Titel zurück, wenn leer.",
     dash_editor_odo: "Tachostand-Entity",
@@ -893,6 +895,7 @@ const I18N = {
     dash_editor_image_uploading: "Wordt geüpload…",
     dash_editor_image_upload_failed: "Upload mislukt: ",
     dash_editor_image_clear: "Verwijderen",
+    dash_editor_show_bike_image: "Fietsafbeelding weergeven",
     dash_editor_bike_name: "Naam fiets (optioneel)",
     dash_editor_bike_name_hint: "Valt terug op de titel als leeg.",
     dash_editor_odo: "Kilometerstand-entity",
@@ -1255,6 +1258,7 @@ const I18N = {
     dash_editor_image_uploading: "Téléversement…",
     dash_editor_image_upload_failed: "Échec du téléversement : ",
     dash_editor_image_clear: "Effacer",
+    dash_editor_show_bike_image: "Afficher l'image du vélo",
     dash_editor_bike_name: "Nom du vélo (optionnel)",
     dash_editor_bike_name_hint: "Reprend le titre si vide.",
     dash_editor_odo: "Entité compteur",
@@ -1617,6 +1621,7 @@ const I18N = {
     dash_editor_image_uploading: "Caricamento…",
     dash_editor_image_upload_failed: "Caricamento fallito: ",
     dash_editor_image_clear: "Rimuovi",
+    dash_editor_show_bike_image: "Mostra immagine della bici",
     dash_editor_bike_name: "Nome della bici (opzionale)",
     dash_editor_bike_name_hint: "Se vuoto, usa il titolo.",
     dash_editor_odo: "Entità contachilometri",
@@ -1979,6 +1984,7 @@ const I18N = {
     dash_editor_image_uploading: "Subiendo…",
     dash_editor_image_upload_failed: "Subida fallida: ",
     dash_editor_image_clear: "Borrar",
+    dash_editor_show_bike_image: "Mostrar imagen de la bici",
     dash_editor_bike_name: "Nombre de la bici (opcional)",
     dash_editor_bike_name_hint: "Si está vacío, usa el título.",
     dash_editor_odo: "Entidad cuentakilómetros",
@@ -7632,37 +7638,47 @@ class BoschEBikeDashboardCard extends HTMLElement {
     // nur src/alt, wenn sich die Werte tatsächlich geändert haben.
     const imgWrap = this.querySelector("#dash-image-wrap");
     if (imgWrap) {
-      let img = imgWrap.querySelector("img");
-      let placeholder = imgWrap.querySelector(".dash-no-image");
-      const wantedAlt = cfg.bike_name || "eBike";
+      // Issue #45 follow-up: the whole image area (photo or the "no image
+      // configured" placeholder) is optional, default on for existing
+      // configs. display:none collapses the aspect-ratio box AND its
+      // margin-bottom entirely, so turning it off actually reclaims the
+      // space instead of leaving an empty gap.
+      const showImage = cfg.show_bike_image !== false;
+      imgWrap.style.display = showImage ? "" : "none";
 
-      if (cfg.bike_image) {
-        if (placeholder) { placeholder.remove(); placeholder = null; }
-        if (!img) {
-          img = document.createElement("img");
-          img.src = cfg.bike_image;
-          img.alt = wantedAlt;
-          imgWrap.appendChild(img);
-        } else {
-          // src nur überschreiben, wenn sich der URL-String wirklich
-          // ändert – sonst (je nach Browser und Cache-Header) erneuter
-          // Netzwerk-Roundtrip trotz identischer URL.
-          if (img.getAttribute("src") !== cfg.bike_image) {
+      if (showImage) {
+        let img = imgWrap.querySelector("img");
+        let placeholder = imgWrap.querySelector(".dash-no-image");
+        const wantedAlt = cfg.bike_name || "eBike";
+
+        if (cfg.bike_image) {
+          if (placeholder) { placeholder.remove(); placeholder = null; }
+          if (!img) {
+            img = document.createElement("img");
             img.src = cfg.bike_image;
+            img.alt = wantedAlt;
+            imgWrap.appendChild(img);
+          } else {
+            // src nur überschreiben, wenn sich der URL-String wirklich
+            // ändert – sonst (je nach Browser und Cache-Header) erneuter
+            // Netzwerk-Roundtrip trotz identischer URL.
+            if (img.getAttribute("src") !== cfg.bike_image) {
+              img.src = cfg.bike_image;
+            }
+            if (img.alt !== wantedAlt) img.alt = wantedAlt;
           }
-          if (img.alt !== wantedAlt) img.alt = wantedAlt;
-        }
-      } else {
-        if (img) { img.remove(); img = null; }
-        if (!placeholder) {
-          placeholder = document.createElement("div");
-          placeholder.className = "dash-no-image";
-          placeholder.innerHTML = `
-            <ha-icon class="ico" icon="mdi:bicycle-electric" style="--mdc-icon-size:48px"></ha-icon>
-            <div>${this._t("dash_no_image")}</div>
-            <div style="opacity:.6;margin-top:4px">${this._t("dash_no_image_hint")}</div>
-          `;
-          imgWrap.appendChild(placeholder);
+        } else {
+          if (img) { img.remove(); img = null; }
+          if (!placeholder) {
+            placeholder = document.createElement("div");
+            placeholder.className = "dash-no-image";
+            placeholder.innerHTML = `
+              <ha-icon class="ico" icon="mdi:bicycle-electric" style="--mdc-icon-size:48px"></ha-icon>
+              <div>${this._t("dash_no_image")}</div>
+              <div style="opacity:.6;margin-top:4px">${this._t("dash_no_image_hint")}</div>
+            `;
+            imgWrap.appendChild(placeholder);
+          }
         }
       }
     }
@@ -8578,10 +8594,36 @@ class BoschEBikeDashboardCardEditor extends HTMLElement {
       return text;  // return text input so _sync() can still set its value
     };
 
+    const titleField = mkText("title", "dash_editor_title");
+    const bikeImageField = mkImage("bike_image", "dash_editor_image", "dash_editor_image_hint");
+
+    // Issue #45 follow-up: the bike image (photo or its placeholder) takes
+    // up a fixed 16:10 block on the card - make it optional, right next to
+    // the field that sets it. Same immutable-update pattern as
+    // show_range_pills below: an explicit boolean, never deleted, since a
+    // missing key was not reliably picked up through HA's config-changed
+    // round-trip for this control.
+    const showImageWrap = document.createElement("label");
+    showImageWrap.style.cssText = "display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;margin-top:-4px;";
+    const showImageToggle = document.createElement("input");
+    showImageToggle.type = "checkbox";
+    showImageToggle.checked = this._config.show_bike_image !== false;
+    showImageToggle.addEventListener("change", () => {
+      this._config = { ...this._config, show_bike_image: showImageToggle.checked };
+      this._emit();
+    });
+    showImageWrap.appendChild(showImageToggle);
+    const showImageLbl = document.createElement("span");
+    showImageLbl.textContent = this._t("dash_editor_show_bike_image");
+    showImageWrap.appendChild(showImageLbl);
+    wrap.appendChild(showImageWrap);
+
+    const bikeNameField = mkText("bike_name", "dash_editor_bike_name", "dash_editor_bike_name_hint");
+
     this._fields = {
-      title: mkText("title", "dash_editor_title"),
-      bike_image: mkImage("bike_image", "dash_editor_image", "dash_editor_image_hint"),
-      bike_name: mkText("bike_name", "dash_editor_bike_name", "dash_editor_bike_name_hint"),
+      title: titleField,
+      bike_image: bikeImageField,
+      bike_name: bikeNameField,
       odometer_entity: mkEntity("odometer_entity", "dash_editor_odo", null,
         ["sensor"]),
       battery_entity: mkEntity("battery_entity", "dash_editor_battery", null,
