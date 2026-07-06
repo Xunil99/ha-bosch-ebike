@@ -274,15 +274,24 @@ class BoschEBikeOptionsFlowHandler(OptionsFlow):
             self._live_sensors.pop(bike_id, None)
 
     async def _async_show_bike_step(self) -> ConfigFlowResult:
+        _LOGGER.debug(
+            "Options flow show_bike_step: bike_index=%d of %d bike(s)",
+            self._bike_index, len(self._bikes),
+        )
         if self._bike_index >= len(self._bikes):
+            _LOGGER.debug("Options flow finishing (no more bikes to show)")
             return self.async_create_entry(
                 title="", data={CONF_LIVE_SENSORS: self._live_sensors}
             )
         bike = self._bikes[self._bike_index]
+        label = bike_label(bike)
+        _LOGGER.debug(
+            "Options flow showing step for bike_id=%s label=%r", bike["id"], label
+        )
         return self.async_show_form(
             step_id="bike",
             data_schema=self._entity_schema(self._live_sensors.get(bike["id"], {})),
-            description_placeholders={"bike_name": bike_label(bike)},
+            description_placeholders={"bike_name": label},
         )
 
     async def async_step_init(
@@ -293,6 +302,21 @@ class BoschEBikeOptionsFlowHandler(OptionsFlow):
         bikes = coordinator.data.get("bikes", []) if coordinator and coordinator.data else []
         self._bikes = [b for b in bikes if b.get("id")]
         self._bike_index = 0
+
+        # Debug-only (issue #44 follow-up): a report of the wizard not
+        # showing a per-bike step despite a confirmed multi-bike account,
+        # with clean WARNING-level logs, gave no visibility into how many
+        # bikes this discovery actually found. Enable debug logging for
+        # custom_components.ha_bosch_ebike.config_flow to see this.
+        _LOGGER.debug(
+            "Options flow init: coordinator=%s, coordinator.data=%s, "
+            "raw bikes=%d, bikes with id=%d, bike ids=%s",
+            coordinator is not None,
+            coordinator.data is not None if coordinator else None,
+            len(bikes),
+            len(self._bikes),
+            [b.get("id") for b in self._bikes],
+        )
 
         current = self.config_entry.options or {}
         self._live_sensors = {

@@ -6090,17 +6090,6 @@ class BoschEBikeMapCardEditor extends HTMLElement {
       bikeOpts += `<option value="${this._escapeHtml(b.id)}"${selected}>${this._escapeHtml(b.label)}</option>`;
     }
 
-    // ESP/LDI-bridge live battery SoC entity (sensor.*). Optional; shown as a
-    // badge in the card header when set.
-    let battLiveOpts = `<option value="">—</option>`;
-    const battEntities = this._hass
-      ? Object.keys(this._hass.states).filter((e) => e.startsWith("sensor.")).sort()
-      : [];
-    for (const e of battEntities) {
-      const selected = cfg.battery_live_entity === e ? " selected" : "";
-      battLiveOpts += `<option value="${this._escapeHtml(e)}"${selected}>${this._escapeHtml(e)}</option>`;
-    }
-
     const radii = [
       { v: 500, l: "500 m" },
       { v: 1000, l: "1 km" },
@@ -6141,7 +6130,7 @@ class BoschEBikeMapCardEditor extends HTMLElement {
       <span style="${hintStyle}">${t("editor_bike_hint")}</span>
 
       <label style="${labelStyle}">${t("map_editor_battery_live")}</label>
-      <select id="batt-live-in" style="${inputStyle}">${battLiveOpts}</select>
+      <div id="batt-live-in"></div>
       <span style="${hintStyle}">${t("map_editor_battery_live_hint")}</span>
 
       <label style="${labelStyle}">
@@ -6215,13 +6204,23 @@ class BoschEBikeMapCardEditor extends HTMLElement {
       else delete this._config.bike_id;
       this._emit();
     });
-    this.querySelector("#batt-live-in").addEventListener("change", (e) => {
-      const v = e.target.value;
+    // Native searchable HA entity picker (issue #45), built here instead of
+    // as a template string since its filtering/hass properties can only be
+    // set on the actual element, not expressed as static HTML.
+    const battLivePicker = document.createElement("ha-entity-picker");
+    battLivePicker.hass = this._hass;
+    battLivePicker.includeDomains = ["sensor"];
+    battLivePicker.allowCustomEntity = true;
+    battLivePicker.value = cfg.battery_live_entity || "";
+    battLivePicker.style.width = "100%";
+    battLivePicker.addEventListener("value-changed", (ev) => {
+      const v = ev.detail.value;
       this._config = { ...this._config };
       if (v) this._config.battery_live_entity = v;
       else delete this._config.battery_live_entity;
       this._emit();
     });
+    this.querySelector("#batt-live-in").appendChild(battLivePicker);
     this.querySelector("#batt-live-show-in").addEventListener("change", (e) => {
       this._config = { ...this._config };
       if (e.target.checked) this._config.battery_live_show = true;
@@ -8223,7 +8222,16 @@ class BoschEBikeDashboardCardEditor extends HTMLElement {
 
   set hass(hass) {
     this._hass = hass;
-    if (!this._built) this._build();
+    if (!this._built) {
+      this._build();
+    } else if (this._fields) {
+      // _build() only ever runs once (see setConfig), so the ha-entity-
+      // picker fields created there would otherwise keep the .hass from
+      // that first tick forever and never see newly added entities.
+      for (const input of Object.values(this._fields)) {
+        if (input && input.tagName === "HA-ENTITY-PICKER") input.hass = hass;
+      }
+    }
     // Shared-Settings einmalig laden + Bus abonnieren. Sonst zeigt der
     // Editor nach Browser-Reload die hartcodierten Defaults statt der
     // im Backend gespeicherten Werte - und ein nachfolgendes Tippen
@@ -8289,11 +8297,6 @@ class BoschEBikeDashboardCardEditor extends HTMLElement {
       bubbles: true,
       composed: true,
     }));
-  }
-
-  _entities(filter) {
-    if (!this._hass) return [];
-    return Object.keys(this._hass.states).filter(filter).sort();
   }
 
   // Build one "mode -> colour" row per detected reachable-range mode.
@@ -8448,23 +8451,29 @@ class BoschEBikeDashboardCardEditor extends HTMLElement {
       return input;
     };
 
-    const mkEntity = (key, labelKey, hintKey, filter) => {
+    // Native searchable/filterable HA entity picker (issue #45) instead of a
+    // plain <select> listing every matching entity as a flat option list -
+    // unusable once an install has thousands of entities. ha-entity-picker
+    // is bundled with HA's own frontend (used by core integrations'
+    // Lovelace editors), so it is always available here with no import;
+    // verified against the actual frontend source for the .hass property,
+    // .includeDomains, .value and the "value-changed" event (stable as of
+    // HA frontend 20260527.x - a newer, context-based rewrite exists
+    // upstream that drops the settable .hass property, so re-verify this if
+    // pickers ever stop reacting to hass updates on a future HA version).
+    const mkEntity = (key, labelKey, hintKey, includeDomains) => {
       const input = mk(this._t(labelKey), hintKey ? this._t(hintKey) : null, () => {
-        const sel = document.createElement("select");
-        sel.style.cssText = "padding:8px;border-radius:4px;border:1px solid var(--divider-color);background:var(--card-background-color);color:var(--primary-text-color);";
-        const opt0 = document.createElement("option");
-        opt0.value = ""; opt0.textContent = "—";
-        sel.appendChild(opt0);
-        for (const e of this._entities(filter)) {
-          const o = document.createElement("option");
-          o.value = e; o.textContent = e;
-          sel.appendChild(o);
-        }
-        return sel;
+        const picker = document.createElement("ha-entity-picker");
+        picker.hass = this._hass;
+        picker.includeDomains = includeDomains;
+        picker.allowCustomEntity = true;
+        picker.style.width = "100%";
+        return picker;
       });
       input.value = this._config[key] || "";
-      input.addEventListener("change", () => {
-        if (input.value) this._config[key] = input.value;
+      input.addEventListener("value-changed", (ev) => {
+        const v = ev.detail.value;
+        if (v) this._config[key] = v;
         else delete this._config[key];
         this._emit();
       });
@@ -8574,23 +8583,23 @@ class BoschEBikeDashboardCardEditor extends HTMLElement {
       bike_image: mkImage("bike_image", "dash_editor_image", "dash_editor_image_hint"),
       bike_name: mkText("bike_name", "dash_editor_bike_name", "dash_editor_bike_name_hint"),
       odometer_entity: mkEntity("odometer_entity", "dash_editor_odo", null,
-        (e) => e.startsWith("sensor.")),
+        ["sensor"]),
       battery_entity: mkEntity("battery_entity", "dash_editor_battery", null,
-        (e) => e.startsWith("sensor.")),
+        ["sensor"]),
       battery_live_entity: mkEntity("battery_live_entity", "dash_editor_battery_live", "dash_editor_battery_live_hint",
-        (e) => e.startsWith("sensor.")),
+        ["sensor"]),
       charging_entity: mkEntity("charging_entity", "dash_editor_charging", null,
-        (e) => e.startsWith("binary_sensor.") || e.startsWith("sensor.")),
+        ["binary_sensor", "sensor"]),
       last_tour_distance_entity: mkEntity("last_tour_distance_entity", "dash_editor_last_tour", null,
-        (e) => e.startsWith("sensor.")),
+        ["sensor"]),
       range_entity: mkEntity("range_entity", "dash_editor_range", "dash_editor_range_hint",
-        (e) => e.startsWith("sensor.")),
+        ["sensor"]),
       charge_power_entity: mkEntity("charge_power_entity", "dash_editor_charge_power", null,
-        (e) => e.startsWith("sensor.")),
+        ["sensor"]),
       charge_switch_entity: mkEntity("charge_switch_entity", "dash_editor_charge_switch", null,
-        (e) => e.startsWith("switch.")),
+        ["switch"]),
       target_soc_entity: mkEntity("target_soc_entity", "dash_editor_target_soc", "dash_editor_target_soc_hint",
-        (e) => e.startsWith("input_number.")),
+        ["input_number"]),
     };
 
     // --- Reichweite je Fahrmodus (Piles) -------------------------------------
@@ -13355,7 +13364,17 @@ class BoschEBikeRoutePlannerCardEditor extends HTMLElement {
 
   set hass(hass) {
     this._hass = hass;
-    if (!this._built && this._config) this._render();
+    if (!this._built && this._config) {
+      this._render();
+    } else if (this._built) {
+      // _render() only ever runs once (see setConfig), so the entity
+      // pickers created there would otherwise keep the .hass from that
+      // first tick forever and never see newly added entities.
+      const entityIn = this.querySelector("#rp-entity-in");
+      const socIn = this.querySelector("#rp-soc-in");
+      if (entityIn) entityIn.hass = hass;
+      if (socIn) socIn.hass = hass;
+    }
   }
 
   _escapeHtml(s) {
@@ -13366,18 +13385,6 @@ class BoschEBikeRoutePlannerCardEditor extends HTMLElement {
 
   _emit() {
     this.dispatchEvent(new CustomEvent("config-changed", { detail: { config: this._config } }));
-  }
-
-  _entityOptions(filter, selectedId) {
-    let opts = `<option value="">—</option>`;
-    const ids = this._hass
-      ? Object.keys(this._hass.states).filter(filter).sort()
-      : [];
-    for (const e of ids) {
-      const selected = selectedId === e ? " selected" : "";
-      opts += `<option value="${this._escapeHtml(e)}"${selected}>${this._escapeHtml(e)}</option>`;
-    }
-    return opts;
   }
 
   // Wird nach dem einmaligen _render() bei jedem setConfig aufgerufen:
@@ -13403,11 +13410,6 @@ class BoschEBikeRoutePlannerCardEditor extends HTMLElement {
     const labelStyle = "display:block;margin-top:14px;margin-bottom:6px;font-weight:500";
     const hintStyle = "display:block;margin-top:4px;font-size:12px;color:var(--secondary-text-color,#777)";
 
-    const rangeIds = new Set(boschRangeEntityIds(this._hass, "estimated_range_full"));
-    const rangeOpts = this._entityOptions(
-      (e) => rangeIds.has(e) || e.endsWith("_estimated_range_full"), cfg.entity);
-    const socOpts = this._entityOptions((e) => e.startsWith("sensor."), cfg.soc_entity);
-
     this.innerHTML = `<div style="padding:16px">
       <label style="${labelStyle.replace('margin-top:14px;', '')}">${t("editor_height")}</label>
       <input type="number" value="${parseInt(cfg.height, 10) || 480}" min="200" max="1000" step="20" style="${inputStyle}" id="rp-h-in">
@@ -13420,11 +13422,11 @@ class BoschEBikeRoutePlannerCardEditor extends HTMLElement {
       <input type="text" value="${this._escapeHtml(cfg.brouter_url || '')}" placeholder="https://brouter.de" style="${inputStyle}" id="rp-brouter-in">
 
       <label style="${labelStyle}">${t("rp_editor_entity")}</label>
-      <select id="rp-entity-in" style="${inputStyle}">${rangeOpts}</select>
+      <div id="rp-entity-in-holder"></div>
       <span style="${hintStyle}">${t("rp_editor_entity_hint")}</span>
 
       <label style="${labelStyle}">${t("rp_editor_soc")}</label>
-      <select id="rp-soc-in" style="${inputStyle}">${socOpts}</select>
+      <div id="rp-soc-in-holder"></div>
       <span style="${hintStyle}">${t("rp_editor_soc_hint")}</span>
 
       <span style="${hintStyle};margin-top:14px;">${t("rp_privacy_note")}</span>
@@ -13448,20 +13450,42 @@ class BoschEBikeRoutePlannerCardEditor extends HTMLElement {
       else delete this._config.brouter_url;
       this._emit();
     });
-    this.querySelector("#rp-entity-in").addEventListener("change", (e) => {
-      const v = e.target.value;
+    // Native searchable HA entity pickers (issue #45) instead of a <select>
+    // listing every matching entity - built here rather than as template
+    // strings since filtering/hass can only be set on the actual element.
+    const rangeIds = new Set(boschRangeEntityIds(this._hass, "estimated_range_full"));
+    const entityPicker = document.createElement("ha-entity-picker");
+    entityPicker.id = "rp-entity-in";
+    entityPicker.hass = this._hass;
+    entityPicker.entityFilter = (stateObj) =>
+      rangeIds.has(stateObj.entity_id) || stateObj.entity_id.endsWith("_estimated_range_full");
+    entityPicker.allowCustomEntity = true;
+    entityPicker.value = cfg.entity || "";
+    entityPicker.style.width = "100%";
+    entityPicker.addEventListener("value-changed", (ev) => {
+      const v = ev.detail.value;
       this._config = { ...this._config };
       if (v) this._config.entity = v;
       else delete this._config.entity;
       this._emit();
     });
-    this.querySelector("#rp-soc-in").addEventListener("change", (e) => {
-      const v = e.target.value;
+    this.querySelector("#rp-entity-in-holder").appendChild(entityPicker);
+
+    const socPicker = document.createElement("ha-entity-picker");
+    socPicker.id = "rp-soc-in";
+    socPicker.hass = this._hass;
+    socPicker.includeDomains = ["sensor"];
+    socPicker.allowCustomEntity = true;
+    socPicker.value = cfg.soc_entity || "";
+    socPicker.style.width = "100%";
+    socPicker.addEventListener("value-changed", (ev) => {
+      const v = ev.detail.value;
       this._config = { ...this._config };
       if (v) this._config.soc_entity = v;
       else delete this._config.soc_entity;
       this._emit();
     });
+    this.querySelector("#rp-soc-in-holder").appendChild(socPicker);
 
     this._built = true;
   }
