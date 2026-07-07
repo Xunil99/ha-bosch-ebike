@@ -183,6 +183,15 @@
       },
       "avg_cadence_all_rides": {
         "name": "Ø Trittfrequenz (alle Touren)"
+      },
+      "energy_charged_7d": {
+        "name": "Ladeenergie (7 Tage)"
+      },
+      "energy_charged_30d": {
+        "name": "Ladeenergie (30 Tage)"
+      },
+      "energy_charged_365d": {
+        "name": "Ladeenergie (365 Tage)"
       }
     },
     "number": {

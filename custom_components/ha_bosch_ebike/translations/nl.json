@@ -183,6 +183,15 @@
       },
       "avg_cadence_all_rides": {
         "name": "Gem. trapfrequentie (alle ritten)"
+      },
+      "energy_charged_7d": {
+        "name": "Laadenergie (7 dagen)"
+      },
+      "energy_charged_30d": {
+        "name": "Laadenergie (30 dagen)"
+      },
+      "energy_charged_365d": {
+        "name": "Laadenergie (365 dagen)"
       }
     },
     "number": {

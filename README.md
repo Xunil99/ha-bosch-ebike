@@ -528,6 +528,11 @@ target_soc_entity: input_number.ebike_target_soc
   - Auch aus Automationen heraus pflegbar über die HA-Services `bosch_ebike.add_maintenance`, `bosch_ebike.update_maintenance`, `bosch_ebike.complete_maintenance` und `bosch_ebike.remove_maintenance`
   - Im Card-Editor wählst Du das Bike aus einem Dropdown; die zugehörigen Wartungen erscheinen direkt darunter und werden live ins Backend gespeichert
 - **CO₂- und Sprit-Kosten-Vergleich** zum Auto: zwei Kacheln „Gesamt" und „Letzte Tour" mit eingesparten kg CO₂ und €. Im Editor wählst Du das Vergleichs-Fahrzeug aus 7 realistischen Presets (Kleinwagen/Mittelklasse/SUV jeweils Benzin oder Diesel, plus E-Auto mit Ökostrom); optional kannst Du den Sprit-/Strompreis je Liter/kWh überschreiben.
+- **Ladekosten-Zusammenfassung** (optional, standardmäßig an): zeigt, was das Laden dieses Bikes in den letzten 7/30/365 Tagen gekostet hat.
+  - Die zugrundeliegende Ladeenergie wird vom Coordinator berechnet und **in Home Assistant gespeichert** (drei neue Sensoren pro Bike, siehe unten) - nicht im Browser
+  - Strompreis entweder als **fester Wert** (Default `0,23 €/kWh`) oder als **Verweis auf eine Entität**, die den aktuellen Preis liefert (z. B. ein dynamischer Tarif-Sensor)
+  - Jeder der drei Zeiträume (7/30/365 Tage) ist einzeln ein-/ausblendbar
+  - Die Zeitfenster sind rollierend (immer „die letzten X Tage", kein Reset zum Kalendermonat)
 
 ![Dashboard-Card mit Bike-Foto, Statuskacheln, Fahrmodus-Reichweiten, Wartungsliste und CO2-Vergleich](docs/img/card-dashboard.png)
 
@@ -626,6 +631,9 @@ Auf der Lovelace-Karte gibt es einen 📚-Toggle in den Karten-Steuerelementen. 
 | Avg Speed (All Rides) | km/h | Durchschnittsgeschwindigkeit über alle Fahrten |
 | Avg Rider Power (All Rides) | W | Durchschnittliche Fahrerleistung |
 | Avg Cadence (All Rides) | rpm | Durchschnittliche Trittfrequenz |
+| Energy Charged (7 Days) | Wh | Ladeenergie der letzten 7 Tage (rollierendes Fenster) |
+| Energy Charged (30 Days) | Wh | Ladeenergie der letzten 30 Tage (rollierendes Fenster) |
+| Energy Charged (365 Days) | Wh | Ladeenergie der letzten 365 Tage (rollierendes Fenster) |
 
 #### Buttons
 | Button | Beschreibung |
@@ -1175,6 +1183,11 @@ target_soc_entity: input_number.ebike_target_soc
   - Also manageable from automations via the HA services `bosch_ebike.add_maintenance`, `bosch_ebike.update_maintenance`, `bosch_ebike.complete_maintenance` and `bosch_ebike.remove_maintenance`
   - The card editor picks the bike from a dropdown; the associated maintenance items appear below and are saved live to the backend
 - **CO₂ and fuel-cost comparison** vs a car: two tiles "Total" and "Last tour" with kg CO₂ and € saved. In the editor you pick the reference vehicle from 7 realistic presets (small/mid-size/SUV in petrol or diesel, plus an EV on green electricity); the fuel or electricity price per liter / kWh can be overridden.
+- **Charging cost summary** (optional, on by default): shows what charging this bike cost over the last 7/30/365 days.
+  - The underlying charging energy is computed by the coordinator and **stored in Home Assistant** (three new sensors per bike, see below), not in the browser
+  - Electricity price is either a **fixed value** (default `0.23 €/kWh`) or a **reference to an entity** that provides the current price (e.g. a dynamic-tariff sensor)
+  - Each of the three periods (7/30/365 days) can be shown or hidden independently
+  - The windows are rolling (always "the last X days", no reset at the calendar month boundary)
 
 ![Dashboard card with bike photo, status tiles, per-mode range, maintenance list and CO2 comparison](docs/img/card-dashboard.png)
 
@@ -1273,6 +1286,9 @@ The Lovelace card has a 📚 toggle in the map controls. When enabled, the card 
 | Avg Speed (All Rides) | km/h | Average speed across all rides |
 | Avg Rider Power (All Rides) | W | Average rider power |
 | Avg Cadence (All Rides) | rpm | Average cadence |
+| Energy Charged (7 Days) | Wh | Charging energy over the last 7 days (rolling window) |
+| Energy Charged (30 Days) | Wh | Charging energy over the last 30 days (rolling window) |
+| Energy Charged (365 Days) | Wh | Charging energy over the last 365 days (rolling window) |
 
 #### Buttons
 | Button | Description |

@@ -60,6 +60,15 @@
       },
       "last_ride_start_odometer": {
         "name": "Last Ride Start Odometer"
+      },
+      "energy_charged_7d": {
+        "name": "Energy Charged (7 Days)"
+      },
+      "energy_charged_30d": {
+        "name": "Energy Charged (30 Days)"
+      },
+      "energy_charged_365d": {
+        "name": "Energy Charged (365 Days)"
       }
     }
   },

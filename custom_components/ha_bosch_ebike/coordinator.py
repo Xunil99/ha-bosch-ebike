@@ -31,6 +31,7 @@ from .const import (
     CONF_LIVE_SOC_ENTITY,
     CONF_LIVE_SENSORS,
 )
+from .energy_cost import compute_energy_windows
 from .live_enrichment import get_state_at, parse_iso_utc
 from .range_estimate import (
     compute_range_estimate,
@@ -707,6 +708,7 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "service_overrides": self._service_overrides,
             "battery_capacity_wh": self._battery_capacity_wh,
             "range_estimate": None,
+            "energy_window": {},
             "bike_pass": {},
             "service_records": {},
         }
@@ -965,6 +967,25 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if est:
                 range_estimate[bid] = est
 
+        # Charging energy over rolling 7/30/365-day windows, per bike -
+        # computed from data already in memory (no extra API calls). Feeds
+        # the dashboard card's optional charging-cost summary.
+        energy_window: dict[str, dict[str, float]] = {}
+        for bike in bikes:
+            bid = bike.get("id")
+            if not bid:
+                continue
+            windows = compute_energy_windows(
+                self._all_activities,
+                self._activity_bike,
+                self._activity_consumption,
+                bid,
+                dt_util.utcnow(),
+                fallback_all=single_bike,
+            )
+            if windows:
+                energy_window[bid] = windows
+
         # Per-bike GPS details for the latest ride (issue #47 follow-up):
         # each bike needs its OWN latest activity's GPS details, not the
         # account-wide latest_activity_details fetched above. Reuses that
@@ -1042,6 +1063,7 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "service_overrides": self._service_overrides,
             "battery_capacity_wh": self._battery_capacity_wh,
             "range_estimate": range_estimate,
+            "energy_window": energy_window,
             "bike_pass": self._bike_pass,
             "service_records": self._service_records,
         }

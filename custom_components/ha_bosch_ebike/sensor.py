@@ -691,6 +691,16 @@ async def async_setup_entry(
                     BoschCurrentRangeSensor(coordinator, bike_id, drive_name, soc_entity)
                 )
 
+            # Charging energy over rolling 7/30/365-day windows (dashboard
+            # card's charging-cost summary). BES2 has no consumption data,
+            # same gate as the range estimate above.
+            for window_key, translation_key in ENERGY_WINDOW_DEFS:
+                entities.append(
+                    BoschEnergyWindowSensor(
+                        coordinator, bike_id, drive_name, window_key, translation_key
+                    )
+                )
+
         # Maintenance overview (count of items due/overdue + full list as attributes)
         entities.append(BoschMaintenanceOverviewSensor(coordinator, bike_id, drive_name))
 
@@ -1402,6 +1412,58 @@ class BoschCurrentRangeSensor(BoschRangeEstimateSensor):
         attrs["soc_source"] = self._soc_entity_id
         attrs["current_soc"] = self._current_soc()
         return attrs
+
+
+# (window_key, translation_key, unique_id_suffix)
+ENERGY_WINDOW_DEFS: tuple[tuple[str, str], ...] = (
+    ("7d", "energy_charged_7d"),
+    ("30d", "energy_charged_30d"),
+    ("365d", "energy_charged_365d"),
+)
+
+
+class BoschEnergyWindowSensor(CoordinatorEntity[BoschEBikeCoordinator], SensorEntity):
+    """Charging energy (Wh) this bike consumed in a rolling time window.
+
+    Feeds the dashboard card's optional charging-cost summary (price is
+    applied card-side, same pattern as the existing CO2/fuel-cost
+    comparison). Reads coordinator.data["energy_window"][bike_id], computed
+    once per poll from data already in memory (see energy_cost.py).
+    """
+
+    _attr_has_entity_name = True
+    _attr_native_unit_of_measurement = UnitOfEnergy.WATT_HOUR
+    _attr_device_class = SensorDeviceClass.ENERGY
+    _attr_icon = "mdi:lightning-bolt"
+    _attr_suggested_display_precision = 0
+
+    def __init__(
+        self,
+        coordinator: BoschEBikeCoordinator,
+        bike_id: str,
+        drive_name: str,
+        window_key: str,
+        translation_key: str,
+    ) -> None:
+        super().__init__(coordinator)
+        self._bike_id = bike_id
+        self._window_key = window_key
+        self._attr_translation_key = translation_key
+        self._attr_unique_id = f"{bike_id}_{translation_key}"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, bike_id)},
+            name=drive_name,
+            manufacturer="Bosch",
+            model=drive_name,
+        )
+
+    @property
+    def native_value(self) -> float | None:
+        """Wh charged by this bike within the window, or None if no data."""
+        window = (self.coordinator.data.get("energy_window") or {}).get(self._bike_id)
+        if not window:
+            return None
+        return window.get(self._window_key)
 
 
 class BoschServiceDueSensor(CoordinatorEntity[BoschEBikeCoordinator], SensorEntity):

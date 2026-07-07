@@ -246,6 +246,28 @@ const I18N = {
     dash_editor_vehicle_type: "Vehicle type",
     dash_editor_fuel_price: "Fuel price (€ / l, € / kWh)",
     dash_editor_fuel_price_hint: "Override the default price. Leave blank to use 1.85 € / l for petrol, 1.75 € / l for diesel, 0.35 € / kWh for EV.",
+    dash_section_energy: "Charging cost",
+    dash_energy_week: "Last 7 days",
+    dash_energy_month: "Last 30 days",
+    dash_energy_year: "Last 365 days",
+    dash_energy_kwh: " kWh",
+    dash_editor_section_energy: "Charging cost summary",
+    dash_editor_energy_hint: "Shows what charging this bike cost over rolling 7/30/365-day windows, based on the energy sensors below and an electricity price.",
+    dash_editor_show_energy_cost: "Show charging cost summary",
+    dash_editor_energy_price_mode: "Electricity price source",
+    dash_editor_energy_price_mode_fixed: "Fixed price",
+    dash_editor_energy_price_mode_entity: "From an entity",
+    dash_editor_energy_price_fixed: "Electricity price (€ / kWh)",
+    dash_editor_energy_price_fixed_hint: "Applied to all three time windows. Default: 0.23 € / kWh.",
+    dash_editor_energy_price_entity: "Electricity price entity",
+    dash_editor_energy_price_entity_hint: "An entity whose state is the current price in € / kWh (e.g. a dynamic-tariff sensor).",
+    dash_editor_energy_week_entity: "Weekly energy sensor",
+    dash_editor_energy_month_entity: "Monthly energy sensor",
+    dash_editor_energy_year_entity: "Yearly energy sensor",
+    dash_editor_energy_entities_hint: "Pick this bike's \"Energy Charged (7/30/365 Days)\" sensors, created automatically by the integration.",
+    dash_editor_show_cost_week: "Show 7-day cost",
+    dash_editor_show_cost_month: "Show 30-day cost",
+    dash_editor_show_cost_year: "Show 365-day cost",
     // 3D map card
     map3d_title: "Bosch eBike 3D Tours",
     map3d_loading: "Loading tours…",
@@ -598,6 +620,28 @@ const I18N = {
     dash_editor_vehicle_type: "Fahrzeugtyp",
     dash_editor_fuel_price: "Sprit-/Strom-Preis (€ / l, € / kWh)",
     dash_editor_fuel_price_hint: "Überschreibt den Default-Preis. Leer = 1,85 €/l Benzin, 1,75 €/l Diesel, 0,35 €/kWh E-Auto.",
+    dash_section_energy: "Ladekosten",
+    dash_energy_week: "Letzte 7 Tage",
+    dash_energy_month: "Letzte 30 Tage",
+    dash_energy_year: "Letzte 365 Tage",
+    dash_energy_kwh: " kWh",
+    dash_editor_section_energy: "Ladekosten-Zusammenfassung",
+    dash_editor_energy_hint: "Zeigt, was das Laden dieses Bikes über rollierende 7-/30-/365-Tage-Fenster gekostet hat, basierend auf den Energie-Sensoren unten und einem Strompreis.",
+    dash_editor_show_energy_cost: "Ladekosten-Zusammenfassung anzeigen",
+    dash_editor_energy_price_mode: "Strompreis-Quelle",
+    dash_editor_energy_price_mode_fixed: "Fester Preis",
+    dash_editor_energy_price_mode_entity: "Aus einer Entität",
+    dash_editor_energy_price_fixed: "Strompreis (€ / kWh)",
+    dash_editor_energy_price_fixed_hint: "Gilt für alle drei Zeitfenster. Standard: 0,23 € / kWh.",
+    dash_editor_energy_price_entity: "Strompreis-Entität",
+    dash_editor_energy_price_entity_hint: "Eine Entität, deren Zustand der aktuelle Preis in € / kWh ist (z. B. ein dynamischer Tarif-Sensor).",
+    dash_editor_energy_week_entity: "Wochen-Energie-Sensor",
+    dash_editor_energy_month_entity: "Monats-Energie-Sensor",
+    dash_editor_energy_year_entity: "Jahres-Energie-Sensor",
+    dash_editor_energy_entities_hint: "Wähle die \"Ladeenergie (7/30/365 Tage)\"-Sensoren dieses Bikes, die die Integration automatisch anlegt.",
+    dash_editor_show_cost_week: "7-Tage-Kosten anzeigen",
+    dash_editor_show_cost_month: "30-Tage-Kosten anzeigen",
+    dash_editor_show_cost_year: "365-Tage-Kosten anzeigen",
     // 3D map card
     map3d_title: "Bosch eBike 3D-Touren",
     map3d_loading: "Touren werden geladen…",
@@ -949,6 +993,28 @@ const I18N = {
     dash_editor_vehicle_type: "Voertuigtype",
     dash_editor_fuel_price: "Brandstof-/stroomprijs (€ / l, € / kWh)",
     dash_editor_fuel_price_hint: "Overschrijft de standaardprijs. Leeg = 1,85 €/l benzine, 1,75 €/l diesel, 0,35 €/kWh elektrisch.",
+    dash_section_energy: "Laadkosten",
+    dash_energy_week: "Laatste 7 dagen",
+    dash_energy_month: "Laatste 30 dagen",
+    dash_energy_year: "Laatste 365 dagen",
+    dash_energy_kwh: " kWh",
+    dash_editor_section_energy: "Laadkosten-overzicht",
+    dash_editor_energy_hint: "Toont wat het laden van deze fiets heeft gekost over rollende periodes van 7/30/365 dagen, gebaseerd op de energiesensoren hieronder en een stroomprijs.",
+    dash_editor_show_energy_cost: "Laadkosten-overzicht tonen",
+    dash_editor_energy_price_mode: "Bron stroomprijs",
+    dash_editor_energy_price_mode_fixed: "Vaste prijs",
+    dash_editor_energy_price_mode_entity: "Uit een entiteit",
+    dash_editor_energy_price_fixed: "Stroomprijs (€ / kWh)",
+    dash_editor_energy_price_fixed_hint: "Geldt voor alle drie de periodes. Standaard: 0,23 € / kWh.",
+    dash_editor_energy_price_entity: "Stroomprijs-entiteit",
+    dash_editor_energy_price_entity_hint: "Een entiteit waarvan de status de actuele prijs in € / kWh is (bijv. een dynamische-tariefsensor).",
+    dash_editor_energy_week_entity: "Week-energiesensor",
+    dash_editor_energy_month_entity: "Maand-energiesensor",
+    dash_editor_energy_year_entity: "Jaar-energiesensor",
+    dash_editor_energy_entities_hint: "Kies de \"Laadenergie (7/30/365 dagen)\"-sensoren van deze fiets, die de integratie automatisch aanmaakt.",
+    dash_editor_show_cost_week: "7-dagen-kosten tonen",
+    dash_editor_show_cost_month: "30-dagen-kosten tonen",
+    dash_editor_show_cost_year: "365-dagen-kosten tonen",
     // 3D map card
     map3d_title: "Bosch eBike 3D-tours",
     map3d_loading: "Tours worden geladen…",
@@ -1312,6 +1378,28 @@ const I18N = {
     dash_editor_vehicle_type: "Type de véhicule",
     dash_editor_fuel_price: "Prix carburant (€ / l, € / kWh)",
     dash_editor_fuel_price_hint: "Remplace le prix par défaut. Laisser vide pour utiliser 1,85 €/l essence, 1,75 €/l diesel, 0,35 €/kWh électrique.",
+    dash_section_energy: "Coût de charge",
+    dash_energy_week: "7 derniers jours",
+    dash_energy_month: "30 derniers jours",
+    dash_energy_year: "365 derniers jours",
+    dash_energy_kwh: " kWh",
+    dash_editor_section_energy: "Résumé du coût de charge",
+    dash_editor_energy_hint: "Affiche ce qu'a coûté la charge de ce vélo sur des fenêtres glissantes de 7/30/365 jours, à partir des capteurs d'énergie ci-dessous et d'un prix de l'électricité.",
+    dash_editor_show_energy_cost: "Afficher le résumé du coût de charge",
+    dash_editor_energy_price_mode: "Source du prix de l'électricité",
+    dash_editor_energy_price_mode_fixed: "Prix fixe",
+    dash_editor_energy_price_mode_entity: "Depuis une entité",
+    dash_editor_energy_price_fixed: "Prix de l'électricité (€ / kWh)",
+    dash_editor_energy_price_fixed_hint: "Appliqué aux trois fenêtres temporelles. Par défaut : 0,23 € / kWh.",
+    dash_editor_energy_price_entity: "Entité de prix de l'électricité",
+    dash_editor_energy_price_entity_hint: "Une entité dont l'état est le prix actuel en € / kWh (par ex. un capteur de tarif dynamique).",
+    dash_editor_energy_week_entity: "Capteur d'énergie hebdomadaire",
+    dash_editor_energy_month_entity: "Capteur d'énergie mensuel",
+    dash_editor_energy_year_entity: "Capteur d'énergie annuel",
+    dash_editor_energy_entities_hint: "Choisissez les capteurs \"Énergie chargée (7/30/365 jours)\" de ce vélo, créés automatiquement par l'intégration.",
+    dash_editor_show_cost_week: "Afficher le coût sur 7 jours",
+    dash_editor_show_cost_month: "Afficher le coût sur 30 jours",
+    dash_editor_show_cost_year: "Afficher le coût sur 365 jours",
     // 3D map card
     map3d_title: "Bosch eBike Tours 3D",
     map3d_loading: "Chargement des sorties…",
@@ -1675,6 +1763,28 @@ const I18N = {
     dash_editor_vehicle_type: "Tipo di veicolo",
     dash_editor_fuel_price: "Prezzo carburante (€ / l, € / kWh)",
     dash_editor_fuel_price_hint: "Sovrascrive il prezzo predefinito. Lascia vuoto per usare 1,85 €/l benzina, 1,75 €/l diesel, 0,35 €/kWh elettrico.",
+    dash_section_energy: "Costo di ricarica",
+    dash_energy_week: "Ultimi 7 giorni",
+    dash_energy_month: "Ultimi 30 giorni",
+    dash_energy_year: "Ultimi 365 giorni",
+    dash_energy_kwh: " kWh",
+    dash_editor_section_energy: "Riepilogo costo di ricarica",
+    dash_editor_energy_hint: "Mostra quanto è costata la ricarica di questa bici su finestre mobili di 7/30/365 giorni, in base ai sensori di energia sottostanti e a un prezzo dell'elettricità.",
+    dash_editor_show_energy_cost: "Mostra riepilogo costo di ricarica",
+    dash_editor_energy_price_mode: "Fonte prezzo elettricità",
+    dash_editor_energy_price_mode_fixed: "Prezzo fisso",
+    dash_editor_energy_price_mode_entity: "Da un'entità",
+    dash_editor_energy_price_fixed: "Prezzo elettricità (€ / kWh)",
+    dash_editor_energy_price_fixed_hint: "Applicato a tutte e tre le finestre temporali. Predefinito: 0,23 € / kWh.",
+    dash_editor_energy_price_entity: "Entità prezzo elettricità",
+    dash_editor_energy_price_entity_hint: "Un'entità il cui stato è il prezzo attuale in € / kWh (es. un sensore di tariffa dinamica).",
+    dash_editor_energy_week_entity: "Sensore energia settimanale",
+    dash_editor_energy_month_entity: "Sensore energia mensile",
+    dash_editor_energy_year_entity: "Sensore energia annuale",
+    dash_editor_energy_entities_hint: "Scegli i sensori \"Energia caricata (7/30/365 giorni)\" di questa bici, creati automaticamente dall'integrazione.",
+    dash_editor_show_cost_week: "Mostra costo a 7 giorni",
+    dash_editor_show_cost_month: "Mostra costo a 30 giorni",
+    dash_editor_show_cost_year: "Mostra costo a 365 giorni",
     // 3D map card
     map3d_title: "Bosch eBike Tour 3D",
     map3d_loading: "Caricamento uscite…",
@@ -2038,6 +2148,28 @@ const I18N = {
     dash_editor_vehicle_type: "Tipo de vehículo",
     dash_editor_fuel_price: "Precio combustible (€ / l, € / kWh)",
     dash_editor_fuel_price_hint: "Sobrescribe el precio predeterminado. Déjalo vacío para usar 1,85 €/l gasolina, 1,75 €/l diésel, 0,35 €/kWh eléctrico.",
+    dash_section_energy: "Coste de carga",
+    dash_energy_week: "Últimos 7 días",
+    dash_energy_month: "Últimos 30 días",
+    dash_energy_year: "Últimos 365 días",
+    dash_energy_kwh: " kWh",
+    dash_editor_section_energy: "Resumen del coste de carga",
+    dash_editor_energy_hint: "Muestra lo que ha costado cargar esta bici en ventanas móviles de 7/30/365 días, a partir de los sensores de energía de abajo y un precio de la electricidad.",
+    dash_editor_show_energy_cost: "Mostrar resumen del coste de carga",
+    dash_editor_energy_price_mode: "Fuente del precio de la electricidad",
+    dash_editor_energy_price_mode_fixed: "Precio fijo",
+    dash_editor_energy_price_mode_entity: "Desde una entidad",
+    dash_editor_energy_price_fixed: "Precio de la electricidad (€ / kWh)",
+    dash_editor_energy_price_fixed_hint: "Se aplica a las tres ventanas temporales. Por defecto: 0,23 € / kWh.",
+    dash_editor_energy_price_entity: "Entidad de precio de electricidad",
+    dash_editor_energy_price_entity_hint: "Una entidad cuyo estado es el precio actual en € / kWh (p. ej. un sensor de tarifa dinámica).",
+    dash_editor_energy_week_entity: "Sensor de energía semanal",
+    dash_editor_energy_month_entity: "Sensor de energía mensual",
+    dash_editor_energy_year_entity: "Sensor de energía anual",
+    dash_editor_energy_entities_hint: "Elige los sensores \"Energía cargada (7/30/365 días)\" de esta bici, creados automáticamente por la integración.",
+    dash_editor_show_cost_week: "Mostrar coste de 7 días",
+    dash_editor_show_cost_month: "Mostrar coste de 30 días",
+    dash_editor_show_cost_year: "Mostrar coste de 365 días",
     // 3D map card
     map3d_title: "Bosch eBike Rutas 3D",
     map3d_loading: "Cargando rutas…",
@@ -7479,6 +7611,28 @@ class BoschEBikeDashboardCard extends HTMLElement {
         font-size: 11px; color: var(--secondary-text-color);
         margin-top: 4px; text-align: center; font-style: italic;
       }
+      .dash-energy-grid {
+        display: grid; grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
+        gap: 10px;
+      }
+      .dash-energy-card {
+        padding: 12px; border-radius: 10px;
+        background: var(--secondary-background-color, #f4f6f8);
+        display: flex; flex-direction: column; gap: 4px;
+        border-left: 3px solid var(--primary-color, #03a9f4);
+      }
+      .dash-energy-card .lbl {
+        font-size: 11px; color: var(--secondary-text-color);
+        text-transform: uppercase; letter-spacing: .04em;
+      }
+      .dash-energy-card .v1 {
+        font-size: 18px; font-weight: 700; color: var(--primary-text-color);
+        font-variant-numeric: tabular-nums;
+      }
+      .dash-energy-card .v2 {
+        font-size: 12px; color: var(--secondary-text-color);
+        font-variant-numeric: tabular-nums;
+      }
       /* Editor: Wartungs-Liste */
       .dash-ed-maint-row {
         display: grid;
@@ -7543,6 +7697,10 @@ class BoschEBikeDashboardCard extends HTMLElement {
         <div class="dash-section-head" id="dash-co2-head"></div>
         <div class="dash-co2-grid" id="dash-co2-grid"></div>
         <div class="dash-co2-compared" id="dash-co2-compared"></div>
+      </div>
+      <div id="dash-energy-section" style="display:none">
+        <div class="dash-section-head" id="dash-energy-head"></div>
+        <div class="dash-energy-grid" id="dash-energy-grid"></div>
       </div>
     `;
 
@@ -7852,6 +8010,7 @@ class BoschEBikeDashboardCard extends HTMLElement {
     // ---------- Wartung + CO2 ----------
     this._renderMaintenance();
     this._renderCO2(odo, lastTour);
+    this._renderEnergyCost();
   }
 
   // ===========================================================================
@@ -8196,6 +8355,61 @@ class BoschEBikeDashboardCard extends HTMLElement {
     const lang = (this._hass && this._hass.language) ? this._hass.language.split("-")[0] : "en";
     const vehLabel = preset["label_" + lang] || preset.label_en;
     cmp.textContent = this._t("dash_co2_compared") + ": " + vehLabel;
+  }
+
+  // Charging-cost summary over rolling 7/30/365-day windows. The energy
+  // (Wh) figures come from the integration's own backend sensors (stored
+  // in Home Assistant, not recomputed from cached rides in the browser);
+  // this method only applies a price - fixed or from a referenced entity -
+  // same "raw entity + card-side math" split as _renderCO2 above.
+  _renderEnergyCost() {
+    const sec = this.querySelector("#dash-energy-section");
+    const head = this.querySelector("#dash-energy-head");
+    const grid = this.querySelector("#dash-energy-grid");
+    if (!sec || !head || !grid) return;
+    if (this._config.show_energy_cost === false) { sec.style.display = "none"; return; }
+
+    const priceMode = this._config.energy_price_mode === "entity" ? "entity" : "fixed";
+    let price = null;
+    if (priceMode === "entity") {
+      const v = this._config.energy_price_entity ? this._num(this._config.energy_price_entity) : null;
+      price = v;
+    } else {
+      const fixed = Number(this._config.energy_price_fixed);
+      price = Number.isFinite(fixed) ? fixed : 0.23;
+    }
+
+    const periods = [
+      { entityKey: "energy_week_entity", showKey: "show_cost_week", label: this._t("dash_energy_week") },
+      { entityKey: "energy_month_entity", showKey: "show_cost_month", label: this._t("dash_energy_month") },
+      { entityKey: "energy_year_entity", showKey: "show_cost_year", label: this._t("dash_energy_year") },
+    ];
+    const rows = periods.filter((p) => this._config[p.showKey] !== false && this._config[p.entityKey]);
+    if (!rows.length) { sec.style.display = "none"; return; }
+
+    sec.style.display = "";
+    head.textContent = this._t("dash_section_energy");
+    grid.innerHTML = "";
+
+    for (const p of rows) {
+      const wh = this._num(this._config[p.entityKey]);
+      const el = document.createElement("div");
+      el.className = "dash-energy-card";
+      if (wh == null || price == null) {
+        el.innerHTML = `<div class="lbl">${p.label}</div><div class="v1">–</div>`;
+      } else {
+        const kwh = wh / 1000;
+        const cost = kwh * price;
+        const costStr = cost.toLocaleString(undefined, { maximumFractionDigits: 2 });
+        const kwhStr = kwh.toLocaleString(undefined, { maximumFractionDigits: kwh < 10 ? 2 : 1 });
+        el.innerHTML = `
+          <div class="lbl">${p.label}</div>
+          <div class="v1">${costStr}${this._t("dash_co2_eur")}</div>
+          <div class="v2">${kwhStr}${this._t("dash_energy_kwh")}</div>
+        `;
+      }
+      grid.appendChild(el);
+    }
   }
 
   _handleStop() {
@@ -8733,6 +8947,104 @@ class BoschEBikeDashboardCardEditor extends HTMLElement {
       this._emit();
     });
     this._fields.fuel_price = fuelPriceInput;
+
+    // --- Ladekosten-Zusammenfassung -------------------------------------------
+    const energyHead = document.createElement("div");
+    energyHead.textContent = this._t("dash_editor_section_energy");
+    energyHead.style.cssText =
+      "margin-top:14px;padding-top:10px;border-top:1px solid var(--divider-color);" +
+      "color:var(--secondary-text-color);font-size:12px;line-height:1.4;font-weight:600;";
+    wrap.appendChild(energyHead);
+
+    const energyHint = document.createElement("small");
+    energyHint.textContent = this._t("dash_editor_energy_hint");
+    energyHint.style.cssText = "color:var(--secondary-text-color);font-size:11px;";
+    wrap.appendChild(energyHint);
+
+    const energyToggleWrap = document.createElement("label");
+    energyToggleWrap.style.cssText = "display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;margin-top:6px;";
+    const energyToggle = document.createElement("input");
+    energyToggle.type = "checkbox";
+    energyToggle.checked = this._config.show_energy_cost !== false;
+    energyToggle.addEventListener("change", () => {
+      this._config = { ...this._config, show_energy_cost: energyToggle.checked };
+      this._emit();
+    });
+    energyToggleWrap.appendChild(energyToggle);
+    const energyToggleLbl = document.createElement("span");
+    energyToggleLbl.textContent = this._t("dash_editor_show_energy_cost");
+    energyToggleWrap.appendChild(energyToggleLbl);
+    wrap.appendChild(energyToggleWrap);
+
+    // Price source: fixed value or a referenced entity. Both fields stay
+    // visible (same simplicity as the fuel-price field above); energy_price_mode
+    // decides which one _renderEnergyCost() actually reads.
+    const priceModeSelect = mk(this._t("dash_editor_energy_price_mode"), null, () => {
+      const sel = document.createElement("select");
+      sel.style.cssText = "padding:8px;border-radius:4px;border:1px solid var(--divider-color);background:var(--card-background-color);color:var(--primary-text-color);";
+      for (const [id, labelKey] of [["fixed", "dash_editor_energy_price_mode_fixed"], ["entity", "dash_editor_energy_price_mode_entity"]]) {
+        const o = document.createElement("option");
+        o.value = id;
+        o.textContent = this._t(labelKey);
+        sel.appendChild(o);
+      }
+      return sel;
+    });
+    priceModeSelect.value = this._config.energy_price_mode === "entity" ? "entity" : "fixed";
+    priceModeSelect.addEventListener("change", () => {
+      this._config = { ...this._config, energy_price_mode: priceModeSelect.value };
+      this._emit();
+    });
+    this._fields.energy_price_mode = priceModeSelect;
+
+    const energyPriceFixedInput = mk(this._t("dash_editor_energy_price_fixed"), this._t("dash_editor_energy_price_fixed_hint"), () => {
+      const i = document.createElement("input");
+      i.type = "number"; i.step = "0.01"; i.min = "0";
+      i.style.cssText = "padding:8px;border-radius:4px;border:1px solid var(--divider-color);background:var(--card-background-color);color:var(--primary-text-color);";
+      return i;
+    });
+    energyPriceFixedInput.value = this._config.energy_price_fixed != null ? String(this._config.energy_price_fixed) : "0.23";
+    energyPriceFixedInput.addEventListener("input", () => {
+      const v = energyPriceFixedInput.value.trim();
+      if (v === "") delete this._config.energy_price_fixed;
+      else if (Number.isFinite(Number(v))) this._config.energy_price_fixed = Number(v);
+      this._emit();
+    });
+    this._fields.energy_price_fixed = energyPriceFixedInput;
+
+    this._fields.energy_price_entity = mkEntity(
+      "energy_price_entity", "dash_editor_energy_price_entity", "dash_editor_energy_price_entity_hint", ["sensor", "input_number"]
+    );
+
+    const energyEntitiesHint = document.createElement("small");
+    energyEntitiesHint.textContent = this._t("dash_editor_energy_entities_hint");
+    energyEntitiesHint.style.cssText = "color:var(--secondary-text-color);font-size:11px;";
+    wrap.appendChild(energyEntitiesHint);
+
+    this._fields.energy_week_entity = mkEntity("energy_week_entity", "dash_editor_energy_week_entity", null, ["sensor"]);
+    this._fields.energy_month_entity = mkEntity("energy_month_entity", "dash_editor_energy_month_entity", null, ["sensor"]);
+    this._fields.energy_year_entity = mkEntity("energy_year_entity", "dash_editor_energy_year_entity", null, ["sensor"]);
+
+    const mkPeriodToggle = (configKey, labelKey) => {
+      const toggleWrap = document.createElement("label");
+      toggleWrap.style.cssText = "display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;";
+      const toggle = document.createElement("input");
+      toggle.type = "checkbox";
+      toggle.checked = this._config[configKey] !== false;
+      toggle.addEventListener("change", () => {
+        this._config = { ...this._config, [configKey]: toggle.checked };
+        this._emit();
+      });
+      toggleWrap.appendChild(toggle);
+      const toggleLbl = document.createElement("span");
+      toggleLbl.textContent = this._t(labelKey);
+      toggleWrap.appendChild(toggleLbl);
+      wrap.appendChild(toggleWrap);
+      return toggle;
+    };
+    this._fields.show_cost_week = mkPeriodToggle("show_cost_week", "dash_editor_show_cost_week");
+    this._fields.show_cost_month = mkPeriodToggle("show_cost_month", "dash_editor_show_cost_month");
+    this._fields.show_cost_year = mkPeriodToggle("show_cost_year", "dash_editor_show_cost_year");
 
     // --- Bike-Picker (für Wartung) -------------------------------------------
     // Wartung lebt jetzt in HA-Storage und ist per Bike gescopt. Wenn
@@ -9315,12 +9627,17 @@ class BoschEBikeDashboardCardEditor extends HTMLElement {
   _sync() {
     if (!this._fields) return;
     for (const [key, input] of Object.entries(this._fields)) {
-      // vehicle_comparison/fuel_price brauchen Sonderfälle (Select-Default,
-      // leerer Wert bei fehlendem fuel_price-Override).
+      // vehicle_comparison/fuel_price/energy_price_mode/energy_price_fixed
+      // brauchen Sonderfälle (Select-Default bzw. ein tatsächlich wirksamer
+      // Default statt leerem Feld bei fehlendem Override).
       if (key === "vehicle_comparison") {
         input.value = this._config.vehicle_comparison || "none";
       } else if (key === "fuel_price") {
         input.value = this._config.fuel_price != null ? String(this._config.fuel_price) : "";
+      } else if (key === "energy_price_mode") {
+        input.value = this._config.energy_price_mode === "entity" ? "entity" : "fixed";
+      } else if (key === "energy_price_fixed") {
+        input.value = this._config.energy_price_fixed != null ? String(this._config.energy_price_fixed) : "0.23";
       } else {
         input.value = this._config[key] || "";
       }
