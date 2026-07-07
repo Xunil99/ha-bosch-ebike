@@ -5,6 +5,10 @@
 
 > **Deutsch** | [English](#english) | [Nederlands](https://github.com/Xunil99/ha-bosch-ebike/blob/main/README.nl.md) | [Français](https://github.com/Xunil99/ha-bosch-ebike/blob/main/README.fr.md) | [Italiano](https://github.com/Xunil99/ha-bosch-ebike/blob/main/README.it.md) | [Español](https://github.com/Xunil99/ha-bosch-ebike/blob/main/README.es.md)
 
+> **Bosch eBike Smart System & eBike System 2 (BES2) für Home Assistant** – liest Fahrrad- und Fahrtdaten direkt von der offiziellen Bosch Data Act API: Kilometerstand, Akkuzustand, letzte Fahrten mit GPS-Track und mehr. Mit Custom-Lovelace-Karten (2D, 3D, Heatmap, Kalender, Routenplaner, Dashboard) und optionalen Live-Daten per Bluetooth.
+>
+> *Bosch eBike Smart System & eBike System 2 (BES2) for Home Assistant – reads bike and ride data directly from the official Bosch Data Act API, with custom Lovelace cards and optional live data over Bluetooth.*
+
 > **⚠️ Update-Hinweis (ab v1.17.6):** Der Integrationsordner heißt jetzt `ha_bosch_ebike` (vorher `bosch_ebike`). Deine Einrichtung, Geräte und Einstellungen bleiben unverändert. Falls nach dem HACS-Update **beide** Ordner in `config/custom_components/` liegen, lösche den alten `bosch_ebike` einmalig und starte Home Assistant neu.
 
 > ### ⚠️ Regionale Voraussetzung
@@ -26,11 +30,17 @@
 
 ## Deutsch
 
+<a name="de-inhalt"></a>**Inhalt:** [Beschreibung](#de-beschreibung) · [eBike System 2 (BES2)](#de-bes2) · [Funktionen](#de-funktionen) · [Setup-Anleitung](#de-setup) · [Mehrere Bikes/Konten](#de-mehrere-bikes) · [Karten & Cards](#de-pois) · [Wartung](#de-wartung) · [Reichweiten-Schätzung](#de-reichweite) · [Fehlerbehebung](#de-fehlerbehebung) · [Verfügbare Sensoren](#de-sensoren)
+
+<a name="de-beschreibung"></a>
+
 ### Beschreibung
 
 Diese Custom Integration verbindet dein **Bosch eBike Smart System** mit Home Assistant. Sie liest Fahrraddaten (Kilometerstand, Motorstunden, Batterie-Ladezyklen) und Aktivitätsdaten (letzte Fahrt, Geschwindigkeit, Trittfrequenz, Leistung) direkt von der offiziellen Bosch Data Act API aus.
 
 **Unterstützt werden ausschließlich eBikes mit Bosch Smart System** (nicht das Classic Line System).
+
+<a name="de-bes2"></a>
 
 ### 🆕 eBike System 2 (BES2) – NEU, in Erprobung (Alpha)
 
@@ -65,6 +75,8 @@ Die Integration unterstützt jetzt **zusätzlich** das ältere **eBike System 2 
 Nicht verfügbare Funktionen erzeugen für BES2-Bikes **gar keine** Entitäten — sie fehlen einfach, statt „unbekannt" anzuzeigen.
 
 **Ohne die ausdauernden und genauen Beta-Tests von Habanatz** (pedelecforum.de) wäre die Unterstützung für eBike System 2 (BES2) nicht möglich gewesen. Ganz herzlichen Dank dafür!
+
+<a name="de-funktionen"></a>
 
 ### Funktionen
 
@@ -103,26 +115,26 @@ Sind diese gesetzt, fragt die Integration bei jedem Tour-Update den HA-Recorder 
 
 Die Werte ersetzen die bisherige Snapshot-Schätzung in den Sensoren *Last Ride Distance*, *Battery Consumption Wh*, *Verbrauch %* etc. Wenn beim Tour-Start oder -Ende kein BLE-Sample im Toleranzfenster (±5 min) verfügbar war (Bike außer Reichweite), fällt die Integration transparent auf die alte Cloud-Logik zurück. Beide Felder sind optional und unabhängig - du kannst auch nur einen der beiden setzen.
 
+<a name="de-setup"></a>
+
 ### Voraussetzungen
 
-1. Ein eBike mit **Bosch Smart System** (z. B. Performance Line CX, SX, etc.)
-2. Ein **Bosch SingleKey ID** Account ([singlekey-id.com](https://singlekey-id.com))
-3. Zugang zum **Bosch eBike Flow Portal** ([portal.bosch-ebike.com](https://portal.bosch-ebike.com))
+1. Ein eBike mit **Bosch Smart System** (z. B. Performance Line CX, SX, etc.) - für **eBike System 2 (BES2)** siehe Hinweis direkt unten
+2. Ein **Bosch SingleKey ID** Account - falls noch nicht vorhanden, erstelle einen unter [singlekey-id.com](https://singlekey-id.com)
+3. Dein eBike ist mit der **Bosch eBike Flow App** ([iOS](https://apps.apple.com/app/bosch-ebike-flow/id1504451498) / [Android](https://play.google.com/store/apps/details?id=com.bosch.ebike)) verknüpft
+4. Zugang zum **Bosch eBike Flow Portal** ([portal.bosch-ebike.com](https://portal.bosch-ebike.com))
 
 ---
 
 ### Schritt-für-Schritt-Anleitung
 
-> **Zwei Systeme:** Die folgenden Schritte beschreiben die Einrichtung für das **Smart System**. Für **eBike System 2 (BES2)** sind die Schritte fast gleich — die wenigen Unterschiede stehen im Abschnitt **„eBike System 2 (BES2) einrichten"** weiter unten.
-
-#### Voraussetzungen
-
-1. Ein **Bosch SingleKey ID** Account - falls noch nicht vorhanden, erstelle einen unter [singlekey-id.com](https://singlekey-id.com)
-2. Dein eBike muss mit der **Bosch eBike Flow App** ([iOS](https://apps.apple.com/app/bosch-ebike-flow/id1504451498) / [Android](https://play.google.com/store/apps/details?id=com.bosch.ebike)) verknüpft sein
+> **Zwei Systeme:** Die folgenden Schritte beschreiben die Einrichtung für das **Smart System**. Für **eBike System 2 (BES2)** sind die Schritte fast gleich — die wenigen Unterschiede (u. a. ein **eBike-Connect-Konto** statt der SingleKey ID) stehen im Abschnitt **„eBike System 2 (BES2) einrichten"** weiter unten.
 
 ---
 
 #### Schritt 1: App im Bosch Data Act Portal registrieren
+
+Home Assistant muss sich gegenüber der Bosch-API als „App" ausweisen - dafür registrierst du hier eine solche App und erhältst eine Kennung (Client-ID), die du in Schritt 4 einträgst.
 
 1. Gehe zu [portal.bosch-ebike.com/data-act/app](https://portal.bosch-ebike.com/data-act/app)
 2. Melde dich mit deiner **SingleKey ID** an
@@ -138,9 +150,11 @@ Die Werte ersetzen die bisherige Snapshot-Schätzung in den Sensoren *Last Ride 
    | **Redirect URI** | `https://my.home-assistant.io/redirect/oauth` | Rücksprung-Adresse **nach** dem Bosch-Login (OAuth-Callback) - muss exakt so lauten, das ist die offizielle „My Home Assistant"-Weiterleitung, über die Home Assistant den Login automatisch abschließt. |
    | **Login URL** | `https://my.home-assistant.io/redirect/config_flow_start/?domain=ha_bosch_ebike` | Link, den **„Service aktivieren"** im eBike Manager öffnet, um den Einrichtungs-Flow direkt in deiner Home-Assistant-Instanz zu **starten**. |
 
+   ![Bosch-Portal-Formular „Create your Client application" mit Login URL und Redirect URI(s)](docs/img/setup-app-form.png)
+
    > **Hinweis:** Die „My Home Assistant"-Integration muss in HA aktiviert sein (Standard). Falls du sie deaktiviert hast, trage bei **Redirect URI** stattdessen `https://<deine-HA-URL>/auth/external/callback` ein.
 
-5. Nach dem Erstellen erhältst du eine **Client-ID** (Format `euda-xxxxxxxx-...`).
+5. Nach dem Erstellen erhältst du eine **Client-ID** (Format `euda-xxxxxxxx-...`), die im Portal in der App-Übersicht angezeigt wird.
 
 #### Schritt 2: Client-ID sichern
 
@@ -148,14 +162,19 @@ Kopiere die **Client-ID** - du brauchst sie gleich.
 
 #### Schritt 3: Integration in Home Assistant installieren
 
-Installiere die Integration über **HACS** (siehe Abschnitt weiter unten) und starte Home Assistant neu. Erst danach kann der Freigabe-Link aus dem eBike Manager den Einrichtungs-Flow öffnen.
+Installiere die Integration über **HACS** (Detailschritte im Abschnitt „HACS-Installation" weiter unten) und starte Home Assistant neu. Erst danach kann der Freigabe-Link aus dem eBike Manager den Einrichtungs-Flow öffnen.
 
 #### Schritt 4: Integration einrichten (über „Service aktivieren")
 
+**Im eBike Manager:**
+
 1. Öffne **Mein eBike → eBike Manager** und dort den Bereich **Data Act** (erreichbar über **[flow.bosch-ebike.com](https://flow.bosch-ebike.com)**).
 2. Klicke beim Eintrag für deine in Schritt 1 angelegte App auf **„Service aktivieren"**. Daraufhin öffnet sich automatisch deine Home-Assistant-Instanz (über die in Schritt 1 hinterlegte Login-URL).
-3. In Home Assistant öffnet sich der Einrichtungs-Flow: **Client-ID einfügen**, **Autorisieren**, bei Bosch anmelden und bestätigen.
-4. Die Integration ist jetzt eingerichtet - **aber die Entitäten fehlen noch**. Das ist normal, weiter mit Schritt 5.
+
+**In Home Assistant:**
+
+3. Der Einrichtungs-Flow öffnet sich: **Client-ID einfügen**, **Autorisieren**, bei Bosch anmelden und bestätigen.
+4. Die Integration ist jetzt eingerichtet - **aber die Entitäten fehlen noch, weil die Datenfreigabe pro Bike noch nicht aktiviert ist.** Das erledigst du in Schritt 5.
 
 > **Hinweis:** Alternativ kannst du die Integration auch manuell hinzufügen (**Einstellungen → Geräte & Dienste → Integration hinzufügen → "Bosch eBike"**, Client-ID einfügen, Autorisieren). Kein localhost und kein Copy & Paste: Home Assistant übernimmt den Login-Rücksprung über die "My Home Assistant"-Weiterleitung, Access- und Refresh-Token werden danach automatisch erneuert.
 
@@ -164,10 +183,10 @@ Installiere die Integration über **HACS** (siehe Abschnitt weiter unten) und st
 Ohne aktivierte Freigabe antwortet die API mit **403 Forbidden** und es erscheinen keine Entitäten.
 
 1. Gehe zurück zu **Mein eBike → eBike Manager → Data Act**.
-2. Aktiviere dort den **Schalter (Toggle)** für den in Schritt 1 angelegten Client - die Freigabe gilt **pro Bike**. Bei aktiver Freigabe wechselt die Anzeige auf **„Service deaktivieren"**.
+2. Aktiviere dort den **Schalter (Toggle)** für den in Schritt 1 angelegten Client - die Freigabe gilt **pro Bike**. Das ist ein separater Schalter, nicht derselbe Link **„Service aktivieren"** aus Schritt 4. Bei aktiver Freigabe wechselt die Anzeige auf **„Service deaktivieren"**.
 3. Lade in Home Assistant die **Bosch eBike** Integration neu (**⋮ → Neu laden**). Danach sind **alle Entitäten** da.
 
-> Kommt direkt nach dem Aktivieren noch ein 403 oder fehlen Entitäten: ein paar Minuten warten (die Freigabe propagiert serverseitig) und erneut neu laden.
+> Kommt direkt nach dem Aktivieren noch ein 403 oder fehlen Entitäten: ein paar Minuten warten (die Freigabe propagiert serverseitig) und erneut neu laden. Weitere Fehlerbilder siehe Abschnitt „Fehlerbehebung" weiter unten.
 
 #### Schritt 6: Kartenansicht einrichten (optional)
 
@@ -207,6 +226,8 @@ Die Integration enthält eine interaktive Lovelace-Karte zur Anzeige deiner GPS-
 - **◀ Prev / Next ▶** Buttons und **Date-Picker** zum Durchblättern aller Fahrten
 - **▶ Chase-Cam-Button** öffnet die aktuell sichtbare Tour in einem Vollbild-Overlay mit der kompletten 3D-Card-Wiedergabe (2D / 3D / Satellit, Slider, Nord-Fix-Toggle, Vollbild). Schließen via X-Button oder Escape.
 
+![Kartendarstellung mit GPS-Track, Geschwindigkeits-Farbcodierung und Fahrtinfo-Leiste](docs/img/card-map.png)
+
 > **Hinweis:** Wenn die Karte nach einem Update nicht korrekt angezeigt wird, leere den Browser-Cache mit `Ctrl+Shift+R` (Hard Reload).
 
 > **HACS-Update für die Karten:** Alle vier Lovelace-Karten (Map, Heatmap, Calendar, Dashboard) liegen in einer einzigen JS-Datei (`bosch-ebike-map-card.js`) und werden automatisch mit der Integration aktualisiert. Nach einem Versions-Update von HACS ein Hard Reload des Browser-Caches durchführen, sonst kann der Card-Picker eine neue Karte noch nicht anzeigen.
@@ -222,7 +243,7 @@ Für **eBike System 2** ist die Einrichtung nahezu identisch zur obigen Smart-Sy
 
 Welche Daten BES2 liefert (und welche nicht), zeigt die Vergleichstabelle im Abschnitt **eBike System 2 (BES2)** weiter oben.
 
-#### HACS-Installation (Alternative)
+#### HACS-Installation (Detailanleitung zu Schritt 3)
 
 1. Öffne HACS in Home Assistant
 2. Klicke auf **"Benutzerdefinierte Repositories"** (drei Punkte oben rechts)
@@ -231,6 +252,8 @@ Welche Daten BES2 liefert (und welche nicht), zeigt die Vergleichstabelle im Abs
 5. Installiere die Integration und starte Home Assistant neu
 
 ---
+
+<a name="de-mehrere-bikes"></a>
 
 ### Mehrere Bikes oder Konten
 
@@ -272,6 +295,8 @@ cards:
 
 Beide Karten zeigen dann immer Touren des jeweils gelockten Kontos und können mit der Datums-/Sortierauswahl unabhängig voneinander durch die Touren-Historie geblättert werden - ideal um z. B. zwei am selben Tag gefahrene Touren direkt zu vergleichen. Die gleichen Optionen funktionieren auch in der `bosch-ebike-heatmap-card`.
 
+<a name="de-pois"></a>
+
 ### POIs entlang der Route
 
 Auf der Karte gibt es einen 📍-Toggle in den Steuerelementen. Aktiviert er, wird im Hintergrund eine Overpass-API-Abfrage gestartet, die folgende Punkte entlang der Route findet (max. ~500 m vom befahrenen Pfad entfernt):
@@ -283,6 +308,8 @@ Auf der Karte gibt es einen 📍-Toggle in den Steuerelementen. Aktiviert er, wi
 - 🍽️ **Gastronomie** (Restaurants, Cafés, Biergärten, Imbisse — `amenity=restaurant/cafe/biergarten/fast_food`)
 
 Klick auf einen Marker → Popup mit Name, Öffnungszeiten/Adresse/Website (sofern bei OSM hinterlegt) und Link zu OpenStreetMap. Pro Tour werden bis zu 100 Marker dargestellt; Ergebnisse werden im Browser-localStorage gecacht.
+
+<a name="de-wartung"></a>
 
 ### Wartungs-Erinnerungen
 
@@ -313,6 +340,8 @@ Neben dem von Bosch gelieferten Service-Termin (`Next Service Date`/`Next Servic
 - `ha_bosch_ebike_maintenance_due_soon` / `ha_bosch_ebike_maintenance_overdue` (für eigene Posten)
 
 Damit kann man z. B. eine Push-Mitteilung oder eine Beleuchtungs-Erinnerung bauen.
+
+<a name="de-reichweite"></a>
 
 ### Reichweiten-Schätzung
 
@@ -380,6 +409,8 @@ height: 600
 
 Die erste Anzeige kann etwas dauern - bei jeder bisher nicht abgerufenen Tour wird ein zusätzlicher API-Call gemacht (mit Concurrency-Limit). Die Tracks werden serverseitig im Speicher gecacht, weitere Aufrufe sind sofort.
 
+![Heatmap-Card mit mehreren übereinandergelegten Touren und Zeitraum-/Konto-Filtern](docs/img/card-heatmap.png)
+
 ### Kalender-Card - GitHub-Style-Heatmap der Fahrtage
 
 Die Card `bosch-ebike-calendar-card` zeigt eine Jahres-Heatmap im Stil der GitHub-Contributions-Übersicht: 7 Zeilen für die Wochentage, eine Spalte pro Kalenderwoche, jede Zelle eingefärbt nach gefahrenen Kilometern an dem Tag. Beim Hovern erscheint ein Tooltip mit Datum, Tour-Anzahl und Distanz. Statistik-Zeile darunter zeigt Aktive Tage, Touren und Gesamt-Distanz im gewählten Zeitraum.
@@ -425,6 +456,8 @@ playback_speed: 60     # 60x Echtzeit (1h-Tour = 1min Wiedergabe)
 - **Cast-Shadows von Gebäuden** auf den Boden, projiziert aus Sonnen-Azimut und Sonnen-Höhe zur Slider-Zeit. Schatten werden bei Tageslicht angezeigt, bei Dämmerung kürzer, bei Nacht ausgeblendet. Update automatisch, wenn die Kamera in ein neues Stadtgebiet schwenkt oder der Slider bewegt wird.
 - **Video-Export** rechts neben dem Slider: Aufnahme-Button startet eine Wiedergabe vom Tour-Anfang und schreibt den Karten-Inhalt parallel als Video mit. Beim Tour-Ende kommt automatisch ein Datei-Download (ca. 20-40 MB pro Minute). Das Format wird vom Browser bestimmt: **MP4** in modernem Chrome (≥ 126) und Safari (≥ 14.4), sonst **WebM**. Komplett im Browser via `canvas.captureStream()` + `MediaRecorder`, der HA-Server hat damit nichts zu tun.
 - Zurück-Button kehrt zur Tour-Liste zurück
+
+![3D-Chase-Cam-Ansicht mit Gebäude-Extrusionen und Zeit-Slider](docs/img/card-3d-map.png)
 
 **Karten-Konfig-Optionen:**
 
@@ -487,8 +520,16 @@ target_soc_entity: input_number.ebike_target_soc
 - **Ziel-SoC-Schieberegler**, der den Wert eines `input_number` setzt
 - **Start- und Stop-Buttons** mit Zwei-Klick-Bestätigung bei Stop (Versehensschutz)
 - **Akku-Balken** unten, der unter 35 % auf Orange und unter 15 % auf Rot wechselt
-- **Wartungs-Liste** mit beliebig vielen frei definierbaren Posten (Kette ölen, Kundendienst, Bremsen prüfen, …) – im Editor wählbar aus 11 Vorschlägen oder als freier Text. Pro Posten Trigger über km-Intervall oder Tages-Intervall. Erscheinen im Dashboard automatisch, sobald sie in den nächsten **500 km** oder **30 Tagen** fällig sind – überfällige Einträge rot, bald fällige gelb, sortiert nach Dringlichkeit. Mit einem grünen Häkchen-Button pro Zeile kannst Du einen Posten direkt als „erledigt" markieren. **Speicherung in Home Assistant** (`/config/.storage/`, per Bike scoped) statt im Browser-Cache: die Einträge überleben Browser-Wechsel, sind über alle Geräte synchron und lassen sich auch über die HA-Services `bosch_ebike.add_maintenance`, `bosch_ebike.update_maintenance`, `bosch_ebike.complete_maintenance` und `bosch_ebike.remove_maintenance` aus Automations heraus pflegen. Im Card-Editor wählst Du das Bike aus einem Dropdown; die zugehörigen Wartungen erscheinen direkt darunter und werden live ins Backend gespeichert.
+- **Wartungs-Liste** mit beliebig vielen frei definierbaren Posten (Kette ölen, Kundendienst, Bremsen prüfen, …):
+  - Im Editor wählbar aus 11 Vorschlägen oder als freier Text; pro Posten Trigger über km-Intervall oder Tages-Intervall
+  - Erscheinen im Dashboard automatisch, sobald sie in den nächsten **500 km** oder **30 Tagen** fällig sind – überfällige Einträge rot, bald fällige gelb, sortiert nach Dringlichkeit
+  - Grüner Häkchen-Button pro Zeile markiert einen Posten direkt als „erledigt"
+  - **Speicherung in Home Assistant** (`/config/.storage/`, per Bike scoped) statt im Browser-Cache: die Einträge überleben Browser-Wechsel und sind über alle Geräte synchron
+  - Auch aus Automationen heraus pflegbar über die HA-Services `bosch_ebike.add_maintenance`, `bosch_ebike.update_maintenance`, `bosch_ebike.complete_maintenance` und `bosch_ebike.remove_maintenance`
+  - Im Card-Editor wählst Du das Bike aus einem Dropdown; die zugehörigen Wartungen erscheinen direkt darunter und werden live ins Backend gespeichert
 - **CO₂- und Sprit-Kosten-Vergleich** zum Auto: zwei Kacheln „Gesamt" und „Letzte Tour" mit eingesparten kg CO₂ und €. Im Editor wählst Du das Vergleichs-Fahrzeug aus 7 realistischen Presets (Kleinwagen/Mittelklasse/SUV jeweils Benzin oder Diesel, plus E-Auto mit Ökostrom); optional kannst Du den Sprit-/Strompreis je Liter/kWh überschreiben.
+
+![Dashboard-Card mit Bike-Foto, Statuskacheln, Fahrmodus-Reichweiten, Wartungsliste und CO2-Vergleich](docs/img/card-dashboard.png)
 
 **Voraussetzungen für die volle Funktionalität:**
 
@@ -520,6 +561,8 @@ Auf der Lovelace-Karte gibt es einen 📚-Toggle in den Karten-Steuerelementen. 
 - **Toggle-Status und Ergebnisse** werden im Browser gecacht (`localStorage`), beim Tour-Wechsel werden frische Daten geholt
 - **Datenschutz-Hinweis**: Beim Aktivieren des Layers werden Stützstellen-Koordinaten der Route an die Wikipedia-API gesendet; der Layer ist standardmäßig aus
 
+<a name="de-fehlerbehebung"></a>
+
 ### Fehlerbehebung
 
 | Problem | Lösung |
@@ -533,6 +576,8 @@ Auf der Lovelace-Karte gibt es einen 📚-Toggle in den Karten-Steuerelementen. 
 | Token nicht akzeptiert | Prüfe, ob die Client-ID korrekt eingegeben wurde |
 
 ---
+
+<a name="de-sensoren"></a>
 
 ### Verfügbare Sensoren
 
@@ -633,11 +678,17 @@ Diese Entitäten erscheinen **automatisch** mit der normalen Einrichtung. Eine *
 
 > **⚠️ Upgrade note (since v1.17.6):** The integration folder is now `ha_bosch_ebike` (was `bosch_ebike`). Your setup, devices and settings stay unchanged. If **both** folders exist in `config/custom_components/` after the HACS update, delete the old `bosch_ebike` once and restart Home Assistant.
 
+<a name="en-inhalt"></a>**Contents:** [Description](#en-description) · [eBike System 2 (BES2)](#en-bes2) · [Features](#en-features) · [Setup Guide](#en-setup) · [Multiple bikes/accounts](#en-multiple-bikes) · [Cards](#en-pois) · [Maintenance](#en-maintenance) · [Range estimation](#en-range) · [Troubleshooting](#en-troubleshooting) · [Available Sensors](#en-sensors)
+
+<a name="en-description"></a>
+
 ### Description
 
 This custom integration connects your **Bosch eBike Smart System** to Home Assistant. It reads bike data (odometer, motor hours, battery charge cycles) and activity data (last ride, speed, cadence, rider power) directly from the official Bosch Data Act API.
 
 **Only eBikes with Bosch Smart System are supported** (not the Classic Line system).
+
+<a name="en-bes2"></a>
 
 ### 🆕 eBike System 2 (BES2) – NEW, currently in testing (alpha)
 
@@ -672,6 +723,8 @@ The integration now **also** supports the older **eBike System 2 (BES2)** in add
 Features that are not available create **no** entities at all for BES2 bikes — they are simply absent instead of showing "unknown".
 
 **Without the persistent and meticulous beta testing by Habanatz** (pedelecforum.de), eBike System 2 (BES2) support would not have been possible. Many thanks!
+
+<a name="en-features"></a>
 
 ### Features
 
@@ -710,26 +763,26 @@ When set, the integration queries the HA recorder for these sensors at every tou
 
 These replace the snapshot-based estimates in *Last Ride Distance*, *Battery Consumption Wh*, *consumption %* etc. If no fresh BLE sample exists at tour start/end within ±5 min (bike out of range), the integration transparently falls back to the previous cloud logic. Both fields are optional and independent - you can wire just one of them.
 
+<a name="en-setup"></a>
+
 ### Prerequisites
 
-1. An eBike with **Bosch Smart System** (e.g., Performance Line CX, SX, etc.)
-2. A **Bosch SingleKey ID** account ([singlekey-id.com](https://singlekey-id.com))
-3. Access to the **Bosch eBike Flow Portal** ([portal.bosch-ebike.com](https://portal.bosch-ebike.com))
+1. An eBike with **Bosch Smart System** (e.g., Performance Line CX, SX, etc.) - for **eBike System 2 (BES2)** see the note right below
+2. A **Bosch SingleKey ID** account - if you don't have one, create it at [singlekey-id.com](https://singlekey-id.com)
+3. Your eBike is linked to the **Bosch eBike Flow App** ([iOS](https://apps.apple.com/app/bosch-ebike-flow/id1504451498) / [Android](https://play.google.com/store/apps/details?id=com.bosch.ebike))
+4. Access to the **Bosch eBike Flow Portal** ([portal.bosch-ebike.com](https://portal.bosch-ebike.com))
 
 ---
 
 ### Step-by-Step Setup Guide
 
-> **Two systems:** the following steps describe the setup for the **Smart System**. For **eBike System 2 (BES2)** the steps are almost the same — the few differences are listed in the **"Setting up eBike System 2 (BES2)"** section further down.
-
-#### Prerequisites
-
-1. A **Bosch SingleKey ID** account - if you don't have one, create it at [singlekey-id.com](https://singlekey-id.com)
-2. Your eBike must be linked to the **Bosch eBike Flow App** ([iOS](https://apps.apple.com/app/bosch-ebike-flow/id1504451498) / [Android](https://play.google.com/store/apps/details?id=com.bosch.ebike))
+> **Two systems:** the following steps describe the setup for the **Smart System**. For **eBike System 2 (BES2)** the steps are almost the same — the few differences (including an **eBike Connect account** instead of SingleKey ID) are listed in the **"Setting up eBike System 2 (BES2)"** section further down.
 
 ---
 
 #### Step 1: Register an App in the Bosch Data Act Portal
+
+Home Assistant needs to identify itself to the Bosch API as an "app" - that's what you register here, receiving a credential (Client-ID) that you'll enter in Step 4.
 
 1. Go to [portal.bosch-ebike.com/data-act/app](https://portal.bosch-ebike.com/data-act/app)
 2. Sign in with your **SingleKey ID**
@@ -745,9 +798,11 @@ These replace the snapshot-based estimates in *Last Ride Distance*, *Battery Con
    | **Redirect URI** | `https://my.home-assistant.io/redirect/oauth` | The callback address used **after** the Bosch login (OAuth callback) - must be exactly this, it is the official "My Home Assistant" redirect that lets Home Assistant complete the login automatically. |
    | **Login URL** | `https://my.home-assistant.io/redirect/config_flow_start/?domain=ha_bosch_ebike` | The link that **"Service aktivieren"** in the eBike Manager opens to **start** the setup flow directly in your Home Assistant instance. |
 
+   ![Bosch portal "Create your Client application" form with Login URL and Redirect URI(s)](docs/img/setup-app-form.png)
+
    > **Note:** The "My Home Assistant" integration must be enabled in HA (it is by default). If you disabled it, enter `https://<your-ha-url>/auth/external/callback` for **Redirect URI** instead.
 
-5. After creating the app, you will receive a **Client-ID** (format `euda-xxxxxxxx-...`).
+5. After creating the app, you will receive a **Client-ID** (format `euda-xxxxxxxx-...`), shown in the app overview in the portal.
 
 #### Step 2: Save your Client-ID
 
@@ -755,14 +810,19 @@ Copy the **Client-ID** - you will need it in a moment.
 
 #### Step 3: Install the Integration in Home Assistant
 
-Install the integration via **HACS** (see the section further down) and restart Home Assistant. Only then can the consent link from the eBike Manager open the setup flow.
+Install the integration via **HACS** (see the "HACS Installation" section further down for the detailed steps) and restart Home Assistant. Only then can the consent link from the eBike Manager open the setup flow.
 
 #### Step 4: Set up the integration (via "Service aktivieren")
 
+**In the eBike Manager:**
+
 1. Open **My eBike → eBike Manager** and go to the **Data Act** section (reachable via **[flow.bosch-ebike.com](https://flow.bosch-ebike.com)**).
 2. On the entry for the app you created in Step 1, click **"Service aktivieren"**. This automatically opens your Home Assistant instance (via the Login URL you registered in Step 1).
-3. In Home Assistant the setup flow opens: **paste the Client-ID**, **Authorize**, sign in at Bosch and confirm.
-4. The integration is now set up - **but the entities are still missing**. That is normal, continue with Step 5.
+
+**In Home Assistant:**
+
+3. The setup flow opens: **paste the Client-ID**, **Authorize**, sign in at Bosch and confirm.
+4. The integration is now set up - **but the entities are still missing, because per-bike data sharing is not activated yet.** You'll take care of that in Step 5.
 
 > **Note:** Alternatively, you can add the integration manually (**Settings → Devices & Services → Add Integration → "Bosch eBike"**, paste the Client-ID, Authorize). No localhost and no copy & paste: Home Assistant handles the login round-trip via the "My Home Assistant" redirect, and the access and refresh tokens are then renewed automatically.
 
@@ -771,10 +831,10 @@ Install the integration via **HACS** (see the section further down) and restart 
 Without active data sharing the API answers with **403 Forbidden** and no entities appear.
 
 1. Go back to **My eBike → eBike Manager → Data Act**.
-2. There, activate the **toggle (switch)** for the client you created in Step 1 - data sharing applies **per bike**. When sharing is active, the label changes to **"Service deaktivieren"**.
+2. There, activate the **toggle (switch)** for the client you created in Step 1 - data sharing applies **per bike**. This is a separate switch, not the same link "Service aktivieren" from Step 4. When sharing is active, the label changes to **"Service deaktivieren"**.
 3. In Home Assistant, reload the **Bosch eBike** integration (**⋮ → Reload**). All **entities** then appear.
 
-> If you still get a 403 right after activating, or entities are missing: wait a few minutes (the consent propagates server-side) and reload again.
+> If you still get a 403 right after activating, or entities are missing: wait a few minutes (the consent propagates server-side) and reload again. See the "Troubleshooting" section further down for more error patterns.
 
 #### Step 6: Set Up the Map Card (optional)
 
@@ -814,6 +874,8 @@ The integration includes an interactive Lovelace card for displaying your GPS tr
 - **◀ Prev / Next ▶** buttons and **date picker** for browsing all rides
 - **▶ Chase-cam button** opens the currently shown ride in a fullscreen overlay with the full 3D-card playback experience (2D / 3D / Satellite, slider, north-up toggle, fullscreen). Close via the × button or Escape.
 
+![Map card showing a GPS track with speed-based color coding and the ride info bar](docs/img/card-map.png)
+
 > **Note:** If the card doesn't display correctly after an update, clear your browser cache with `Ctrl+Shift+R` (hard reload).
 
 > **HACS update for the cards:** All four Lovelace cards (Map, Heatmap, Calendar, Dashboard) ship inside a single JS file (`bosch-ebike-map-card.js`) and update automatically with the integration. After a HACS version bump, hard-reload the browser cache, otherwise a newly added card may not show up in the card picker yet.
@@ -829,7 +891,7 @@ For **eBike System 2** the setup is nearly identical to the Smart System guide a
 
 Which data BES2 delivers (and which it does not) is shown in the comparison table in the **eBike System 2 (BES2)** section above.
 
-#### HACS Installation (Alternative)
+#### HACS Installation (detailed steps for Step 3)
 
 1. Open HACS in Home Assistant
 2. Click **"Custom repositories"** (three dots in the top right)
@@ -838,6 +900,8 @@ Which data BES2 delivers (and which it does not) is shown in the comparison tabl
 5. Install the integration and restart Home Assistant
 
 ---
+
+<a name="en-multiple-bikes"></a>
 
 ### Multiple bikes or accounts
 
@@ -877,6 +941,8 @@ cards:
 
 Both cards then always show rides of their locked account and can be navigated independently with the date/sort controls - ideal for comparing two rides taken on the same day. The same options work in `bosch-ebike-heatmap-card`.
 
+<a name="en-pois"></a>
+
 ### POIs along the route
 
 Click the 📍 toggle in the map controls to overlay points of interest sourced live from OpenStreetMap (Overpass API), filtered to within ~500 m of the route:
@@ -888,6 +954,8 @@ Click the 📍 toggle in the map controls to overlay points of interest sourced 
 - 🍽️ **Food & drink** (restaurants, cafés, beer gardens, fast food — `amenity=restaurant/cafe/biergarten/fast_food`)
 
 Clicking a marker opens a popup with name, opening hours / address / website (if tagged in OSM) and a link to the OpenStreetMap node. Up to 100 markers per ride; results are cached in the browser's localStorage.
+
+<a name="en-maintenance"></a>
 
 ### Maintenance reminders
 
@@ -918,6 +986,8 @@ Beyond the official Bosch service info (`Next Service Date` / `Next Service Odom
 - `ha_bosch_ebike_maintenance_due_soon` / `ha_bosch_ebike_maintenance_overdue` (custom items)
 
 You can wire these up to push notifications, light reminders, etc.
+
+<a name="en-range"></a>
 
 ### Range estimation
 
@@ -986,6 +1056,8 @@ height: 600
 
 First render can take a moment - every ride whose detail hasn't been fetched yet triggers an API call (rate-limited via concurrency limit). Tracks are then cached server-side in memory; subsequent renders are instant.
 
+![Heatmap card with several overlaid rides and time-range/account filters](docs/img/card-heatmap.png)
+
 ### Calendar card - GitHub-style heatmap of riding days
 
 The card `bosch-ebike-calendar-card` renders a yearly heatmap in the GitHub-contributions style: 7 rows for the days of the week, one column per calendar week, each cell colored by the kilometers ridden on that day. Hover for a tooltip with date, ride count and distance. A stats row below shows active days, rides and total distance for the selected period.
@@ -1031,6 +1103,8 @@ playback_speed: 60     # 60× real time (1 h ride plays in 1 min)
 - **Cast shadows from buildings** projected onto the ground from sun azimuth and altitude at the slider's time. Shadows are visible during daylight, shorter at twilight, hidden at night. They refresh automatically when the camera moves into a new neighbourhood or the slider is released.
 - **Video export** next to the slider: the record button restarts playback from the tour beginning and captures the canvas content as a video file in parallel. When the playback ends, the file is offered for download automatically (about 20-40 MB per minute). Format depends on the browser: **MP4** on recent Chrome (≥ 126) and Safari (≥ 14.4), **WebM** otherwise. Pure browser-side via `canvas.captureStream()` + `MediaRecorder`; the HA server is not involved.
 - Back button returns to the tour list
+
+![3D chase-cam view with building extrusions and time slider](docs/img/card-3d-map.png)
 
 **Card config options:**
 
@@ -1093,8 +1167,16 @@ target_soc_entity: input_number.ebike_target_soc
 - **Target-SoC slider** that writes to an `input_number`
 - **Start and Stop buttons** with a two-click confirm on Stop (accident protection)
 - **Battery bar** at the bottom that turns amber under 35 % and red under 15 %
-- **Maintenance list** with any number of freely defined tasks (clean chain, major service, check brakes, …) – pick one of 11 presets in the editor or enter free text. Each task triggers by km interval or day interval. The dashboard automatically surfaces items due within the next **500 km** or **30 days**; overdue entries are red, soon-due are amber, sorted by urgency. A green check button on each row marks an item as done. **Stored in Home Assistant** (`/config/.storage/`, scoped per bike) instead of the browser cache: entries survive browser changes, sync across all devices and can also be managed via the HA services `bosch_ebike.add_maintenance`, `bosch_ebike.update_maintenance`, `bosch_ebike.complete_maintenance` and `bosch_ebike.remove_maintenance` from automations. The card editor picks the bike from a dropdown; the associated maintenance items appear below and are saved live to the backend.
+- **Maintenance list** with any number of freely defined tasks (clean chain, major service, check brakes, …):
+  - Pick one of 11 presets in the editor or enter free text; each task triggers by km interval or day interval
+  - The dashboard automatically surfaces items due within the next **500 km** or **30 days**; overdue entries are red, soon-due are amber, sorted by urgency
+  - A green check button on each row marks an item as done
+  - **Stored in Home Assistant** (`/config/.storage/`, scoped per bike) instead of the browser cache: entries survive browser changes and sync across all devices
+  - Also manageable from automations via the HA services `bosch_ebike.add_maintenance`, `bosch_ebike.update_maintenance`, `bosch_ebike.complete_maintenance` and `bosch_ebike.remove_maintenance`
+  - The card editor picks the bike from a dropdown; the associated maintenance items appear below and are saved live to the backend
 - **CO₂ and fuel-cost comparison** vs a car: two tiles "Total" and "Last tour" with kg CO₂ and € saved. In the editor you pick the reference vehicle from 7 realistic presets (small/mid-size/SUV in petrol or diesel, plus an EV on green electricity); the fuel or electricity price per liter / kWh can be overridden.
+
+![Dashboard card with bike photo, status tiles, per-mode range, maintenance list and CO2 comparison](docs/img/card-dashboard.png)
 
 **Requirements for full functionality:**
 
@@ -1126,6 +1208,8 @@ The Lovelace card has a 📚 toggle in the map controls. When enabled, the card 
 - **Toggle state and results** are cached in the browser (`localStorage`); fresh queries run when switching rides
 - **Privacy note**: Enabling the layer sends sample coordinates of the route to the Wikipedia API. The layer is off by default
 
+<a name="en-troubleshooting"></a>
+
 ### Troubleshooting
 
 | Problem | Solution |
@@ -1139,6 +1223,8 @@ The Lovelace card has a 📚 toggle in the map controls. When enabled, the card 
 | Token not accepted | Check that the Client-ID was entered correctly |
 
 ---
+
+<a name="en-sensors"></a>
 
 ### Available Sensors
 
