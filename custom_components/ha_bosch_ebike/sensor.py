@@ -741,6 +741,20 @@ def _create_battery_sensors(
     return [BoschEBikeSensor(coordinator, desc, bike_id, drive_name) for desc in descs]
 
 
+def _activities_for_bike(coordinator_data: dict, bike_id: str) -> list[dict]:
+    """Filter all_activities down to the ones attributed to this bike.
+
+    Falls back to the unfiltered (account-wide) list when attribution is
+    empty, which covers single-bike accounts and the brief startup window
+    before the first attribution pass has run.
+    """
+    all_activities = coordinator_data.get("all_activities", [])
+    activity_bike = coordinator_data.get("activity_bike", {})
+    if not activity_bike:
+        return all_activities
+    return [a for a in all_activities if activity_bike.get(a.get("id")) == bike_id]
+
+
 class BoschEBikeSensor(CoordinatorEntity[BoschEBikeCoordinator], SensorEntity):
     """Representation of a Bosch eBike sensor."""
 
@@ -769,11 +783,12 @@ class BoschEBikeSensor(CoordinatorEntity[BoschEBikeCoordinator], SensorEntity):
     def native_value(self) -> Any:
         """Return the sensor value."""
         if self.entity_description.is_aggregate:
-            all_activities = self.coordinator.data.get("all_activities", [])
-            return self.entity_description.value_fn(all_activities)
+            activities = _activities_for_bike(self.coordinator.data, self._bike_id)
+            return self.entity_description.value_fn(activities)
 
         if self.entity_description.is_activity:
-            activity = self.coordinator.data.get("latest_activity")
+            activities = _activities_for_bike(self.coordinator.data, self._bike_id)
+            activity = activities[0] if activities else None
             if not activity:
                 return None
             return self.entity_description.value_fn(activity)
@@ -1230,8 +1245,9 @@ class BoschBatteryConsumptionSensor(CoordinatorEntity[BoschEBikeCoordinator], Se
         )
 
     def _get_consumption(self) -> dict[str, Any] | None:
-        """Get consumption data for the latest activity."""
-        activity = self.coordinator.data.get("latest_activity")
+        """Get consumption data for this bike's latest activity."""
+        activities = _activities_for_bike(self.coordinator.data, self._bike_id)
+        activity = activities[0] if activities else None
         if not activity:
             return None
         aid = activity.get("id")
