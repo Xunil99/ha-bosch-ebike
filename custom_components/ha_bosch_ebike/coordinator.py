@@ -72,6 +72,12 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._all_activities: list[dict[str, Any]] = []
         self._latest_activity_details: dict[str, Any] | None = None
         self._latest_activity_id: str | None = None
+        # Per-bike latest-activity GPS details (issue #47 follow-up): reuses
+        # the account-wide fetch above when a bike's own latest ride is also
+        # the global latest (the common case, zero extra cost); otherwise
+        # fetched separately, bounded by number of bikes.
+        self._latest_activity_details_by_bike: dict[str, dict[str, Any]] = {}
+        self._latest_activity_id_by_bike: dict[str, str] = {}
         # Per-bike Data Act endpoints (refreshed every poll)
         self._bike_pass: dict[str, dict[str, Any]] = {}
         self._service_records: dict[str, dict[str, Any]] = {}
@@ -680,11 +686,21 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     bike.setdefault("driveUnit", {})["odometer"] = stats["total_distance_m"]
                 bike["_bes2_statistics"] = stats
 
+        # BES2 config entries are single-bike, so the account-wide latest
+        # activity details are also this one bike's own (issue #47 follow-up
+        # counterpart for the BES3 path's per-bike dict).
+        latest_activity_details_by_bike: dict[str, Any] = {}
+        if bikes and latest_details is not None:
+            bid = bikes[0].get("id")
+            if bid:
+                latest_activity_details_by_bike[bid] = latest_details
+
         return {
             "bikes": bikes,
             "latest_activity": latest_activity,
             "all_activities": activities,
             "latest_activity_details": latest_details,
+            "latest_activity_details_by_bike": latest_activity_details_by_bike,
             "activity_consumption": {},
             "activity_bike": {},
             "maintenance": self._maintenance,
@@ -949,6 +965,46 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if est:
                 range_estimate[bid] = est
 
+        # Per-bike GPS details for the latest ride (issue #47 follow-up):
+        # each bike needs its OWN latest activity's GPS details, not the
+        # account-wide latest_activity_details fetched above. Reuses that
+        # fetch when a bike's own latest ride is also the account-wide
+        # latest (the common case, zero extra cost); only fetches
+        # separately when it differs, guarded by the same
+        # distance-confirmed staleness check as the account-wide fetch.
+        for bike in bikes:
+            bid = bike.get("id")
+            if not bid:
+                continue
+            bike_latest = self._bike_latest_activity(bid, fallback_all=single_bike)
+            if not bike_latest:
+                continue
+            bike_activity_id = bike_latest.get("id")
+            if not bike_activity_id:
+                continue
+            if bike_activity_id == self._latest_activity_id:
+                self._latest_activity_details_by_bike[bid] = self._latest_activity_details
+                self._latest_activity_id_by_bike[bid] = bike_activity_id
+                continue
+            distance_confirmed = bike_latest.get("_distance_source") in (
+                "ble_live",
+                "gps_track",
+            )
+            if (
+                self._latest_activity_id_by_bike.get(bid) == bike_activity_id
+                and distance_confirmed
+            ):
+                continue
+            try:
+                details = await self.api.get_activity_detail(bike_activity_id)
+                self._latest_activity_details_by_bike[bid] = details
+                self._latest_activity_id_by_bike[bid] = bike_activity_id
+            except Exception as err:  # noqa: BLE001
+                _LOGGER.debug(
+                    "Could not fetch GPS details for bike %s activity %s: %s",
+                    bid, bike_activity_id, err,
+                )
+
         if state_changed:
             await self._async_save_state()
 
@@ -979,6 +1035,7 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "latest_activity": latest_activity,
             "all_activities": self._all_activities,
             "latest_activity_details": self._latest_activity_details,
+            "latest_activity_details_by_bike": self._latest_activity_details_by_bike,
             "activity_consumption": self._activity_consumption,
             "activity_bike": self._activity_bike,
             "maintenance": self._maintenance,
@@ -1020,6 +1077,24 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if latest_end_odo is None:
             return float(profile_odo)
         return max(float(profile_odo), float(latest_end_odo))
+
+    def _bike_latest_activity(
+        self, bike_id: str, fallback_all: bool = False
+    ) -> dict[str, Any] | None:
+        """This bike's own newest activity (self._all_activities is sorted
+        newest-first, so the first match is it). Mirrors compute_range_estimate's
+        fallback_all semantics: an unmapped activity counts as this bike's own
+        only for single-bike accounts where attribution is empty.
+        """
+        for activity in self._all_activities:
+            aid = activity.get("id")
+            if not aid:
+                continue
+            mapped = self._activity_bike.get(aid)
+            if mapped != bike_id and not (mapped is None and fallback_all):
+                continue
+            return activity
+        return None
 
     def _check_service_and_maintenance(self, bikes: list[dict[str, Any]]) -> bool:
         """Fire events for service-due / overdue and per-bike maintenance items.

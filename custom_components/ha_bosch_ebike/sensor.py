@@ -1115,12 +1115,11 @@ class BoschComponentInventorySensor(CoordinatorEntity[BoschEBikeCoordinator], Se
 
 
 class BoschMaxAltitudeSensor(CoordinatorEntity[BoschEBikeCoordinator], SensorEntity):
-    """Max altitude of the latest ride (single instance per bike).
+    """Max altitude of this bike's own latest ride.
 
-    Mirrors BoschRangeEstimateSensor's single-instance attachment. Reads
-    coordinator.data["latest_activity_details"] and returns
-    profile_extra.max_altitude(details) in metres. Uses a literal name, so no
-    translation_key is required.
+    Reads coordinator.data["latest_activity_details_by_bike"][bike_id] and
+    returns profile_extra.max_altitude(details) in metres. Uses a literal
+    name, so no translation_key is required.
     """
 
     _attr_has_entity_name = True
@@ -1147,8 +1146,10 @@ class BoschMaxAltitudeSensor(CoordinatorEntity[BoschEBikeCoordinator], SensorEnt
 
     @property
     def native_value(self) -> float | None:
-        """Return the max altitude (m) of the latest ride, or None."""
-        details = self.coordinator.data.get("latest_activity_details")
+        """Return the max altitude (m) of this bike's latest ride, or None."""
+        details = self.coordinator.data.get("latest_activity_details_by_bike", {}).get(
+            self._bike_id
+        )
         return max_altitude(details)
 
 
@@ -1177,8 +1178,10 @@ class BoschGPSSensor(CoordinatorEntity[BoschEBikeCoordinator], SensorEntity):
         )
 
     def _get_coordinate(self, index: int) -> dict[str, float] | None:
-        """Get coordinate at given index from activity details."""
-        details = self.coordinator.data.get("latest_activity_details")
+        """Get coordinate at given index from this bike's own activity details."""
+        details = self.coordinator.data.get("latest_activity_details_by_bike", {}).get(
+            self._bike_id
+        )
         if not details:
             return None
 

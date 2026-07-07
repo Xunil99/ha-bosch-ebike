@@ -29,6 +29,20 @@ def _safe_get(data: dict, *keys: str, default: Any = None) -> Any:
     return data
 
 
+def _bike_latest_activity(coordinator_data: dict, bike_id: str) -> dict | None:
+    """This bike's own newest activity (all_activities is sorted newest-first).
+
+    Falls back to the account-wide newest activity when attribution is
+    empty (single-bike accounts), matching sensor.py's _activities_for_bike.
+    """
+    all_activities = coordinator_data.get("all_activities", [])
+    activity_bike = coordinator_data.get("activity_bike", {})
+    for activity in all_activities:
+        if not activity_bike or activity_bike.get(activity.get("id")) == bike_id:
+            return activity
+    return None
+
+
 _LOGGER = logging.getLogger(__name__)
 
 # GPS export directory inside HA config
@@ -412,10 +426,10 @@ class BoschGPSImportSingleButton(ButtonEntity):
         )
 
     async def async_press(self) -> None:
-        """Handle button press — import GPS for latest activity."""
-        latest = self._coordinator.data.get("latest_activity")
+        """Handle button press — import GPS for this bike's latest activity."""
+        latest = _bike_latest_activity(self._coordinator.data, self._bike_id)
         if not latest:
-            _LOGGER.warning("Bosch eBike: No latest activity available")
+            _LOGGER.warning("Bosch eBike: No latest activity available for this bike")
             return
 
         activity_id = latest.get("id")
