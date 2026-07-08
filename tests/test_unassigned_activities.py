@@ -53,13 +53,18 @@ def test_missing_date_and_title_still_included_with_none():
     assert result == [{"id": "a1", "date": None, "title": None}], result
 
 
-def test_result_capped_at_max_results():
+def test_result_is_never_capped_so_the_count_stays_true():
+    # Regression test: the sensor's native_value is len(this list), so this
+    # function must never silently truncate it, or an account with more
+    # unmatched rides than the display limit would show a wrong (too low)
+    # count. Any capping for display belongs to the caller, not here.
     activities = [
         {"id": f"a{i}", "startTime": f"2026-01-{(i % 28) + 1:02d}T10:00:00Z", "title": f"Ride {i}"}
         for i in range(80)
     ]
     result = compute_unassigned_activities(activities, {}, bike_count=2)
-    assert len(result) == _mod.MAX_RESULTS, len(result)
+    assert len(result) == 80, len(result)
+    assert len(result) > _mod.ATTRIBUTE_DISPLAY_LIMIT
 
 
 def test_no_activities_returns_empty():

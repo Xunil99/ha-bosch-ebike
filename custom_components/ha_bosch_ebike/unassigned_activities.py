@@ -4,7 +4,11 @@ from __future__ import annotations
 
 from typing import Any
 
-MAX_RESULTS = 50
+# How many affected rides the sensor exposes as attributes (HA attribute
+# payload size). The sensor's own count (native_value) is NEVER capped by
+# this - it must always reflect the true total, or the state would silently
+# understate the problem for accounts with more than this many gaps.
+ATTRIBUTE_DISPLAY_LIMIT = 50
 
 
 def compute_unassigned_activities(
@@ -12,25 +16,24 @@ def compute_unassigned_activities(
     attribution: dict[str, str],
     bike_count: int,
 ) -> list[dict[str, Any]]:
-    """Return {id, date, title} for activities missing from *attribution*.
+    """Return {id, date, title} for every activity missing from *attribution*.
 
     Only meaningful for multi-bike accounts: attribute_activities_to_bikes()
     trivially attributes every activity for single-bike accounts, so this
-    always returns an empty list when bike_count <= 1.
+    always returns an empty list when bike_count <= 1. Deliberately
+    uncapped - callers that need to bound how many entries they display
+    (e.g. HA entity attributes) must slice the result themselves, so the
+    length of this list can always be trusted as the true count.
     """
     if bike_count <= 1:
         return []
 
-    result: list[dict[str, Any]] = []
-    for activity in activities:
-        activity_id = activity.get("id")
-        if not activity_id or activity_id in attribution:
-            continue
-        result.append({
-            "id": activity_id,
+    return [
+        {
+            "id": activity["id"],
             "date": activity.get("startTime"),
             "title": activity.get("title"),
-        })
-        if len(result) >= MAX_RESULTS:
-            break
-    return result
+        }
+        for activity in activities
+        if activity.get("id") and activity["id"] not in attribution
+    ]

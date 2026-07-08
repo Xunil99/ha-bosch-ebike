@@ -41,6 +41,7 @@ from .profile_extra import (
     next_service_date,
     reachable_ranges,
 )
+from .unassigned_activities import ATTRIBUTE_DISPLAY_LIMIT
 
 RANGE_DISCLAIMER = (
     "Estimate based on your past consumption over the last ~500 km. "
@@ -1161,8 +1162,14 @@ class BoschUnassignedActivitiesSensor(CoordinatorEntity[BoschEBikeCoordinator], 
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        """Expose the affected rides (id, date, title)."""
-        return {"activities": self.coordinator.data.get("unassigned_activities", [])}
+        """Expose the affected rides (id, date, title), capped for HA's attribute payload.
+
+        native_value above is NEVER capped - only this display list is, so
+        the sensor's state always reflects the true count even when there
+        are more unassigned rides than fit in the attributes.
+        """
+        activities = self.coordinator.data.get("unassigned_activities", [])
+        return {"activities": activities[:ATTRIBUTE_DISPLAY_LIMIT]}
 
 
 class BoschMaxAltitudeSensor(CoordinatorEntity[BoschEBikeCoordinator], SensorEntity):

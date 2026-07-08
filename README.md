@@ -670,7 +670,7 @@ Diese Entitäten erscheinen **automatisch** mit der normalen Einrichtung. Eine *
 | Components | sensor (Diagnose) | Verbaute Komponenten laut Diagnose |
 | Last Ride Start Odometer | sensor / km | Start-Kilometerstand der letzten Fahrt |
 | Last Ride Max Altitude | sensor / m | Maximale Höhe der letzten Fahrt |
-| Unassigned Activities | sensor (Diagnose, Account-weit) | Nur bei Multi-Bike-Accounts: Anzahl Aktivitäten, die der Bike-Zuordnung nicht zugeordnet werden konnten (siehe Issue #47). Attribute enthalten die betroffenen Touren mit Datum und Titel. |
+| Unassigned Activities | sensor (Diagnose, Account-weit) | Nur bei Multi-Bike-Accounts: die tatsächliche (nicht gedeckelte) Anzahl Aktivitäten, die der Bike-Zuordnung nicht zugeordnet werden konnten (siehe Issue #47). Attribute listen die betroffenen Touren mit Datum und Titel, dort auf 50 Einträge begrenzt. |
 
 > **⚠️ Wichtiger Hinweis zu diesen Entitäten:** Es ist **keine zusätzliche Bosch-Datenfreigabe** nötig, sie sind durch die normale Autorisierung abgedeckt. Sie stehen aber oft auf „unbekannt", weil die zugrunde liegenden Daten nur in bestimmten Fällen existieren:
 > - Der **Diebstahl-Standort** (`Last Known Location`) wird **nur befüllt, wenn ein Diebstahl gemeldet wurde** – es findet **keine fortlaufende Standortverfolgung** statt.
@@ -1329,7 +1329,7 @@ These entities appear **automatically** with the normal setup. **No additional o
 | Components | sensor (diagnostic) | Installed components per diagnostics |
 | Last Ride Start Odometer | sensor / km | Start odometer of the last ride |
 | Last Ride Max Altitude | sensor / m | Maximum altitude of the last ride |
-| Unassigned Activities | sensor (diagnostic, account-level) | Multi-bike accounts only: count of activities that could not be matched to a bike by the attribution logic (see issue #47). Attributes list the affected rides with date and title. |
+| Unassigned Activities | sensor (diagnostic, account-level) | Multi-bike accounts only: the true (uncapped) count of activities that could not be matched to a bike by the attribution logic (see issue #47). Attributes list the affected rides with date and title, capped at 50 entries there. |
 
 > **⚠️ Important note about these entities:** **No additional Bosch data-sharing consent is required** – they are covered by the normal authorization. They often show "unknown", though, because the underlying data only exists in certain cases:
 > - The **theft location** (`Last Known Location`) is **only populated when a theft has been reported** – there is **no continuous location tracking**.
