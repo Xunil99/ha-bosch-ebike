@@ -364,6 +364,8 @@ const I18N = {
     map3d_editor_show_elevation: "Show elevation",
     map3d_editor_stats_as_chips: "Stats as overlay chips (1 / 0)",
     map3d_editor_stats_as_chips_hint: "1 = render distance, speed and elevation as chips in the top-left overlay next to date and time. 0 = keep the classic stats line in the bottom control bar (default).",
+    map3d_editor_auto_hide_ui: "Auto-hide controls when idle",
+    map3d_editor_auto_hide_ui_hint: "Fades the overlay and playback controls after a few seconds without interaction, useful for wall-mounted or kiosk displays. Touch or move the mouse to bring them back. Off by default.",
     // Route planner card
     rp_card_name: "Bosch eBike Route Planner",
     rp_card_desc: "Plan bike routes with BRouter: consumption estimate, battery check and GPX export",
@@ -738,6 +740,8 @@ const I18N = {
     map3d_editor_show_elevation: "Höhe anzeigen",
     map3d_editor_stats_as_chips: "Stats als Overlay-Chips (1 / 0)",
     map3d_editor_stats_as_chips_hint: "1 = Distanz, Geschwindigkeit und Höhe werden als Chips oben links neben Datum und Uhrzeit angezeigt. 0 = klassische Stats-Zeile in der unteren Steuerleiste (Default).",
+    map3d_editor_auto_hide_ui: "Steuerung bei Inaktivität automatisch ausblenden",
+    map3d_editor_auto_hide_ui_hint: "Blendet die Overlay-Chips und die Wiedergabesteuerung nach ein paar Sekunden ohne Interaktion aus, nützlich für wandmontierte Displays oder Kiosk-Betrieb. Berühren oder Maus bewegen holt sie zurück. Standardmäßig aus.",
     rp_card_name: "Bosch eBike Routenplaner",
     rp_card_desc: "Fahrrad-Routen mit BRouter planen: Verbrauchs-Schätzung, Akku-Check und GPX-Export",
     rp_default_title: "Routenplaner",
@@ -1111,6 +1115,8 @@ const I18N = {
     map3d_editor_show_elevation: "Hoogte tonen",
     map3d_editor_stats_as_chips: "Stats als overlay-chips (1 / 0)",
     map3d_editor_stats_as_chips_hint: "1 = afstand, snelheid en hoogte verschijnen als chips linksboven naast datum en tijd. 0 = klassieke stats-regel in de onderste balk (default).",
+    map3d_editor_auto_hide_ui: "Bediening automatisch verbergen bij inactiviteit",
+    map3d_editor_auto_hide_ui_hint: "Laat de overlay-chips en afspeelbediening na een paar seconden zonder interactie vervagen, handig voor wandgemonteerde of kiosk-schermen. Aanraken of muis bewegen brengt ze terug. Standaard uit.",
     rp_card_name: "Bosch eBike Routeplanner",
     rp_card_desc: "Fietsroutes plannen met BRouter: verbruiksschatting, accucontrole en GPX-export",
     rp_default_title: "Routeplanner",
@@ -1496,6 +1502,8 @@ const I18N = {
     map3d_editor_show_elevation: "Afficher l'altitude",
     map3d_editor_stats_as_chips: "Stats en puces overlay (1 / 0)",
     map3d_editor_stats_as_chips_hint: "1 = distance, vitesse et altitude affichées en puces en haut à gauche à côté de la date et de l'heure. 0 = garder la ligne de stats classique dans la barre du bas (défaut).",
+    map3d_editor_auto_hide_ui: "Masquer automatiquement les commandes en cas d'inactivité",
+    map3d_editor_auto_hide_ui_hint: "Estompe les puces de superposition et les commandes de lecture après quelques secondes sans interaction, utile pour les écrans muraux ou en mode kiosque. Toucher ou déplacer la souris les fait réapparaître. Désactivé par défaut.",
     rp_card_name: "Planificateur d'itinéraires Bosch eBike",
     rp_card_desc: "Planifier des itinéraires vélo avec BRouter : estimation de consommation, contrôle de batterie et export GPX",
     rp_default_title: "Planificateur d'itinéraires",
@@ -1881,6 +1889,8 @@ const I18N = {
     map3d_editor_show_elevation: "Mostra altitudine",
     map3d_editor_stats_as_chips: "Statistiche come chip overlay (1 / 0)",
     map3d_editor_stats_as_chips_hint: "1 = distanza, velocità e altitudine come chip in alto a sinistra accanto a data e ora. 0 = riga statistiche classica nella barra inferiore (default).",
+    map3d_editor_auto_hide_ui: "Nascondi automaticamente i controlli se inattivo",
+    map3d_editor_auto_hide_ui_hint: "Dissolve i chip di overlay e i controlli di riproduzione dopo alcuni secondi senza interazione, utile per display a parete o in modalità chiosco. Toccare o muovere il mouse li fa riapparire. Disattivato per impostazione predefinita.",
     rp_card_name: "Pianificatore di percorsi Bosch eBike",
     rp_card_desc: "Pianifica percorsi in bici con BRouter: stima dei consumi, controllo batteria ed esportazione GPX",
     rp_default_title: "Pianificatore di percorsi",
@@ -2266,6 +2276,8 @@ const I18N = {
     map3d_editor_show_elevation: "Mostrar altitud",
     map3d_editor_stats_as_chips: "Estadísticas como chips overlay (1 / 0)",
     map3d_editor_stats_as_chips_hint: "1 = distancia, velocidad y altitud como chips arriba a la izquierda junto a fecha y hora. 0 = línea de estadísticas clásica en la barra inferior (por defecto).",
+    map3d_editor_auto_hide_ui: "Ocultar controles automáticamente en inactividad",
+    map3d_editor_auto_hide_ui_hint: "Desvanece los chips superpuestos y los controles de reproducción tras unos segundos sin interacción, útil para pantallas de pared o en modo quiosco. Tocar o mover el ratón los hace reaparecer. Desactivado por defecto.",
     rp_card_name: "Planificador de rutas Bosch eBike",
     rp_card_desc: "Planifica rutas en bici con BRouter: estimación de consumo, control de batería y exportación GPX",
     rp_default_title: "Planificador de rutas",
@@ -9801,6 +9813,7 @@ class BoschEBike3DMapCard extends HTMLElement {
       _cardSettingsBus.removeEventListener("changed", this._cardSettingsHandler);
       this._cardSettingsHandler = null;
     }
+    this._teardownIdleFade();
   }
 
   static getConfigElement() { return document.createElement("bosch-ebike-3d-map-card-editor"); }
@@ -9814,6 +9827,7 @@ class BoschEBike3DMapCard extends HTMLElement {
       show_date: 1, show_time: 1, show_sun: 1,
       show_speed: 1, show_distance: 1, show_elevation: 1,
       stats_as_chips: 0,
+      auto_hide_ui: 0,
     };
   }
   getCardSize() { return 7; }
@@ -9932,6 +9946,30 @@ class BoschEBike3DMapCard extends HTMLElement {
       .map3d-msg { padding: 24px; text-align: center; color: var(--secondary-text-color); }
       .map3d-detail { position: relative; }
       .map3d-canvas { width: 100%; height: var(--m3d-h, 540px); position: relative; }
+      /* Kiosk / auto-hide-UI (auto_hide_ui option): fades the informational
+         chips, mode switch, north-up button and playback controls after a
+         few seconds without interaction, for wall-mounted displays watching
+         a passive playback - inspired by comparing against Helios's kiosk
+         mode. Only applied when .map3d-ui-idle is toggled on .map3d-detail
+         by _setupIdleFade(); the canvas itself never fades.
+         Deliberately NOT fading .map3d-overlay as a whole (and so NOT
+         .map3d-close-btn/.map3d-fs-btn, its other children): a parent's
+         opacity:0 collapses its entire rendered subtree as one compositing
+         group, so a child's own opacity/pointer-events cannot "win" it back
+         - the close/fullscreen buttons are the only way out of (pseudo-)
+         fullscreen on a touch-only kiosk tablet with no ESC key, and must
+         stay visible and reachable at all times, idle or not. */
+      .map3d-chip, .map3d-mode-switch, .map3d-terrain-progress, .map3d-nu-btn, .map3d-controls {
+        transition: opacity .4s ease;
+      }
+      .map3d-detail.map3d-ui-idle .map3d-chip,
+      .map3d-detail.map3d-ui-idle .map3d-mode-switch,
+      .map3d-detail.map3d-ui-idle .map3d-terrain-progress,
+      .map3d-detail.map3d-ui-idle .map3d-nu-btn,
+      .map3d-detail.map3d-ui-idle .map3d-controls {
+        opacity: 0;
+        pointer-events: none;
+      }
       .map3d-overlay {
         position: absolute; top: 8px; left: 8px; right: 8px;
         display: flex; flex-wrap: wrap; gap: 6px; pointer-events: none;
@@ -10491,6 +10529,80 @@ class BoschEBike3DMapCard extends HTMLElement {
     try { localStorage.setItem("bosch-ebike-3d-north-up", on ? "1" : "0"); }
     catch (_) { /* private mode */ }
   }
+
+  // Chase-cam pitch/zoom: config (default_pitch/chase_zoom) sets the
+  // starting value, same as north-up above. A live manual adjustment via
+  // the map's own drag/scroll/pitch controls (detected through
+  // pitchend/zoomend's originalEvent - absent on our own programmatic
+  // jumpTo/easeTo calls, see _initMap) overrides it and persists across
+  // reloads, so a user's preferred viewing angle sticks instead of
+  // resetting to the YAML default every time (inspired by comparing
+  // against Helios's persisted camera pose).
+  _loadChasePitchPref() {
+    try {
+      // getItem returns null when unset - Number(null) is 0, NOT NaN, so
+      // the raw string must be checked for absence before conversion.
+      // Getting this wrong would force every fresh install's pitch to 0
+      // (straight down) instead of falling through to the config default.
+      const raw = localStorage.getItem("bosch-ebike-3d-chase-pitch");
+      if (raw == null) return null;
+      const v = Number(raw);
+      if (Number.isFinite(v)) return v;
+    } catch (_) { /* ignore */ }
+    return null;   // sentinel: use config default
+  }
+  _saveChasePitchPref(pitch) {
+    try { localStorage.setItem("bosch-ebike-3d-chase-pitch", String(pitch)); }
+    catch (_) { /* private mode */ }
+  }
+  _loadChaseZoomPref() {
+    try {
+      // Same null-vs-0 pitfall as _loadChasePitchPref above.
+      const raw = localStorage.getItem("bosch-ebike-3d-chase-zoom");
+      if (raw == null) return null;
+      const v = Number(raw);
+      if (Number.isFinite(v)) return v;
+    } catch (_) { /* ignore */ }
+    return null;   // sentinel: use config default
+  }
+  _saveChaseZoomPref(zoom) {
+    try { localStorage.setItem("bosch-ebike-3d-chase-zoom", String(zoom)); }
+    catch (_) { /* private mode */ }
+  }
+
+  // Kiosk / auto-hide-UI: fades the overlay chips and playback controls
+  // after IDLE_MS without interaction, brings them back on the next touch
+  // or pointer movement within the detail view. Off by default (auto_hide_ui
+  // config option), for wall-mounted/kiosk dashboards showing a passive
+  // playback. Must be torn down before every re-render and on disconnect -
+  // see the call sites in _renderDetail/exitDetail/disconnectedCallback -
+  // otherwise repeated renders would stack duplicate listeners.
+  _teardownIdleFade() {
+    if (this._idleTimer) { clearTimeout(this._idleTimer); this._idleTimer = null; }
+    if (this._idleFadeTarget && this._idleFadeHandler) {
+      for (const ev of ["pointerdown", "pointermove", "touchstart", "keydown"]) {
+        this._idleFadeTarget.removeEventListener(ev, this._idleFadeHandler);
+      }
+    }
+    if (this._idleFadeTarget) this._idleFadeTarget.classList.remove("map3d-ui-idle");
+    this._idleFadeTarget = null;
+    this._idleFadeHandler = null;
+  }
+  _setupIdleFade(detailEl) {
+    if (!detailEl || !this._optionOn("auto_hide_ui", false)) return;
+    const IDLE_MS = 5000;
+    const wake = () => {
+      detailEl.classList.remove("map3d-ui-idle");
+      if (this._idleTimer) clearTimeout(this._idleTimer);
+      this._idleTimer = setTimeout(() => detailEl.classList.add("map3d-ui-idle"), IDLE_MS);
+    };
+    this._idleFadeTarget = detailEl;
+    this._idleFadeHandler = wake;
+    for (const ev of ["pointerdown", "pointermove", "touchstart", "keydown"]) {
+      detailEl.addEventListener(ev, wake);
+    }
+    wake();
+  }
   _currentNorthUp() {
     const pref = this._loadNorthUpPref();
     if (pref !== null) return pref;
@@ -10835,6 +10947,7 @@ class BoschEBike3DMapCard extends HTMLElement {
     // and the new map+markers race against the orphan's leftover
     // event handlers.
     this._destroyMap();
+    this._teardownIdleFade();
     const title = a.title || this._t("msg_unnamed_ride");
     const hide = (key) => this._showFlag(key) ? "" : "display:none;";
     const statsAsChips = this._optionOn("stats_as_chips", false);
@@ -10924,6 +11037,7 @@ class BoschEBike3DMapCard extends HTMLElement {
       this.classList.remove("map3d-pseudo-fs");
       this._stopAnim();
       this._destroyMap();
+      this._teardownIdleFade();
       this._mode = "list";
       this._currentActivity = null;
       this._currentTrack = null;
@@ -10986,6 +11100,8 @@ class BoschEBike3DMapCard extends HTMLElement {
     this._mapMode = "vector";
     this._updateModeUI();
 
+    this._setupIdleFade(this._root.querySelector(".map3d-detail"));
+
     this._initMap();
   }
 
@@ -11029,15 +11145,29 @@ class BoschEBike3DMapCard extends HTMLElement {
     // actually lets values in the new 65-80 range take effect.
     const chasePitch = Math.max(20, Math.min(80, Number(readCardSetting(this._config, "default_pitch", undefined)) || 55));
     const chaseZoom = Math.max(14, Math.min(19, Number(readCardSetting(this._config, "chase_zoom", undefined)) || 17));
-    this._chasePitch = chasePitch;
-    this._chaseZoom = chaseZoom;
 
     // FPV/action-cam mode (issue #43): an alternative camera driven by real
     // metre distances instead of pitch/zoom, computed per frame in
     // _applyIndex via calculateCameraOptionsFromTo. "chase" (default)
-    // leaves ALL existing behavior above unchanged.
+    // leaves ALL existing behavior above unchanged. Computed BEFORE the
+    // pitch/zoom preference below so that a stored CHASE-mode override
+    // (see pitchend/zoomend further down) can never leak into an FPV
+    // card's initial camera frame - the two camera modes share this._map's
+    // constructor call, and localStorage is not per-card-instance scoped.
     const cameraModeRaw = readCardSetting(this._config, "camera_mode", "chase");
     this._cameraMode = cameraModeRaw === "fpv" ? "fpv" : "chase";
+
+    // A live manual pitch/zoom adjustment (see the pitchend/zoomend
+    // listeners below) overrides the config default and persists across
+    // reloads, same idea as the north-up preference above. Chase mode only:
+    // FPV never reads this._chasePitch/this._chaseZoom (its own camera is
+    // computed fresh every frame via calculateCameraOptionsFromTo), and the
+    // save-side listeners already skip FPV cards - this is the matching
+    // gate on the load/apply side.
+    const pitchPref = this._cameraMode === "fpv" ? null : this._loadChasePitchPref();
+    const zoomPref = this._cameraMode === "fpv" ? null : this._loadChaseZoomPref();
+    this._chasePitch = pitchPref != null ? Math.max(20, Math.min(80, pitchPref)) : chasePitch;
+    this._chaseZoom = zoomPref != null ? Math.max(14, Math.min(19, zoomPref)) : chaseZoom;
     this._fpvHeight = Math.max(0.3, Math.min(10, Number(readCardSetting(this._config, "fpv_height_m", undefined)) || 2));
     this._fpvDistance = Math.max(0, Math.min(30, Number(readCardSetting(this._config, "fpv_distance_m", undefined)) || 4));
     this._fpvLookahead = Math.max(3, Math.min(80, Number(readCardSetting(this._config, "fpv_lookahead_m", undefined)) || 20));
@@ -11071,8 +11201,8 @@ class BoschEBike3DMapCard extends HTMLElement {
       container: canvas,
       style: OPENFREEMAP_LIBERTY,
       center: [pts[0].lon, pts[0].lat],
-      zoom: chaseZoom,
-      pitch: chasePitch,
+      zoom: this._chaseZoom,
+      pitch: this._chasePitch,
       bearing: initialBearing,
       attributionControl: false,
       maxTileCacheSize: 200,
@@ -11096,6 +11226,28 @@ class BoschEBike3DMapCard extends HTMLElement {
 
     myMap.on("error", (e) => {
       console.warn("[Bosch eBike 3D] map error", e && e.error);
+    });
+
+    // Capture a manual pitch/zoom adjustment and persist it. e.originalEvent
+    // is only set by MapLibre's own interaction handlers (drag/scroll/pinch),
+    // never by our own programmatic jumpTo/easeTo calls in _applyIndex below
+    // (verified against the bundled MapLibre source - interaction handlers
+    // pass {originalEvent: e} as eventData, our calls never do) - so this
+    // only fires for something the user actually did with their hands, not
+    // every per-frame chase-cam camera update. Chase mode only: FPV's camera
+    // is computed fresh every frame from real metre distances and has no
+    // comparable persisted pitch/zoom concept.
+    myMap.on("pitchend", (e) => {
+      if (this._map !== myMap || this._cameraMode === "fpv" || !e || !e.originalEvent) return;
+      const p = myMap.getPitch();
+      this._chasePitch = p;
+      this._saveChasePitchPref(p);
+    });
+    myMap.on("zoomend", (e) => {
+      if (this._map !== myMap || this._cameraMode === "fpv" || !e || !e.originalEvent) return;
+      const z = myMap.getZoom();
+      this._chaseZoom = z;
+      this._saveChaseZoomPref(z);
     });
 
     myMap.on("load", () => {
@@ -12403,6 +12555,33 @@ class BoschEBike3DMapCardEditor extends HTMLElement {
       show_elevation: mkText("show_elevation", "map3d_editor_show_elevation", null, "number"),
       stats_as_chips: mkText("stats_as_chips", "map3d_editor_stats_as_chips", "map3d_editor_stats_as_chips_hint", "number"),
     });
+
+    // Auto-hide-UI (kiosk mode): a real checkbox rather than the 0/1
+    // number-input pattern used above, so it is not registered in
+    // this._fields - _sync()'s generic loop only ever assigns .value,
+    // which is a documented no-op on a checkbox and would not reflect
+    // .checked anyway. Not a shared setting: it is a 3D-card-only display
+    // preference, not a chase-cam rendering parameter used by the 2D card too.
+    const autoHideWrap = document.createElement("label");
+    autoHideWrap.style.cssText = "display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;margin-top:8px;";
+    const autoHideCb = document.createElement("input");
+    autoHideCb.type = "checkbox";
+    autoHideCb.checked = this._config.auto_hide_ui === 1 || this._config.auto_hide_ui === "1" || this._config.auto_hide_ui === true;
+    autoHideCb.addEventListener("change", () => {
+      if (autoHideCb.checked) this._config.auto_hide_ui = 1;
+      else delete this._config.auto_hide_ui;
+      this._emit();
+    });
+    autoHideWrap.appendChild(autoHideCb);
+    const autoHideLbl = document.createElement("span");
+    autoHideLbl.textContent = this._t("map3d_editor_auto_hide_ui");
+    autoHideWrap.appendChild(autoHideLbl);
+    wrap.appendChild(autoHideWrap);
+
+    const autoHideHint = document.createElement("small");
+    autoHideHint.textContent = this._t("map3d_editor_auto_hide_ui_hint");
+    autoHideHint.style.cssText = "color:var(--secondary-text-color);font-size:11px;";
+    wrap.appendChild(autoHideHint);
 
     this._built = true;
   }

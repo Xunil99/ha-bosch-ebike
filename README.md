@@ -456,6 +456,8 @@ playback_speed: 60     # 60x Echtzeit (1h-Tour = 1min Wiedergabe)
 - **Cast-Shadows von Gebäuden** auf den Boden, projiziert aus Sonnen-Azimut und Sonnen-Höhe zur Slider-Zeit. Schatten werden bei Tageslicht angezeigt, bei Dämmerung kürzer, bei Nacht ausgeblendet. Update automatisch, wenn die Kamera in ein neues Stadtgebiet schwenkt oder der Slider bewegt wird.
 - **Video-Export** rechts neben dem Slider: Aufnahme-Button startet eine Wiedergabe vom Tour-Anfang und schreibt den Karten-Inhalt parallel als Video mit. Beim Tour-Ende kommt automatisch ein Datei-Download (ca. 20-40 MB pro Minute). Das Format wird vom Browser bestimmt: **MP4** in modernem Chrome (≥ 126) und Safari (≥ 14.4), sonst **WebM**. Komplett im Browser via `canvas.captureStream()` + `MediaRecorder`, der HA-Server hat damit nichts zu tun.
 - Zurück-Button kehrt zur Tour-Liste zurück
+- **Pitch/Zoom merken sich manuelle Anpassungen:** Neigst oder zoomst Du die Kamera per Hand (Drag, Scrollrad, Pinch), bleibt das über Reloads hinweg erhalten, statt bei jeder Tour wieder auf `default_pitch`/`chase_zoom` zurückzuspringen
+- **Kiosk-Modus** (optional, `auto_hide_ui`): blendet Overlay-Chips und Wiedergabesteuerung nach ein paar Sekunden ohne Interaktion aus, für wandmontierte Displays. Berühren oder Maus bewegen holt sie zurück
 
 ![3D-Chase-Cam-Ansicht mit Gebäude-Extrusionen und Zeit-Slider](docs/img/card-3d-map.png)
 
@@ -479,6 +481,7 @@ playback_speed: 60     # 60x Echtzeit (1h-Tour = 1min Wiedergabe)
 | `show_distance` | 1 | Kumulierte Distanz in der Stats-Leiste anzeigen (0 = aus) |
 | `show_elevation` | 1 | Höhe anzeigen (0 = aus) |
 | `stats_as_chips` | 0 | 1 = Distanz, Geschwindigkeit und Höhe als Overlay-Chips oben links statt unten in der Stats-Leiste. 0 = klassische Stats-Zeile in der Steuerleiste (Default) |
+| `auto_hide_ui` | 0 | 1 = Overlay und Wiedergabesteuerung blenden nach ein paar Sekunden Inaktivität aus (Kiosk-/Wandmontage-Modus), 0 = immer sichtbar (Default) |
 | `account_id` | (leer) | Auf ein Konto fixieren, wie bei der 2D-Karte |
 | `bike_id` | (leer) | Auf ein Bike fixieren |
 
@@ -1111,6 +1114,8 @@ playback_speed: 60     # 60× real time (1 h ride plays in 1 min)
 - **Cast shadows from buildings** projected onto the ground from sun azimuth and altitude at the slider's time. Shadows are visible during daylight, shorter at twilight, hidden at night. They refresh automatically when the camera moves into a new neighbourhood or the slider is released.
 - **Video export** next to the slider: the record button restarts playback from the tour beginning and captures the canvas content as a video file in parallel. When the playback ends, the file is offered for download automatically (about 20-40 MB per minute). Format depends on the browser: **MP4** on recent Chrome (≥ 126) and Safari (≥ 14.4), **WebM** otherwise. Pure browser-side via `canvas.captureStream()` + `MediaRecorder`; the HA server is not involved.
 - Back button returns to the tour list
+- **Pitch/zoom remember manual adjustments:** tilt or zoom the camera by hand (drag, scroll wheel, pinch) and it persists across reloads, instead of snapping back to `default_pitch`/`chase_zoom` on every tour
+- **Kiosk mode** (optional, `auto_hide_ui`): fades the overlay chips and playback controls after a few seconds without interaction, for wall-mounted displays. Touch or move the mouse to bring them back
 
 ![3D chase-cam view with building extrusions and time slider](docs/img/card-3d-map.png)
 
@@ -1134,6 +1139,7 @@ playback_speed: 60     # 60× real time (1 h ride plays in 1 min)
 | `show_distance` | 1 | Show cumulative distance in the stats bar (0 = hide) |
 | `show_elevation` | 1 | Show elevation (0 = hide) |
 | `stats_as_chips` | 0 | 1 = render distance, speed and elevation as chips in the top-left overlay instead of the bottom stats line. 0 = classic stats line in the control bar (default) |
+| `auto_hide_ui` | 0 | 1 = fade the overlay and playback controls after a few seconds of inactivity (kiosk/wall-mount mode), 0 = always visible (default) |
 | `account_id` | (empty) | Lock to a specific account, like the 2D card |
 | `bike_id` | (empty) | Lock to a specific bike |
 
