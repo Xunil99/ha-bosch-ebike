@@ -39,6 +39,19 @@
   },
   "options": {
     "step": {
+      "init": {
+        "menu_options": {
+          "live_sensors": "Configure live BLE sensors",
+          "assign_activities": "Assign unassigned activities to a bike"
+        }
+      },
+      "assign_activities": {
+        "title": "Assign ride {position} of {total}",
+        "description": "{date}: {title}. Which bike was this ride on? Leave blank to decide later; it will show up again next time.",
+        "data": {
+          "bike_id": "Bike"
+        }
+      },
       "bike": {
         "title": "Live data sources for {bike_name} (optional)",
         "description": "Optionally link the live odometer and battery state-of-charge sensors of this bike's own ESPHome Bosch eBike LDI bridge. Each bike on this account is configured separately, so two bikes never share the same bridge's values. When set, the integration uses these sensors to compute exact tour distance and battery consumption instead of cloud-derived estimates. Leave empty to keep the existing behavior for this bike.",

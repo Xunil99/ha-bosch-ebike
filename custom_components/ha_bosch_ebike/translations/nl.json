@@ -39,6 +39,19 @@
   },
   "options": {
     "step": {
+      "init": {
+        "menu_options": {
+          "live_sensors": "Live BLE-sensoren configureren",
+          "assign_activities": "Niet-toegewezen activiteiten aan een fiets toewijzen"
+        }
+      },
+      "assign_activities": {
+        "title": "Rit {position} van {total} toewijzen",
+        "description": "{date}: {title}. Bij welke fiets hoort deze rit? Leeg laten om later te beslissen; hij verschijnt dan de volgende keer weer.",
+        "data": {
+          "bike_id": "Fiets"
+        }
+      },
       "bike": {
         "title": "Live-databronnen voor {bike_name} (optioneel)",
         "description": "Koppel optioneel de live kilometerstand- en accusensor van de eigen ESPHome Bosch eBike LDI-bridge van deze fiets. Elke fiets op dit account wordt apart geconfigureerd, zodat twee fietsen nooit dezelfde bridge delen. Indien ingesteld berekent de integratie de exacte ritafstand en het werkelijke verbruik uit deze live-waarden in plaats van de cloud-schattingen. Leeg laten om het bestaande gedrag voor deze fiets te behouden.",

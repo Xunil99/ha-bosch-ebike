@@ -39,6 +39,19 @@
   },
   "options": {
     "step": {
+      "init": {
+        "menu_options": {
+          "live_sensors": "Live-BLE-Sensoren konfigurieren",
+          "assign_activities": "Nicht zugeordnete Aktivitäten einem Bike zuweisen"
+        }
+      },
+      "assign_activities": {
+        "title": "Fahrt {position} von {total} zuweisen",
+        "description": "{date}: {title}. Zu welchem Bike gehört diese Fahrt? Leer lassen, um später zu entscheiden - sie erscheint dann beim nächsten Mal wieder.",
+        "data": {
+          "bike_id": "Bike"
+        }
+      },
       "bike": {
         "title": "Live-Datenquellen für {bike_name} (optional)",
         "description": "Optional kannst du den Tachostand- und Akkustand-Sensor der eigenen ESPHome-Bosch-eBike-LDI-Bridge dieses Bikes verknüpfen. Jedes Bike auf diesem Konto wird separat konfiguriert, sodass sich zwei Bikes nie dieselbe Bridge teilen. Wenn gesetzt, berechnet die Integration aus den Live-Werten die exakte Tourdistanz und den genauen Akkuverbrauch — anstelle der Cloud-Schätzungen. Leer lassen, um das bisherige Verhalten für dieses Bike beizubehalten.",

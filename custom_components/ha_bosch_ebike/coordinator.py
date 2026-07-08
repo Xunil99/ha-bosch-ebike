@@ -38,7 +38,7 @@ from .range_estimate import (
     track_distance_m,
     corrected_track_distance,
 )
-from .unassigned_activities import compute_unassigned_activities
+from .unassigned_activities import compute_unassigned_activities, merge_manual_overrides
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -98,6 +98,7 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # Per-activity bike attribution (activity_id -> bike_id) for multi-bike accounts
         self._activity_bike: dict[str, str] = {}
         self._unassigned_activities: list[dict[str, Any]] = []
+        self._manual_activity_bike: dict[str, str] = {}
         # Per-activity track cache (activity_id -> [{lat,lon,...}]) for heatmap card
         self._all_tracks_cache: dict[str, list[dict[str, Any]]] = {}
         # Maintenance state per bike
@@ -160,6 +161,12 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     k: v for k, v in attribution.items()
                     if isinstance(k, str) and isinstance(v, str)
                 }
+            manual_attribution = data.get("manual_activity_bike")
+            if isinstance(manual_attribution, dict):
+                self._manual_activity_bike = {
+                    k: v for k, v in manual_attribution.items()
+                    if isinstance(k, str) and isinstance(v, str)
+                }
             maintenance = data.get("maintenance")
             if isinstance(maintenance, dict):
                 self._maintenance = {
@@ -200,6 +207,7 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 "prev_activity_ids": sorted(self._prev_activity_ids),
                 "activity_consumption": self._activity_consumption,
                 "activity_bike": self._activity_bike,
+                "manual_activity_bike": self._manual_activity_bike,
                 "maintenance": self._maintenance,
                 "service_overrides": self._service_overrides,
                 "battery_capacity_wh": dict(self._battery_capacity_wh),
@@ -929,12 +937,14 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # this order wrong once already caused live enrichment to use stale
         # attribution from the prior poll; the same applies to consumption.
         new_attribution = self.attribute_activities_to_bikes(bikes, self._all_activities)
-        state_changed = new_attribution != self._activity_bike
+        merged_attribution = merge_manual_overrides(new_attribution, self._manual_activity_bike)
+        state_changed = merged_attribution != self._activity_bike
         if state_changed:
-            self._activity_bike = new_attribution
+            self._activity_bike = merged_attribution
 
         # Issue #47 follow-up: activities the odometer-matching above could
-        # not confidently assign to any bike. Diagnostic only for now.
+        # not confidently assign to any bike, minus any the user has since
+        # manually assigned via the options flow.
         self._unassigned_activities = compute_unassigned_activities(
             self._all_activities, self._activity_bike, len(bikes)
         )
@@ -1077,6 +1087,17 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "service_records": self._service_records,
             "unassigned_activities": self._unassigned_activities,
         }
+
+    async def async_assign_activities(self, mapping: dict[str, str]) -> None:
+        """Manually assign one or more activities to a bike (issue #47 follow-up).
+
+        Called by the options flow's activity-assignment wizard. Merged keys
+        always take precedence over the odometer heuristic (see
+        merge_manual_overrides) and persist across restarts.
+        """
+        self._manual_activity_bike.update(mapping)
+        await self._async_save_state()
+        await self.async_request_refresh()
 
     # -- Service & maintenance --
 

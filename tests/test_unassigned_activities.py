@@ -10,6 +10,7 @@ _spec = importlib.util.spec_from_file_location("unassigned_activities", _MODULE_
 _mod = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_mod)
 compute_unassigned_activities = _mod.compute_unassigned_activities
+merge_manual_overrides = _mod.merge_manual_overrides
 
 
 def test_all_attributed_returns_empty():
@@ -83,6 +84,26 @@ def test_multi_bike_isolation_matches_issue_47_shape():
     attribution = {"act_a2": "bike_a", "act_b1": "bike_b"}
     result = compute_unassigned_activities(activities, attribution, bike_count=2)
     assert result == [{"id": "act_old", "date": "2024-06-01T10:00:00Z", "title": "Ancient ride"}], result
+
+
+def test_merge_manual_overrides_wins_over_heuristic():
+    heuristic = {"a1": "bike_a", "a2": "bike_b"}
+    manual = {"a2": "bike_c"}  # conflicts with the heuristic's own match for a2
+    result = merge_manual_overrides(heuristic, manual)
+    assert result == {"a1": "bike_a", "a2": "bike_c"}, result
+
+
+def test_merge_manual_adds_activities_the_heuristic_never_matched():
+    heuristic = {"a1": "bike_a"}
+    manual = {"a2": "bike_b"}
+    result = merge_manual_overrides(heuristic, manual)
+    assert result == {"a1": "bike_a", "a2": "bike_b"}, result
+
+
+def test_merge_with_no_manual_overrides_is_unchanged():
+    heuristic = {"a1": "bike_a"}
+    result = merge_manual_overrides(heuristic, {})
+    assert result == {"a1": "bike_a"}, result
 
 
 if __name__ == "__main__":

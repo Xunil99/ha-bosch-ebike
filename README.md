@@ -679,6 +679,8 @@ Diese Entitäten erscheinen **automatisch** mit der normalen Einrichtung. Eine *
 >
 > Andernfalls zeigen diese Entitäten „unbekannt" – das ist **so beabsichtigt** (by design).
 
+**Nicht zugeordnete Aktivitäten manuell zuweisen:** Zeigt der Sensor `Unassigned Activities` einen Wert größer als 0, kannst du diese Touren einem Bike zuweisen. Öffne dazu Einstellungen → Geräte & Dienste → Bosch eBike → Konfigurieren, wähle im erscheinenden Menü „Nicht zugeordnete Aktivitäten einem Bike zuweisen" und gehe die Liste durch – pro Tour ein Dropdown mit den Bikes des Kontos. Leer gelassene Touren bleiben unzugeordnet und erscheinen beim nächsten Mal wieder. Zugewiesene Touren zählen danach wieder zu den Gesamtwerten (Distanz, Dauer, Kalorien usw.) des jeweiligen Bikes.
+
 ---
 
 <a id="english"></a>
@@ -1337,6 +1339,8 @@ These entities appear **automatically** with the normal setup. **No additional o
 > - **Service-book and customer-report data** (Last Service, lifetime values) only appear if such records exist.
 >
 > Otherwise these entities show "unknown" – this is **by design**.
+
+**Manually assigning unassigned activities:** If the `Unassigned Activities` sensor shows a value greater than 0, you can assign those rides to a bike. Go to Settings → Devices & Services → Bosch eBike → Configure, pick "Assign unassigned activities to a bike" from the menu that appears, and step through the list – one dropdown of the account's bikes per ride. Leaving a ride blank keeps it unassigned; it shows up again next time. Assigned rides then count again toward that bike's totals (distance, duration, calories, and so on).
 
 ---
 

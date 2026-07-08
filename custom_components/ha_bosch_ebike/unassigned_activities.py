@@ -37,3 +37,16 @@ def compute_unassigned_activities(
         for activity in activities
         if activity.get("id") and activity["id"] not in attribution
     ]
+
+
+def merge_manual_overrides(
+    heuristic_attribution: dict[str, str],
+    manual_attribution: dict[str, str],
+) -> dict[str, str]:
+    """Combine odometer-heuristic and manual bike attributions.
+
+    Manual assignments always win, including when the heuristic independently
+    (and possibly differently) matches the same activity - once a user has
+    corrected an assignment, it must not silently flip back.
+    """
+    return {**heuristic_attribution, **manual_attribution}

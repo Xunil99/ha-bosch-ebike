@@ -239,6 +239,9 @@ class BoschEBikeOptionsFlowHandler(OptionsFlow):
         self._bikes: list[dict[str, Any]] = []
         self._bike_index: int = 0
         self._live_sensors: dict[str, dict[str, Any]] = {}
+        self._unassigned: list[dict[str, Any]] = []
+        self._activity_index: int = 0
+        self._activity_assignments: dict[str, str] = {}
 
     @staticmethod
     def _entity_schema(suggested: dict[str, Any]) -> vol.Schema:
@@ -357,7 +360,73 @@ class BoschEBikeOptionsFlowHandler(OptionsFlow):
             if legacy:
                 self._live_sensors[self._bikes[0]["id"]] = legacy
 
+        # Issue #47 follow-up: offer manual bike-assignment for activities
+        # the odometer heuristic could not match, capped to keep a single
+        # options-flow run from turning into an unbounded step-walk.
+        self._unassigned = (
+            coordinator.data.get("unassigned_activities", [])
+            if coordinator and coordinator.data
+            else []
+        )[:25]
+        self._activity_index = 0
+        self._activity_assignments = {}
+
+        if not self._unassigned:
+            return await self._async_show_bike_step()
+
+        return self.async_show_menu(
+            step_id="init",
+            menu_options=["live_sensors", "assign_activities"],
+        )
+
+    async def async_step_live_sensors(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Menu target: continue into the existing per-bike BLE-sensor wizard."""
         return await self._async_show_bike_step()
+
+    async def async_step_assign_activities(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """One step per currently-unassigned activity; step_id is reused,
+        advancing an internal index, mirroring async_step_bike."""
+        if user_input is not None:
+            activity = self._unassigned[self._activity_index]
+            bike_id = user_input.get("bike_id")
+            if bike_id:
+                self._activity_assignments[activity["id"]] = bike_id
+            self._activity_index += 1
+        return await self._async_show_activity_step()
+
+    async def _async_show_activity_step(self) -> ConfigFlowResult:
+        if self._activity_index >= len(self._unassigned):
+            if self._activity_assignments:
+                coordinator = self.hass.data.get(DOMAIN, {}).get(
+                    self.config_entry.entry_id
+                )
+                if coordinator:
+                    await coordinator.async_assign_activities(
+                        self._activity_assignments
+                    )
+            return self.async_create_entry(
+                title="", data=self.config_entry.options or {}
+            )
+
+        activity = self._unassigned[self._activity_index]
+        bike_choices = {
+            b["id"]: self._display_name_for_bike(b) for b in self._bikes
+        }
+
+        return self.async_show_form(
+            step_id="assign_activities",
+            data_schema=vol.Schema({vol.Optional("bike_id"): vol.In(bike_choices)}),
+            description_placeholders={
+                "date": str(activity.get("date") or "?"),
+                "title": str(activity.get("title") or "Unnamed ride"),
+                "position": str(self._activity_index + 1),
+                "total": str(len(self._unassigned)),
+            },
+        )
 
     async def async_step_bike(
         self, user_input: dict[str, Any] | None = None
