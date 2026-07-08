@@ -192,6 +192,9 @@
       },
       "energy_charged_365d": {
         "name": "Laadenergie (365 dagen)"
+      },
+      "unassigned_activities": {
+        "name": "Niet-toegewezen activiteiten"
       }
     },
     "number": {

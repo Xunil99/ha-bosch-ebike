@@ -704,6 +704,14 @@ async def async_setup_entry(
         # Maintenance overview (count of items due/overdue + full list as attributes)
         entities.append(BoschMaintenanceOverviewSensor(coordinator, bike_id, drive_name))
 
+    # Account-level diagnostic: activities the odometer-based attribution
+    # could not match to any bike. Only meaningful (and only ever non-empty)
+    # for multi-bike Smart System accounts.
+    if not is_bes2 and len(bikes) > 1:
+        entities.append(
+            BoschUnassignedActivitiesSensor(coordinator, entry.entry_id)
+        )
+
     async_add_entities(entities)
 
 
@@ -1122,6 +1130,39 @@ class BoschComponentInventorySensor(CoordinatorEntity[BoschEBikeCoordinator], Se
     def extra_state_attributes(self) -> dict[str, Any]:
         """Expose the full component inventory."""
         return self._inventory() or {}
+
+
+class BoschUnassignedActivitiesSensor(CoordinatorEntity[BoschEBikeCoordinator], SensorEntity):
+    """Diagnostic: activities the multi-bike attribution could not match.
+
+    Account-level (not bound to a specific bike_id) since an unassigned
+    activity has, by definition, no known bike. Only created for multi-bike
+    Smart System accounts by async_setup_entry.
+    """
+
+    _attr_has_entity_name = True
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_icon = "mdi:help-rhombus-outline"
+    _attr_translation_key = "unassigned_activities"
+
+    def __init__(self, coordinator: BoschEBikeCoordinator, account_device_id: str) -> None:
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{account_device_id}_unassigned_activities"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, account_device_id)},
+            name="Bosch eBike Account",
+            manufacturer="Bosch",
+        )
+
+    @property
+    def native_value(self) -> int:
+        """Return the count of unassigned activities."""
+        return len(self.coordinator.data.get("unassigned_activities", []))
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Expose the affected rides (id, date, title)."""
+        return {"activities": self.coordinator.data.get("unassigned_activities", [])}
 
 
 class BoschMaxAltitudeSensor(CoordinatorEntity[BoschEBikeCoordinator], SensorEntity):

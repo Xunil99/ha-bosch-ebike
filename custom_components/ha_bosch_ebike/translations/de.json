@@ -192,6 +192,9 @@
       },
       "energy_charged_365d": {
         "name": "Ladeenergie (365 Tage)"
+      },
+      "unassigned_activities": {
+        "name": "Nicht zugeordnete Aktivitäten"
       }
     },
     "number": {

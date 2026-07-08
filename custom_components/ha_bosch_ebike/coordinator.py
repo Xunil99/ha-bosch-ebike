@@ -38,6 +38,7 @@ from .range_estimate import (
     track_distance_m,
     corrected_track_distance,
 )
+from .unassigned_activities import compute_unassigned_activities
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -96,6 +97,7 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._activity_consumption: dict[str, dict[str, Any]] = {}
         # Per-activity bike attribution (activity_id -> bike_id) for multi-bike accounts
         self._activity_bike: dict[str, str] = {}
+        self._unassigned_activities: list[dict[str, Any]] = []
         # Per-activity track cache (activity_id -> [{lat,lon,...}]) for heatmap card
         self._all_tracks_cache: dict[str, list[dict[str, Any]]] = {}
         # Maintenance state per bike
@@ -711,6 +713,7 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "energy_window": {},
             "bike_pass": {},
             "service_records": {},
+            "unassigned_activities": [],
         }
 
     async def fetch_track_detail(self, activity_id: Any) -> dict[str, Any]:
@@ -930,6 +933,12 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if state_changed:
             self._activity_bike = new_attribution
 
+        # Issue #47 follow-up: activities the odometer-matching above could
+        # not confidently assign to any bike. Diagnostic only for now.
+        self._unassigned_activities = compute_unassigned_activities(
+            self._all_activities, self._activity_bike, len(bikes)
+        )
+
         # Battery consumption tracking via Wh delta
         if self._track_battery_consumption(bikes):
             state_changed = True
@@ -1066,6 +1075,7 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "energy_window": energy_window,
             "bike_pass": self._bike_pass,
             "service_records": self._service_records,
+            "unassigned_activities": self._unassigned_activities,
         }
 
     # -- Service & maintenance --
