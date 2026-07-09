@@ -56,10 +56,15 @@ ASSIST_MODE_NAMES: dict[str, str] = {
     "A100M3AUTO": "AUTO",
     "A100M30020": "TURBO",
     "A100M3AAB0": "eMTB",
-    "A100M30010": "TOUR",
+    # A100M30010 is intentionally NOT in this table - see the sibling_codes
+    # handling in assist_mode_display_name() below (issue #48).
     # Further motor variant codes (reported by @ToPa451, issue #37).
     "A100E34AA0": "TOUR+",
     "A100M40010": "TURBO",
+    # More M3-series codes, a different drive unit revision than
+    # @johnlucajf's (reported by @YarneThatsMe, issue #48).
+    "A100M30040": "ECO",
+    "A100M3AAA0": "TOUR+",
 }
 
 
@@ -83,12 +88,24 @@ def assist_mode_display_name(code: Any, sibling_codes: set[str] | None = None) -
     code is also present, eMTB otherwise. Without that context we cannot
     tell, so we fall back to the raw code rather than silently guessing -
     a guess would be wrong for one of the two real reports we already have.
+
+    ``A100M30010`` is the same kind of reused-slot ambiguity (issue #48):
+    @johnlucajf's bike (issue #37) had it active alongside the distinct
+    TURBO code ``A100M30020``, meaning TOUR there. @YarneThatsMe's bike
+    (issue #48) does not have ``A100M30020`` active at all, and confirmed
+    via the Bosch Flow app that ``A100M30010`` means TURBO on that drive
+    unit revision. Disambiguated the same way as ``A100GAAAE0``: TOUR if
+    ``A100M30020`` is also present, TURBO otherwise.
     """
     if not isinstance(code, str):
         return code
     if code == "A100GAAAE0":
         if sibling_codes is not None:
             return "SPORT" if "A100GAAAB0" in sibling_codes else "eMTB"
+        return code
+    if code == "A100M30010":
+        if sibling_codes is not None:
+            return "TOUR" if "A100M30020" in sibling_codes else "TURBO"
         return code
     mapped = ASSIST_MODE_NAMES.get(code)
     if mapped is not None:

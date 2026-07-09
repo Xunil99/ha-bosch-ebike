@@ -144,7 +144,58 @@ def test_assist_mode_display_name_m3series():
     assert assist_mode_display_name("A100M3AUTO") == "AUTO"
     assert assist_mode_display_name("A100M30020") == "TURBO"
     assert assist_mode_display_name("A100M3AAB0") == "eMTB"
-    assert assist_mode_display_name("A100M30010") == "TOUR"
+    # More M3-series codes, a different drive unit revision than
+    # @johnlucajf's (reported by @YarneThatsMe, issue #48).
+    assert assist_mode_display_name("A100M30040") == "ECO"
+    assert assist_mode_display_name("A100M3AAA0") == "TOUR+"
+
+
+def test_assist_mode_display_name_m30010_is_ambiguous_by_design():
+    # issue #48: A100M30010 was reported as TOUR on @johnlucajf's bike
+    # (issue #37), whose active modes also included the distinct TURBO code
+    # A100M30020, and as TURBO on @YarneThatsMe's bike, whose active modes
+    # did NOT include A100M30020 at all - the same reused-slot pattern as
+    # A100GAAAE0 (issue #46), so this must depend on sibling_codes too.
+    assert assist_mode_display_name(
+        "A100M30010", sibling_codes={"A100M3AUTO", "A100M30020", "A100M3AAB0"}
+    ) == "TOUR"
+    assert assist_mode_display_name(
+        "A100M30010", sibling_codes={"A100M3AUTO", "A100M30040", "A100M3AAA0"}
+    ) == "TURBO"
+    # Without sibling context we genuinely cannot tell - stay raw rather
+    # than silently guess (a guess is wrong for one of the two real bikes).
+    assert assist_mode_display_name("A100M30010") == "A100M30010"
+    assert assist_mode_display_name("A100M30010", sibling_codes=None) == "A100M30010"
+
+
+def test_reachable_ranges_resolves_m30010_per_bike():
+    # The two real, conflicting bikes from issues #37 and #48, end to end
+    # through reachable_ranges() rather than the unit directly.
+    johnlucajf_bike = {"driveUnit": {"activeAssistModes": [
+        {"name": "A100M3AUTO", "reachableRange": 49},
+        {"name": "A100M30020", "reachableRange": 20},  # distinct TURBO present
+        {"name": "A100M3AAB0", "reachableRange": 55},
+        {"name": "A100M30010", "reachableRange": 40},
+    ]}}
+    assert reachable_ranges(johnlucajf_bike) == [
+        {"name": "AUTO", "range_km": 49.0},
+        {"name": "TURBO", "range_km": 20.0},
+        {"name": "eMTB", "range_km": 55.0},
+        {"name": "TOUR", "range_km": 40.0},
+    ]
+
+    yarnethatsme_bike = {"driveUnit": {"activeAssistModes": [
+        {"name": "A100M30040", "reachableRange": 64},
+        {"name": "A100M3AAA0", "reachableRange": 49},
+        {"name": "A100M3AUTO", "reachableRange": 49},
+        {"name": "A100M30010", "reachableRange": 31},  # no A100M30020 sibling
+    ]}}
+    assert reachable_ranges(yarnethatsme_bike) == [
+        {"name": "ECO", "range_km": 64.0},
+        {"name": "TOUR+", "range_km": 49.0},
+        {"name": "AUTO", "range_km": 49.0},
+        {"name": "TURBO", "range_km": 31.0},
+    ]
 
 
 def test_assist_mode_display_name_topa451_codes():
