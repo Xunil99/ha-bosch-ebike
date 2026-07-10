@@ -430,6 +430,30 @@ bike_id: bike-uuid-1
 
 Farb-Buckets pro Tag: leer, 1-10 km, 10-25 km, 25-50 km, 50+ km. Die Farben kommen aus den HA-Theme-Variablen, hellen Designs sehen wie GitHub-Light aus, im dunklen Modus wird automatisch das passende dunkle Palette geladen.
 
+### Statistik-Card - Balkendiagramme für Distanz, Höhenmeter, Tempo und Touren-Anzahl
+
+Die Card `bosch-ebike-stats-card` zeigt bis zu vier Balkendiagramme für die letzten 12 Wochen oder Monate: Distanz (km), Höhenmeter (m), Ø-Geschwindigkeit (km/h, distanz-gewichtet über alle Touren im Zeitraum) und Touren-Anzahl. Ein Bike-Filter und ein Wochen/Monate-Umschalter direkt auf der Card wirken auf alle sichtbaren Diagramme gleichzeitig.
+
+```yaml
+type: custom:bosch-ebike-stats-card
+```
+
+Konfigurierbar per Editor oder YAML:
+
+```yaml
+type: custom:bosch-ebike-stats-card
+title: Volkers Fahrstatistik
+account_id: 01HXYZ...
+bike_id: bike-uuid-1
+default_timeframe: months   # weeks (Standard) oder months
+show_distance: true
+show_elevation: true
+show_avg_speed: true
+show_ride_count: true
+```
+
+Alle vier `show_*`-Flags sind standardmäßig aktiv; einzeln auf `false` setzen blendet das jeweilige Diagramm aus. Auf einen festen Konto- oder Bike-Filter kann per YAML gelockt werden (gleiche Optionen wie bei den anderen Cards). Das Zeitfenster ist immer fix auf die letzten 12 Perioden begrenzt, wächst also nicht mit dem Kontoalter.
+
 ### 3D-Karte - Chase-Cam-Verfolgung mit Zeit-Slider und Sonnenstand
 
 Die Card `bosch-ebike-3d-map-card` ist eine parallele Karte zur klassischen 2D-Map. Sie startet mit einer Liste der letzten Touren. Beim Klick auf eine Tour öffnet sich die 3D-Detailansicht mit MapLibre und kostenlosen OpenFreeMap-Vector-Tiles: die **Kamera folgt dem Bike in Third-Person-Perspektive** ("Chase-Cam"), Bearing dreht sich passend zur Fahrtrichtung, Pitch und Zoom sind konfigurierbar. Beim Slider-Bewegen schwenkt die Kamera mit. Die Kartenbeleuchtung passt sich dem Sonnenstand zur Tour-Zeit an.
@@ -1090,6 +1114,30 @@ bike_id: bike-uuid-1
 ```
 
 Color buckets per day: empty, 1-10 km, 10-25 km, 25-50 km, 50+ km. Colors are pulled from HA theme variables, light themes look like GitHub-Light; in dark mode the matching dark palette is applied automatically.
+
+### Statistics card - bar charts for distance, elevation, speed and ride count
+
+The card `bosch-ebike-stats-card` shows up to four bar charts for the last 12 weeks or months: distance (km), elevation gain (m), average speed (km/h, distance-weighted across all rides in the period) and ride count. A bike filter and a weeks/months toggle right on the card affect all visible charts at once.
+
+```yaml
+type: custom:bosch-ebike-stats-card
+```
+
+Configurable via the editor or YAML:
+
+```yaml
+type: custom:bosch-ebike-stats-card
+title: Volker's riding stats
+account_id: 01HXYZ...
+bike_id: bike-uuid-1
+default_timeframe: months   # weeks (default) or months
+show_distance: true
+show_elevation: true
+show_avg_speed: true
+show_ride_count: true
+```
+
+All four `show_*` flags default to on; set any to `false` to hide that chart. You can lock the card to a specific account or bike via YAML (same options as the other cards). The time window is always fixed to the last 12 periods, so it never grows with account age.
 
 ### 3D map card - chase-cam, time slider, sun-aware building shadows
 
