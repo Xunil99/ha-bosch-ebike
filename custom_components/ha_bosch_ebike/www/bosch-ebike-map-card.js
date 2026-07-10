@@ -7494,12 +7494,28 @@ class BoschEBikeStatsCard extends HTMLElement {
       }
       .stats-filter-lbl { font-size:12px; color:var(--secondary-text-color,#666); align-self:center; }
       .stats-body { padding:14px 16px; }
+      .stats-legend { display:flex; flex-wrap:wrap; gap:10px; margin-bottom:12px; }
+      .stats-legend-item { display:flex; align-items:center; gap:5px; font-size:11px; color:var(--secondary-text-color,#666); }
+      .stats-legend-swatch { width:9px; height:9px; border-radius:2px; flex:none; }
       .stats-chart { margin-bottom:18px; }
       .stats-chart:last-child { margin-bottom:0; }
       .stats-chart-title { font-size:13px; font-weight:500; color:var(--primary-text-color,#333); margin-bottom:6px; }
-      .stats-bars { display:flex; align-items:flex-end; gap:3px; height:90px; }
-      .stats-bar-wrap { flex:1; display:flex; flex-direction:column; align-items:center; height:100%; justify-content:flex-end; }
+      .stats-chart-unit { font-weight:400; color:var(--secondary-text-color,#888); }
+      .stats-chart-body { display:flex; gap:6px; height:90px; }
+      .stats-axis { position:relative; width:28px; flex:none; }
+      .stats-axis-tick {
+        position:absolute; left:0; right:0; transform:translateY(50%);
+        font-size:9px; color:var(--secondary-text-color,#888); text-align:right;
+      }
+      .stats-bars { position:relative; flex:1; display:flex; align-items:flex-end; gap:3px; height:100%; }
+      .stats-gridline {
+        position:absolute; left:0; right:0; height:1px;
+        background:var(--divider-color,#e0e0e0); transform:translateY(50%); z-index:0;
+      }
+      .stats-bar-wrap { position:relative; z-index:1; flex:1; display:flex; flex-direction:column; align-items:center; height:100%; justify-content:flex-end; }
       .stats-bar { width:100%; background:var(--primary-color,#03a9f4); border-radius:2px 2px 0 0; min-height:1px; }
+      .stats-bar-group { width:100%; height:100%; display:flex; align-items:flex-end; gap:1px; }
+      .stats-bar-sub { flex:1; border-radius:2px 2px 0 0; min-height:1px; }
       .stats-bar-label { font-size:9px; color:var(--secondary-text-color,#888); margin-top:3px; white-space:nowrap; }
       .stats-overlay { padding:18px 16px; color:var(--secondary-text-color,#999); font-size:13px; text-align:center; }
     `;
