@@ -7374,6 +7374,37 @@ const STATS_METRICS = [
     value: (t) => t.rides, digits: 0 },
 ];
 
+// "Nice round number" tick helper for a 3-gridline Y-axis (0 / mid / max).
+// Returns { niceMax, ticks: [0, mid, niceMax] } where niceMax is always >=
+// the input max, rounded up to a clean 1/2/5-times-a-power-of-ten step, so
+// axis labels read as "0/25/50" instead of "0/24.7/49.3". Bars are scaled
+// against niceMax (not the raw max) so bars and gridlines always agree.
+function statsNiceTicks(max) {
+  if (!(max > 0)) return { niceMax: 0, ticks: [0, 0, 0] };
+  const rawStep = max / 2;
+  const magnitude = Math.pow(10, Math.floor(Math.log10(rawStep)));
+  const normalized = rawStep / magnitude;
+  let niceStep;
+  if (normalized <= 1) niceStep = 1 * magnitude;
+  else if (normalized <= 2) niceStep = 2 * magnitude;
+  else if (normalized <= 5) niceStep = 5 * magnitude;
+  else niceStep = 10 * magnitude;
+  const niceMax = niceStep * 2;
+  return { niceMax, ticks: [0, niceStep, niceMax] };
+}
+
+// Fixed palette for per-bike bars/legend when "All Bikes" is selected with
+// 2+ bikes in scope. Matches the vivid Bosch-Flow-style hex values already
+// used for assist-mode colors elsewhere in this file (BOSCH_MODE_COLORS),
+// copied by value rather than referenced (that object is declared later in
+// this file, and a top-level reference here would hit the temporal dead
+// zone before the script finishes its first pass). Cycles via modulo if
+// more than 8 bikes are in scope.
+const STATS_BIKE_COLORS = [
+  "#1E9FE0", "#F39200", "#5FB733", "#8A4FD3",
+  "#E2231A", "#00B3C8", "#E5006D", "#8C9196",
+];
+
 class BoschEBikeStatsCard extends HTMLElement {
   constructor() {
     super();
