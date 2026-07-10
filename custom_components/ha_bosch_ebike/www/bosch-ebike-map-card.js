@@ -7654,27 +7654,75 @@ class BoschEBikeStatsCard extends HTMLElement {
       return;
     }
 
+    const bikes = this._filterBike === "all" ? this._bikesInScope() : [];
+    const multiBike = bikes.length >= 2;
+    const perBike = multiBike
+      ? bikes.map((b) => ({
+          bike: b,
+          totals: statsAggregateIntoBuckets(acts.filter((a) => a.bikeId === b.id), buckets),
+        }))
+      : [];
+
+    const legend = multiBike
+      ? `<div class="stats-legend">${bikes.map((b, i) => `
+          <span class="stats-legend-item">
+            <span class="stats-legend-swatch" style="background:${STATS_BIKE_COLORS[i % STATS_BIKE_COLORS.length]}"></span>
+            ${this._escapeHtml(b.label)}
+          </span>`).join("")}</div>`
+      : "";
+
     const cfg = this._config || {};
     const charts = [];
     for (const metric of STATS_METRICS) {
       if (cfg[metric.key] === false) continue; // absent key -> enabled by default
       const values = totals.map((tt) => metric.value(tt));
-      const max = Math.max(...values, 0);
-      const bars = values.map((v, i) => {
-        const pct = max > 0 ? Math.max((v / max) * 100, v > 0 ? 2 : 0) : 0;
-        const title = `${buckets[i].label}: ${v.toFixed(metric.digits)} ${t(metric.unitKey)}`;
-        return `<div class="stats-bar-wrap" title="${this._escapeHtml(title)}">
-          <div class="stats-bar" style="height:${pct}%"></div>
-          <div class="stats-bar-label">${this._escapeHtml(buckets[i].label)}</div>
-        </div>`;
+      const perBikeValues = perBike.map((pb) => pb.totals.map((tt) => metric.value(tt)));
+      const rawMax = Math.max(...values, ...perBikeValues.flat(), 0);
+      const { niceMax, ticks } = statsNiceTicks(rawMax);
+      const scale = niceMax > 0 ? niceMax : 1;
+
+      const bars = buckets.map((bucket, i) => {
+        let barsHtml;
+        if (multiBike) {
+          barsHtml = perBike.map((pb, bi) => {
+            const v = perBikeValues[bi][i];
+            const pct = Math.max((v / scale) * 100, v > 0 ? 2 : 0);
+            const title = `${this._escapeHtml(pb.bike.label)} - ${bucket.label}: ${v.toFixed(metric.digits)} ${t(metric.unitKey)}`;
+            return `<div class="stats-bar-sub" style="height:${pct}%; background:${STATS_BIKE_COLORS[bi % STATS_BIKE_COLORS.length]}" title="${title}"></div>`;
+          }).join("");
+          barsHtml = `<div class="stats-bar-group">${barsHtml}</div>`;
+        } else {
+          const v = values[i];
+          const pct = Math.max((v / scale) * 100, v > 0 ? 2 : 0);
+          const title = `${bucket.label}: ${v.toFixed(metric.digits)} ${t(metric.unitKey)}`;
+          barsHtml = `<div class="stats-bar" style="height:${pct}%" title="${this._escapeHtml(title)}"></div>`;
+        }
+        return `<div class="stats-bar-wrap">${barsHtml}<div class="stats-bar-label">${this._escapeHtml(bucket.label)}</div></div>`;
       }).join("");
+
+      const axis = niceMax > 0
+        ? `<div class="stats-axis">
+            <span class="stats-axis-tick" style="bottom:100%">${ticks[2].toFixed(metric.digits)}</span>
+            <span class="stats-axis-tick" style="bottom:50%">${ticks[1].toFixed(metric.digits)}</span>
+            <span class="stats-axis-tick" style="bottom:0%">0</span>
+          </div>`
+        : "";
+      const gridlines = niceMax > 0
+        ? `<div class="stats-gridline" style="bottom:100%"></div>
+           <div class="stats-gridline" style="bottom:50%"></div>
+           <div class="stats-gridline" style="bottom:0%"></div>`
+        : "";
+
       charts.push(`<div class="stats-chart">
-        <div class="stats-chart-title">${t(metric.labelKey)}</div>
-        <div class="stats-bars">${bars}</div>
+        <div class="stats-chart-title">${t(metric.labelKey)} <span class="stats-chart-unit">(${t(metric.unitKey)})</span></div>
+        <div class="stats-chart-body">
+          ${axis}
+          <div class="stats-bars">${gridlines}${bars}</div>
+        </div>
       </div>`);
     }
     body.innerHTML = charts.length
-      ? charts.join("")
+      ? legend + charts.join("")
       : `<div class="stats-overlay">${t("stats_no_match")}</div>`;
   }
 }
