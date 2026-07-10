@@ -7318,6 +7318,27 @@ function statsBucketIndexFor(startTimeIso, buckets) {
   return -1;
 }
 
+// Best-available tour duration in seconds, mirroring BoschEBike3DMapCard's
+// _tourDurationSec(): durationWithoutStops (preferred), then legacy
+// duration, then endTime - startTime, else 0. Needed because the backend
+// can legitimately omit durationWithoutStops (e.g. BES2 activities) while
+// still reporting a real distance - falling back to `|| 0` there would
+// silently skew the distance-weighted average speed below.
+function statsTourDurationSec(a) {
+  if (!a) return 0;
+  if (Number.isFinite(a.durationWithoutStops) && a.durationWithoutStops > 0) {
+    return a.durationWithoutStops;
+  }
+  if (Number.isFinite(a.duration) && a.duration > 0) {
+    return a.duration;
+  }
+  if (a.startTime && a.endTime) {
+    const d = (new Date(a.endTime).getTime() - new Date(a.startTime).getTime()) / 1000;
+    if (Number.isFinite(d) && d > 0) return d;
+  }
+  return 0;
+}
+
 // Aggregates filtered activities into per-bucket totals, parallel to
 // `buckets`. Average speed is NOT stored directly - it is derived at render
 // time as distanceM / durationS (distance-weighted), never as a mean of
@@ -7331,7 +7352,7 @@ function statsAggregateIntoBuckets(activities, buckets) {
     const t = totals[idx];
     t.distanceM += a.distance || 0;
     t.elevationM += a.elevation?.gain || 0; // missing -> contributes 0, ride still counted
-    t.durationS += a.durationWithoutStops || 0;
+    t.durationS += statsTourDurationSec(a);
     t.rides += 1;
   }
   return totals;
@@ -7482,7 +7503,7 @@ class BoschEBikeStatsCard extends HTMLElement {
 
     this.querySelector("#stats-account").addEventListener("change", (e) => {
       this._filterAccount = e.target.value;
-      this._filterBike = "all";
+      if (!this._lockedBike) this._filterBike = "all";
       this._populateBikeFilter();
       this._render();
     });
