@@ -454,6 +454,8 @@ show_ride_count: true
 
 Alle vier `show_*`-Flags sind standardmäßig aktiv; einzeln auf `false` setzen blendet das jeweilige Diagramm aus. Auf einen festen Konto- oder Bike-Filter kann per YAML gelockt werden (gleiche Optionen wie bei den anderen Cards). Das Zeitfenster ist immer fix auf die letzten 12 Perioden begrenzt, wächst also nicht mit dem Kontoalter.
 
+Bei "Alle Bikes" mit zwei oder mehr Bikes zeigt jedes Diagramm automatisch farblich unterschiedene Balken pro Bike (mit Legende) statt eines einzelnen Summenbalkens; nicht zuordenbare Touren erscheinen dabei als eigene Kategorie "Nicht zugeordnet". Jedes Diagramm hat außerdem eine dezente Y-Achse mit Skalenwerten und Einheit.
+
 ### 3D-Karte - Chase-Cam-Verfolgung mit Zeit-Slider und Sonnenstand
 
 Die Card `bosch-ebike-3d-map-card` ist eine parallele Karte zur klassischen 2D-Map. Sie startet mit einer Liste der letzten Touren. Beim Klick auf eine Tour öffnet sich die 3D-Detailansicht mit MapLibre und kostenlosen OpenFreeMap-Vector-Tiles: die **Kamera folgt dem Bike in Third-Person-Perspektive** ("Chase-Cam"), Bearing dreht sich passend zur Fahrtrichtung, Pitch und Zoom sind konfigurierbar. Beim Slider-Bewegen schwenkt die Kamera mit. Die Kartenbeleuchtung passt sich dem Sonnenstand zur Tour-Zeit an.
@@ -1138,6 +1140,8 @@ show_ride_count: true
 ```
 
 All four `show_*` flags default to on; set any to `false` to hide that chart. You can lock the card to a specific account or bike via YAML (same options as the other cards). The time window is always fixed to the last 12 periods, so it never grows with account age.
+
+With "All Bikes" selected and two or more bikes in scope, each chart automatically shows color-coded bars per bike (with a legend) instead of one combined bar; rides that couldn't be attributed to a bike show up as their own "Unassigned" category. Every chart also gets a subtle Y-axis with scale values and units.
 
 ### 3D map card - chase-cam, time slider, sun-aware building shadows
 
