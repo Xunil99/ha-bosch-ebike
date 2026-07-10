@@ -156,6 +156,7 @@ const I18N = {
     stats_unit_m: "m",
     stats_unit_kmh: "km/h",
     stats_unit_rides: "rides",
+    stats_bike_unassigned: "Unassigned",
     cal_stat_rides: "Rides",
     cal_stat_distance: "Distance",
     cal_stat_active_days: "Active days",
@@ -547,6 +548,7 @@ const I18N = {
     stats_unit_m: "m",
     stats_unit_kmh: "km/h",
     stats_unit_rides: "Touren",
+    stats_bike_unassigned: "Nicht zugeordnet",
     cal_stat_rides: "Touren",
     cal_stat_distance: "Distanz",
     cal_stat_active_days: "Aktive Tage",
@@ -936,6 +938,7 @@ const I18N = {
     stats_unit_m: "m",
     stats_unit_kmh: "km/u",
     stats_unit_rides: "ritten",
+    stats_bike_unassigned: "Niet toegewezen",
     cal_stat_rides: "Ritten",
     cal_stat_distance: "Afstand",
     cal_stat_active_days: "Actieve dagen",
@@ -1336,6 +1339,7 @@ const I18N = {
     stats_unit_m: "m",
     stats_unit_kmh: "km/h",
     stats_unit_rides: "sorties",
+    stats_bike_unassigned: "Non attribué",
     cal_stat_rides: "Sorties",
     cal_stat_distance: "Distance",
     cal_stat_active_days: "Jours actifs",
@@ -1737,6 +1741,7 @@ const I18N = {
     stats_unit_m: "m",
     stats_unit_kmh: "km/h",
     stats_unit_rides: "uscite",
+    stats_bike_unassigned: "Non assegnato",
     cal_stat_rides: "Uscite",
     cal_stat_distance: "Distanza",
     cal_stat_active_days: "Giorni attivi",
@@ -2138,6 +2143,7 @@ const I18N = {
     stats_unit_m: "m",
     stats_unit_kmh: "km/h",
     stats_unit_rides: "rutas",
+    stats_bike_unassigned: "Sin asignar",
     cal_stat_rides: "Rutas",
     cal_stat_distance: "Distancia",
     cal_stat_active_days: "Días activos",
@@ -7405,6 +7411,12 @@ const STATS_BIKE_COLORS = [
   "#E2231A", "#00B3C8", "#E5006D", "#8C9196",
 ];
 
+// Fixed, non-cycling color for activities the backend couldn't attribute to
+// a specific bike (odometer-based matching failed - see the integration's
+// "Unassigned Activities" diagnostic sensor). Kept separate from
+// STATS_BIKE_COLORS so it never collides with a real bike's cycled color.
+const STATS_UNASSIGNED_COLOR = "#8C9196";
+
 class BoschEBikeStatsCard extends HTMLElement {
   constructor() {
     super();
@@ -7670,20 +7682,32 @@ class BoschEBikeStatsCard extends HTMLElement {
       return;
     }
 
-    const bikes = this._filterBike === "all" ? this._bikesInScope() : [];
-    const multiBike = bikes.length >= 2;
-    const perBike = multiBike
-      ? bikes.map((b) => ({
-          bike: b,
-          totals: statsAggregateIntoBuckets(acts.filter((a) => a.bikeId === b.id), buckets),
-        }))
-      : [];
+    const scopedBikes = this._filterBike === "all" ? this._bikesInScope() : [];
+    const multiBike = scopedBikes.length >= 2;
+    let perBike = [];
+    if (multiBike) {
+      const scopedIds = new Set(scopedBikes.map((b) => b.id));
+      const groups = scopedBikes.map((b, i) => ({
+        label: b.label,
+        color: STATS_BIKE_COLORS[i % STATS_BIKE_COLORS.length],
+        acts: acts.filter((a) => a.bikeId === b.id),
+      }));
+      // Activities the backend couldn't attribute to a specific bike (see
+      // the "Unassigned Activities" diagnostic sensor) still count toward
+      // the household totals/axis above - give them their own bar/legend
+      // entry instead of silently dropping them from every bike's bar.
+      const unassignedActs = acts.filter((a) => !scopedIds.has(a.bikeId));
+      if (unassignedActs.length) {
+        groups.push({ label: t("stats_bike_unassigned"), color: STATS_UNASSIGNED_COLOR, acts: unassignedActs });
+      }
+      perBike = groups.map((g) => ({ bike: g, totals: statsAggregateIntoBuckets(g.acts, buckets) }));
+    }
 
     const legend = multiBike
-      ? `<div class="stats-legend">${bikes.map((b, i) => `
+      ? `<div class="stats-legend">${perBike.map((pb) => `
           <span class="stats-legend-item">
-            <span class="stats-legend-swatch" style="background:${STATS_BIKE_COLORS[i % STATS_BIKE_COLORS.length]}"></span>
-            ${this._escapeHtml(b.label)}
+            <span class="stats-legend-swatch" style="background:${pb.bike.color}"></span>
+            ${this._escapeHtml(pb.bike.label)}
           </span>`).join("")}</div>`
       : "";
 
@@ -7704,7 +7728,7 @@ class BoschEBikeStatsCard extends HTMLElement {
             const v = perBikeValues[bi][i];
             const pct = Math.max((v / scale) * 100, v > 0 ? 2 : 0);
             const title = `${this._escapeHtml(pb.bike.label)} - ${bucket.label}: ${v.toFixed(metric.digits)} ${t(metric.unitKey)}`;
-            return `<div class="stats-bar-sub" style="height:${pct}%; background:${STATS_BIKE_COLORS[bi % STATS_BIKE_COLORS.length]}" title="${title}"></div>`;
+            return `<div class="stats-bar-sub" style="height:${pct}%; background:${pb.bike.color}" title="${title}"></div>`;
           }).join("");
           barsHtml = `<div class="stats-bar-group">${barsHtml}</div>`;
         } else {
@@ -7716,10 +7740,19 @@ class BoschEBikeStatsCard extends HTMLElement {
         return `<div class="stats-bar-wrap">${barsHtml}<div class="stats-bar-label">${this._escapeHtml(bucket.label)}</div></div>`;
       }).join("");
 
-      const axis = niceMax > 0
+      const zeroLabel = (0).toFixed(metric.digits);
+      const topLabel = ticks[2].toFixed(metric.digits);
+      const midLabel = ticks[1].toFixed(metric.digits);
+      // A top label that rounds to zero (e.g. "0.0" for a few meters of
+      // distance) is actively misleading, not just imprecise - omit the
+      // numbers rather than show a fake-looking all-zero scale. A mid
+      // label identical to the top label (e.g. both "1" for ticks 0.5/1
+      // with an integer metric) is redundant, so it's dropped too.
+      const showAxisLabels = niceMax > 0 && topLabel !== zeroLabel;
+      const axis = showAxisLabels
         ? `<div class="stats-axis">
-            <span class="stats-axis-tick" style="bottom:100%">${ticks[2].toFixed(metric.digits)}</span>
-            <span class="stats-axis-tick" style="bottom:50%">${ticks[1].toFixed(metric.digits)}</span>
+            <span class="stats-axis-tick" style="bottom:100%">${topLabel}</span>
+            ${midLabel !== topLabel ? `<span class="stats-axis-tick" style="bottom:50%">${midLabel}</span>` : ""}
             <span class="stats-axis-tick" style="bottom:0%">0</span>
           </div>`
         : "";
