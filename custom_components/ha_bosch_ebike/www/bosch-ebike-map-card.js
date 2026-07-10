@@ -6944,7 +6944,7 @@ class BoschEBikeCalendarCard extends HTMLElement {
     });
     this.querySelector("#cal-account").addEventListener("change", (e) => {
       this._filterAccount = e.target.value;
-      this._filterBike = "all";
+      if (!this._lockedBike) this._filterBike = "all";
       this._populateBikeFilter();
       this._render();
     });
@@ -7556,6 +7556,18 @@ class BoschEBikeStatsCard extends HTMLElement {
     this._populateBikeFilter();
   }
 
+  // Bikes visible under the current account filter, in stable order. Shared
+  // by the bike-filter <select> and the per-bike chart breakdown so both
+  // always agree on which bikes exist and in what order.
+  _bikesInScope() {
+    const bikes = [];
+    for (const inst of this._instances) {
+      if (this._filterAccount !== "all" && inst.config_entry_id !== this._filterAccount) continue;
+      for (const b of (inst.bikes || [])) bikes.push(b);
+    }
+    return bikes;
+  }
+
   _populateBikeFilter() {
     const bikeSel = this.querySelector("#stats-bike");
     const bikeLbl = this.querySelector("#stats-bike-lbl");
@@ -7564,11 +7576,7 @@ class BoschEBikeStatsCard extends HTMLElement {
       if (bikeLbl) bikeLbl.style.display = "none";
       return;
     }
-    const bikes = [];
-    for (const inst of this._instances) {
-      if (this._filterAccount !== "all" && inst.config_entry_id !== this._filterAccount) continue;
-      for (const b of (inst.bikes || [])) bikes.push(b);
-    }
+    const bikes = this._bikesInScope();
     if (bikes.length <= 1) {
       bikeSel.style.display = "none";
       bikeLbl.style.display = "none";
