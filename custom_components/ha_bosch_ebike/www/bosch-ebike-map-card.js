@@ -142,6 +142,20 @@ const I18N = {
     cal_loading: "Loading rides …",
     cal_load_failed: "Error loading rides",
     cal_no_match: "No rides match this filter",
+    stats_title: "eBike Statistics",
+    stats_editor_timeframe: "Default timeframe",
+    stats_weeks: "Weeks",
+    stats_months: "Months",
+    stats_editor_metrics: "Visible metrics",
+    stats_metric_distance: "Distance",
+    stats_metric_elevation: "Elevation gain",
+    stats_metric_avg_speed: "Average speed",
+    stats_metric_ride_count: "Ride count",
+    stats_no_match: "No rides in this period.",
+    stats_unit_km: "km",
+    stats_unit_m: "m",
+    stats_unit_kmh: "km/h",
+    stats_unit_rides: "rides",
     cal_stat_rides: "Rides",
     cal_stat_distance: "Distance",
     cal_stat_active_days: "Active days",
@@ -519,6 +533,20 @@ const I18N = {
     cal_loading: "Lade Touren …",
     cal_load_failed: "Fehler beim Laden der Touren",
     cal_no_match: "Keine Touren in diesem Filter",
+    stats_title: "eBike Statistik",
+    stats_editor_timeframe: "Standard-Zeitraum",
+    stats_weeks: "Wochen",
+    stats_months: "Monate",
+    stats_editor_metrics: "Sichtbare Metriken",
+    stats_metric_distance: "Distanz",
+    stats_metric_elevation: "Höhenmeter",
+    stats_metric_avg_speed: "Ø-Geschwindigkeit",
+    stats_metric_ride_count: "Anzahl Touren",
+    stats_no_match: "Keine Touren in diesem Zeitraum.",
+    stats_unit_km: "km",
+    stats_unit_m: "m",
+    stats_unit_kmh: "km/h",
+    stats_unit_rides: "Touren",
     cal_stat_rides: "Touren",
     cal_stat_distance: "Distanz",
     cal_stat_active_days: "Aktive Tage",
@@ -894,6 +922,20 @@ const I18N = {
     cal_loading: "Ritten laden …",
     cal_load_failed: "Fout bij het laden van ritten",
     cal_no_match: "Geen ritten voldoen aan dit filter",
+    stats_title: "eBike Statistieken",
+    stats_editor_timeframe: "Standaard tijdvak",
+    stats_weeks: "Weken",
+    stats_months: "Maanden",
+    stats_editor_metrics: "Zichtbare metrieken",
+    stats_metric_distance: "Afstand",
+    stats_metric_elevation: "Hoogtemeters",
+    stats_metric_avg_speed: "Gem. snelheid",
+    stats_metric_ride_count: "Aantal ritten",
+    stats_no_match: "Geen ritten in deze periode.",
+    stats_unit_km: "km",
+    stats_unit_m: "m",
+    stats_unit_kmh: "km/u",
+    stats_unit_rides: "ritten",
     cal_stat_rides: "Ritten",
     cal_stat_distance: "Afstand",
     cal_stat_active_days: "Actieve dagen",
@@ -1280,6 +1322,20 @@ const I18N = {
     cal_loading: "Chargement des sorties …",
     cal_load_failed: "Erreur de chargement des sorties",
     cal_no_match: "Aucune sortie ne correspond à ce filtre",
+    stats_title: "Statistiques eBike",
+    stats_editor_timeframe: "Période par défaut",
+    stats_weeks: "Semaines",
+    stats_months: "Mois",
+    stats_editor_metrics: "Métriques visibles",
+    stats_metric_distance: "Distance",
+    stats_metric_elevation: "Dénivelé",
+    stats_metric_avg_speed: "Vitesse moyenne",
+    stats_metric_ride_count: "Nombre de sorties",
+    stats_no_match: "Aucune sortie sur cette période.",
+    stats_unit_km: "km",
+    stats_unit_m: "m",
+    stats_unit_kmh: "km/h",
+    stats_unit_rides: "sorties",
     cal_stat_rides: "Sorties",
     cal_stat_distance: "Distance",
     cal_stat_active_days: "Jours actifs",
@@ -1667,6 +1723,20 @@ const I18N = {
     cal_loading: "Caricamento uscite …",
     cal_load_failed: "Errore nel caricamento delle uscite",
     cal_no_match: "Nessuna uscita corrisponde al filtro",
+    stats_title: "Statistiche eBike",
+    stats_editor_timeframe: "Periodo predefinito",
+    stats_weeks: "Settimane",
+    stats_months: "Mesi",
+    stats_editor_metrics: "Metriche visibili",
+    stats_metric_distance: "Distanza",
+    stats_metric_elevation: "Dislivello",
+    stats_metric_avg_speed: "Velocità media",
+    stats_metric_ride_count: "Numero di uscite",
+    stats_no_match: "Nessuna uscita in questo periodo.",
+    stats_unit_km: "km",
+    stats_unit_m: "m",
+    stats_unit_kmh: "km/h",
+    stats_unit_rides: "uscite",
     cal_stat_rides: "Uscite",
     cal_stat_distance: "Distanza",
     cal_stat_active_days: "Giorni attivi",
@@ -2054,6 +2124,20 @@ const I18N = {
     cal_loading: "Cargando rutas …",
     cal_load_failed: "Error al cargar las rutas",
     cal_no_match: "Ninguna ruta coincide con el filtro",
+    stats_title: "Estadísticas eBike",
+    stats_editor_timeframe: "Periodo predeterminado",
+    stats_weeks: "Semanas",
+    stats_months: "Meses",
+    stats_editor_metrics: "Métricas visibles",
+    stats_metric_distance: "Distancia",
+    stats_metric_elevation: "Desnivel positivo",
+    stats_metric_avg_speed: "Velocidad media",
+    stats_metric_ride_count: "Número de rutas",
+    stats_no_match: "No hay rutas en este periodo.",
+    stats_unit_km: "km",
+    stats_unit_m: "m",
+    stats_unit_kmh: "km/h",
+    stats_unit_rides: "rutas",
     cal_stat_rides: "Rutas",
     cal_stat_distance: "Distancia",
     cal_stat_active_days: "Días activos",
@@ -7183,6 +7267,441 @@ class BoschEBikeCalendarCardEditor extends BoschEBikeMapCardEditor {
       if (v) this._config.bike_id = v; else delete this._config.bike_id;
       this._emit();
     });
+  }
+}
+
+// ===========================================================================
+// Statistics card: bar charts (distance/elevation/avg speed/ride count) over
+// the last 12 weeks or months, issue #51.
+// ===========================================================================
+
+// Fixed-size bucket boundaries [{start, end, label}], oldest first, ending at
+// "now" - weeks are 7-day windows, months are calendar months. `now` is
+// injected so this stays testable. Verified standalone (see this session's
+// scratchpad sim_stats_card_bucketing.js) before being pasted here.
+function statsComputeBuckets(mode, now) {
+  const buckets = [];
+  if (mode === "weeks") {
+    let end = new Date(now);
+    for (let i = 0; i < 12; i++) {
+      const start = new Date(end.getTime() - 7 * 86400000);
+      buckets.unshift({ start, end, label: null });
+      end = start;
+    }
+  } else {
+    let end = new Date(now);
+    let cursor = new Date(now.getFullYear(), now.getMonth(), 1);
+    for (let i = 0; i < 12; i++) {
+      const start = cursor;
+      buckets.unshift({ start, end, label: null });
+      end = start;
+      cursor = new Date(start.getFullYear(), start.getMonth() - 1, 1);
+    }
+  }
+  for (const b of buckets) {
+    b.label = mode === "weeks"
+      ? `${b.start.getMonth() + 1}/${b.start.getDate()}`
+      : b.start.toLocaleString(undefined, { month: "short" });
+  }
+  return buckets;
+}
+
+// Finds the bucket index for an activity's startTime (ISO string), or -1 if
+// it falls outside all 12 buckets. A ride's own startTime decides its
+// bucket - it is never split across a boundary.
+function statsBucketIndexFor(startTimeIso, buckets) {
+  const t = Date.parse(startTimeIso);
+  if (isNaN(t)) return -1;
+  for (let i = 0; i < buckets.length; i++) {
+    if (t >= buckets[i].start.getTime() && t < buckets[i].end.getTime()) return i;
+  }
+  return -1;
+}
+
+// Aggregates filtered activities into per-bucket totals, parallel to
+// `buckets`. Average speed is NOT stored directly - it is derived at render
+// time as distanceM / durationS (distance-weighted), never as a mean of
+// per-ride speed.average values, so multi-bike/multi-ride buckets stay
+// statistically correct.
+function statsAggregateIntoBuckets(activities, buckets) {
+  const totals = buckets.map(() => ({ distanceM: 0, elevationM: 0, rides: 0, durationS: 0 }));
+  for (const a of activities) {
+    const idx = statsBucketIndexFor(a.startTime, buckets);
+    if (idx === -1) continue;
+    const t = totals[idx];
+    t.distanceM += a.distance || 0;
+    t.elevationM += a.elevation?.gain || 0; // missing -> contributes 0, ride still counted
+    t.durationS += a.durationWithoutStops || 0;
+    t.rides += 1;
+  }
+  return totals;
+}
+
+function statsAvgSpeedKmh(bucketTotal) {
+  if (bucketTotal.durationS <= 0) return null;
+  return (bucketTotal.distanceM / 1000) / (bucketTotal.durationS / 3600);
+}
+
+const STATS_METRICS = [
+  { key: "show_distance", labelKey: "stats_metric_distance", unitKey: "stats_unit_km",
+    value: (t) => t.distanceM / 1000, digits: 1 },
+  { key: "show_elevation", labelKey: "stats_metric_elevation", unitKey: "stats_unit_m",
+    value: (t) => t.elevationM, digits: 0 },
+  { key: "show_avg_speed", labelKey: "stats_metric_avg_speed", unitKey: "stats_unit_kmh",
+    value: (t) => statsAvgSpeedKmh(t) ?? 0, digits: 1 },
+  { key: "show_ride_count", labelKey: "stats_metric_ride_count", unitKey: "stats_unit_rides",
+    value: (t) => t.rides, digits: 0 },
+];
+
+class BoschEBikeStatsCard extends HTMLElement {
+  constructor() {
+    super();
+    this._hass = null;
+    this._config = {};
+    this._activities = [];
+    this._instances = [];
+    this._filterAccount = "all";
+    this._filterBike = "all";
+    this._timeframe = "weeks"; // "weeks" | "months"
+    this._lockedAccount = false;
+    this._lockedBike = false;
+    this._ready = false;
+    this._booting = false;
+  }
+
+  setConfig(config) {
+    this._config = { ...config };
+    if (config.account_id) { this._filterAccount = config.account_id; this._lockedAccount = true; }
+    else { this._lockedAccount = false; }
+    if (config.bike_id) { this._filterBike = config.bike_id; this._lockedBike = true; }
+    else { this._lockedBike = false; }
+    this._timeframe = config.default_timeframe === "months" ? "months" : "weeks";
+    if (this._ready) {
+      this._applyTitle();
+      this._populateFilters();
+      this._render();
+    }
+  }
+
+  set hass(hass) {
+    const first = !this._hass;
+    this._hass = hass;
+    if (first) this._boot();
+  }
+
+  static getConfigElement() { return document.createElement("bosch-ebike-stats-card-editor"); }
+  static getStubConfig() {
+    return { show_distance: true, show_elevation: true, show_avg_speed: true, show_ride_count: true };
+  }
+  getCardSize() { return 6; }
+
+  async _boot() {
+    if (this._booting || this._ready) return;
+    this._booting = true;
+    try {
+      this._buildDOM();
+      this._ready = true;
+      this._applyTitle();
+      await this._fetchInstances();
+      this._populateFilters();
+      await this._loadActivities();
+      this._render();
+    } catch (err) {
+      console.error("[Bosch eBike Stats] boot error", err);
+      const msg = this.querySelector("#stats-msg");
+      if (msg) msg.textContent = "Error: " + (err?.message || err);
+    } finally {
+      this._booting = false;
+    }
+  }
+
+  _applyTitle() {
+    const head = this.querySelector(".stats-head span");
+    if (head && this._config && this._config.title) head.textContent = this._config.title;
+  }
+
+  _buildDOM() {
+    this.innerHTML = "";
+    const card = document.createElement("ha-card");
+    this.appendChild(card);
+    const style = document.createElement("style");
+    style.textContent = `
+      .stats-head {
+        display:flex; align-items:center; gap:8px; padding:12px 16px;
+        background:var(--primary-color,#03a9f4); color:#fff; font-size:16px; font-weight:500;
+      }
+      .stats-filters {
+        display:flex; flex-wrap:wrap; gap:8px; padding:8px 12px;
+        background:var(--secondary-background-color,#f5f5f5);
+        border-bottom:1px solid var(--divider-color,#e0e0e0);
+      }
+      .stats-filters select {
+        padding:5px 8px; border:1px solid var(--divider-color,#ccc);
+        border-radius:6px; font-size:13px;
+        background:var(--card-background-color,#fff); color:var(--primary-text-color,#333);
+      }
+      .stats-filter-lbl { font-size:12px; color:var(--secondary-text-color,#666); align-self:center; }
+      .stats-body { padding:14px 16px; }
+      .stats-chart { margin-bottom:18px; }
+      .stats-chart:last-child { margin-bottom:0; }
+      .stats-chart-title { font-size:13px; font-weight:500; color:var(--primary-text-color,#333); margin-bottom:6px; }
+      .stats-bars { display:flex; align-items:flex-end; gap:3px; height:90px; }
+      .stats-bar-wrap { flex:1; display:flex; flex-direction:column; align-items:center; height:100%; justify-content:flex-end; }
+      .stats-bar { width:100%; background:var(--primary-color,#03a9f4); border-radius:2px 2px 0 0; min-height:1px; }
+      .stats-bar-label { font-size:9px; color:var(--secondary-text-color,#888); margin-top:3px; white-space:nowrap; }
+      .stats-overlay { padding:18px 16px; color:var(--secondary-text-color,#999); font-size:13px; text-align:center; }
+    `;
+    card.appendChild(style);
+
+    const t = (k, ...a) => ebT(this._hass, k, ...a);
+    const wrap = document.createElement("div");
+    wrap.innerHTML = `
+      <div class="stats-head">
+        <svg viewBox="0 0 24 24" width="22" height="22"><path fill="white" d="M22,21H2V3H4V19H6V10H10V19H12V6H16V19H18V14H22V21Z"/></svg>
+        <span>${t("stats_title")}</span>
+      </div>
+      <div class="stats-filters">
+        <span class="stats-filter-lbl" id="stats-acc-lbl" style="display:none;">${t("cal_account_label")}</span>
+        <select id="stats-account" style="display:none;">
+          <option value="all">${t("cal_account_label")}</option>
+        </select>
+        <span class="stats-filter-lbl" id="stats-bike-lbl" style="display:none;">${t("cal_bike_label")}</span>
+        <select id="stats-bike" style="display:none;">
+          <option value="all">${t("cal_bike_label")}</option>
+        </select>
+        <select id="stats-timeframe">
+          <option value="weeks">${t("stats_weeks")}</option>
+          <option value="months">${t("stats_months")}</option>
+        </select>
+      </div>
+      <div class="stats-body" id="stats-body">
+        <div class="stats-overlay" id="stats-msg">${t("cal_loading")}</div>
+      </div>
+    `;
+    while (wrap.firstChild) card.appendChild(wrap.firstChild);
+
+    this.querySelector("#stats-account").addEventListener("change", (e) => {
+      this._filterAccount = e.target.value;
+      this._filterBike = "all";
+      this._populateBikeFilter();
+      this._render();
+    });
+    this.querySelector("#stats-bike").addEventListener("change", (e) => {
+      this._filterBike = e.target.value;
+      this._render();
+    });
+    const tfSel = this.querySelector("#stats-timeframe");
+    tfSel.value = this._timeframe;
+    tfSel.addEventListener("change", (e) => {
+      this._timeframe = e.target.value;
+      this._render();
+    });
+  }
+
+  async _fetchInstances() {
+    try {
+      const res = await this._hass.callWS({ type: "bosch_ebike/list_instances" });
+      this._instances = res.instances || [];
+    } catch (_) { this._instances = []; }
+  }
+
+  async _loadActivities() {
+    try {
+      const res = await this._hass.callWS({ type: "bosch_ebike/list_activities" });
+      this._activities = res.activities || [];
+    } catch (err) {
+      console.error("[Bosch eBike Stats] load_activities failed", err);
+      this._activities = [];
+    }
+  }
+
+  _populateFilters() {
+    const accSel = this.querySelector("#stats-account");
+    const accLbl = this.querySelector("#stats-acc-lbl");
+    if (this._lockedAccount) {
+      if (accSel) accSel.style.display = "none";
+      if (accLbl) accLbl.style.display = "none";
+    } else if (this._instances.length > 1) {
+      const t = (k) => ebT(this._hass, k);
+      const opts = [`<option value="all">${t("cal_account_label").replace(":", "")}</option>`];
+      for (const inst of this._instances) {
+        opts.push(`<option value="${this._escapeHtml(inst.config_entry_id)}">${this._escapeHtml(inst.label)}</option>`);
+      }
+      accSel.innerHTML = opts.join("");
+      accSel.value = this._filterAccount;
+      accSel.style.display = "";
+      accLbl.style.display = "";
+    }
+    this._populateBikeFilter();
+  }
+
+  _populateBikeFilter() {
+    const bikeSel = this.querySelector("#stats-bike");
+    const bikeLbl = this.querySelector("#stats-bike-lbl");
+    if (this._lockedBike) {
+      if (bikeSel) bikeSel.style.display = "none";
+      if (bikeLbl) bikeLbl.style.display = "none";
+      return;
+    }
+    const bikes = [];
+    for (const inst of this._instances) {
+      if (this._filterAccount !== "all" && inst.config_entry_id !== this._filterAccount) continue;
+      for (const b of (inst.bikes || [])) bikes.push(b);
+    }
+    if (bikes.length <= 1) {
+      bikeSel.style.display = "none";
+      bikeLbl.style.display = "none";
+      return;
+    }
+    const t = (k) => ebT(this._hass, k);
+    const opts = [`<option value="all">${t("cal_bike_label").replace(":", "")}</option>`];
+    for (const b of bikes) {
+      opts.push(`<option value="${this._escapeHtml(b.id)}">${this._escapeHtml(b.label)}</option>`);
+    }
+    bikeSel.innerHTML = opts.join("");
+    bikeSel.value = this._filterBike;
+    bikeSel.style.display = "";
+    bikeLbl.style.display = "";
+  }
+
+  _escapeHtml(s) {
+    return String(s || "").replace(/[&<>"']/g, (c) => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+    })[c]);
+  }
+
+  _filteredActivities() {
+    return (this._activities || []).filter((a) => {
+      if (this._filterAccount !== "all" && a.accountId !== this._filterAccount) return false;
+      if (this._filterBike !== "all" && a.bikeId !== this._filterBike) return false;
+      return true;
+    });
+  }
+
+  _render() {
+    if (!this._ready) return;
+    const body = this.querySelector("#stats-body");
+    if (!body) return;
+    const t = (k, ...a) => ebT(this._hass, k, ...a);
+
+    const acts = this._filteredActivities();
+    const buckets = statsComputeBuckets(this._timeframe, new Date());
+    const totals = statsAggregateIntoBuckets(acts, buckets);
+
+    const anyRides = totals.some((tt) => tt.rides > 0);
+    if (!anyRides) {
+      body.innerHTML = `<div class="stats-overlay">${t("stats_no_match")}</div>`;
+      return;
+    }
+
+    const cfg = this._config || {};
+    const charts = [];
+    for (const metric of STATS_METRICS) {
+      if (cfg[metric.key] === false) continue; // absent key -> enabled by default
+      const values = totals.map((tt) => metric.value(tt));
+      const max = Math.max(...values, 0);
+      const bars = values.map((v, i) => {
+        const pct = max > 0 ? Math.max((v / max) * 100, v > 0 ? 2 : 0) : 0;
+        const title = `${buckets[i].label}: ${v.toFixed(metric.digits)} ${t(metric.unitKey)}`;
+        return `<div class="stats-bar-wrap" title="${this._escapeHtml(title)}">
+          <div class="stats-bar" style="height:${pct}%"></div>
+          <div class="stats-bar-label">${this._escapeHtml(buckets[i].label)}</div>
+        </div>`;
+      }).join("");
+      charts.push(`<div class="stats-chart">
+        <div class="stats-chart-title">${t(metric.labelKey)}</div>
+        <div class="stats-bars">${bars}</div>
+      </div>`);
+    }
+    body.innerHTML = charts.length
+      ? charts.join("")
+      : `<div class="stats-overlay">${t("stats_no_match")}</div>`;
+  }
+}
+
+class BoschEBikeStatsCardEditor extends BoschEBikeMapCardEditor {
+  _render() {
+    if (!this._config) return;
+    const cfg = this._config;
+    const inputStyle = "width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;background:var(--card-background-color,#fff);color:var(--primary-text-color,#222);";
+    const labelStyle = "display:block;margin-top:14px;margin-bottom:6px;font-weight:500";
+    const hintStyle = "display:block;margin-top:4px;font-size:12px;color:var(--secondary-text-color,#777)";
+    const t = (k, ...a) => ebT(this._hass, k, ...a);
+
+    let accountOpts = `<option value="">${ebT(this._hass, "editor_select_all")}</option>`;
+    for (const inst of (this._instances || [])) {
+      const selected = cfg.account_id === inst.config_entry_id ? " selected" : "";
+      accountOpts += `<option value="${this._escapeHtml(inst.config_entry_id)}"${selected}>${this._escapeHtml(inst.label)}</option>`;
+    }
+
+    let bikeOpts = `<option value="">${ebT(this._hass, "editor_select_all")}</option>`;
+    for (const b of this._bikeOptionsForAccount(cfg.account_id)) {
+      const selected = cfg.bike_id === b.id ? " selected" : "";
+      bikeOpts += `<option value="${this._escapeHtml(b.id)}"${selected}>${this._escapeHtml(b.label)}</option>`;
+    }
+
+    this.innerHTML = `<div style="padding:16px">
+      <label style="${labelStyle.replace('margin-top:14px;', '')}">${t("editor_title")}</label>
+      <input type="text" value="${this._escapeHtml(cfg.title || '')}" placeholder="${t("stats_title")}" style="${inputStyle}" id="title-in">
+
+      <label style="${labelStyle}">${t("editor_account_label")}</label>
+      <select id="acc-in" style="${inputStyle}">${accountOpts}</select>
+      <span style="${hintStyle}">${t("editor_account_hint")}</span>
+
+      <label style="${labelStyle}">${t("editor_bike_label")}</label>
+      <select id="bike-in" style="${inputStyle}">${bikeOpts}</select>
+      <span style="${hintStyle}">${t("editor_bike_hint")}</span>
+
+      <label style="${labelStyle}">${t("stats_editor_timeframe")}</label>
+      <select id="timeframe-in" style="${inputStyle}">
+        <option value="weeks"${cfg.default_timeframe !== "months" ? " selected" : ""}>${t("stats_weeks")}</option>
+        <option value="months"${cfg.default_timeframe === "months" ? " selected" : ""}>${t("stats_months")}</option>
+      </select>
+
+      <label style="${labelStyle}">${t("stats_editor_metrics")}</label>
+      <div>
+        <input type="checkbox" id="show-distance-in"${cfg.show_distance !== false ? " checked" : ""} style="margin-right:8px;vertical-align:middle;">${t("stats_metric_distance")}<br>
+        <input type="checkbox" id="show-elevation-in"${cfg.show_elevation !== false ? " checked" : ""} style="margin-right:8px;vertical-align:middle;">${t("stats_metric_elevation")}<br>
+        <input type="checkbox" id="show-avg-speed-in"${cfg.show_avg_speed !== false ? " checked" : ""} style="margin-right:8px;vertical-align:middle;">${t("stats_metric_avg_speed")}<br>
+        <input type="checkbox" id="show-ride-count-in"${cfg.show_ride_count !== false ? " checked" : ""} style="margin-right:8px;vertical-align:middle;">${t("stats_metric_ride_count")}
+      </div>
+    </div>`;
+
+    this.querySelector("#title-in").addEventListener("change", (e) => {
+      const v = e.target.value.trim();
+      this._config = { ...this._config };
+      if (v) this._config.title = v; else delete this._config.title;
+      this._emit();
+    });
+    this.querySelector("#acc-in").addEventListener("change", (e) => {
+      const v = e.target.value;
+      this._config = { ...this._config };
+      if (v) this._config.account_id = v; else delete this._config.account_id;
+      delete this._config.bike_id;
+      this._emit();
+      this._render();
+    });
+    this.querySelector("#bike-in").addEventListener("change", (e) => {
+      const v = e.target.value;
+      this._config = { ...this._config };
+      if (v) this._config.bike_id = v; else delete this._config.bike_id;
+      this._emit();
+    });
+    this.querySelector("#timeframe-in").addEventListener("change", (e) => {
+      this._config = { ...this._config, default_timeframe: e.target.value };
+      this._emit();
+    });
+    for (const [id, key] of [
+      ["show-distance-in", "show_distance"],
+      ["show-elevation-in", "show_elevation"],
+      ["show-avg-speed-in", "show_avg_speed"],
+      ["show-ride-count-in", "show_ride_count"],
+    ]) {
+      this.querySelector(`#${id}`).addEventListener("change", (e) => {
+        this._config = { ...this._config, [key]: e.target.checked };
+        this._emit();
+      });
+    }
   }
 }
 
@@ -14065,6 +14584,12 @@ if (!customElements.get("bosch-ebike-routeplanner-card")) {
 if (!customElements.get("bosch-ebike-routeplanner-card-editor")) {
   customElements.define("bosch-ebike-routeplanner-card-editor", BoschEBikeRoutePlannerCardEditor);
 }
+if (!customElements.get("bosch-ebike-stats-card")) {
+  customElements.define("bosch-ebike-stats-card", BoschEBikeStatsCard);
+}
+if (!customElements.get("bosch-ebike-stats-card-editor")) {
+  customElements.define("bosch-ebike-stats-card-editor", BoschEBikeStatsCardEditor);
+}
 
 window.customCards = window.customCards || [];
 if (!window.customCards.find((c) => c.type === "bosch-ebike-map-card")) {
@@ -14112,6 +14637,14 @@ if (!window.customCards.find((c) => c.type === "bosch-ebike-routeplanner-card"))
     type: "bosch-ebike-routeplanner-card",
     name: "Bosch eBike Route Planner",
     description: "Plan bike routes with BRouter: consumption estimate, battery check and GPX export",
+    preview: false,
+  });
+}
+if (!window.customCards.find((c) => c.type === "bosch-ebike-stats-card")) {
+  window.customCards.push({
+    type: "bosch-ebike-stats-card",
+    name: "Bosch eBike Statistics",
+    description: "Balkendiagramme für Distanz, Höhenmeter, Ø-Geschwindigkeit und Touren-Anzahl über die letzten 12 Wochen/Monate",
     preview: false,
   });
 }
