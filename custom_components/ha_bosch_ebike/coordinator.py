@@ -587,36 +587,41 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
             # ---- Distance (live odometer is in km) ----
             if odo_entity and not cache.get("odo"):
-                start_odo = await get_state_at(self.hass, odo_entity, start_time)
-                end_odo = await get_state_at(self.hass, odo_entity, end_time)
-                if (
-                    start_odo is not None
-                    and end_odo is not None
-                    and end_odo >= start_odo
-                ):
-                    live_distance_m = (end_odo - start_odo) * 1000.0
-                    # Sanity guard: ignore obviously bogus values (sensor
-                    # rollover, zero-length tour). 50 m .. 500 km per tour.
-                    if 50.0 <= live_distance_m <= 500_000.0:
-                        old = activity.get("distance")
-                        activity["distance"] = round(live_distance_m, 1)
-                        activity["_distance_source"] = "ble_live"
-                        cache["odo"] = True
-                        _LOGGER.info(
-                            "Live distance for activity %s: %.0f m (was %s)",
-                            aid, live_distance_m, old,
-                        )
+                start_odo_result = await get_state_at(self.hass, odo_entity, start_time)
+                end_odo_result = await get_state_at(self.hass, odo_entity, end_time)
+                if start_odo_result is not None and end_odo_result is not None:
+                    start_odo, start_odo_ts = start_odo_result
+                    end_odo, end_odo_ts = end_odo_result
+                    if end_odo >= start_odo:
+                        live_distance_m = (end_odo - start_odo) * 1000.0
+                        # Sanity guard: ignore obviously bogus values (sensor
+                        # rollover, zero-length tour). 50 m .. 500 km per tour.
+                        if 50.0 <= live_distance_m <= 500_000.0:
+                            old = activity.get("distance")
+                            activity["distance"] = round(live_distance_m, 1)
+                            activity["_distance_source"] = "ble_live"
+                            cache["odo"] = True
+                            _LOGGER.info(
+                                "Live distance for activity %s: %.0f m (was %s). "
+                                "issue#31 forensic: start_odo=%.3f km @ %s (target %s), "
+                                "end_odo=%.3f km @ %s (target %s)",
+                                aid, live_distance_m, old,
+                                start_odo, start_odo_ts.isoformat(), start_time.isoformat(),
+                                end_odo, end_odo_ts.isoformat(), end_time.isoformat(),
+                            )
 
             # ---- Consumption (live SoC in %) ----
             if soc_entity and not cache.get("soc"):
-                start_soc = await get_state_at(self.hass, soc_entity, start_time)
-                end_soc = await get_state_at(self.hass, soc_entity, end_time)
+                start_soc_result = await get_state_at(self.hass, soc_entity, start_time)
+                end_soc_result = await get_state_at(self.hass, soc_entity, end_time)
                 capacity_wh = self.battery_capacity_wh(bike_id)
                 if (
-                    start_soc is not None
-                    and end_soc is not None
+                    start_soc_result is not None
+                    and end_soc_result is not None
                     and capacity_wh > 0
                 ):
+                    start_soc, _start_soc_ts = start_soc_result
+                    end_soc, _end_soc_ts = end_soc_result
                     delta_pct = start_soc - end_soc
                     # Allow tiny negative drifts (regen, sensor noise).
                     if -2.0 <= delta_pct <= 100.0:
@@ -747,8 +752,16 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         morning ride would otherwise freeze on its partial summary forever.
         Refetch the track of the most recent still-unconfirmed activities
         (bounded by a 48 h window and a fetch cap) every poll and correct them
-        upwards once their full track is available. Index 0 is handled above;
-        BLE/GPS-confirmed distances are skipped.
+        upwards once their full track is available. Index 0 is handled above.
+        A `gps_track`-confirmed distance is skipped (nothing would change on
+        a repeat check against the same track). A `ble_live` distance is
+        normally more precise than a GPS track and is skipped too - but only
+        once it has actually been cross-checked against the track a single
+        time (`_ble_track_checked`). This lets a wrong ble_live value (e.g.
+        from an odometer sample that matched the wrong ride, issue #31) still
+        self-heal via the same upward-only correction as any other activity,
+        without re-fetching the track forever once a ble_live value has
+        already been confirmed correct.
         """
         if getattr(self, "is_bes2", False):
             return  # BES2 uses a different track endpoint (handled elsewhere).
@@ -760,7 +773,10 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         for act in self._all_activities[1:30]:
             if fetched >= max_fetches:
                 break
-            if act.get("_distance_source") in ("ble_live", "gps_track"):
+            src = act.get("_distance_source")
+            if src == "gps_track":
+                continue
+            if src == "ble_live" and act.get("_ble_track_checked"):
                 continue
             aid = act.get("id")
             if not aid:
@@ -781,9 +797,10 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             track_m = track_distance_m(details)
             summary_m = float(act.get("distance") or 0)
             _LOGGER.debug(
-                "issue#31 recheck activity %s: summary=%.0f m track=%s",
+                "issue#31 recheck activity %s: summary=%.0f m track=%s source=%s",
                 aid, summary_m,
                 ("%.0f" % track_m) if track_m is not None else None,
+                src or "cloud",
             )
             corrected = corrected_track_distance(summary_m, track_m)
             if corrected is not None:
@@ -791,9 +808,11 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 act["_distance_source"] = "gps_track"
                 _LOGGER.info(
                     "Distance for activity %s corrected from GPS track "
-                    "(recheck): %.0f m (summary said %.0f m)",
-                    aid, corrected, summary_m,
+                    "(recheck): %.0f m (%s said %.0f m)",
+                    aid, corrected, src or "summary", summary_m,
                 )
+            elif src == "ble_live":
+                act["_ble_track_checked"] = True
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch bikes and activities from Bosch API."""

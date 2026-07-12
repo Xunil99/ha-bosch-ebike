@@ -35,12 +35,15 @@ async def get_state_at(
     entity_id: str | None,
     target_time: datetime,
     tolerance: timedelta = LIVE_SAMPLE_TOLERANCE,
-) -> float | None:
-    """Return the recorder state of *entity_id* closest to *target_time*.
+) -> tuple[float, datetime] | None:
+    """Return (value, sample_time) of *entity_id* closest to *target_time*.
 
     Only returns a value if a fresh sample exists within *tolerance* of the
     target. Returns None if the entity is not configured, the recorder has no
-    matching data, or the closest sample is too far away in time.
+    matching data, or the closest sample is too far away in time. The
+    returned *sample_time* is the matched sample's own ``last_updated``, kept
+    alongside the value so callers can log exactly which sample was used
+    (issue #31: forensic detail for otherwise-unreproducible mismatches).
     """
     if not entity_id:
         return None
@@ -84,7 +87,7 @@ async def get_state_at(
         return None
 
     try:
-        return float(closest.state)
+        return float(closest.state), closest.last_updated
     except (ValueError, TypeError):
         return None
 
