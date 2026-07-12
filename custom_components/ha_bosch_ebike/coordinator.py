@@ -756,12 +756,14 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         A `gps_track`-confirmed distance is skipped (nothing would change on
         a repeat check against the same track). A `ble_live` distance is
         normally more precise than a GPS track and is skipped too - but only
-        once it has actually been cross-checked against the track a single
-        time (`_ble_track_checked`). This lets a wrong ble_live value (e.g.
-        from an odometer sample that matched the wrong ride, issue #31) still
-        self-heal via the same upward-only correction as any other activity,
-        without re-fetching the track forever once a ble_live value has
-        already been confirmed correct.
+        once a real track has actually been fetched and compared against it
+        (`_ble_track_checked`, set only when the track was available, so a
+        still-uploading track is retried on a later poll rather than locking
+        the activity out). The comparison itself uses a much stricter margin
+        than a raw cloud summary (see `corrected_track_distance`'s
+        `min_ratio`/`min_absolute_m`), so ordinary GPS noise never overrides
+        a good BLE value - only a genuinely wrong one, like an odometer
+        sample that matched the wrong ride (issue #31), self-heals this way.
         """
         if getattr(self, "is_bes2", False):
             return  # BES2 uses a different track endpoint (handled elsewhere).
@@ -802,7 +804,16 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 ("%.0f" % track_m) if track_m is not None else None,
                 src or "cloud",
             )
-            corrected = corrected_track_distance(summary_m, track_m)
+            if src == "ble_live":
+                # ble_live is normally more precise than a GPS track, so
+                # require a much larger, unmistakable gap (not the 5 %/200 m
+                # noise band used for a raw cloud summary) before letting the
+                # track override it - ordinary GPS jitter must never win.
+                corrected = corrected_track_distance(
+                    summary_m, track_m, min_ratio=2.0, min_absolute_m=1000.0
+                )
+            else:
+                corrected = corrected_track_distance(summary_m, track_m)
             if corrected is not None:
                 act["distance"] = corrected
                 act["_distance_source"] = "gps_track"
@@ -811,7 +822,10 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     "(recheck): %.0f m (%s said %.0f m)",
                     aid, corrected, src or "summary", summary_m,
                 )
-            elif src == "ble_live":
+            elif src == "ble_live" and track_m is not None:
+                # Only mark as checked once a real track was actually
+                # compared - if the track hasn't uploaded yet (track_m is
+                # None), leave it eligible for retry on a later poll.
                 act["_ble_track_checked"] = True
 
     async def _async_update_data(self) -> dict[str, Any]:

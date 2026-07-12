@@ -125,22 +125,31 @@ def track_distance_m(details: dict[str, Any]) -> float | None:
 
 
 def corrected_track_distance(
-    summary_m: float, track_m: float | None
+    summary_m: float,
+    track_m: float | None,
+    min_ratio: float = 1.05,
+    min_absolute_m: float = 200.0,
 ) -> float | None:
     """GPS-track distance to use, or None to keep the summary (issue #31).
 
-    Corrects the cloud summary UPWARDS only — a partial/uploading track must
-    never shrink a value — past small noise (>5 % and >200 m), with an absolute
-    sanity cap (500 km) against unit surprises or haversine outliers. There is
-    deliberately NO relative cap: an unfinished ride reports only a partial
-    summary, so the full track can be many times longer (the case that the old
-    "max 2x summary" guard wrongly blocked).
+    Corrects the existing distance UPWARDS only — a partial/uploading track
+    must never shrink a value — past small noise (default >5 % and >200 m),
+    with an absolute sanity cap (500 km) against unit surprises or haversine
+    outliers. There is deliberately NO relative cap: an unfinished ride
+    reports only a partial summary, so the full track can be many times
+    longer (the case that the old "max 2x summary" guard wrongly blocked).
+
+    *min_ratio*/*min_absolute_m* can be raised by callers correcting a value
+    that is normally MORE precise than a GPS track (e.g. a BLE-odometer-
+    derived "ble_live" distance), so ordinary GPS noise (cold-start jitter,
+    urban-canyon multipath) cannot override it — only a genuinely wrong value,
+    clearly outside that noise band, should.
     """
     if track_m is None:
         return None
     if (
-        track_m > summary_m * 1.05
-        and track_m - summary_m > 200.0
+        track_m > summary_m * min_ratio
+        and track_m - summary_m > min_absolute_m
         and track_m <= 500_000.0
     ):
         return round(track_m, 1)
