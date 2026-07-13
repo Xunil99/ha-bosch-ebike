@@ -841,10 +841,44 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         timestamps sort correctly as plain strings, no parsing needed -
         mirrors the defensive re-sort already used for the BES2 endpoint's
         similarly unreliable ordering.
+
+        Ties on startTime break on ``id`` as a secondary key, so the result
+        is a pure function of which activities are present, never of the
+        (unreliable) order the cloud happened to return them in this poll -
+        otherwise two same-instant activities could flip back and forth as
+        "latest" every 30 minutes purely from batch-order noise.
         """
         if not activities:
             return None
-        return max(activities, key=lambda a: str(a.get("startTime") or ""))
+        return max(
+            activities,
+            key=lambda a: (str(a.get("startTime") or ""), str(a.get("id") or "")),
+        )
+
+    @staticmethod
+    def _preserve_derived_distance(old: dict[str, Any], fresh: dict[str, Any]) -> None:
+        """Copy a derived distance (and its markers) from *old* onto *fresh*.
+
+        A fresh cloud copy of an activity would otherwise silently revert a
+        previously derived ble_live/gps_track distance back to the raw cloud
+        summary - and since both enrichment mechanisms are keyed by activity
+        id and never re-fire once done (`_live_enrichment_cache` for
+        ble_live, `_ble_track_checked` for the recheck loop), losing it here
+        would be permanent, not just until the next poll (issue #31).
+        A gps_track value is only kept while it is still >= the fresh cloud
+        summary: tracks are fetched once and can be stale (ride still
+        uploading), so a GROWING summary must win over a stale
+        track-derived value.
+        """
+        src = old.get("_distance_source")
+        if src == "ble_live" or (
+            src == "gps_track"
+            and float(old.get("distance") or 0) >= float(fresh.get("distance") or 0)
+        ):
+            fresh["distance"] = old.get("distance")
+            fresh["_distance_source"] = src
+        if old.get("_ble_track_checked"):
+            fresh["_ble_track_checked"] = True
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch bikes and activities from Bosch API."""
@@ -892,32 +926,18 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 if latest and str(latest.get("startTime") or "") >= current_start:
                     latest_id = latest.get("id")
                     if self._all_activities and self._all_activities[0].get("id") == latest_id:
-                        # Same activity, update in place — but keep a derived
-                        # distance (BLE odometer / GPS track): the fresh cloud
-                        # copy would silently revert it and the enrichment
-                        # cache prevents re-deriving (issue #31).
-                        # A gps_track value is only kept while it is still >=
-                        # the fresh cloud summary: tracks are fetched once and
-                        # can be stale (ride still uploading) — a GROWING
-                        # summary must win over a stale track-derived value.
-                        old = self._all_activities[0]
-                        src = old.get("_distance_source")
-                        if src == "ble_live" or (
-                            src == "gps_track"
-                            and float(old.get("distance") or 0)
-                            >= float(latest.get("distance") or 0)
-                        ):
-                            latest["distance"] = old.get("distance")
-                            latest["_distance_source"] = src
+                        # Same activity, update in place.
+                        self._preserve_derived_distance(self._all_activities[0], latest)
                         self._all_activities[0] = latest
                     else:
                         # A genuinely newer activity than the current index 0
                         # - it may already exist further down the list (e.g.
                         # issue #57: the cloud previously reported an older
                         # activity as "latest" and we imported this one in
-                        # its correct, lower position already), so drop any
-                        # existing copy before prepending to avoid a
-                        # duplicate.
+                        # its correct, lower position already). Preserve any
+                        # distance already derived for it there the same way
+                        # as above, then drop the old entry before
+                        # prepending so it isn't duplicated.
                         existing_idx = next(
                             (
                                 i
@@ -927,7 +947,8 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                             None,
                         )
                         if existing_idx is not None:
-                            self._all_activities.pop(existing_idx)
+                            old = self._all_activities.pop(existing_idx)
+                            self._preserve_derived_distance(old, latest)
                         self._all_activities.insert(0, latest)
                         _LOGGER.info(
                             "Bosch eBike: New activity detected: %s", latest.get("title")
