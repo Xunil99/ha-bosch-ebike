@@ -37,6 +37,7 @@ from .range_estimate import (
     compute_range_estimate,
     track_distance_m,
     corrected_track_distance,
+    ble_distance_implausible,
 )
 from .unassigned_activities import compute_unassigned_activities, merge_manual_overrides
 
@@ -555,6 +556,13 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         derive the exact value and replace the cloud-derived one. Falls back
         transparently when no live data is available.
 
+        For the current latest activity specifically, a derived distance is
+        also cross-checked against its own GPS track (already fetched
+        earlier in the same poll) via ``ble_distance_implausible`` before
+        being accepted - a live-sensor sample can have a genuinely fresh
+        timestamp while its VALUE still reflects an earlier, unrelated ride
+        (issues #31, #54), which timestamp freshness alone cannot detect.
+
         Requires ``self._activity_bike`` to already reflect the CURRENT
         ``self._all_activities`` (attribution must run before this).
 
@@ -597,18 +605,52 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                         # Sanity guard: ignore obviously bogus values (sensor
                         # rollover, zero-length tour). 50 m .. 500 km per tour.
                         if 50.0 <= live_distance_m <= 500_000.0:
-                            old = activity.get("distance")
-                            activity["distance"] = round(live_distance_m, 1)
-                            activity["_distance_source"] = "ble_live"
-                            cache["odo"] = True
-                            _LOGGER.info(
-                                "Live distance for activity %s: %.0f m (was %s). "
-                                "issue#31 forensic: start_odo=%.3f km @ %s (target %s), "
-                                "end_odo=%.3f km @ %s (target %s)",
-                                aid, live_distance_m, old,
-                                start_odo, start_odo_ts.isoformat(), start_time.isoformat(),
-                                end_odo, end_odo_ts.isoformat(), end_time.isoformat(),
-                            )
+                            # issue #31/#54: if this is the current latest
+                            # activity and its GPS track is already fetched,
+                            # cross-check the BLE value against it too. A
+                            # sample can have a genuinely fresh timestamp
+                            # (get_state_at()'s own check passes) while its
+                            # VALUE still reflects an earlier, unrelated
+                            # ride - the track is a physically-grounded,
+                            # independent measurement that catches this.
+                            track_m = None
+                            if (
+                                aid == self._latest_activity_id
+                                and self._latest_activity_details
+                            ):
+                                track_m = track_distance_m(
+                                    self._latest_activity_details
+                                )
+                            if track_m is not None and ble_distance_implausible(
+                                live_distance_m, track_m
+                            ):
+                                _LOGGER.info(
+                                    "Live distance for activity %s: rejecting "
+                                    "%.0f m, disagrees with its GPS track "
+                                    "(%.0f m) by more than ordinary noise - "
+                                    "keeping %s. start_odo=%.3f km @ %s "
+                                    "(target %s), end_odo=%.3f km @ %s "
+                                    "(target %s)",
+                                    aid, live_distance_m, track_m,
+                                    activity.get("distance"),
+                                    start_odo, start_odo_ts.isoformat(),
+                                    start_time.isoformat(),
+                                    end_odo, end_odo_ts.isoformat(),
+                                    end_time.isoformat(),
+                                )
+                            else:
+                                old = activity.get("distance")
+                                activity["distance"] = round(live_distance_m, 1)
+                                activity["_distance_source"] = "ble_live"
+                                cache["odo"] = True
+                                _LOGGER.info(
+                                    "Live distance for activity %s: %.0f m (was %s). "
+                                    "issue#31 forensic: start_odo=%.3f km @ %s (target %s), "
+                                    "end_odo=%.3f km @ %s (target %s)",
+                                    aid, live_distance_m, old,
+                                    start_odo, start_odo_ts.isoformat(), start_time.isoformat(),
+                                    end_odo, end_odo_ts.isoformat(), end_time.isoformat(),
+                                )
 
             # ---- Consumption (live SoC in %) ----
             if soc_entity and not cache.get("soc"):

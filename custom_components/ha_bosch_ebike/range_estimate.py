@@ -154,3 +154,30 @@ def corrected_track_distance(
     ):
         return round(track_m, 1)
     return None
+
+
+def ble_distance_implausible(
+    ble_m: float,
+    track_m: float | None,
+    min_ratio: float = 1.5,
+    min_absolute_m: float = 500.0,
+) -> bool:
+    """True if a ble_live-derived distance disagrees with the ride's own
+    GPS track by more than ordinary noise, in EITHER direction (issue
+    #31/#54).
+
+    corrected_track_distance() above is deliberately upward-only, built for
+    a raw cloud summary that might still be partially uploading (a partial
+    track must never shrink that value). A ble_live distance is different:
+    it already claims to be an exact, derived measurement, not a
+    conservative lower bound, so if a ride's own (already fetched) track
+    clearly disagrees with it either way, the BLE computation itself is
+    more likely to be wrong - e.g. a live-odometer sample whose timestamp
+    was genuinely fresh but whose VALUE still reflected an earlier,
+    unrelated ride (a bike reconnecting right before departure, sampling an
+    odometer that has not yet caught up with the prior ride).
+    """
+    if track_m is None or track_m <= 0 or ble_m <= 0:
+        return False
+    lo, hi = sorted((ble_m, track_m))
+    return hi > lo * min_ratio and hi - lo > min_absolute_m
