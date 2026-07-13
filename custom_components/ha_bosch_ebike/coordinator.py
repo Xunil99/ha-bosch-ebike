@@ -621,7 +621,20 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                             # ride, or a ride that stops being "latest" the
                             # very next poll) so the check applies uniformly
                             # regardless of ride order or bike attribution.
-                            cloud_m = float(activity.get("distance") or 0)
+                            # cloud_m must be a genuinely independent
+                            # signal. If _distance_source is already
+                            # "gps_track" (this poll or an earlier one),
+                            # activity["distance"] IS a track-derived
+                            # value already, not the original cloud
+                            # summary - using it here would let a track
+                            # correction corroborate itself against the
+                            # very track it came from. Pass None instead.
+                            prior_source = activity.get("_distance_source")
+                            cloud_m = (
+                                float(activity.get("distance") or 0)
+                                if prior_source != "gps_track"
+                                else None
+                            )
                             track_m = None
                             try:
                                 details = await self.api.get_activity_detail(aid)
@@ -635,14 +648,19 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                             if track_m is not None and ble_distance_implausible(
                                 live_distance_m, track_m, cloud_m
                             ):
+                                cloud_desc = (
+                                    f"{cloud_m:.0f} m"
+                                    if cloud_m is not None
+                                    else "not independently verifiable"
+                                )
                                 _LOGGER.info(
                                     "Live distance for activity %s: rejecting "
                                     "%.0f m, disagrees with its GPS track "
-                                    "(%.0f m, cloud was %.0f m) by more than "
+                                    "(%.0f m, cloud was %s) by more than "
                                     "ordinary noise - keeping %s. "
                                     "start_odo=%.3f km @ %s (target %s), "
                                     "end_odo=%.3f km @ %s (target %s)",
-                                    aid, live_distance_m, track_m, cloud_m,
+                                    aid, live_distance_m, track_m, cloud_desc,
                                     activity.get("distance"),
                                     start_odo, start_odo_ts.isoformat(),
                                     start_time.isoformat(),
