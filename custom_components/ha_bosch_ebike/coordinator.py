@@ -829,6 +829,33 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 act["_ble_track_checked"] = True
 
     @staticmethod
+    def _activity_sort_key(a: dict[str, Any]) -> tuple[str, str, str]:
+        """Deterministic (startTime, id, endTime) ordering key (issue #57).
+
+        ISO-8601 timestamps sort correctly as plain strings, no parsing
+        needed. ``id`` is the primary tiebreak on equal startTime, but some
+        real Bosch activity summaries arrive with a missing/empty ``id``
+        (this file already guards against that elsewhere), which would
+        collapse two same-instant activities to an identical key and fall
+        back to whatever (unreliable) order the cloud happened to return
+        them in. ``endTime`` is added as a third level so even two
+        id-less, same-instant entries almost always still resolve
+        deterministically, since two genuinely different rides essentially
+        never share both a start AND an end instant.
+
+        The SAME key must be used everywhere this integration orders
+        activities by recency (initial import's sort, and
+        ``_newest_by_start_time`` below) - using different keys in
+        different places can make them disagree on a tie and produce a
+        spurious "new activity" on the very first poll after import.
+        """
+        return (
+            str(a.get("startTime") or ""),
+            str(a.get("id") or ""),
+            str(a.get("endTime") or ""),
+        )
+
+    @staticmethod
     def _newest_by_start_time(
         activities: list[dict[str, Any]],
     ) -> dict[str, Any] | None:
@@ -837,23 +864,17 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         Never trusts the list's own order (issue #57): Bosch's cloud
         sort=-startTime has been observed to keep reporting a stale
         activity as item 0 for some accounts, indefinitely, so item 0 is
-        re-derived here by actually comparing startTime instead. ISO-8601
-        timestamps sort correctly as plain strings, no parsing needed -
-        mirrors the defensive re-sort already used for the BES2 endpoint's
-        similarly unreliable ordering.
-
-        Ties on startTime break on ``id`` as a secondary key, so the result
-        is a pure function of which activities are present, never of the
-        (unreliable) order the cloud happened to return them in this poll -
-        otherwise two same-instant activities could flip back and forth as
-        "latest" every 30 minutes purely from batch-order noise.
+        re-derived here by actually comparing startTime instead, using the
+        same deterministic key as the initial import's sort (see
+        ``_activity_sort_key``), so the result is a pure function of which
+        activities are present, never of the (unreliable) order the cloud
+        happened to return them in this poll - otherwise two same-instant
+        activities could flip back and forth as "latest" every 30 minutes
+        purely from batch-order noise.
         """
         if not activities:
             return None
-        return max(
-            activities,
-            key=lambda a: (str(a.get("startTime") or ""), str(a.get("id") or "")),
-        )
+        return max(activities, key=BoschEBikeCoordinator._activity_sort_key)
 
     @staticmethod
     def _preserve_derived_distance(old: dict[str, Any], fresh: dict[str, Any]) -> None:
@@ -898,8 +919,10 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 # endpoint's similarly unreliable ordering. Some accounts
                 # have been observed to have Bosch keep reporting a stale
                 # activity as "latest" indefinitely, even right after a
-                # fresh full import.
-                imported.sort(key=lambda a: str(a.get("startTime") or ""), reverse=True)
+                # fresh full import. Uses the exact same key as
+                # _newest_by_start_time() below, so the two never disagree
+                # on a startTime tie.
+                imported.sort(key=self._activity_sort_key, reverse=True)
                 self._all_activities = imported
                 self._initial_import_done = True
                 _LOGGER.info(
