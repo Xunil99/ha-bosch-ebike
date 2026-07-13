@@ -167,6 +167,22 @@ class BoschEBikeAPI:
         summaries = data.get("activitySummaries", [])
         return summaries[0] if summaries else None
 
+    async def get_recent_activities(self, limit: int = 20) -> list[dict[str, Any]]:
+        """Fetch the most recent *limit* activity summaries in one request.
+
+        Used for polling instead of get_latest_activity()'s bare limit=1
+        fetch: Bosch's own sort=-startTime ordering has been observed to
+        keep reporting a stale activity as "latest" for some accounts
+        (issue #57), which a single-item fetch has no way to detect or
+        correct. Callers cross-check the returned items by their own
+        startTime rather than trusting item 0, the same defensive approach
+        already used for the BES2 endpoint's unreliable ordering.
+        """
+        data = await self._get(
+            f"{ACTIVITIES_ENDPOINT}?limit={limit}&sort=-startTime"
+        )
+        return data.get("activitySummaries", [])
+
     async def get_all_activities(self, page_size: int = 50) -> list[dict[str, Any]]:
         """Fetch all activity summaries with pagination."""
         all_activities: list[dict[str, Any]] = []

@@ -828,6 +828,24 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 # None), leave it eligible for retry on a later poll.
                 act["_ble_track_checked"] = True
 
+    @staticmethod
+    def _newest_by_start_time(
+        activities: list[dict[str, Any]],
+    ) -> dict[str, Any] | None:
+        """The activity with the latest startTime, or None if empty.
+
+        Never trusts the list's own order (issue #57): Bosch's cloud
+        sort=-startTime has been observed to keep reporting a stale
+        activity as item 0 for some accounts, indefinitely, so item 0 is
+        re-derived here by actually comparing startTime instead. ISO-8601
+        timestamps sort correctly as plain strings, no parsing needed -
+        mirrors the defensive re-sort already used for the BES2 endpoint's
+        similarly unreliable ordering.
+        """
+        if not activities:
+            return None
+        return max(activities, key=lambda a: str(a.get("startTime") or ""))
+
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch bikes and activities from Bosch API."""
         if self._system == SYSTEM_BES2:
@@ -839,16 +857,39 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if not self._initial_import_done:
                 # First run: import ALL activities
                 _LOGGER.info("Bosch eBike: Initial import — fetching all activities...")
-                self._all_activities = await self.api.get_all_activities()
+                imported = await self.api.get_all_activities()
+                # issue #57: never trust the cloud's own sort=-startTime
+                # ordering across pages - re-derive newest-first ourselves,
+                # the same defensive re-sort already used for the BES2
+                # endpoint's similarly unreliable ordering. Some accounts
+                # have been observed to have Bosch keep reporting a stale
+                # activity as "latest" indefinitely, even right after a
+                # fresh full import.
+                imported.sort(key=lambda a: str(a.get("startTime") or ""), reverse=True)
+                self._all_activities = imported
                 self._initial_import_done = True
                 _LOGGER.info(
                     "Bosch eBike: Initial import complete — %d activities loaded",
                     len(self._all_activities),
                 )
             else:
-                # Subsequent runs: only fetch latest activity
-                latest = await self.api.get_latest_activity()
-                if latest:
+                # Subsequent runs: fetch a small batch of recent activities
+                # rather than trusting a bare "latest" (limit=1) fetch -
+                # issue #57 showed Bosch's own sort=-startTime can keep
+                # reporting the same stale activity as "latest" indefinitely
+                # for some accounts, which a single-item fetch has no way to
+                # ever notice or correct. Re-derive the true newest by
+                # comparing startTime ourselves.
+                recent = await self.api.get_recent_activities()
+                latest = self._newest_by_start_time(recent)
+                current_start = (
+                    str(self._all_activities[0].get("startTime") or "")
+                    if self._all_activities
+                    else ""
+                )
+                # Never let a batch that happens to omit the activity we
+                # already track as latest regress us to something older.
+                if latest and str(latest.get("startTime") or "") >= current_start:
                     latest_id = latest.get("id")
                     if self._all_activities and self._all_activities[0].get("id") == latest_id:
                         # Same activity, update in place — but keep a derived
@@ -870,7 +911,23 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                             latest["_distance_source"] = src
                         self._all_activities[0] = latest
                     else:
-                        # New activity, prepend
+                        # A genuinely newer activity than the current index 0
+                        # - it may already exist further down the list (e.g.
+                        # issue #57: the cloud previously reported an older
+                        # activity as "latest" and we imported this one in
+                        # its correct, lower position already), so drop any
+                        # existing copy before prepending to avoid a
+                        # duplicate.
+                        existing_idx = next(
+                            (
+                                i
+                                for i, a in enumerate(self._all_activities)
+                                if a.get("id") == latest_id
+                            ),
+                            None,
+                        )
+                        if existing_idx is not None:
+                            self._all_activities.pop(existing_idx)
                         self._all_activities.insert(0, latest)
                         _LOGGER.info(
                             "Bosch eBike: New activity detected: %s", latest.get("title")
