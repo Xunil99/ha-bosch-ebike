@@ -92,6 +92,27 @@ async def get_state_at(
         return None
 
 
+def sample_is_fresh(
+    sample_time: datetime,
+    target_time: datetime,
+    tolerance: timedelta = LIVE_SAMPLE_TOLERANCE,
+) -> bool:
+    """Independent re-check that *sample_time* is actually within *tolerance*
+    of *target_time*.
+
+    get_state_at() already enforces this tolerance internally, but issues
+    #31 and #54 showed real-world cases (a step-updating odometer entity
+    tied to a stationary bridge) where a value hours old, from before a
+    prior, unrelated ride, still ended up used - the exact mechanism inside
+    the recorder query that let a stale sample through remains unconfirmed.
+    Callers re-verify the returned sample's own timestamp with this simple,
+    independent check before trusting the value, as a defense-in-depth
+    backstop regardless of what causes get_state_at()'s own check to
+    occasionally not catch a stale sample.
+    """
+    return abs((sample_time - target_time).total_seconds()) <= tolerance.total_seconds()
+
+
 def parse_iso_utc(value: str | None) -> datetime | None:
     """Parse a Bosch-style ISO-8601 timestamp into an aware UTC datetime."""
     if not value:
