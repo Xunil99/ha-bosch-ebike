@@ -556,12 +556,13 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         derive the exact value and replace the cloud-derived one. Falls back
         transparently when no live data is available.
 
-        For the current latest activity specifically, a derived distance is
-        also cross-checked against its own GPS track (already fetched
-        earlier in the same poll) via ``ble_distance_implausible`` before
-        being accepted - a live-sensor sample can have a genuinely fresh
-        timestamp while its VALUE still reflects an earlier, unrelated ride
-        (issues #31, #54), which timestamp freshness alone cannot detect.
+        A derived distance is also cross-checked against the ride's own GPS
+        track before being accepted (fetched directly, once per activity,
+        the first time a distance is derived for it) via
+        ``ble_distance_implausible`` - a live-sensor sample can have a
+        genuinely fresh timestamp while its VALUE still reflects an
+        earlier, unrelated ride (issues #31, #54), which timestamp
+        freshness alone cannot detect.
 
         Requires ``self._activity_bike`` to already reflect the CURRENT
         ``self._all_activities`` (attribution must run before this).
@@ -605,33 +606,43 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                         # Sanity guard: ignore obviously bogus values (sensor
                         # rollover, zero-length tour). 50 m .. 500 km per tour.
                         if 50.0 <= live_distance_m <= 500_000.0:
-                            # issue #31/#54: if this is the current latest
-                            # activity and its GPS track is already fetched,
-                            # cross-check the BLE value against it too. A
-                            # sample can have a genuinely fresh timestamp
-                            # (get_state_at()'s own check passes) while its
-                            # VALUE still reflects an earlier, unrelated
-                            # ride - the track is a physically-grounded,
-                            # independent measurement that catches this.
+                            # issue #31/#54: cross-check the BLE value
+                            # against this activity's OWN GPS track before
+                            # accepting it. A sample can have a genuinely
+                            # fresh timestamp (get_state_at()'s own check
+                            # passes) while its VALUE still reflects an
+                            # earlier, unrelated ride - the track is a
+                            # physically-grounded, independent measurement
+                            # that catches this. Fetched directly here
+                            # (not via self._latest_activity_details, which
+                            # only ever covers whichever single activity is
+                            # the account-wide latest at this exact moment
+                            # and would miss every other bike's own latest
+                            # ride, or a ride that stops being "latest" the
+                            # very next poll) so the check applies uniformly
+                            # regardless of ride order or bike attribution.
+                            cloud_m = float(activity.get("distance") or 0)
                             track_m = None
-                            if (
-                                aid == self._latest_activity_id
-                                and self._latest_activity_details
-                            ):
-                                track_m = track_distance_m(
-                                    self._latest_activity_details
+                            try:
+                                details = await self.api.get_activity_detail(aid)
+                                track_m = track_distance_m(details)
+                            except Exception as err:  # noqa: BLE001
+                                _LOGGER.debug(
+                                    "Could not fetch GPS track to cross-check "
+                                    "ble_live distance for activity %s: %s",
+                                    aid, err,
                                 )
                             if track_m is not None and ble_distance_implausible(
-                                live_distance_m, track_m
+                                live_distance_m, track_m, cloud_m
                             ):
                                 _LOGGER.info(
                                     "Live distance for activity %s: rejecting "
                                     "%.0f m, disagrees with its GPS track "
-                                    "(%.0f m) by more than ordinary noise - "
-                                    "keeping %s. start_odo=%.3f km @ %s "
-                                    "(target %s), end_odo=%.3f km @ %s "
-                                    "(target %s)",
-                                    aid, live_distance_m, track_m,
+                                    "(%.0f m, cloud was %.0f m) by more than "
+                                    "ordinary noise - keeping %s. "
+                                    "start_odo=%.3f km @ %s (target %s), "
+                                    "end_odo=%.3f km @ %s (target %s)",
+                                    aid, live_distance_m, track_m, cloud_m,
                                     activity.get("distance"),
                                     start_odo, start_odo_ts.isoformat(),
                                     start_time.isoformat(),
