@@ -44,6 +44,18 @@ async def get_state_at(
     returned *sample_time* is the matched sample's own ``last_updated``, kept
     alongside the value so callers can log exactly which sample was used
     (issue #31: forensic detail for otherwise-unreproducible mismatches).
+
+    Deliberately queries with ``include_start_time_state=False``. That flag
+    asks the recorder to synthesize an extra "state as of the window start"
+    row even when nothing actually changed inside the window, reconstructed
+    from the last real change *no matter how old it is*. Two independent
+    reports (issues #31, #54) showed exactly that stale, synthesized row
+    being treated as a fresh sample for a step-updating odometer entity tied
+    to a stationary bridge, applying an hours-old value (from before an
+    earlier, unrelated ride) to a later one. Without that flag, only genuine
+    state-change events whose own timestamp truly falls inside the window
+    are ever considered, so an entity that hasn't changed in hours correctly
+    yields no match here instead of a misleadingly "fresh" stale one.
     """
     if not entity_id:
         return None
@@ -57,7 +69,7 @@ async def get_state_at(
             start,
             end,
             entity_id,
-            include_start_time_state=True,
+            include_start_time_state=False,
             no_attributes=True,
         )
 
@@ -90,27 +102,6 @@ async def get_state_at(
         return float(closest.state), closest.last_updated
     except (ValueError, TypeError):
         return None
-
-
-def sample_is_fresh(
-    sample_time: datetime,
-    target_time: datetime,
-    tolerance: timedelta = LIVE_SAMPLE_TOLERANCE,
-) -> bool:
-    """Independent re-check that *sample_time* is actually within *tolerance*
-    of *target_time*.
-
-    get_state_at() already enforces this tolerance internally, but issues
-    #31 and #54 showed real-world cases (a step-updating odometer entity
-    tied to a stationary bridge) where a value hours old, from before a
-    prior, unrelated ride, still ended up used - the exact mechanism inside
-    the recorder query that let a stale sample through remains unconfirmed.
-    Callers re-verify the returned sample's own timestamp with this simple,
-    independent check before trusting the value, as a defense-in-depth
-    backstop regardless of what causes get_state_at()'s own check to
-    occasionally not catch a stale sample.
-    """
-    return abs((sample_time - target_time).total_seconds()) <= tolerance.total_seconds()
 
 
 def parse_iso_utc(value: str | None) -> datetime | None:

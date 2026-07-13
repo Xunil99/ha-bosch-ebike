@@ -32,7 +32,7 @@ from .const import (
     CONF_LIVE_SENSORS,
 )
 from .energy_cost import compute_energy_windows
-from .live_enrichment import get_state_at, parse_iso_utc, sample_is_fresh
+from .live_enrichment import get_state_at, parse_iso_utc
 from .range_estimate import (
     compute_range_estimate,
     track_distance_m,
@@ -592,24 +592,7 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 if start_odo_result is not None and end_odo_result is not None:
                     start_odo, start_odo_ts = start_odo_result
                     end_odo, end_odo_ts = end_odo_result
-                    # issue #31/#54: re-verify freshness ourselves rather than
-                    # trusting get_state_at()'s own tolerance check alone - a
-                    # step-updating odometer (stationary bridge) has been
-                    # observed matching an hours-old sample from before a
-                    # PRIOR, unrelated ride, silently applying that ride's
-                    # cumulative distance to this one.
-                    if not sample_is_fresh(start_odo_ts, start_time) or not sample_is_fresh(
-                        end_odo_ts, end_time
-                    ):
-                        _LOGGER.debug(
-                            "Live distance for activity %s: rejecting stale sample "
-                            "(start_odo=%.3f km @ %s for target %s, end_odo=%.3f km "
-                            "@ %s for target %s) - keeping the cloud-derived distance",
-                            aid,
-                            start_odo, start_odo_ts.isoformat(), start_time.isoformat(),
-                            end_odo, end_odo_ts.isoformat(), end_time.isoformat(),
-                        )
-                    elif end_odo >= start_odo:
+                    if end_odo >= start_odo:
                         live_distance_m = (end_odo - start_odo) * 1000.0
                         # Sanity guard: ignore obviously bogus values (sensor
                         # rollover, zero-length tour). 50 m .. 500 km per tour.
@@ -637,41 +620,28 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     and end_soc_result is not None
                     and capacity_wh > 0
                 ):
-                    start_soc, start_soc_ts = start_soc_result
-                    end_soc, end_soc_ts = end_soc_result
-                    # Same defense-in-depth freshness re-check as distance above.
-                    if not sample_is_fresh(start_soc_ts, start_time) or not sample_is_fresh(
-                        end_soc_ts, end_time
-                    ):
-                        _LOGGER.debug(
-                            "Live consumption for activity %s: rejecting stale SoC "
-                            "sample (start=%.1f%% @ %s for target %s, end=%.1f%% @ %s "
-                            "for target %s)",
-                            aid,
-                            start_soc, start_soc_ts.isoformat(), start_time.isoformat(),
-                            end_soc, end_soc_ts.isoformat(), end_time.isoformat(),
+                    start_soc, _start_soc_ts = start_soc_result
+                    end_soc, _end_soc_ts = end_soc_result
+                    delta_pct = start_soc - end_soc
+                    # Allow tiny negative drifts (regen, sensor noise).
+                    if -2.0 <= delta_pct <= 100.0:
+                        consumed_pct = max(0.0, delta_pct)
+                        consumed_wh = (
+                            consumed_pct * capacity_wh / 100.0
                         )
-                    else:
-                        delta_pct = start_soc - end_soc
-                        # Allow tiny negative drifts (regen, sensor noise).
-                        if -2.0 <= delta_pct <= 100.0:
-                            consumed_pct = max(0.0, delta_pct)
-                            consumed_wh = (
-                                consumed_pct * capacity_wh / 100.0
-                            )
-                            self._activity_consumption[aid] = {
-                                "consumed_wh": round(consumed_wh, 1),
-                                "capacity_wh": capacity_wh,
-                                "is_exact": True,
-                                "percentage": round(consumed_pct, 1),
-                                "source": "ble_live",
-                            }
-                            cache["soc"] = True
-                            state_changed = True
-                            _LOGGER.info(
-                                "Live consumption for activity %s: %.1f Wh (%.1f %%)",
-                                aid, consumed_wh, consumed_pct,
-                            )
+                        self._activity_consumption[aid] = {
+                            "consumed_wh": round(consumed_wh, 1),
+                            "capacity_wh": capacity_wh,
+                            "is_exact": True,
+                            "percentage": round(consumed_pct, 1),
+                            "source": "ble_live",
+                        }
+                        cache["soc"] = True
+                        state_changed = True
+                        _LOGGER.info(
+                            "Live consumption for activity %s: %.1f Wh (%.1f %%)",
+                            aid, consumed_wh, consumed_pct,
+                        )
 
         return state_changed
 
