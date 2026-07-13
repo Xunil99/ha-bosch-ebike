@@ -977,6 +977,35 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                             "Bosch eBike: New activity detected: %s", latest.get("title")
                         )
 
+                # Backfill any OTHER activities in this same batch that are
+                # not yet tracked at all. Only the single overall-newest one
+                # is merged above - if two separate rides finish within the
+                # same poll interval (DEFAULT_SCAN_INTERVAL), the earlier of
+                # the two would otherwise never become "latest" on any poll
+                # (a later poll's newest is always >= it) and would be
+                # silently, permanently missing from every downstream
+                # computation. No extra API call needed, `recent` already
+                # has them.
+                known_ids = {
+                    a.get("id") for a in self._all_activities if a.get("id")
+                }
+                missing = [
+                    a
+                    for a in recent
+                    if a.get("id") and a.get("id") not in known_ids
+                ]
+                if missing:
+                    self._all_activities.extend(missing)
+                    self._all_activities.sort(
+                        key=self._activity_sort_key, reverse=True
+                    )
+                    _LOGGER.info(
+                        "Bosch eBike: Backfilled %d activity(ies) missed by an "
+                        "earlier poll: %s",
+                        len(missing),
+                        ", ".join(a.get("title") or a.get("id", "?") for a in missing),
+                    )
+
         except AuthError as err:
             raise ConfigEntryAuthFailed(str(err)) from err
         except Exception as err:
