@@ -989,10 +989,25 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 known_ids = {
                     a.get("id") for a in self._all_activities if a.get("id")
                 }
+                # A tracked activity that arrived with a missing/falsy id
+                # (a real, observed Bosch response shape) can never appear
+                # in known_ids, so a later poll where the same ride shows
+                # up in `recent` with an id now populated would otherwise
+                # look "missing" and get appended as a duplicate. Fall back
+                # to startTime for those - two genuinely different rides
+                # essentially never share one, and skipping a coincidental
+                # match is a far safer failure mode than a silent duplicate.
+                known_start_times = {
+                    str(a.get("startTime") or "")
+                    for a in self._all_activities
+                    if not a.get("id")
+                }
                 missing = [
                     a
                     for a in recent
-                    if a.get("id") and a.get("id") not in known_ids
+                    if a.get("id")
+                    and a.get("id") not in known_ids
+                    and str(a.get("startTime") or "") not in known_start_times
                 ]
                 if missing:
                     self._all_activities.extend(missing)
