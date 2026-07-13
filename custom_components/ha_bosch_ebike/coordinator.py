@@ -622,19 +622,19 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                             # very next poll) so the check applies uniformly
                             # regardless of ride order or bike attribution.
                             # cloud_m must be a genuinely independent
-                            # signal. If _distance_source is already
-                            # "gps_track" (this poll or an earlier one),
-                            # activity["distance"] IS a track-derived
-                            # value already, not the original cloud
-                            # summary - using it here would let a track
-                            # correction corroborate itself against the
-                            # very track it came from. Pass None instead.
-                            prior_source = activity.get("_distance_source")
-                            cloud_m = (
-                                float(activity.get("distance") or 0)
-                                if prior_source != "gps_track"
-                                else None
-                            )
+                            # signal, not activity["distance"] itself -
+                            # that field can already be a gps_track-
+                            # derived correction (this poll's own sanity
+                            # check, or an earlier poll's), which would
+                            # let a track correction corroborate itself
+                            # against the very track it came from.
+                            # _cloud_distance_raw is stamped once, right
+                            # after each fresh API fetch, before any local
+                            # correction ever touches "distance", so it
+                            # stays a trustworthy reference no matter how
+                            # many corrections have run since.
+                            raw = activity.get("_cloud_distance_raw")
+                            cloud_m = float(raw) if raw else None
                             track_m = None
                             try:
                                 details = await self.api.get_activity_detail(aid)
@@ -984,6 +984,14 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 # First run: import ALL activities
                 _LOGGER.info("Bosch eBike: Initial import — fetching all activities...")
                 imported = await self.api.get_all_activities()
+                # Stamp the untouched cloud distance before anything else
+                # ever writes to "distance" (gps_track/ble_live
+                # corrections) - _enrich_activities_with_live_data() needs
+                # a value it can trust is genuinely independent of its own
+                # corrections, not one persisted-but-stale marker like
+                # _distance_source (issue #31/#54 corroboration fix).
+                for a in imported:
+                    a["_cloud_distance_raw"] = a.get("distance")
                 # issue #57: never trust the cloud's own sort=-startTime
                 # ordering across pages - re-derive newest-first ourselves,
                 # the same defensive re-sort already used for the BES2
@@ -1009,6 +1017,11 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 # ever notice or correct. Re-derive the true newest by
                 # comparing startTime ourselves.
                 recent = await self.api.get_recent_activities()
+                # Same stamp as the initial import above, covering both the
+                # "latest" merge and the backfill items below (both are
+                # references into `recent`, not copies).
+                for a in recent:
+                    a["_cloud_distance_raw"] = a.get("distance")
                 latest = self._newest_by_start_time(recent)
                 current_start = (
                     str(self._all_activities[0].get("startTime") or "")
@@ -1091,6 +1104,21 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                         len(missing),
                         ", ".join(a.get("title") or a.get("id", "?") for a in missing),
                     )
+
+                # Refresh _cloud_distance_raw for every already-tracked
+                # activity that still appears in this poll's recent batch,
+                # not just the merged "latest"/backfilled ones - a gps_track
+                # correction only ever loses to the cloud's own summary
+                # once it independently catches up, so this reference needs
+                # to track new data whenever it is available, not stay
+                # frozen at whatever was first seen (issue #31/#54).
+                recent_raw = {
+                    a.get("id"): a.get("distance") for a in recent if a.get("id")
+                }
+                for act in self._all_activities:
+                    aid = act.get("id")
+                    if aid in recent_raw:
+                        act["_cloud_distance_raw"] = recent_raw[aid]
 
         except AuthError as err:
             raise ConfigEntryAuthFailed(str(err)) from err
