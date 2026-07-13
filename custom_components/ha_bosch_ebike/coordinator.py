@@ -1112,8 +1112,20 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 # once it independently catches up, so this reference needs
                 # to track new data whenever it is available, not stay
                 # frozen at whatever was first seen (issue #31/#54).
+                #
+                # Read from _cloud_distance_raw, NOT "distance": the
+                # "latest"/"existing_idx" merge above may have called
+                # _preserve_derived_distance(old, latest), which mutates
+                # "distance" in place on the SAME dict object that is
+                # still sitting inside `recent` (self._newest_by_start_time
+                # returns a live reference, not a copy) - reading
+                # "distance" back out of `recent` here would silently pick
+                # up that locally-derived value instead of the untouched
+                # raw one the earlier stamp loop already captured.
                 recent_raw = {
-                    a.get("id"): a.get("distance") for a in recent if a.get("id")
+                    a.get("id"): a.get("_cloud_distance_raw")
+                    for a in recent
+                    if a.get("id")
                 }
                 for act in self._all_activities:
                     aid = act.get("id")
