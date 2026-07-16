@@ -107,6 +107,12 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # written back into the bike/activity data itself, only used to
         # floor what the "Odometer" sensor shows.
         self._odometer_floor_km: dict[str, float] = {}
+        # Highest bike count ever seen in a single successful poll (issue #60
+        # follow-up). A single transient/glitched get_bikes() response
+        # temporarily omitting a bike must not make
+        # _unambiguous_live_odometer_entity() think the account is
+        # single-bike for that one poll - see its docstring.
+        self._max_bikes_seen = 0
         # Maintenance state per bike
         # bike_id -> {"items": [{id,name,interval_km,interval_days,last_done_at,last_done_odometer,warned}], "service_warned": {...}}
         self._maintenance: dict[str, dict[str, Any]] = {}
@@ -1432,6 +1438,51 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             return float(profile_odo)
         return max(float(profile_odo), float(latest_end_odo))
 
+    # Live-entity boost tolerances for _floored_odometer_km() (issue #60
+    # follow-up). Deliberately mirrors the spirit of the per-activity
+    # ble_live cross-check (issues #31/#54): a live sample must be both
+    # FRESH (else it may be a bridge that hasn't seen the bike in a long
+    # time, still reporting its last real state as "available") and
+    # PLAUSIBLE (else a unit mixup or decode glitch could permanently
+    # poison a value that, unlike the per-activity case, never expires).
+    LIVE_ODOMETER_BOOST_TOLERANCE = timedelta(hours=2)
+    # Additive, not multiplicative: a metres-instead-of-km misconfigured
+    # entity (reporting 1000x the true value) would still slip under this
+    # bound for a bike whose true lifetime odometer is under ~500 m -
+    # accepted as a narrow, self-resolving edge case (any real bike passes
+    # 500 m within its first ride) rather than adding a multiplicative
+    # bound for it, the same tradeoff already made for corrected_track_distance()'s
+    # min_absolute_m in range_estimate.py.
+    LIVE_ODOMETER_BOOST_MAX_EXCESS_KM = 500.0
+
+    def _unambiguous_live_odometer_entity(self, bike_id: str) -> str | None:
+        """live_odometer_entity(bike_id), or None if it could be another bike's.
+
+        _live_sensor_entity() falls back to a single, account-wide entity
+        when no per-bike mapping has been saved yet (issue #44) - harmless
+        for a single-bike account, and bounded/cross-checked where the
+        existing per-activity BLE enrichment already uses it. This floor
+        is permanent, though, so only trust the fallback here when it is
+        genuinely unambiguous: either bike_id has its own explicit
+        mapping, or there is only one bike in the account at all.
+
+        Uses the highest bike count ever seen across polls
+        (self._max_bikes_seen), not just this poll's count: a single
+        transient/glitched get_bikes() response that happens to omit a
+        bike for one poll must not make a genuinely multi-bike account
+        look single-bike for that one poll and re-open the cross-bike
+        contamination this guard exists to prevent.
+        """
+        options = self.config_entry.options if self.config_entry else {}
+        per_bike = options.get(CONF_LIVE_SENSORS) or {}
+        if bike_id in per_bike:
+            return self.live_odometer_entity(bike_id)
+        bikes = self.data.get("bikes", []) if self.data else []
+        self._max_bikes_seen = max(self._max_bikes_seen, len(bikes))
+        if self._max_bikes_seen > 1:
+            return None
+        return self.live_odometer_entity(bike_id)
+
     def _floored_odometer_km(self, bike_id: str, value_km: float) -> float:
         """Clamp a bike's displayed odometer (km) so it never visibly regresses.
 
@@ -1449,13 +1500,59 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         all that round) with the last known-good value instead of a
         momentary drop to 0, since max(0, floor) is just the floor.
 
+        When this bike has an unambiguous linked live odometer entity
+        configured (issue #60 follow-up), its current state is folded into
+        the same max() so the display jumps to the live value the moment
+        the bike reconnects at home, instead of waiting for the next Bosch
+        cloud sync (which can take hours) - the live entity already
+        publishes in km, same unit as the cloud value. Only accepted when
+        BOTH fresh (changed within LIVE_ODOMETER_BOOST_TOLERANCE - a bridge
+        that hasn't seen the bike in a long time keeps reporting its last
+        real state as "available" indefinitely, see issues #31/#54 for why
+        that distinction matters for this exact class of entity) AND
+        plausible (no more than LIVE_ODOMETER_BOOST_MAX_EXCESS_KM above the
+        current cloud/floor value - guards against a unit mixup, e.g. a
+        misconfigured entity exposing raw metres instead of km, or a
+        decode glitch, either of which would otherwise poison this floor
+        permanently, unlike the bounded, per-activity use of the same
+        entity elsewhere in this file).
+
+        Freshness is checked against last_changed, not last_updated: HA
+        bumps last_updated on every write, including a reconnect (HA
+        restart, ESPHome reboot, WiFi blip) that merely re-reports the
+        SAME cached value, which would otherwise look deceptively "fresh".
+        last_changed only moves when the reported VALUE itself actually
+        changes, so a stale value replayed unchanged across a reconnect
+        keeps its true (old) last_changed. This does not cover the case
+        where Home Assistant's own in-memory state is wiped by a full HA
+        restart (last_changed also resets then, since there is nothing
+        to compare against) - the plausibility bound is the remaining
+        safety net for that narrower case.
+
         Known, accepted limitation: a genuine hardware replacement (new
         drive unit with a lower true odometer) would also stay clamped to
-        the old bike's mileage until the new value grows past it again -
+        the old bike's mileage until a new value grows past it again -
         rare enough not to warrant reset-detection logic.
         """
+        candidates = [float(value_km)]
+        live_entity = self._unambiguous_live_odometer_entity(bike_id)
+        if live_entity:
+            state = self.hass.states.get(live_entity)
+            if state is not None and state.state not in (None, "unknown", "unavailable"):
+                fresh = (
+                    dt_util.utcnow() - state.last_changed
+                    <= self.LIVE_ODOMETER_BOOST_TOLERANCE
+                )
+                if fresh:
+                    try:
+                        live_km = float(state.state)
+                        reference = max(value_km, self._odometer_floor_km.get(bike_id, 0.0))
+                        if live_km <= reference + self.LIVE_ODOMETER_BOOST_MAX_EXCESS_KM:
+                            candidates.append(live_km)
+                    except (TypeError, ValueError):
+                        pass
         floor = self._odometer_floor_km.get(bike_id, 0.0)
-        clamped = max(float(value_km), floor)
+        clamped = max(max(candidates), floor)
         self._odometer_floor_km[bike_id] = clamped
         return clamped
 
