@@ -102,6 +102,11 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._manual_activity_bike: dict[str, str] = {}
         # Per-activity track cache (activity_id -> [{lat,lon,...}]) for heatmap card
         self._all_tracks_cache: dict[str, list[dict[str, Any]]] = {}
+        # Highest odometer (km) ever DISPLAYED for each bike (issue #60): see
+        # _floored_odometer_km() for the full rationale. Deliberately never
+        # written back into the bike/activity data itself, only used to
+        # floor what the "Odometer" sensor shows.
+        self._odometer_floor_km: dict[str, float] = {}
         # Maintenance state per bike
         # bike_id -> {"items": [{id,name,interval_km,interval_days,last_done_at,last_done_odometer,warned}], "service_warned": {...}}
         self._maintenance: dict[str, dict[str, Any]] = {}
@@ -193,6 +198,12 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 # entry.data value is the fallback every bike reads until
                 # explicitly overridden; see battery_capacity_wh().
                 pass
+            odo_floor = data.get("odometer_floor_km")
+            if isinstance(odo_floor, dict):
+                self._odometer_floor_km = {
+                    bid: float(v) for bid, v in odo_floor.items()
+                    if isinstance(bid, str) and isinstance(v, (int, float)) and v >= 0
+                }
             _LOGGER.debug(
                 "Loaded persisted consumption state: prev_wh=%s, activities=%d",
                 self._prev_delivered_wh,
@@ -212,6 +223,7 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 "maintenance": self._maintenance,
                 "service_overrides": self._service_overrides,
                 "battery_capacity_wh": dict(self._battery_capacity_wh),
+                "odometer_floor_km": dict(self._odometer_floor_km),
             }
         )
 
@@ -1419,6 +1431,33 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if latest_end_odo is None:
             return float(profile_odo)
         return max(float(profile_odo), float(latest_end_odo))
+
+    def _floored_odometer_km(self, bike_id: str, value_km: float) -> float:
+        """Clamp a bike's displayed odometer (km) so it never visibly regresses.
+
+        A physical odometer can only increase, but the cloud's own reported
+        value has been observed to briefly dip below what it reported on an
+        earlier poll before catching back up, showing as a visible drop in
+        the history graph (issue #60). Display-only by design: this never
+        touches the bike dict itself, so multi-bike ride attribution
+        (odometer-matching) and maintenance/service-due calculations, both
+        of which need the genuine cloud value, are unaffected - only what
+        this one sensor shows is floored.
+
+        Also naturally backfills a missing/zero reading (e.g. a BES2 poll
+        where the /statistics fetch failed and no odometer was reported at
+        all that round) with the last known-good value instead of a
+        momentary drop to 0, since max(0, floor) is just the floor.
+
+        Known, accepted limitation: a genuine hardware replacement (new
+        drive unit with a lower true odometer) would also stay clamped to
+        the old bike's mileage until the new value grows past it again -
+        rare enough not to warrant reset-detection logic.
+        """
+        floor = self._odometer_floor_km.get(bike_id, 0.0)
+        clamped = max(float(value_km), floor)
+        self._odometer_floor_km[bike_id] = clamped
+        return clamped
 
     def _bike_latest_activity(
         self, bike_id: str, fallback_all: bool = False

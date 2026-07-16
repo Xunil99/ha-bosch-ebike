@@ -815,7 +815,14 @@ class BoschEBikeSensor(CoordinatorEntity[BoschEBikeCoordinator], SensorEntity):
         # Find this bike in coordinator data
         for bike in self.coordinator.data.get("bikes", []):
             if bike.get("id") == self._bike_id:
-                return self.entity_description.value_fn(bike)
+                value = self.entity_description.value_fn(bike)
+                # issue #60: floor the lifetime odometer so a brief cloud dip
+                # never shows as a visible drop. Display-only - deliberately
+                # not applied to the bike dict itself, see
+                # coordinator._floored_odometer_km() for why.
+                if self.entity_description.key == "odometer" and isinstance(value, (int, float)):
+                    value = self.coordinator._floored_odometer_km(self._bike_id, value)
+                return value
         return None
 
 
