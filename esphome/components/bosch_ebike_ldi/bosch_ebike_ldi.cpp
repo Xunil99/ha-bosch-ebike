@@ -166,6 +166,22 @@ static bool pairing_window_open() {
   return g_pairing_until_ms != 0 && (int32_t) (g_pairing_until_ms - millis()) > 0;
 }
 
+// Periodic advertising watchdog (forum reports from wulf and Friedhofsblond,
+// issue #59 thread): start_advertising() already re-arms on every disconnect,
+// failed connect attempt, and pairing-window expiry, but a bridge left
+// running for a long time with nothing in that list happening (e.g. a
+// Sonoff charge-limiter that just sits there advertising privately for
+// days) has no periodic check that it is actually still advertising. If
+// any NimBLE/controller edge case silently stops it without going through
+// one of those paths, the bridge would stay invisible indefinitely with no
+// log to explain why - both reports describe exactly this symptom (a bike
+// failing to reconnect until the advertising is manually restarted via the
+// "eBike Advertising" switch). Checked every ADV_WATCHDOG_INTERVAL_MS while
+// disconnected; a no-op almost always, since ble_gap_adv_active() normally
+// reports true already.
+static constexpr uint32_t ADV_WATCHDOG_INTERVAL_MS = 30000;
+static uint32_t g_last_adv_watchdog_ms = 0;
+
 // Upper bound for reading bonded peers (well above NimBLE's default 3 bonds).
 static constexpr int MAX_BOND_PROBE = 8;
 
@@ -635,6 +651,19 @@ void BoschEbikeLdi::loop() {
       start_advertising();
     }
   }
+
+  // Advertising watchdog - see its declaration above for the full rationale.
+  if (g_ble_synced && !this->last_published_connected_) {
+    uint32_t now = millis();
+    if (now - g_last_adv_watchdog_ms >= ADV_WATCHDOG_INTERVAL_MS) {
+      g_last_adv_watchdog_ms = now;
+      bool should_advertise = pairing_window_open() || (g_adv_enabled && bonded_peer_count() > 0);
+      if (should_advertise && !ble_gap_adv_active()) {
+        ESP_LOGW(TAG, "Advertising watchdog: expected to be advertising but was not - restarting");
+        start_advertising();
+      }
+    }
+  }
 }
 
 void BoschEbikeLdi::publish_decoded_() {
@@ -690,7 +719,7 @@ void BoschEbikeLdi::dump_config() {
   ESP_LOGCONFIG(TAG, "  Service UUID: 0000eb20-eaa2-11e9-81b4-2a2ae2dbcce4");
   ESP_LOGCONFIG(TAG, "  Live Data Char: 0000eb21-eaa2-11e9-81b4-2a2ae2dbcce4");
   ESP_LOGCONFIG(TAG, "  Appearance: 0x0480 (Cycling)");
-  ESP_LOGCONFIG(TAG, "  Status: v0.5 – private advertising + manual pairing window (issue #36)");
+  ESP_LOGCONFIG(TAG, "  Status: v0.6 – advertising watchdog (issue #59)");
 }
 
 float BoschEbikeLdi::get_setup_priority() const {
