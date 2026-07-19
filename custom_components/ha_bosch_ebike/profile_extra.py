@@ -65,6 +65,9 @@ ASSIST_MODE_NAMES: dict[str, str] = {
     # @johnlucajf's (reported by @YarneThatsMe, issue #48).
     "A100M30040": "ECO",
     "A100M3AAA0": "TOUR+",
+    # Same M40 drive unit family as A100M40010 above, Bosch Performance Line
+    # (reported by @jeroen011091, issue #37).
+    "A100M40040": "ECO",
 }
 
 
