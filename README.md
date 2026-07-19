@@ -2,6 +2,7 @@
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
 [![HA Version](https://img.shields.io/badge/Home%20Assistant-2024.1%2B-blue.svg)](https://www.home-assistant.io/)
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=Xunil99&repository=ha-bosch-ebike&category=integration)
 
 > **Deutsch** | [English](#english) | [Nederlands](https://github.com/Xunil99/ha-bosch-ebike/blob/main/README.nl.md) | [Français](https://github.com/Xunil99/ha-bosch-ebike/blob/main/README.fr.md) | [Italiano](https://github.com/Xunil99/ha-bosch-ebike/blob/main/README.it.md) | [Español](https://github.com/Xunil99/ha-bosch-ebike/blob/main/README.es.md)
 
@@ -251,6 +252,12 @@ Welche Daten BES2 liefert (und welche nicht), zeigt die Vergleichstabelle im Abs
 
 #### HACS-Installation (Detailanleitung zu Schritt 3)
 
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=Xunil99&repository=ha-bosch-ebike&category=integration)
+
+Der Button öffnet direkt deine Home-Assistant-Instanz mit vorausgefülltem Repository und Kategorie (setzt HACS und eine verknüpfte "My Home Assistant"-Instanz voraus). Danach noch **Herunterladen** klicken und Home Assistant neu starten, weiter geht's ab Schritt 4 oben.
+
+Alternativ manuell:
+
 1. Öffne HACS in Home Assistant
 2. Klicke auf **"Benutzerdefinierte Repositories"** (drei Punkte oben rechts)
 3. Füge die Repository-URL hinzu: `https://github.com/Xunil99/ha-bosch-ebike`
@@ -349,14 +356,14 @@ Damit kann man z. B. eine Push-Mitteilung oder eine Beleuchtungs-Erinnerung baue
 
 #### 🆕 Fertige Blueprints (ab v1.19.31)
 
-Für die gängigsten Benachrichtigungen liegen im Repo unter [`blueprints/automation/ha_bosch_ebike/`](blueprints/automation/ha_bosch_ebike/) vier fertige Automations-Blueprints - importierbar über **Einstellungen → Automatisierungen → Blueprints → Blueprint importieren**, dort die Raw-URL der jeweiligen Datei einfügen:
+Für die gängigsten Benachrichtigungen liegen im Repo unter [`blueprints/automation/ha_bosch_ebike/`](blueprints/automation/ha_bosch_ebike/) vier fertige Automations-Blueprints. Button klicken öffnet direkt den Import-Dialog in deiner eigenen Home-Assistant-Instanz (setzt eine verknüpfte "My Home Assistant"-Instanz voraus); alternativ die Raw-URL der jeweiligen Datei manuell unter **Einstellungen → Automatisierungen → Blueprints → Blueprint importieren** einfügen.
 
-| Blueprint | Reagiert auf |
-|---|---|
-| `service_due_reminder.yaml` | `ha_bosch_ebike_service_due_soon` / `_service_overdue` |
-| `maintenance_reminder.yaml` | `ha_bosch_ebike_maintenance_due_soon` / `_maintenance_overdue` |
-| `theft_alert.yaml` | `Theft Reported`-Sensor (Zustand „ein") |
-| `software_update_available.yaml` | `Software Update Available`-Sensor (Zustand „ein") |
+| Blueprint | Reagiert auf | Import |
+|---|---|---|
+| `service_due_reminder.yaml` | `ha_bosch_ebike_service_due_soon` / `_service_overdue` | [![Blueprint importieren](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fraw.githubusercontent.com%2FXunil99%2Fha-bosch-ebike%2Fmain%2Fblueprints%2Fautomation%2Fha_bosch_ebike%2Fservice_due_reminder.yaml) |
+| `maintenance_reminder.yaml` | `ha_bosch_ebike_maintenance_due_soon` / `_maintenance_overdue` | [![Blueprint importieren](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fraw.githubusercontent.com%2FXunil99%2Fha-bosch-ebike%2Fmain%2Fblueprints%2Fautomation%2Fha_bosch_ebike%2Fmaintenance_reminder.yaml) |
+| `theft_alert.yaml` | `Theft Reported`-Sensor (Zustand „ein") | [![Blueprint importieren](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fraw.githubusercontent.com%2FXunil99%2Fha-bosch-ebike%2Fmain%2Fblueprints%2Fautomation%2Fha_bosch_ebike%2Ftheft_alert.yaml) |
+| `software_update_available.yaml` | `Software Update Available`-Sensor (Zustand „ein") | [![Blueprint importieren](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fraw.githubusercontent.com%2FXunil99%2Fha-bosch-ebike%2Fmain%2Fblueprints%2Fautomation%2Fha_bosch_ebike%2Fsoftware_update_available.yaml) |
 
 Jeder Blueprint erwartet nur eine Benachrichtigungs-Aktion deiner Wahl (z. B. eine Mobile-App-Push-Nachricht) als Eingabe und liefert bereits einen fertig formulierten Text mit; die beiden zustandsbasierten Blueprints fragen zusätzlich nach dem/den zu überwachenden Sensor(en).
 
@@ -970,6 +977,12 @@ Which data BES2 delivers (and which it does not) is shown in the comparison tabl
 
 #### HACS Installation (detailed steps for Step 3)
 
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=Xunil99&repository=ha-bosch-ebike&category=integration)
+
+This button opens your Home Assistant instance with the repository and category pre-filled (requires HACS and a linked "My Home Assistant" instance). Click **Download**, restart Home Assistant, then continue from step 4 above.
+
+Or manually:
+
 1. Open HACS in Home Assistant
 2. Click **"Custom repositories"** (three dots in the top right)
 3. Add the repository URL: `https://github.com/Xunil99/ha-bosch-ebike`
@@ -1066,14 +1079,14 @@ You can wire these up to push notifications, light reminders, etc.
 
 #### 🆕 Ready-made blueprints (from v1.19.31)
 
-For the most common notifications, the repo ships four ready-made automation blueprints under [`blueprints/automation/ha_bosch_ebike/`](blueprints/automation/ha_bosch_ebike/) - import them via **Settings → Automations → Blueprints → Import Blueprint**, pasting the raw URL of the file:
+For the most common notifications, the repo ships four ready-made automation blueprints under [`blueprints/automation/ha_bosch_ebike/`](blueprints/automation/ha_bosch_ebike/). Clicking the button opens the import dialog directly in your own Home Assistant instance (requires a linked "My Home Assistant" instance); alternatively, paste the raw URL of the file manually under **Settings → Automations → Blueprints → Import Blueprint**.
 
-| Blueprint | Reacts to |
-|---|---|
-| `service_due_reminder.yaml` | `ha_bosch_ebike_service_due_soon` / `_service_overdue` |
-| `maintenance_reminder.yaml` | `ha_bosch_ebike_maintenance_due_soon` / `_maintenance_overdue` |
-| `theft_alert.yaml` | `Theft Reported` sensor turning "on" |
-| `software_update_available.yaml` | `Software Update Available` sensor turning "on" |
+| Blueprint | Reacts to | Import |
+|---|---|---|
+| `service_due_reminder.yaml` | `ha_bosch_ebike_service_due_soon` / `_service_overdue` | [![Import Blueprint](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fraw.githubusercontent.com%2FXunil99%2Fha-bosch-ebike%2Fmain%2Fblueprints%2Fautomation%2Fha_bosch_ebike%2Fservice_due_reminder.yaml) |
+| `maintenance_reminder.yaml` | `ha_bosch_ebike_maintenance_due_soon` / `_maintenance_overdue` | [![Import Blueprint](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fraw.githubusercontent.com%2FXunil99%2Fha-bosch-ebike%2Fmain%2Fblueprints%2Fautomation%2Fha_bosch_ebike%2Fmaintenance_reminder.yaml) |
+| `theft_alert.yaml` | `Theft Reported` sensor turning "on" | [![Import Blueprint](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fraw.githubusercontent.com%2FXunil99%2Fha-bosch-ebike%2Fmain%2Fblueprints%2Fautomation%2Fha_bosch_ebike%2Ftheft_alert.yaml) |
+| `software_update_available.yaml` | `Software Update Available` sensor turning "on" | [![Import Blueprint](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fraw.githubusercontent.com%2FXunil99%2Fha-bosch-ebike%2Fmain%2Fblueprints%2Fautomation%2Fha_bosch_ebike%2Fsoftware_update_available.yaml) |
 
 Each blueprint only needs a notification action of your choice as input (e.g. a mobile app push action) and comes with a ready-made message text; the two state-based blueprints additionally ask which sensor(s) to watch.
 
