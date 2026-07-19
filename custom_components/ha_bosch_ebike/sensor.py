@@ -41,6 +41,11 @@ from .profile_extra import (
     next_service_date,
     reachable_ranges,
 )
+from .diagnosis_field_data import (
+    battery_field_data,
+    capacity_test_summary,
+    drive_unit_field_data,
+)
 from .unassigned_activities import ATTRIBUTE_DISPLAY_LIMIT
 
 RANGE_DISCLAIMER = (
@@ -565,7 +570,31 @@ async def async_setup_entry(
         for desc in BIKE_SENSORS:
             if is_bes2 and not desc.bes2:
                 continue
-            entities.append(BoschEBikeSensor(coordinator, desc, bike_id, drive_name))
+            # issue #60 follow-up: the odometer sensor's floor/live-boost
+            # value is only recomputed when this entity's own state is
+            # rewritten. As a plain CoordinatorEntity, that only happened on
+            # the coordinator's own 30-minute cloud poll, so a live odometer
+            # update (bike reconnecting at home) sat unused until the next
+            # poll happened to catch up too - by which point the cloud value
+            # had usually also synced, making the boost look like it never
+            # fired early. Passing the live entity_id here wires up the same
+            # immediate-update subscription BoschCurrentRangeSensor already
+            # uses for the live SoC entity, below.
+            # Use the ambiguity-checked resolver, not the raw
+            # live_odometer_entity() - must match exactly what
+            # _floored_odometer_km() itself trusts for this bike (see
+            # _unambiguous_live_odometer_entity's own docstring), otherwise a
+            # legacy multi-bike config with an unmigrated flat entity option
+            # would have every bike subscribe to the SAME shared entity even
+            # though the boost can structurally never apply to any of them,
+            # causing pointless async_write_ha_state()/recorder writes.
+            live_entity_id = (
+                coordinator._unambiguous_live_odometer_entity(bike_id)
+                if desc.key == "odometer" else None
+            )
+            entities.append(
+                BoschEBikeSensor(coordinator, desc, bike_id, drive_name, live_entity_id)
+            )
 
         # BES2 lifetime totals (only when /statistics data is present)
         if bike.get("_bes2_statistics"):
@@ -573,41 +602,71 @@ async def async_setup_entry(
                 entities.append(BoschEBikeSensor(coordinator, desc, bike_id, drive_name))
 
         # Battery sensors (per battery). BES2 batteries carry no cloud fields
-        # (deliveredWhOverLifetime/chargeCycles) and no service-book SoH, so the
-        # whole per-battery block is skipped for BES2.
-        for idx, battery in enumerate([] if is_bes2 else (bike.get("batteries", []) or [])):
+        # (deliveredWhOverLifetime/chargeCycles) and no service-book SoH, so
+        # that part of the per-battery block is skipped for BES2 — but the
+        # loop itself now always runs, since the Diagnosis Field Data sensors
+        # below need it for both systems (capacity test) or BES2 only
+        # (battery field data).
+        for idx, battery in enumerate(bike.get("batteries", []) or []):
             bat_name = battery.get("productName") or f"Battery {idx + 1}"
             bat_prefix = f"battery_{idx + 1}"
-            entities.extend(
-                _create_battery_sensors(coordinator, bike_id, drive_name, battery, bat_prefix, bat_name)
+            bat_serial = battery.get("serialNumber")
+
+            if not is_bes2:
+                entities.extend(
+                    _create_battery_sensors(coordinator, bike_id, drive_name, battery, bat_prefix, bat_name)
+                )
+
+                # State-of-Health sensors from the service book (dealer capacity
+                # measurement). serialNumber captured at creation time; values
+                # resolve from coordinator.data["service_records"]. Commonly None.
+                entities.append(
+                    BoschBatterySohSensor(
+                        coordinator, bike_id, drive_name, bat_name, bat_prefix, bat_serial,
+                        field="soh_pct",
+                        name_suffix="State of Health",
+                        key_suffix="soh",
+                        native_unit_of_measurement=PERCENTAGE,
+                        state_class=SensorStateClass.MEASUREMENT,
+                        icon="mdi:battery-heart-variant",
+                        suggested_display_precision=0,
+                    )
+                )
+                entities.append(
+                    BoschBatterySohSensor(
+                        coordinator, bike_id, drive_name, bat_name, bat_prefix, bat_serial,
+                        field="measured_wh",
+                        name_suffix="Measured Capacity",
+                        key_suffix="measured_capacity",
+                        native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
+                        state_class=SensorStateClass.MEASUREMENT,
+                        icon="mdi:battery",
+                    )
+                )
+
+            # Capacity Tester history (Diagnosis Field Data API). Documented
+            # for both Smart System and BES2; commonly None unless a dealer
+            # has connected a physical Bosch Capacity Tester to this battery.
+            entities.append(
+                BoschCapacityTestSensor(
+                    coordinator, bike_id, drive_name, bat_name, bat_prefix, bat_serial
+                )
             )
 
-            # State-of-Health sensors from the service book (dealer capacity
-            # measurement). serialNumber captured at creation time; values
-            # resolve from coordinator.data["service_records"]. Commonly None.
-            bat_serial = battery.get("serialNumber")
-            entities.append(
-                BoschBatterySohSensor(
-                    coordinator, bike_id, drive_name, bat_name, bat_prefix, bat_serial,
-                    field="soh_pct",
-                    name_suffix="State of Health",
-                    key_suffix="soh",
-                    native_unit_of_measurement=PERCENTAGE,
-                    state_class=SensorStateClass.MEASUREMENT,
-                    icon="mdi:battery-heart-variant",
-                    suggested_display_precision=0,
+            # Battery field data (Diagnosis Field Data API) is BES2-only per
+            # the Data Act appendix — no Smart System variant exists.
+            if is_bes2:
+                entities.append(
+                    BoschBatteryFieldDataSensor(
+                        coordinator, bike_id, drive_name, bat_name, bat_prefix, bat_serial
+                    )
                 )
-            )
+
+        # Drive-unit field data (Diagnosis Field Data API) is likewise
+        # BES2-only, one sensor per bike (one drive unit per bike).
+        if is_bes2:
             entities.append(
-                BoschBatterySohSensor(
-                    coordinator, bike_id, drive_name, bat_name, bat_prefix, bat_serial,
-                    field="measured_wh",
-                    name_suffix="Measured Capacity",
-                    key_suffix="measured_capacity",
-                    native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
-                    state_class=SensorStateClass.MEASUREMENT,
-                    icon="mdi:battery",
-                )
+                BoschDriveUnitFieldDataSensor(coordinator, bike_id, drive_name)
             )
 
         # Per-assist-mode reachable range sensors (one per active mode, API order)
@@ -786,6 +845,7 @@ class BoschEBikeSensor(CoordinatorEntity[BoschEBikeCoordinator], SensorEntity):
         description: BoschBikeSensorDescription,
         bike_id: str,
         drive_name: str,
+        live_entity_id: str | None = None,
     ) -> None:
         super().__init__(coordinator)
         self.entity_description = description
@@ -797,6 +857,36 @@ class BoschEBikeSensor(CoordinatorEntity[BoschEBikeCoordinator], SensorEntity):
             manufacturer="Bosch",
             model=drive_name,
         )
+        # issue #60 follow-up: only set for the odometer entity, when a live
+        # odometer entity is configured for this bike (see the call site).
+        # None for every other description, in which case this entity just
+        # behaves like a plain CoordinatorEntity, updating on the
+        # coordinator's own poll cycle as before.
+        self._live_entity_id = live_entity_id
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        if self._live_entity_id:
+            self.async_on_remove(
+                async_track_state_change_event(
+                    self.hass, [self._live_entity_id], self._on_live_entity_change
+                )
+            )
+
+    @callback
+    def _on_live_entity_change(self, event: Event) -> None:
+        """Re-evaluate native_value immediately when the linked live entity changes.
+
+        Without this, the floor/live-boost value computed in
+        coordinator._floored_odometer_km() was only ever re-read when the
+        CLOUD coordinator's own 30-minute poll rewrote this entity's state -
+        the live entity itself updating (e.g. the bike reconnecting at home)
+        did not, by itself, trigger a re-read. In practice that made the
+        boost appear to only kick in whenever the cloud poll happened to
+        catch up too, defeating its purpose of showing the correct mileage
+        immediately (reported by crazy-joe28 on issue #60 against v1.19.30).
+        """
+        self.async_write_ha_state()
 
     @property
     def native_value(self) -> Any:
@@ -960,6 +1050,204 @@ class BoschBatterySohSensor(CoordinatorEntity[BoschEBikeCoordinator], SensorEnti
             "nominal_wh": soh.get("nominal_wh"),
             "full_charge_cycles": soh.get("full_charge_cycles"),
             "measured_at": soh.get("measured_at"),
+        }
+
+
+class BoschCapacityTestSensor(CoordinatorEntity[BoschEBikeCoordinator], SensorEntity):
+    """Latest Bosch Capacity Tester measurement for one battery.
+
+    Documented for both Smart System and eBike System 2. Distinct from
+    BoschBatterySohSensor above: that one reads the Digital Service Book's
+    customer-report capacity figure, this one reads the dedicated Capacity
+    Tester device history (Diagnosis Field Data API) — a different data
+    source that a dealer may or may not have ever run, independent of
+    whether a service-book customer report exists. serial is captured at
+    creation time; the value is resolved live from
+    coordinator.data["capacity_testers"], parsed via
+    diagnosis_field_data.capacity_test_summary(). A measurement only exists
+    if a dealer connected a physical Bosch Capacity Tester to this battery,
+    so in the common case this reports unknown.
+
+    The real REST path for this endpoint family is unconfirmed (see
+    CAPACITY_TESTERS_PATH_CANDIDATES in const.py) — if none of the
+    candidates resolve for this account, this sensor also reports unknown,
+    indistinguishable from "no capacity test yet".
+    """
+
+    _attr_has_entity_name = True
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(
+        self,
+        coordinator: BoschEBikeCoordinator,
+        bike_id: str,
+        drive_name: str,
+        bat_name: str,
+        prefix: str,
+        serial: str | None,
+    ) -> None:
+        super().__init__(coordinator)
+        self._serial = serial
+        self._attr_name = f"{bat_name} Capacity Test"
+        self._attr_unique_id = f"{bike_id}_{prefix}_capacity_test"
+        self._attr_native_unit_of_measurement = UnitOfEnergy.WATT_HOUR
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_icon = "mdi:battery-clock"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, bike_id)},
+            name=drive_name,
+            manufacturer="Bosch",
+            model=drive_name,
+        )
+
+    def _summary(self) -> dict | None:
+        if not self._serial:
+            return None
+        raw = self.coordinator.data.get("capacity_testers", {}).get(self._serial)
+        return capacity_test_summary(raw)
+
+    @property
+    def native_value(self) -> float | None:
+        summary = self._summary()
+        return summary.get("measured_wh") if summary else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        summary = self._summary()
+        if not summary:
+            return {}
+        return {
+            "nominal_wh": summary.get("nominal_wh"),
+            "full_charge_cycles": summary.get("full_charge_cycles"),
+            "on_bike_measurement": summary.get("on_bike_measurement"),
+            "tested_at": summary.get("tested_at"),
+        }
+
+
+class BoschBatteryFieldDataSensor(CoordinatorEntity[BoschEBikeCoordinator], SensorEntity):
+    """Dealer DiagnosticTool 3 battery field data. eBike System 2 only.
+
+    No Smart System equivalent exists per the Data Act appendix. Unlike the
+    Smart-System-only BoschBatterySohSensor (Digital Service Book), this is
+    currently the only battery-health data source available for eBike
+    System 2 accounts. serial captured at creation time; value resolved
+    live from coordinator.data["battery_field_data"].
+    """
+
+    _attr_has_entity_name = True
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(
+        self,
+        coordinator: BoschEBikeCoordinator,
+        bike_id: str,
+        drive_name: str,
+        bat_name: str,
+        prefix: str,
+        serial: str | None,
+    ) -> None:
+        super().__init__(coordinator)
+        self._serial = serial
+        self._attr_name = f"{bat_name} Battery Health (Diagnosis Tool)"
+        self._attr_unique_id = f"{bike_id}_{prefix}_diagnosis_battery"
+        self._attr_native_unit_of_measurement = PERCENTAGE
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_icon = "mdi:battery-heart-variant"
+        self._attr_suggested_display_precision = 0
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, bike_id)},
+            name=drive_name,
+            manufacturer="Bosch",
+            model=drive_name,
+        )
+
+    def _data(self) -> dict | None:
+        if not self._serial:
+            return None
+        raw = self.coordinator.data.get("battery_field_data", {}).get(self._serial)
+        return battery_field_data(raw)
+
+    @property
+    def native_value(self) -> float | None:
+        data = self._data()
+        return data.get("present_abacus_soh") if data else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        data = self._data()
+        if not data:
+            return {}
+        return {
+            "remaining_capacity_wh": data.get("remaining_capacity_wh"),
+            "remaining_energy_wh": data.get("remaining_energy_wh"),
+            "pack_temperature_c": data.get("pack_temperature_c"),
+            "min_pack_temperature_c": data.get("min_pack_temperature_c"),
+            "max_pack_temperature_c": data.get("max_pack_temperature_c"),
+            "fet_temperature_c": data.get("fet_temperature_c"),
+            "min_fet_temperature_c": data.get("min_fet_temperature_c"),
+            "max_fet_temperature_c": data.get("max_fet_temperature_c"),
+            "charge_cycle_count_on_bike": data.get("charge_cycle_count_on_bike"),
+            "charge_cycle_count_off_bike": data.get("charge_cycle_count_off_bike"),
+            "charge_duration_total_min": data.get("charge_duration_total_min"),
+            "manufacturing_date": data.get("manufacturing_date"),
+            "hw_version": data.get("hw_version"),
+            "sw_version": data.get("sw_version"),
+        }
+
+
+class BoschDriveUnitFieldDataSensor(CoordinatorEntity[BoschEBikeCoordinator], SensorEntity):
+    """Dealer DiagnosticTool 3 drive-unit field data. eBike System 2 only.
+
+    No Smart System equivalent exists per the Data Act appendix. State is
+    the thermal-derating time (how long the motor has ever throttled itself
+    due to heat) — its unit is not documented anywhere in the Data Act
+    appendix (unlike e.g. chargeDurationTotal, which is explicit about
+    minutes), so it is exposed WITHOUT a unit_of_measurement rather than
+    guessing one; see diagnosis_field_data.drive_unit_field_data().
+    """
+
+    _attr_has_entity_name = True
+    _attr_translation_key = "drive_unit_thermal_derating"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_icon = "mdi:engine-outline"
+
+    def __init__(
+        self,
+        coordinator: BoschEBikeCoordinator,
+        bike_id: str,
+        drive_name: str,
+    ) -> None:
+        super().__init__(coordinator)
+        self._bike_id = bike_id
+        self._attr_unique_id = f"{bike_id}_diagnosis_drive_unit"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, bike_id)},
+            name=drive_name,
+            manufacturer="Bosch",
+            model=drive_name,
+        )
+
+    def _data(self) -> dict | None:
+        raw = self.coordinator.data.get("drive_unit_field_data", {}).get(self._bike_id)
+        return drive_unit_field_data(raw)
+
+    @property
+    def native_value(self) -> float | None:
+        data = self._data()
+        return data.get("thermal_derating_time_raw") if data else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        data = self._data()
+        if not data:
+            return {}
+        return {
+            "max_motor_temperature_c": data.get("max_motor_temperature_c"),
+            "min_motor_temperature_c": data.get("min_motor_temperature_c"),
+            "max_pcb_temperature_c": data.get("max_pcb_temperature_c"),
+            "min_pcb_temperature_c": data.get("min_pcb_temperature_c"),
+            "hw_version": data.get("hw_version"),
+            "sw_version": data.get("sw_version"),
         }
 
 

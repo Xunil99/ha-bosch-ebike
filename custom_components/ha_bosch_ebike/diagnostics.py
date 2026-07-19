@@ -78,5 +78,17 @@ async def async_get_config_entry_diagnostics(
         "service_records": async_redact_data(
             data.get("service_records") or {}, TO_REDACT
         ),
+        # Diagnosis Field Data API (capacity-testers/batteries/drive-units).
+        # Counts only, not a redacted dump: these dicts are keyed BY the
+        # battery/drive-unit serial number itself (not a "serialNumber"
+        # field under a value), which TO_REDACT cannot mask since it only
+        # redacts values of matching keys, not dict keys.
+        "diagnosis_field_data": {
+            "capacity_testers_entries": len(data.get("capacity_testers") or {}),
+            "battery_field_data_entries": len(data.get("battery_field_data") or {}),
+            "drive_unit_field_data_entries": len(
+                data.get("drive_unit_field_data") or {}
+            ),
+        },
     }
     return diag

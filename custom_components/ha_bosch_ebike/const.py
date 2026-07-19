@@ -70,3 +70,43 @@ CONF_LIVE_SOC_ENTITY = "live_soc_entity"
 # The flat CONF_LIVE_ODOMETER_ENTITY/CONF_LIVE_SOC_ENTITY keys above remain as
 # a legacy fallback for accounts that saved options before this key existed.
 CONF_LIVE_SENSORS = "live_sensors"
+
+# Diagnosis Field Data API (dealer Bosch DiagnosticTool 3 / Capacity Tester
+# data: batteries, drive-units, capacity-testers).
+#
+# UNLIKE every endpoint above, the Data Act appendix PDF documents these only
+# by their relative name ("/batteries", "/drive-units", "/capacity-testers"),
+# never the full REST path. Compare: the PDF also calls the Digital Service
+# Book endpoint just "/service-records", but the real, confirmed-working path
+# is "/service-book/smart-system/v1/service-records" — a prefix segment the
+# PDF never spells out anywhere. The true prefix for this family is therefore
+# unconfirmed. api.py tries each candidate below once per api-client lifetime
+# and caches whichever one responds successfully (see
+# BoschEBikeAPI._get_with_path_discovery); if none of them work the affected
+# sensors simply stay unavailable, same as the existing "dealer never
+# connected a diagnostic tool" case.
+CAPACITY_TESTERS_PATH_CANDIDATES = {
+    SYSTEM_SMART: [
+        "/diagnosis-field-data/smart-system/v1/capacity-testers",
+        "/field-data/smart-system/v1/capacity-testers",
+        "/smart-system/v1/capacity-testers",
+    ],
+    SYSTEM_BES2: [
+        "/diagnosis-field-data/ebike-system-2/v1/capacity-testers",
+        "/field-data/ebike-system-2/v1/capacity-testers",
+        "/ebike-system-2/v1/capacity-testers",
+    ],
+}
+
+# batteries / drive-units are documented as eBike System Generation 2 only —
+# no Smart System variant exists in the appendix.
+BATTERIES_PATH_CANDIDATES = [
+    "/diagnosis-field-data/ebike-system-2/v1/batteries",
+    "/field-data/ebike-system-2/v1/batteries",
+    "/ebike-system-2/v1/batteries",
+]
+DRIVE_UNITS_PATH_CANDIDATES = [
+    "/diagnosis-field-data/ebike-system-2/v1/drive-units",
+    "/field-data/ebike-system-2/v1/drive-units",
+    "/ebike-system-2/v1/drive-units",
+]

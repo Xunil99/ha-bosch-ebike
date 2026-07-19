@@ -1,0 +1,47 @@
+blueprint:
+  name: Bosch eBike - Software Update Available
+  description: >
+    Notifies you when one of your bikes' "Software Update Available" binary
+    sensors turns on (from Bosch's Digital Service Book customer report,
+    Smart System only). Pick one or more sensors below - on a multi-bike
+    account, select all of them here in one go, or add one automation per
+    bike.
+  domain: automation
+  source_url: https://github.com/Xunil99/ha-bosch-ebike/blob/main/blueprints/automation/ha_bosch_ebike/software_update_available.yaml
+  input:
+    update_sensors:
+      name: Software Update Available sensor(s)
+      description: The "Software Update Available" binary_sensor entity/entities to watch.
+      selector:
+        entity:
+          multiple: true
+          filter:
+            - integration: ha_bosch_ebike
+              domain: binary_sensor
+    notify_action:
+      name: Notification action
+      description: >
+        The action to run when a software update becomes available. A
+        ready-made message is precomputed for you as {{ message }} -
+        reference it in your action's message field.
+      selector:
+        action: {}
+
+trigger:
+  - platform: state
+    entity_id: !input update_sensors
+    to: "on"
+
+variables:
+  bike_name: "{{ state_attr(trigger.entity_id, 'friendly_name') }}"
+  message: >-
+    A software update is available for {{ bike_name }}. Visit your Bosch
+    eBike dealer or the Flow app to install it.
+
+condition: []
+
+action:
+  - !input notify_action
+
+mode: queued
+max: 10

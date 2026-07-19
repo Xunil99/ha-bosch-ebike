@@ -47,6 +47,25 @@ STORAGE_VERSION = 1
 STORAGE_KEY_SUFFIX = "consumption_state"
 
 
+def _safe_fetch_error(err: Exception) -> str:
+    """Exception summary safe to write to the HA log, for the three new
+    Diagnosis Field Data fetches (capacity-tester/battery/drive-unit).
+
+    Unlike bike_pass/service_records (identified by bikeId), these three
+    endpoints are identified by battery/drive-unit part+serial number in
+    the request's query string (see api.py's _part_serial_query). aiohttp's
+    ClientResponseError.__str__() embeds the full request URL — including
+    that query string — so logging str(err)/%s-formatting err directly
+    would leak the part+serial number into the HA log even when the log
+    message itself only names the bike_id, not the serial. Only the HTTP
+    status (if any) is safe to surface; never str(err) for these calls.
+    """
+    status = getattr(err, "status", None)
+    if status is not None:
+        return f"{type(err).__name__} (status={status})"
+    return type(err).__name__
+
+
 class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     """Coordinator to fetch Bosch eBike data."""
 
@@ -84,6 +103,13 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # Per-bike Data Act endpoints (refreshed every poll)
         self._bike_pass: dict[str, dict[str, Any]] = {}
         self._service_records: dict[str, dict[str, Any]] = {}
+        # Diagnosis Field Data API (dealer DiagnosticTool 3 / Capacity
+        # Tester). Keyed by battery/drive-unit serial number (NOT bike_id —
+        # a bike can have more than one battery), except drive units which
+        # are one-per-bike and keyed by bike_id. See diagnosis_field_data.py.
+        self._capacity_testers: dict[str, dict[str, Any]] = {}
+        self._battery_field_data: dict[str, dict[str, Any]] = {}
+        self._drive_unit_field_data: dict[str, dict[str, Any]] = {}
         # Battery consumption tracking (Wh delta between polls), per bike:
         # each bike has its own independent lifetime energy counter, and a
         # single shared scalar previously mixed up bikes whenever more than
@@ -800,6 +826,9 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if bid:
                 latest_activity_details_by_bike[bid] = latest_details
 
+        await self._fetch_capacity_testers(bikes, SYSTEM_BES2)
+        await self._fetch_bes2_diagnosis_field_data(bikes)
+
         return {
             "bikes": bikes,
             "latest_activity": latest_activity,
@@ -816,6 +845,9 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "bike_pass": {},
             "service_records": {},
             "unassigned_activities": [],
+            "capacity_testers": self._capacity_testers,
+            "battery_field_data": self._battery_field_data,
+            "drive_unit_field_data": self._drive_unit_field_data,
         }
 
     async def fetch_track_detail(self, activity_id: Any) -> dict[str, Any]:
@@ -1377,6 +1409,8 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             except Exception as err:  # noqa: BLE001
                 _LOGGER.debug("Could not fetch service records for %s: %s", bike_id, err)
 
+        await self._fetch_capacity_testers(bikes, SYSTEM_SMART)
+
         return {
             "bikes": bikes,
             "latest_activity": latest_activity,
@@ -1393,7 +1427,110 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "bike_pass": self._bike_pass,
             "service_records": self._service_records,
             "unassigned_activities": self._unassigned_activities,
+            "capacity_testers": self._capacity_testers,
+            "battery_field_data": self._battery_field_data,
+            "drive_unit_field_data": self._drive_unit_field_data,
         }
+
+    async def _fetch_capacity_testers(
+        self, bikes: list[dict[str, Any]], system: str
+    ) -> None:
+        """Diagnosis Field Data: capacity-tester history per battery.
+
+        Documented for both Smart System and eBike System 2. Keyed by
+        battery serial number (not bike_id — a bike can have more than one
+        battery). Stores the RAW response (parsed lazily by
+        diagnosis_field_data.capacity_test_summary() at sensor-read time,
+        mirroring how bike_pass/service_records are handled above) so a
+        future parser fix does not require a fresh poll to take effect.
+        Each battery is isolated so one failure never fails the whole
+        update, same as the bike_pass/service_records loop above.
+        """
+        current_serials = {
+            battery.get("serialNumber")
+            for bike in bikes
+            for battery in (bike.get("batteries", []) or [])
+            if isinstance(battery, dict) and battery.get("serialNumber")
+        }
+        for stale in [k for k in self._capacity_testers if k not in current_serials]:
+            del self._capacity_testers[stale]
+        for bike in bikes:
+            bike_id = bike.get("id")
+            for idx, battery in enumerate(bike.get("batteries", []) or []):
+                if not isinstance(battery, dict):
+                    continue
+                serial = battery.get("serialNumber")
+                if not serial:
+                    continue
+                try:
+                    self._capacity_testers[serial] = await self.api.get_capacity_tester(
+                        system, battery.get("partNumber"), serial
+                    )
+                except Exception as err:  # noqa: BLE001
+                    # Log bike_id + battery index, never the serial itself
+                    # (see _safe_fetch_error - this endpoint family is
+                    # identified by part+serial, which the codebase treats
+                    # as sensitive everywhere else, e.g. diagnostics.py).
+                    _LOGGER.debug(
+                        "Could not fetch capacity-tester data for bike %s battery #%d: %s",
+                        bike_id, idx + 1, _safe_fetch_error(err),
+                    )
+
+    async def _fetch_bes2_diagnosis_field_data(
+        self, bikes: list[dict[str, Any]]
+    ) -> None:
+        """Diagnosis Field Data: /batteries + /drive-units, eBike System 2 only.
+
+        No Smart System variant of either endpoint exists per the Data Act
+        appendix. Batteries keyed by serial (a bike can have more than one);
+        drive units are one-per-bike, keyed by bike_id.
+        """
+        current_battery_serials = {
+            battery.get("serialNumber")
+            for bike in bikes
+            for battery in (bike.get("batteries", []) or [])
+            if isinstance(battery, dict) and battery.get("serialNumber")
+        }
+        for stale in [k for k in self._battery_field_data if k not in current_battery_serials]:
+            del self._battery_field_data[stale]
+        for bike in bikes:
+            bike_id = bike.get("id")
+            for idx, battery in enumerate(bike.get("batteries", []) or []):
+                if not isinstance(battery, dict):
+                    continue
+                serial = battery.get("serialNumber")
+                if not serial:
+                    continue
+                try:
+                    self._battery_field_data[serial] = await self.api.get_battery_field_data(
+                        battery.get("partNumber"), serial
+                    )
+                except Exception as err:  # noqa: BLE001
+                    _LOGGER.debug(
+                        "Could not fetch battery field data for bike %s battery #%d: %s",
+                        bike_id, idx + 1, _safe_fetch_error(err),
+                    )
+
+        current_bike_ids = {b.get("id") for b in bikes if b.get("id")}
+        for stale in [k for k in self._drive_unit_field_data if k not in current_bike_ids]:
+            del self._drive_unit_field_data[stale]
+        for bike in bikes:
+            bike_id = bike.get("id")
+            if not bike_id:
+                continue
+            drive = bike.get("driveUnit") or {}
+            serial = drive.get("serialNumber")
+            if not serial:
+                continue
+            try:
+                self._drive_unit_field_data[bike_id] = await self.api.get_drive_unit_field_data(
+                    drive.get("partNumber"), serial
+                )
+            except Exception as err:  # noqa: BLE001
+                _LOGGER.debug(
+                    "Could not fetch drive-unit field data for bike %s: %s",
+                    bike_id, _safe_fetch_error(err),
+                )
 
     async def async_assign_activities(self, mapping: dict[str, str]) -> None:
         """Manually assign one or more activities to a bike (issue #47 follow-up).

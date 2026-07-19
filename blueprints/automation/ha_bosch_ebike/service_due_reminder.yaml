@@ -1,0 +1,57 @@
+blueprint:
+  name: Bosch eBike - Service Due Reminder
+  description: >
+    Notifies you when your Bosch eBike's next dealer service is coming up
+    soon or already overdue (by date and/or by odometer, whichever the
+    integration's own "next service" warning fires for first). Reacts to the
+    ha_bosch_ebike_service_due_soon / ha_bosch_ebike_service_overdue events
+    the integration already fires once per warning window, so this blueprint
+    adds no extra threshold logic of its own and will not repeat-notify for
+    the same warning window.
+  domain: automation
+  source_url: https://github.com/Xunil99/ha-bosch-ebike/blob/main/blueprints/automation/ha_bosch_ebike/service_due_reminder.yaml
+  input:
+    notify_action:
+      name: Notification action
+      description: >
+        The action to run when a service reminder fires, e.g. a mobile app
+        notify action or a persistent notification. A ready-made message is
+        precomputed for you as {{ message }} - reference it in your action's
+        message field, or build your own from trigger.event.data.bike_id /
+        .kind / .days_remaining / .days_overdue / .km_remaining / .km_overdue
+        / .current_odometer_km.
+      selector:
+        action: {}
+
+trigger:
+  - platform: event
+    event_type:
+      - ha_bosch_ebike_service_due_soon
+      - ha_bosch_ebike_service_overdue
+
+variables:
+  is_overdue: "{{ trigger.event.event_type == 'ha_bosch_ebike_service_overdue' }}"
+  kind: "{{ trigger.event.data.kind }}"
+  bike_id: "{{ trigger.event.data.bike_id }}"
+  message: >-
+    {%- if kind == 'date' -%}
+      {%- if is_overdue -%}
+        Bosch eBike {{ bike_id }}: service was due {{ trigger.event.data.days_overdue }} day(s) ago.
+      {%- else -%}
+        Bosch eBike {{ bike_id }}: service due in {{ trigger.event.data.days_remaining }} day(s).
+      {%- endif -%}
+    {%- else -%}
+      {%- if is_overdue -%}
+        Bosch eBike {{ bike_id }}: service was due {{ '%.0f' | format(trigger.event.data.km_overdue) }} km ago (currently {{ '%.0f' | format(trigger.event.data.current_odometer_km) }} km).
+      {%- else -%}
+        Bosch eBike {{ bike_id }}: service due in {{ '%.0f' | format(trigger.event.data.km_remaining) }} km (currently {{ '%.0f' | format(trigger.event.data.current_odometer_km) }} km).
+      {%- endif -%}
+    {%- endif -%}
+
+condition: []
+
+action:
+  - !input notify_action
+
+mode: queued
+max: 10

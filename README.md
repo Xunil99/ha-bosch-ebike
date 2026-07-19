@@ -115,6 +115,12 @@ Sind diese gesetzt, fragt die Integration bei jedem Tour-Update den HA-Recorder 
 
 Die Werte ersetzen die bisherige Snapshot-Schätzung in den Sensoren *Last Ride Distance*, *Battery Consumption Wh*, *Verbrauch %* etc. Wenn beim Tour-Start oder -Ende kein BLE-Sample im Toleranzfenster (±5 min) verfügbar war (Bike außer Reichweite), fällt die Integration transparent auf die alte Cloud-Logik zurück. Beide Felder sind optional und unabhängig - du kannst auch nur einen der beiden setzen.
 
+#### 🆕 Kilometerstand-Sicherung gegen Cloud-Dips + Live-Boost (ab v1.19.28, ab v1.19.31 sofort reaktiv)
+
+Der `Odometer`-Sensor zeigt niemals einen niedrigeren Wert als zuvor, selbst wenn ein einzelner Cloud-Poll kurzzeitig einen veralteten oder zu niedrigen Wert liefert - dafür merkt sich die Integration intern den bisher höchsten bestätigten Kilometerstand pro Bike (rein anzeigeseitig, ohne die zugrunde liegenden Bosch-Rohdaten zu verändern).
+
+Ist zusätzlich ein **Live-Tachostand-Sensor** (siehe oben) für das Bike hinterlegt, fließt dessen aktueller Wert ebenfalls in diese Untergrenze ein, mit zwei Schutzmechanismen: der Live-Wert zählt nur, wenn er sich **kürzlich geändert hat** (innerhalb der letzten 2 Stunden) und **nicht unplausibel weit** über dem bisherigen Wert liegt (max. 500 km Vorsprung). So zeigt der Kilometerstand sofort den korrekten, aktuellen Wert, wenn das Bike zuhause andockt, statt Stunden auf den nächsten Bosch-Cloud-Sync zu warten. Ab v1.19.31 wirkt sich eine Änderung des Live-Sensors sofort auf die Anzeige aus (vorher erst beim nächsten planmäßigen 30-Minuten-Cloud-Poll).
+
 <a name="de-setup"></a>
 
 ### Voraussetzungen
@@ -340,6 +346,19 @@ Neben dem von Bosch gelieferten Service-Termin (`Next Service Date`/`Next Servic
 - `ha_bosch_ebike_maintenance_due_soon` / `ha_bosch_ebike_maintenance_overdue` (für eigene Posten)
 
 Damit kann man z. B. eine Push-Mitteilung oder eine Beleuchtungs-Erinnerung bauen.
+
+#### 🆕 Fertige Blueprints (ab v1.19.31)
+
+Für die gängigsten Benachrichtigungen liegen im Repo unter [`blueprints/automation/ha_bosch_ebike/`](blueprints/automation/ha_bosch_ebike/) vier fertige Automations-Blueprints - importierbar über **Einstellungen → Automatisierungen → Blueprints → Blueprint importieren**, dort die Raw-URL der jeweiligen Datei einfügen:
+
+| Blueprint | Reagiert auf |
+|---|---|
+| `service_due_reminder.yaml` | `ha_bosch_ebike_service_due_soon` / `_service_overdue` |
+| `maintenance_reminder.yaml` | `ha_bosch_ebike_maintenance_due_soon` / `_maintenance_overdue` |
+| `theft_alert.yaml` | `Theft Reported`-Sensor (Zustand „ein") |
+| `software_update_available.yaml` | `Software Update Available`-Sensor (Zustand „ein") |
+
+Jeder Blueprint erwartet nur eine Benachrichtigungs-Aktion deiner Wahl (z. B. eine Mobile-App-Push-Nachricht) als Eingabe und liefert bereits einen fertig formulierten Text mit; die beiden zustandsbasierten Blueprints fragen zusätzlich nach dem/den zu überwachenden Sensor(en).
 
 <a name="de-reichweite"></a>
 
@@ -707,6 +726,18 @@ Diese Entitäten erscheinen **automatisch** mit der normalen Einrichtung. Eine *
 
 **Nicht zugeordnete Aktivitäten manuell zuweisen:** Zeigt der Sensor `Unassigned Activities` einen Wert größer als 0, kannst du diese Touren einem Bike zuweisen. Öffne dazu Einstellungen → Geräte & Dienste → Bosch eBike → Konfigurieren, wähle im erscheinenden Menü „Nicht zugeordnete Aktivitäten einem Bike zuweisen" und gehe die Liste durch – pro Tour ein Dropdown mit den Bikes des Kontos. Leer gelassene Touren bleiben unzugeordnet und erscheinen beim nächsten Mal wieder. Zugewiesene Touren zählen danach wieder zu den Gesamtwerten (Distanz, Dauer, Kalorien usw.) des jeweiligen Bikes.
 
+#### 🆕 Diagnosis-Field-Data-Entitäten (ab v1.19.31, experimentell)
+
+Zusätzlich zu den Data-Act-Entitäten oben nutzt die Integration ab dieser Version drei weitere, bisher ungenutzte Bosch-Endpunkte aus der „Diagnosis Field Data API" (Batterie-Feld-Daten, Antriebseinheit-Feld-Daten, Kapazitätstester-Historie). Diese Daten entstehen **ausschließlich, wenn ein Bosch-Händler das Bike ans DiagnosticTool 3 bzw. den Capacity Tester angeschlossen hat**, meist im Rahmen eines Werkstattbesuchs.
+
+| Entität | Typ/Einheit | Systeme | Beschreibung |
+|---------|-------------|---------|--------------|
+| {Batterie} Capacity Test | sensor (Diagnose) / Wh | Smart System + eBike System 2 | Vom Bosch Capacity Tester gemessene Kapazität, mit nomineller Kapazität, Ladezyklen und Messdatum als Attribute |
+| {Batterie} Battery Health (Diagnosis Tool) | sensor (Diagnose) / % | nur eBike System 2 | Akku-Gesundheit plus Temperatur-/Ladezyklus-Details aus dem DiagnosticTool-3-Feld-Daten-Bericht |
+| Drive Unit Thermal Derating | sensor (Diagnose) | nur eBike System 2 | Wie lange der Motor je thermisch gedrosselt hat, plus Motor-/Platinen-Temperatur-Extremwerte als Attribute |
+
+> **⚠️ Experimentell – bitte mit Vorsicht genießen:** Der genaue REST-Pfad dieser drei Endpunkte ist in Boschs eigener Data-Act-Dokumentation **nicht** dokumentiert (anders als bei allen anderen Endpunkten dieser Integration, die per Reverse Engineering bestätigt sind). Die Integration probiert deshalb beim ersten Zugriff mehrere plausible Pfad-Varianten automatisch durch und merkt sich, welche funktioniert (kein Neustart nötig, falls sich das später als falsch herausstellt – nach 24 Stunden wird automatisch erneut geprüft). Es ist möglich, dass **keine** der Varianten für dein Konto funktioniert, dann bleiben diese Sensoren dauerhaft „unbekannt", unabhängig davon, ob dein Bike schon beim Händler war. Rückmeldungen, besonders von eBike-System-2-Nutzern (zwei der drei Endpunkte existieren nur dort), sind willkommen, siehe [Issues](https://github.com/Xunil99/ha-bosch-ebike/issues).
+
 ---
 
 <a id="english"></a>
@@ -802,6 +833,12 @@ When set, the integration queries the HA recorder for these sensors at every tou
 - **Exact battery consumption in Wh** ((SoC start − SoC end) × battery capacity / 100).
 
 These replace the snapshot-based estimates in *Last Ride Distance*, *Battery Consumption Wh*, *consumption %* etc. If no fresh BLE sample exists at tour start/end within ±5 min (bike out of range), the integration transparently falls back to the previous cloud logic. Both fields are optional and independent - you can wire just one of them.
+
+#### 🆕 Odometer protection against cloud dips + live boost (from v1.19.28, instantly reactive from v1.19.31)
+
+The `Odometer` sensor never shows a lower value than before, even if a single cloud poll briefly returns a stale or too-low reading - the integration keeps its own record of the highest confirmed odometer reading per bike internally (display-only, it never touches Bosch's own underlying data).
+
+If a **live odometer sensor** (see above) is also linked for that bike, its current value feeds into this floor too, with two safeguards: the live value only counts if it **changed recently** (within the last 2 hours) and is **not implausibly far** above the previous value (max. 500 km ahead). This way the odometer shows the correct, current mileage as soon as the bike reconnects at home, instead of waiting hours for the next Bosch cloud sync. From v1.19.31, a change on the live sensor updates the display immediately (previously it only took effect at the next scheduled 30-minute cloud poll).
 
 <a name="en-setup"></a>
 
@@ -1026,6 +1063,19 @@ Beyond the official Bosch service info (`Next Service Date` / `Next Service Odom
 - `ha_bosch_ebike_maintenance_due_soon` / `ha_bosch_ebike_maintenance_overdue` (custom items)
 
 You can wire these up to push notifications, light reminders, etc.
+
+#### 🆕 Ready-made blueprints (from v1.19.31)
+
+For the most common notifications, the repo ships four ready-made automation blueprints under [`blueprints/automation/ha_bosch_ebike/`](blueprints/automation/ha_bosch_ebike/) - import them via **Settings → Automations → Blueprints → Import Blueprint**, pasting the raw URL of the file:
+
+| Blueprint | Reacts to |
+|---|---|
+| `service_due_reminder.yaml` | `ha_bosch_ebike_service_due_soon` / `_service_overdue` |
+| `maintenance_reminder.yaml` | `ha_bosch_ebike_maintenance_due_soon` / `_maintenance_overdue` |
+| `theft_alert.yaml` | `Theft Reported` sensor turning "on" |
+| `software_update_available.yaml` | `Software Update Available` sensor turning "on" |
+
+Each blueprint only needs a notification action of your choice as input (e.g. a mobile app push action) and comes with a ready-made message text; the two state-based blueprints additionally ask which sensor(s) to watch.
 
 <a name="en-range"></a>
 
@@ -1393,6 +1443,18 @@ These entities appear **automatically** with the normal setup. **No additional o
 > Otherwise these entities show "unknown" – this is **by design**.
 
 **Manually assigning unassigned activities:** If the `Unassigned Activities` sensor shows a value greater than 0, you can assign those rides to a bike. Go to Settings → Devices & Services → Bosch eBike → Configure, pick "Assign unassigned activities to a bike" from the menu that appears, and step through the list – one dropdown of the account's bikes per ride. Leaving a ride blank keeps it unassigned; it shows up again next time. Assigned rides then count again toward that bike's totals (distance, duration, calories, and so on).
+
+#### 🆕 Diagnosis Field Data entities (from v1.19.31, experimental)
+
+In addition to the Data Act entities above, this version adds three further, previously unused Bosch endpoints from the "Diagnosis Field Data API" (battery field data, drive-unit field data, capacity-tester history). This data is only ever produced **when a Bosch dealer has connected the bike to a DiagnosticTool 3 or Capacity Tester**, typically during a workshop visit.
+
+| Entity | Type/Unit | Systems | Description |
+|--------|-----------|---------|-------------|
+| {Battery} Capacity Test | sensor (diagnostic) / Wh | Smart System + eBike System 2 | Capacity measured by the Bosch Capacity Tester, with nominal capacity, charge cycles and test date as attributes |
+| {Battery} Battery Health (Diagnosis Tool) | sensor (diagnostic) / % | eBike System 2 only | Battery health plus temperature/charge-cycle detail from the DiagnosticTool 3 field-data report |
+| Drive Unit Thermal Derating | sensor (diagnostic) | eBike System 2 only | How long the motor has ever throttled itself due to heat, plus motor/PCB temperature extremes as attributes |
+
+> **⚠️ Experimental – use with caution:** The exact REST path of these three endpoints is **not** documented anywhere in Bosch's own Data Act documentation (unlike every other endpoint this integration uses, which are all reverse-engineering-confirmed). The integration therefore tries several plausible path variants automatically on first access and remembers whichever one works (no restart needed if that guess later turns out wrong - it re-checks automatically after 24 hours). It is possible that **none** of the variants work for your account, in which case these sensors stay "unknown" permanently, regardless of whether your bike has ever been to a dealer. Feedback is welcome, especially from eBike System 2 users (two of the three endpoints only exist there), see [Issues](https://github.com/Xunil99/ha-bosch-ebike/issues).
 
 ---
 

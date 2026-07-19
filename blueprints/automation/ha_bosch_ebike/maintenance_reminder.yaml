@@ -1,0 +1,51 @@
+blueprint:
+  name: Bosch eBike - Custom Maintenance Item Reminder
+  description: >
+    Notifies you when one of your custom maintenance items (added via the
+    ha_bosch_ebike.add_maintenance service, e.g. "chain lube" or "brake
+    pads") is coming up soon or overdue. Reacts to the
+    ha_bosch_ebike_maintenance_due_soon / ha_bosch_ebike_maintenance_overdue
+    events the integration already fires once per warning window, so this
+    blueprint adds no extra threshold logic of its own.
+  domain: automation
+  source_url: https://github.com/Xunil99/ha-bosch-ebike/blob/main/blueprints/automation/ha_bosch_ebike/maintenance_reminder.yaml
+  input:
+    notify_action:
+      name: Notification action
+      description: >
+        The action to run when a maintenance reminder fires. A ready-made
+        message is precomputed for you as {{ message }} - reference it in
+        your action's message field, or build your own from
+        trigger.event.data.bike_id / .item_id / .name / .remaining_km /
+        .remaining_days.
+      selector:
+        action: {}
+
+trigger:
+  - platform: event
+    event_type:
+      - ha_bosch_ebike_maintenance_due_soon
+      - ha_bosch_ebike_maintenance_overdue
+
+variables:
+  is_overdue: "{{ trigger.event.event_type == 'ha_bosch_ebike_maintenance_overdue' }}"
+  item_name: "{{ trigger.event.data.name or 'maintenance item' }}"
+  remaining_km: "{{ trigger.event.data.remaining_km }}"
+  remaining_days: "{{ trigger.event.data.remaining_days }}"
+  message: >-
+    {%- if is_overdue -%}
+      Bosch eBike {{ trigger.event.data.bike_id }}: "{{ item_name }}" is overdue.
+    {%- else -%}
+      Bosch eBike {{ trigger.event.data.bike_id }}: "{{ item_name }}" is coming up
+      {%- if remaining_km is not none %} in {{ '%.0f' | format(remaining_km) }} km{% endif -%}
+      {%- if remaining_km is not none and remaining_days is not none %} /{% endif -%}
+      {%- if remaining_days is not none %} in {{ '%.0f' | format(remaining_days) }} day(s){% endif -%}.
+    {%- endif -%}
+
+condition: []
+
+action:
+  - !input notify_action
+
+mode: queued
+max: 10

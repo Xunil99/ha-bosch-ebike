@@ -208,6 +208,9 @@
       },
       "unassigned_activities": {
         "name": "Nicht zugeordnete Aktivitäten"
+      },
+      "drive_unit_thermal_derating": {
+        "name": "Motor-Thermodrosselung"
       }
     },
     "number": {

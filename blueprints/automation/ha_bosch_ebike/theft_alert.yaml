@@ -1,0 +1,48 @@
+blueprint:
+  name: Bosch eBike - Theft Alert
+  description: >
+    Notifies you immediately when one of your bikes' "Theft Reported" binary
+    sensors turns on (Bosch's own Bike Pass theft log, Smart System only).
+    Pick one or more theft sensors below - on a multi-bike account, add one
+    automation per bike, or select all of them here in one go.
+  domain: automation
+  source_url: https://github.com/Xunil99/ha-bosch-ebike/blob/main/blueprints/automation/ha_bosch_ebike/theft_alert.yaml
+  input:
+    theft_sensors:
+      name: Theft Reported sensor(s)
+      description: The "Theft Reported" binary_sensor entity/entities to watch.
+      selector:
+        entity:
+          multiple: true
+          filter:
+            - integration: ha_bosch_ebike
+              domain: binary_sensor
+    notify_action:
+      name: Notification action
+      description: >
+        The action to run when a theft is reported. A ready-made message is
+        precomputed for you as {{ message }} - reference it in your action's
+        message field, or build your own from trigger.to_state.attributes
+        (latitude / longitude / address / detected_at / since).
+      selector:
+        action: {}
+
+trigger:
+  - platform: state
+    entity_id: !input theft_sensors
+    to: "on"
+
+variables:
+  bike_name: "{{ state_attr(trigger.entity_id, 'friendly_name') }}"
+  address: "{{ trigger.to_state.attributes.address }}"
+  message: >-
+    Theft reported for {{ bike_name }}!
+    {%- if address %} Last known location: {{ address }}.{% endif -%}
+
+condition: []
+
+action:
+  - !input notify_action
+
+mode: queued
+max: 10

@@ -6,6 +6,7 @@ import hashlib
 import base64
 import secrets
 import logging
+import time
 import urllib.parse
 from typing import Any
 
@@ -25,6 +26,9 @@ from .const import (
     BES2_BIKES_ENDPOINT,
     BES2_ACTIVITIES_ENDPOINT,
     BES2_STATISTICS_ENDPOINT,
+    CAPACITY_TESTERS_PATH_CANDIDATES,
+    BATTERIES_PATH_CANDIDATES,
+    DRIVE_UNITS_PATH_CANDIDATES,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -51,6 +55,13 @@ class BoschEBikeAPI:
         self._refresh_token = refresh_token
         self._system = system
         self._code_verifier: str | None = None
+        # See CAPACITY_TESTERS_PATH_CANDIDATES in const.py for why this
+        # exists: {discovery_key: winning_path_template}. In-memory only —
+        # rebuilt (and re-probed) on every HA/integration restart, which is
+        # cheap and also gives a wrong first guess a chance to self-correct
+        # if a later release reorders the candidate list.
+        self._discovered_paths: dict[str, str] = {}
+        self._unresolved_since: dict[str, float] = {}
 
     # -- PKCE helpers --
 
@@ -155,6 +166,123 @@ class BoschEBikeAPI:
                 return await self._get(path, retry_on_401=False)
             resp.raise_for_status()
             return await resp.json()
+
+    _PATH_UNRESOLVED = "__unresolved__"
+    # A 404 on every candidate is ambiguous: it could mean "wrong path
+    # prefix" (needs a restart to ever recover, since the guess itself is
+    # what's wrong) or "correct path, but no dealer has connected a
+    # diagnostic tool to THIS battery/drive-unit yet" (the documented common
+    # case for this data, which resolves itself once a dealer visit
+    # happens - no restart should be required for that). Since the two
+    # cannot be told apart from a 404 alone, "unresolved" is re-checked
+    # periodically instead of being cached forever, so real data that shows
+    # up later is still picked up without the user needing to restart HA.
+    _UNRESOLVED_RECHECK_INTERVAL_S = 24 * 60 * 60
+
+    async def _get_with_path_discovery(
+        self, discovery_key: str, candidates: list[str], query: str
+    ) -> Any | None:
+        """GET one of several candidate paths, caching whichever one works.
+
+        See CAPACITY_TESTERS_PATH_CANDIDATES in const.py for the reasoning.
+        Tries the previously-discovered path first (if any), then falls back
+        through the remaining candidates in order. A 404 moves on to the
+        next candidate; any other error (network failure, 401 already
+        retried by _get, 5xx, ...) propagates so the caller's normal
+        per-poll error handling applies instead of being mistaken for "wrong
+        path". Returns None once every candidate has 404'd, without raising —
+        this endpoint family is optional (dealer-visit-gated) data, so a
+        confirmed absence is not an error condition. Re-probes from scratch
+        after _UNRESOLVED_RECHECK_INTERVAL_S instead of giving up forever
+        (see that constant's docstring for why).
+        """
+        cached = self._discovered_paths.get(discovery_key)
+        if cached == self._PATH_UNRESOLVED:
+            since = self._unresolved_since.get(discovery_key, 0.0)
+            if time.monotonic() - since < self._UNRESOLVED_RECHECK_INTERVAL_S:
+                return None
+            cached = None  # cooldown elapsed - fall through and re-probe
+        ordered = (
+            [cached] + [c for c in candidates if c != cached] if cached else candidates
+        )
+        for template in ordered:
+            path = f"{template}?{query}" if query else template
+            try:
+                data = await self._get(path)
+            except aiohttp.ClientResponseError as err:
+                if err.status == 404:
+                    continue
+                raise
+            self._discovered_paths[discovery_key] = template
+            self._unresolved_since.pop(discovery_key, None)
+            return data
+        self._discovered_paths[discovery_key] = self._PATH_UNRESOLVED
+        self._unresolved_since[discovery_key] = time.monotonic()
+        _LOGGER.debug(
+            "Bosch eBike: none of the %d candidate paths for '%s' resolved "
+            "(all 404); this Diagnosis Field Data endpoint may be genuinely "
+            "unavailable for this account or its real path is unconfirmed. "
+            "Will retry after %d hours.",
+            len(candidates), discovery_key,
+            self._UNRESOLVED_RECHECK_INTERVAL_S // 3600,
+        )
+        return None
+
+    @staticmethod
+    def _part_serial_query(part_number: str | None, serial_number: str | None) -> str | None:
+        """Query string identifying a component by part+serial, or None if either is missing.
+
+        Diagnosis Field Data API endpoints identify the battery/drive-unit by
+        part number + serial number, not bikeId (unlike every other
+        per-bike endpoint in this client).
+        """
+        if not part_number or not serial_number:
+            return None
+        return (
+            f"partNumber={urllib.parse.quote(str(part_number), safe='')}"
+            f"&serialNumber={urllib.parse.quote(str(serial_number), safe='')}"
+        )
+
+    async def get_capacity_tester(
+        self, system: str, part_number: str | None, serial_number: str | None
+    ) -> dict[str, Any] | None:
+        """Latest Bosch Capacity Tester measurement(s) for one battery.
+
+        Documented for both Smart System and eBike System 2 (Generation 3
+        and 2 respectively). None if part/serial are missing or no candidate
+        path resolves.
+        """
+        query = self._part_serial_query(part_number, serial_number)
+        if query is None:
+            return None
+        candidates = CAPACITY_TESTERS_PATH_CANDIDATES.get(system)
+        if not candidates:
+            return None
+        return await self._get_with_path_discovery(
+            f"capacity_testers_{system}", candidates, query
+        )
+
+    async def get_battery_field_data(
+        self, part_number: str | None, serial_number: str | None
+    ) -> dict[str, Any] | None:
+        """Dealer DiagnosticTool 3 battery field data. eBike System 2 only."""
+        query = self._part_serial_query(part_number, serial_number)
+        if query is None:
+            return None
+        return await self._get_with_path_discovery(
+            "batteries", BATTERIES_PATH_CANDIDATES, query
+        )
+
+    async def get_drive_unit_field_data(
+        self, part_number: str | None, serial_number: str | None
+    ) -> dict[str, Any] | None:
+        """Dealer DiagnosticTool 3 drive-unit field data. eBike System 2 only."""
+        query = self._part_serial_query(part_number, serial_number)
+        if query is None:
+            return None
+        return await self._get_with_path_discovery(
+            "drive_units", DRIVE_UNITS_PATH_CANDIDATES, query
+        )
 
     async def get_bikes(self) -> list[dict[str, Any]]:
         """Fetch all bike profiles."""

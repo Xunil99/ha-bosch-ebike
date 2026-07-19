@@ -85,6 +85,9 @@
       },
       "unassigned_activities": {
         "name": "Unassigned Activities"
+      },
+      "drive_unit_thermal_derating": {
+        "name": "Drive Unit Thermal Derating"
       }
     }
   },

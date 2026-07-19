@@ -208,6 +208,9 @@
       },
       "unassigned_activities": {
         "name": "Niet-toegewezen activiteiten"
+      },
+      "drive_unit_thermal_derating": {
+        "name": "Motor thermische derating"
       }
     },
     "number": {
