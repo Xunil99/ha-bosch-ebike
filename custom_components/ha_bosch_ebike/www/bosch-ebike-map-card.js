@@ -223,6 +223,7 @@ const I18N = {
     dash_editor_charge_switch: "Charger switch entity (optional)",
     dash_editor_target_soc: "Target SoC input_number entity (optional)",
     dash_editor_target_soc_hint: "When set, an HA automation can read this value and stop the smart plug when the battery reaches it.",
+    dash_target_soc_missing: "Entity not found - create an input_number helper first (Settings → Devices & Services → Helpers) and select it above.",
     // Dashboard: maintenance + CO2/fuel
     dash_section_maint: "Upcoming maintenance",
     dash_maint_none: (days, km) => `No maintenance due in the next ${days} days / ${km} km.`,
@@ -614,6 +615,7 @@ const I18N = {
     dash_editor_charge_switch: "Charger-Switch-Entity (optional)",
     dash_editor_target_soc: "Ziel-SoC input_number-Entity (optional)",
     dash_editor_target_soc_hint: "Wenn gesetzt, kann eine HA-Automation diesen Wert lesen und die Steckdose abschalten, sobald der Akku ihn erreicht.",
+    dash_target_soc_missing: "Entity nicht gefunden - lege zuerst einen input_number-Helfer an (Einstellungen → Geräte & Dienste → Helfer) und wähle ihn oben aus.",
     // Dashboard: Wartung + CO2/Sprit
     dash_section_maint: "Anstehende Wartung",
     dash_maint_none: (days, km) => `Keine Wartung in den nächsten ${days} Tagen / ${km} km fällig.`,
@@ -1004,6 +1006,7 @@ const I18N = {
     dash_editor_charge_switch: "Lader-schakelaar-entity (optioneel)",
     dash_editor_target_soc: "Doel-SoC input_number-entity (optioneel)",
     dash_editor_target_soc_hint: "Indien ingesteld kan een HA-automation deze waarde uitlezen en de stekker uitschakelen zodra de accu deze bereikt.",
+    dash_target_soc_missing: "Entiteit niet gevonden - maak eerst een input_number-helper aan (Instellingen → Apparaten & diensten → Helpers) en selecteer deze hierboven.",
     // Dashboard: onderhoud + CO2/brandstof
     dash_section_maint: "Aanstaand onderhoud",
     dash_maint_none: (days, km) => `Geen onderhoud in de komende ${days} dagen / ${km} km.`,
@@ -1406,6 +1409,7 @@ const I18N = {
     dash_editor_charge_switch: "Entité interrupteur chargeur (optionnel)",
     dash_editor_target_soc: "Entité input_number SoC cible (optionnel)",
     dash_editor_target_soc_hint: "Si défini, une automatisation HA peut lire cette valeur et couper la prise quand la batterie l'atteint.",
+    dash_target_soc_missing: "Entité introuvable - créez d'abord un helper input_number (Paramètres → Appareils et services → Assistants) et sélectionnez-le ci-dessus.",
     // Dashboard: maintenance + CO2/fuel
     dash_section_maint: "Maintenance à venir",
     dash_maint_none: (days, km) => `Aucune maintenance prévue dans les ${days} prochains jours / ${km} km.`,
@@ -1808,6 +1812,7 @@ const I18N = {
     dash_editor_charge_switch: "Entità interruttore caricatore (opzionale)",
     dash_editor_target_soc: "Entità input_number SoC target (opzionale)",
     dash_editor_target_soc_hint: "Se impostata, un'automazione HA può leggere questo valore e staccare la presa quando la batteria lo raggiunge.",
+    dash_target_soc_missing: "Entità non trovata - crea prima un helper input_number (Impostazioni → Dispositivi e servizi → Helper) e selezionala sopra.",
     // Dashboard: maintenance + CO2/fuel
     dash_section_maint: "Manutenzioni in arrivo",
     dash_maint_none: (days, km) => `Nessuna manutenzione nei prossimi ${days} giorni / ${km} km.`,
@@ -2210,6 +2215,7 @@ const I18N = {
     dash_editor_charge_switch: "Entidad interruptor del cargador (opcional)",
     dash_editor_target_soc: "Entidad input_number SoC objetivo (opcional)",
     dash_editor_target_soc_hint: "Si se define, una automatización HA puede leer este valor y apagar el enchufe cuando la batería lo alcance.",
+    dash_target_soc_missing: "Entidad no encontrada - crea primero un helper input_number (Ajustes → Dispositivos y servicios → Ayudantes) y selecciónala arriba.",
     // Dashboard: maintenance + CO2/fuel
     dash_section_maint: "Mantenimiento próximo",
     dash_maint_none: (days, km) => `Sin mantenimiento previsto en los próximos ${days} días / ${km} km.`,
@@ -8215,6 +8221,11 @@ class BoschEBikeDashboardCard extends HTMLElement {
         flex: 0 0 auto; min-width: 38px; text-align: right;
         font-size: 14px; font-weight: 600; color: var(--primary-text-color);
       }
+      .dash-slider-warn {
+        display: flex; align-items: center; gap: 6px;
+        font-size: 12px; color: var(--warning-color, #ff9800);
+        margin: 10px 0 14px;
+      }
       .dash-batbar-wrap {
         margin-top: 6px;
         background: var(--secondary-background-color, #eee);
@@ -8371,6 +8382,10 @@ class BoschEBikeDashboardCard extends HTMLElement {
         <span class="lbl" id="dash-slider-lbl"></span>
         <input type="range" id="dash-slider" min="20" max="100" step="5" value="80" />
         <span class="val" id="dash-slider-val">80%</span>
+      </div>
+      <div class="dash-slider-warn" id="dash-slider-warn" style="display:none">
+        <ha-icon icon="mdi:alert-outline"></ha-icon>
+        <span id="dash-slider-warn-text"></span>
       </div>
       <div class="dash-controls" id="dash-controls" style="display:none"></div>
       <div class="dash-batbar-wrap" id="dash-batbar-wrap">
@@ -8637,11 +8652,14 @@ class BoschEBikeDashboardCard extends HTMLElement {
     const slider = this.querySelector("#dash-slider");
     const sliderVal = this.querySelector("#dash-slider-val");
     const sliderLbl = this.querySelector("#dash-slider-lbl");
+    const sliderWarn = this.querySelector("#dash-slider-warn");
+    const sliderWarnText = this.querySelector("#dash-slider-warn-text");
     if (cfg.target_soc_entity) {
-      sliderRow.style.display = "flex";
-      sliderLbl.textContent = this._t("dash_label_target_soc");
       const targetState = this._state(cfg.target_soc_entity);
       if (targetState) {
+        sliderRow.style.display = "flex";
+        sliderWarn.style.display = "none";
+        sliderLbl.textContent = this._t("dash_label_target_soc");
         const a = targetState.attributes || {};
         if (a.min != null) slider.min = a.min;
         if (a.max != null) slider.max = a.max;
@@ -8651,9 +8669,18 @@ class BoschEBikeDashboardCard extends HTMLElement {
           slider.value = v;
           sliderVal.textContent = v + "%";
         }
+      } else {
+        // Configured entity_id does not exist (issue #62): showing a live
+        // slider here would silently fail on every change (input_number.set_value
+        // has nowhere to write to), so surface the fix instead of a
+        // seemingly-working but non-functional control.
+        sliderRow.style.display = "none";
+        sliderWarn.style.display = "flex";
+        sliderWarnText.textContent = `${this._t("dash_target_soc_missing")} (${cfg.target_soc_entity})`;
       }
     } else {
       sliderRow.style.display = "none";
+      sliderWarn.style.display = "none";
     }
 
     // ---------- Buttons ----------
