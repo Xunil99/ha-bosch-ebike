@@ -4,11 +4,13 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 import logging
+import time
 import uuid
 from typing import Any
 
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.helpers.event import async_call_later
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.exceptions import ConfigEntryAuthFailed
@@ -133,6 +135,12 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # written back into the bike/activity data itself, only used to
         # floor what the "Odometer" sensor shows.
         self._odometer_floor_km: dict[str, float] = {}
+        # Debounce handle + streak-start time for persisting odometer-floor
+        # increases to disk (issue #60 follow-up: see
+        # _schedule_odometer_floor_save()). Cancelled on config-entry
+        # unload/reload in __init__.py's async_setup_entry.
+        self._odometer_floor_save_unsub: Any = None
+        self._odometer_floor_save_pending_since: float | None = None
         # Highest bike count ever seen in a single successful poll (issue #60
         # follow-up). A single transient/glitched get_bikes() response
         # temporarily omitting a bike must not make
@@ -1592,6 +1600,13 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     # min_absolute_m in range_estimate.py.
     LIVE_ODOMETER_BOOST_MAX_EXCESS_KM = 500.0
 
+    # Debounce tuning for _schedule_odometer_floor_save(): a short delay so a
+    # burst of live-entity updates during a ride coalesces into one write,
+    # capped by a max wait so an uninterrupted long ride cannot keep
+    # postponing the save indefinitely (see that method's docstring).
+    ODOMETER_FLOOR_SAVE_DEBOUNCE_S = 30
+    ODOMETER_FLOOR_SAVE_MAX_WAIT_S = 300
+
     def _unambiguous_live_odometer_entity(self, bike_id: str) -> str | None:
         """live_odometer_entity(bike_id), or None if it could be another bike's.
 
@@ -1670,6 +1685,20 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         drive unit with a lower true odometer) would also stay clamped to
         the old bike's mileage until a new value grows past it again -
         rare enough not to warrant reset-detection logic.
+
+        Floor increases are persisted to disk in a debounced way (see
+        _schedule_odometer_floor_save()): this method itself only runs when
+        an entity is actually read/written, which is NOT the same as the
+        coordinator's own state_changed-gated save. Without this, a floor
+        raised purely by the live-entity boost (no new activity, no
+        consumption change - nothing that flips state_changed) stayed
+        correct in memory for as long as the process kept running, but
+        reverted to whatever was last saved on any later HA/integration
+        restart, since nothing had ever written the higher value to disk in
+        between (issue #60 - reported as a "sawtooth" by crazy-joe28: the
+        live-boosted value held fine poll after poll within one running
+        session, but a restart in between silently dropped it back to the
+        stale, disk-persisted floor).
         """
         candidates = [float(value_km)]
         live_entity = self._unambiguous_live_odometer_entity(bike_id)
@@ -1691,7 +1720,67 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         floor = self._odometer_floor_km.get(bike_id, 0.0)
         clamped = max(max(candidates), floor)
         self._odometer_floor_km[bike_id] = clamped
+        if clamped > floor:
+            self._schedule_odometer_floor_save()
         return clamped
+
+    def _schedule_odometer_floor_save(self) -> None:
+        """Debounced disk persistence for odometer-floor increases (issue #60).
+
+        _floored_odometer_km() can run very frequently while a bike is
+        actively being ridden (every live-entity update, roughly once a
+        second), so saving to disk on every single increase would be a lot
+        of unnecessary writes over the course of a ride. This coalesces
+        rapid increases into a single save ODOMETER_FLOOR_SAVE_DEBOUNCE_S
+        after the last one - comfortably ahead of any realistic HA/
+        integration restart happening right as or shortly after a ride ends.
+
+        Capped by ODOMETER_FLOOR_SAVE_MAX_WAIT_S: an uninterrupted long ride
+        keeps re-arming this debounce on every update, which would otherwise
+        postpone the save for the entire ride and reopen a narrower version
+        of the same issue if a restart happens mid-ride rather than after.
+        Once a pending streak has run longer than the max wait, the next
+        call forces an immediate save instead of pushing it back further.
+        """
+        now = time.monotonic()
+        if (
+            self._odometer_floor_save_pending_since is not None
+            and now - self._odometer_floor_save_pending_since
+            >= self.ODOMETER_FLOOR_SAVE_MAX_WAIT_S
+        ):
+            self._cancel_odometer_floor_save()
+            self.hass.async_create_task(self._async_save_state())
+            return
+        if self._odometer_floor_save_pending_since is None:
+            self._odometer_floor_save_pending_since = now
+        if self._odometer_floor_save_unsub is not None:
+            self._odometer_floor_save_unsub()
+        self._odometer_floor_save_unsub = async_call_later(
+            self.hass, self.ODOMETER_FLOOR_SAVE_DEBOUNCE_S, self._fire_odometer_floor_save
+        )
+
+    @callback
+    def _fire_odometer_floor_save(self, _now: Any) -> None:
+        self._odometer_floor_save_unsub = None
+        self._odometer_floor_save_pending_since = None
+        self.hass.async_create_task(self._async_save_state())
+
+    @callback
+    def _cancel_odometer_floor_save(self) -> None:
+        """Cancel any pending debounced save (config-entry unload/reload).
+
+        Without this, a reload while a save is still pending (any options
+        change, which reloads the entry, is enough to trigger this) leaves
+        the OLD coordinator instance's timer alive; when it later fires it
+        would call _async_save_state() on stale in-memory data and silently
+        overwrite whatever the NEW coordinator instance has since persisted
+        to the same on-disk store key - not just the odometer floor, since
+        that save writes the entire persisted-state dict.
+        """
+        if self._odometer_floor_save_unsub is not None:
+            self._odometer_floor_save_unsub()
+            self._odometer_floor_save_unsub = None
+        self._odometer_floor_save_pending_since = None
 
     def _bike_latest_activity(
         self, bike_id: str, fallback_all: bool = False

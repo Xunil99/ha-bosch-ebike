@@ -275,6 +275,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # sensor) are created/removed immediately. The coordinator — and with
     # it the enrichment cache — is rebuilt as part of the reload.
     entry.async_on_unload(entry.add_update_listener(_async_options_updated))
+
+    # Cancel any pending debounced odometer-floor save (issue #60 follow-up)
+    # on unload/reload. Without this, an options-triggered reload while a
+    # save is still pending would leave this coordinator instance's timer
+    # alive; it would later fire against stale in-memory data and silently
+    # overwrite whatever the freshly reloaded coordinator has since
+    # persisted to the same on-disk store key.
+    entry.async_on_unload(coordinator._cancel_odometer_floor_save)
     return True
 
 
