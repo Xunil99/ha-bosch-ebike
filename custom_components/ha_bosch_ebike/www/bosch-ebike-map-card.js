@@ -61,6 +61,7 @@ const I18N = {
     msg_no_rides: "No rides found",
     msg_no_filter_match: "No rides match this filter",
     msg_unnamed_ride: "Unnamed ride",
+    trick_hint_tooltip: "Trick Check data detected, see log",
     msg_error_prefix: "Error: ",
     err_leaflet_load: "Leaflet could not be loaded",
     err_create_map: "Could not create the map",
@@ -460,6 +461,7 @@ const I18N = {
     msg_no_rides: "Keine Fahrten gefunden",
     msg_no_filter_match: "Keine Fahrten für diesen Filter",
     msg_unnamed_ride: "Unbenannte Fahrt",
+    trick_hint_tooltip: "Trick-Check-Daten erkannt, siehe Log",
     msg_error_prefix: "Fehler: ",
     err_leaflet_load: "Leaflet konnte nicht geladen werden",
     err_create_map: "Fehler beim Erzeugen der Karte",
@@ -851,6 +853,7 @@ const I18N = {
     msg_no_rides: "Geen ritten gevonden",
     msg_no_filter_match: "Geen ritten voldoen aan dit filter",
     msg_unnamed_ride: "Naamloze rit",
+    trick_hint_tooltip: "Trick Check-gegevens gedetecteerd, zie log",
     msg_error_prefix: "Fout: ",
     err_leaflet_load: "Leaflet kon niet worden geladen",
     err_create_map: "Kan kaart niet maken",
@@ -1247,6 +1250,7 @@ const I18N = {
     msg_no_rides: "Aucune sortie trouvée",
     msg_no_filter_match: "Aucune sortie ne correspond à ce filtre",
     msg_unnamed_ride: "Sortie sans nom",
+    trick_hint_tooltip: "Données Trick Check détectées, voir le journal",
     msg_error_prefix: "Erreur : ",
     err_leaflet_load: "Impossible de charger Leaflet",
     err_create_map: "Impossible de créer la carte",
@@ -1650,6 +1654,7 @@ const I18N = {
     msg_no_rides: "Nessuna uscita trovata",
     msg_no_filter_match: "Nessuna uscita corrisponde al filtro",
     msg_unnamed_ride: "Uscita senza nome",
+    trick_hint_tooltip: "Dati Trick Check rilevati, vedi log",
     msg_error_prefix: "Errore: ",
     err_leaflet_load: "Impossibile caricare Leaflet",
     err_create_map: "Impossibile creare la mappa",
@@ -2053,6 +2058,7 @@ const I18N = {
     msg_no_rides: "No se han encontrado rutas",
     msg_no_filter_match: "Ninguna ruta coincide con el filtro",
     msg_unnamed_ride: "Ruta sin nombre",
+    trick_hint_tooltip: "Datos de Trick Check detectados, ver registro",
     msg_error_prefix: "Error: ",
     err_leaflet_load: "No se ha podido cargar Leaflet",
     err_create_map: "No se ha podido crear el mapa",
@@ -3395,7 +3401,12 @@ class BoschEBikeMapCard extends HTMLElement {
         background:rgba(33,33,33,.72); backdrop-filter:blur(4px);
         box-shadow:0 2px 8px rgba(0,0,0,.25);
       }
-      .eb-title { text-align:center; padding:10px 16px 2px; font-size:16px; font-weight:600; color:var(--primary-text-color,#333); }
+      .eb-title { display:flex; justify-content:center; align-items:center; padding:10px 16px 2px; font-size:16px; font-weight:600; color:var(--primary-text-color,#333); }
+      .eb-trick-dot {
+        display: none; flex-shrink: 0; width: 9px; height: 9px; margin-left: 7px;
+        border-radius: 50%; background: #43a047; vertical-align: middle;
+        box-shadow: 0 0 0 2px rgba(67,160,71,0.25);
+      }
       .eb-datelbl { text-align:center; font-size:12px; color:var(--secondary-text-color,#666); padding:0 16px 6px; }
       .eb-stats { display:grid; grid-template-columns:repeat(3,1fr); gap:4px; padding:8px 16px 14px; }
       .eb-stat { text-align:center; }
@@ -3421,7 +3432,8 @@ class BoschEBikeMapCard extends HTMLElement {
         background:rgba(0,0,0,.35);
         border-bottom:1px solid rgba(255,255,255,.12);
       }
-      .eb-fullscreen-title { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:600; }
+      .eb-fullscreen-title { flex:1; min-width:0; display:flex; align-items:center; font-weight:600; }
+      .eb-fullscreen-title-text { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
       .eb-fullscreen-nav { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
       .eb-fullscreen-nav input[type="date"] { min-width:170px; padding:6px 10px; border:1px solid rgba(255,255,255,.2); border-radius:8px; background:rgba(255,255,255,.12); color:#fff; }
       .eb-fullscreen-nav .eb-ctr { color:rgba(255,255,255,.8); }
@@ -3528,13 +3540,13 @@ class BoschEBikeMapCard extends HTMLElement {
         <div id="eb-overlay-msg" class="eb-overlay-msg"></div>
         <div id="eb-batt-inline" class="eb-batt-badge"></div>
       </div>
-      <div id="eb-title" class="eb-title"></div>
+      <div id="eb-title" class="eb-title"><span id="eb-title-text"></span><span id="eb-trick-dot" class="eb-trick-dot" style="display:none" title="${t("trick_hint_tooltip")}"></span></div>
       <div id="eb-date-lbl" class="eb-datelbl"></div>
       <div id="eb-stats" class="eb-stats"></div>
       <div id="eb-fullscreen-overlay" class="eb-fullscreen" aria-hidden="true">
         <div class="eb-fullscreen-card">
           <div class="eb-fullscreen-head">
-            <div id="eb-fullscreen-title" class="eb-fullscreen-title">${t("rides_title")}</div>
+            <div id="eb-fullscreen-title" class="eb-fullscreen-title"><span id="eb-fullscreen-title-text">${t("rides_title")}</span><span id="eb-fullscreen-trick-dot" class="eb-trick-dot" style="display:none" title="${t("trick_hint_tooltip")}"></span></div>
             <div class="eb-fullscreen-nav">
               <button id="eb-full-prev" class="eb-icon-btn" title="${t("btn_prev")}" aria-label="${t("btn_prev")}">◀</button>
               <input type="date" id="eb-full-date">
@@ -3914,7 +3926,8 @@ class BoschEBikeMapCard extends HTMLElement {
     const fullNext = this._$("eb-full-next");
     if (fullPrev) fullPrev.disabled = index <= 0;
     if (fullNext) fullNext.disabled = index >= this._activities.length - 1;
-    this._$("eb-title").textContent = activity.title || this._t("msg_unnamed_ride");
+    this._$("eb-title-text").textContent = activity.title || this._t("msg_unnamed_ride");
+    this._$("eb-trick-dot").style.display = activity.trickHint ? "inline-block" : "none";
 
     if (activity.startTime) {
       this._$("eb-date-lbl").textContent = new Date(activity.startTime).toLocaleDateString("de-DE", {
@@ -3953,7 +3966,8 @@ class BoschEBikeMapCard extends HTMLElement {
       <div class="eb-stat"><div class="eb-val">${battPct} %</div><div class="eb-lbl">${this._t("stat_battery_pct")}</div></div>
     `;
     this._$("eb-stats").innerHTML = statsHtml;
-    this._$("eb-fullscreen-title").textContent = activity.title || this._t("msg_unnamed_ride");
+    this._$("eb-fullscreen-title-text").textContent = activity.title || this._t("msg_unnamed_ride");
+    this._$("eb-fullscreen-trick-dot").style.display = activity.trickHint ? "inline-block" : "none";
     this._$("eb-fullscreen-meta").innerHTML = statsHtml;
     this._renderFullscreenProfile();
 

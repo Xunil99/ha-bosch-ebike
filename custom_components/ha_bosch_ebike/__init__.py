@@ -411,6 +411,12 @@ async def ws_list_activities(
                 "caloriesBurned": a.get("caloriesBurned"),
                 "accountId": entry_id,
                 "accountLabel": account_label,
+                # Diagnostic canary (see trick_scan.py): true if this
+                # activity's raw API response contained any field name
+                # hinting at Bosch's "Trick Check" data. Not a real, parsed
+                # feature yet - see coordinator._scan_and_log_trick_hits for
+                # the actual field names/values, logged at warning level.
+                "trickHint": bool(a.get("_trick_hint")),
             }
             if aid and aid in activity_bike:
                 entry["bikeId"] = activity_bike[aid]

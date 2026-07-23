@@ -42,6 +42,7 @@ from .range_estimate import (
     ble_distance_implausible,
 )
 from .unassigned_activities import compute_unassigned_activities, merge_manual_overrides
+from .trick_scan import scan_for_trick_fields, format_hits_for_log
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -134,6 +135,17 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # _floored_odometer_km() for the full rationale. Deliberately never
         # written back into the bike/activity data itself, only used to
         # floor what the "Odometer" sensor shows.
+        # Trick Check diagnostic canary (see trick_scan.py): which activity
+        # IDs have already been scanned (whether or not anything matched, so
+        # we never rescan/re-log the same activity every poll) and which
+        # ones actually had a hit (kept forever - a past ride's data does
+        # not change, so once flagged it stays flagged). In-memory only,
+        # deliberately not persisted to disk: this is a temporary detection
+        # aid, not a real feature, so losing it on restart just costs one
+        # extra re-scan/re-log per activity, which is an acceptable tradeoff
+        # for not adding a throwaway feature to the persisted-state schema.
+        self._trick_scanned_ids: set[str] = set()
+        self._trick_hit_ids: set[str] = set()
         self._odometer_floor_km: dict[str, float] = {}
         # Debounce handle + streak-start time for persisting odometer-floor
         # increases to disk (issue #60 follow-up: see
@@ -807,6 +819,7 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     detail = await self.api.get_activity_detail_bes2(raw_id)
                     latest_details = bes2.normalize_track(detail)
                     bes2.enrich_summary_from_detail(latest_activity, detail)
+                    self._scan_and_log_trick_hits(str(raw_id), detail)
                 except Exception as err:  # noqa: BLE001
                     _LOGGER.debug("Could not fetch BES2 activity detail %s: %s", raw_id, err)
 
@@ -836,6 +849,8 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         await self._fetch_capacity_testers(bikes, SYSTEM_BES2)
         await self._fetch_bes2_diagnosis_field_data(bikes)
+
+        self._apply_trick_hints(activities)
 
         return {
             "bikes": bikes,
@@ -1029,6 +1044,41 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             fresh["_distance_source"] = src
         if old.get("_ble_track_checked"):
             fresh["_ble_track_checked"] = True
+
+    def _scan_and_log_trick_hits(self, activity_id: str, raw: dict[str, Any]) -> None:
+        """Diagnostic canary for Bosch "Trick Check" data - see trick_scan.py.
+
+        Scans *raw* (an activity summary or activity-detail response) for
+        any field name hinting at trick data and logs a warning with what it
+        found, the first time (and only the first time) this activity_id is
+        scanned. Safe to call repeatedly with the same activity_id - later
+        calls are a no-op via _trick_scanned_ids.
+        """
+        if activity_id in self._trick_scanned_ids:
+            return
+        self._trick_scanned_ids.add(activity_id)
+        hits = scan_for_trick_fields(raw)
+        if not hits:
+            return
+        self._trick_hit_ids.add(activity_id)
+        _LOGGER.warning(
+            "Bosch eBike: possible Trick Check data detected in activity %s - "
+            "this is not yet a supported feature, just a heads-up so it can "
+            "be added properly once the real field names are confirmed: %s",
+            activity_id, format_hits_for_log(hits),
+        )
+
+    def _apply_trick_hints(self, activities: list[dict[str, Any]]) -> None:
+        """Scan any not-yet-seen activities, then flag every activity whose
+        id has ever had a hit with `_trick_hint` (used by the map card to
+        show a small indicator - see ws_list_activities in __init__.py).
+        """
+        for activity in activities:
+            aid = activity.get("id")
+            if not aid:
+                continue
+            self._scan_and_log_trick_hits(aid, activity)
+            activity["_trick_hint"] = aid in self._trick_hit_ids
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch bikes and activities from Bosch API."""
@@ -1233,6 +1283,7 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     details = await self.api.get_activity_detail(activity_id)
                     self._latest_activity_details = details
                     self._latest_activity_id = activity_id
+                    self._scan_and_log_trick_hits(activity_id, details)
                 except Exception as err:  # noqa: BLE001
                     # GPS details are optional - never fail the whole update.
                     _LOGGER.debug(
@@ -1386,6 +1437,7 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 details = await self.api.get_activity_detail(bike_activity_id)
                 self._latest_activity_details_by_bike[bid] = details
                 self._latest_activity_id_by_bike[bid] = bike_activity_id
+                self._scan_and_log_trick_hits(bike_activity_id, details)
             except Exception as err:  # noqa: BLE001
                 _LOGGER.debug(
                     "Could not fetch GPS details for bike %s activity %s: %s",
@@ -1418,6 +1470,8 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 _LOGGER.debug("Could not fetch service records for %s: %s", bike_id, err)
 
         await self._fetch_capacity_testers(bikes, SYSTEM_SMART)
+
+        self._apply_trick_hints(self._all_activities)
 
         return {
             "bikes": bikes,
