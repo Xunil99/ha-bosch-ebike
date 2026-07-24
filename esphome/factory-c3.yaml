@@ -53,6 +53,20 @@ logger:
     bosch_ebike_ldi: DEBUG
 
 wifi:
+  # Some cheap C3 boards (esp. "ESP32-C3 Super Mini" clones) have weak
+  # onboard power regulation and brown out during the ~500mA TX current
+  # spikes WiFi needs to associate, so they never connect at all (see
+  # issue #64). power_save_mode: none avoids the extra current spikes
+  # caused by modem-sleep wake cycles and has no real downside, so it's
+  # on unconditionally here. Capping output_power (e.g. 8.5) fixes the
+  # brownout itself but trades away range/signal for everyone, including
+  # unaffected boards, so it's intentionally left commented out rather
+  # than baked into the shared factory firmware. If your board keeps
+  # failing to connect after re-flashing, fork this YAML (or build your
+  # own from example-bridge.yaml plus the esp32: block above) and
+  # uncomment it:
+  # output_power: 8.5
+  power_save_mode: none
   ap:
     ssid: "eBike Bridge Setup"
 
