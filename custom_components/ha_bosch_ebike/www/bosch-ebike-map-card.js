@@ -61,7 +61,13 @@ const I18N = {
     msg_no_rides: "No rides found",
     msg_no_filter_match: "No rides match this filter",
     msg_unnamed_ride: "Unnamed ride",
-    trick_hint_tooltip: "Trick Check data detected, see log",
+    trick_hint_tooltip: "Trick detected",
+    trick_jump: "Jump",
+    trick_manual: "Manual",
+    trick_stoppie: "Stoppie",
+    trick_wheelie: "Wheelie",
+    trick_detail_height: (dist, dur, height) => `max ${dist} m, ${dur} s, ${height} m high`,
+    trick_detail_angle: (dist, dur, angle) => `max ${dist} m, ${dur} s, ${angle}° angle`,
     msg_error_prefix: "Error: ",
     err_leaflet_load: "Leaflet could not be loaded",
     err_create_map: "Could not create the map",
@@ -461,7 +467,13 @@ const I18N = {
     msg_no_rides: "Keine Fahrten gefunden",
     msg_no_filter_match: "Keine Fahrten für diesen Filter",
     msg_unnamed_ride: "Unbenannte Fahrt",
-    trick_hint_tooltip: "Trick-Check-Daten erkannt, siehe Log",
+    trick_hint_tooltip: "Trick erkannt",
+    trick_jump: "Jump",
+    trick_manual: "Manual",
+    trick_stoppie: "Stoppie",
+    trick_wheelie: "Wheelie",
+    trick_detail_height: (dist, dur, height) => `max. ${dist} m, ${dur} s, ${height} m hoch`,
+    trick_detail_angle: (dist, dur, angle) => `max. ${dist} m, ${dur} s, ${angle}° Winkel`,
     msg_error_prefix: "Fehler: ",
     err_leaflet_load: "Leaflet konnte nicht geladen werden",
     err_create_map: "Fehler beim Erzeugen der Karte",
@@ -853,7 +865,13 @@ const I18N = {
     msg_no_rides: "Geen ritten gevonden",
     msg_no_filter_match: "Geen ritten voldoen aan dit filter",
     msg_unnamed_ride: "Naamloze rit",
-    trick_hint_tooltip: "Trick Check-gegevens gedetecteerd, zie log",
+    trick_hint_tooltip: "Trick gedetecteerd",
+    trick_jump: "Jump",
+    trick_manual: "Manual",
+    trick_stoppie: "Stoppie",
+    trick_wheelie: "Wheelie",
+    trick_detail_height: (dist, dur, height) => `max ${dist} m, ${dur} s, ${height} m hoog`,
+    trick_detail_angle: (dist, dur, angle) => `max ${dist} m, ${dur} s, ${angle}° hoek`,
     msg_error_prefix: "Fout: ",
     err_leaflet_load: "Leaflet kon niet worden geladen",
     err_create_map: "Kan kaart niet maken",
@@ -1250,7 +1268,13 @@ const I18N = {
     msg_no_rides: "Aucune sortie trouvée",
     msg_no_filter_match: "Aucune sortie ne correspond à ce filtre",
     msg_unnamed_ride: "Sortie sans nom",
-    trick_hint_tooltip: "Données Trick Check détectées, voir le journal",
+    trick_hint_tooltip: "Trick détecté",
+    trick_jump: "Jump",
+    trick_manual: "Manual",
+    trick_stoppie: "Stoppie",
+    trick_wheelie: "Wheelie",
+    trick_detail_height: (dist, dur, height) => `max ${dist} m, ${dur} s, ${height} m de haut`,
+    trick_detail_angle: (dist, dur, angle) => `max ${dist} m, ${dur} s, angle ${angle}°`,
     msg_error_prefix: "Erreur : ",
     err_leaflet_load: "Impossible de charger Leaflet",
     err_create_map: "Impossible de créer la carte",
@@ -1654,7 +1678,13 @@ const I18N = {
     msg_no_rides: "Nessuna uscita trovata",
     msg_no_filter_match: "Nessuna uscita corrisponde al filtro",
     msg_unnamed_ride: "Uscita senza nome",
-    trick_hint_tooltip: "Dati Trick Check rilevati, vedi log",
+    trick_hint_tooltip: "Trick rilevato",
+    trick_jump: "Jump",
+    trick_manual: "Manual",
+    trick_stoppie: "Stoppie",
+    trick_wheelie: "Wheelie",
+    trick_detail_height: (dist, dur, height) => `max ${dist} m, ${dur} s, ${height} m di altezza`,
+    trick_detail_angle: (dist, dur, angle) => `max ${dist} m, ${dur} s, angolo ${angle}°`,
     msg_error_prefix: "Errore: ",
     err_leaflet_load: "Impossibile caricare Leaflet",
     err_create_map: "Impossibile creare la mappa",
@@ -2058,7 +2088,13 @@ const I18N = {
     msg_no_rides: "No se han encontrado rutas",
     msg_no_filter_match: "Ninguna ruta coincide con el filtro",
     msg_unnamed_ride: "Ruta sin nombre",
-    trick_hint_tooltip: "Datos de Trick Check detectados, ver registro",
+    trick_hint_tooltip: "Trick detectado",
+    trick_jump: "Jump",
+    trick_manual: "Manual",
+    trick_stoppie: "Stoppie",
+    trick_wheelie: "Wheelie",
+    trick_detail_height: (dist, dur, height) => `máx. ${dist} m, ${dur} s, ${height} m de altura`,
+    trick_detail_angle: (dist, dur, angle) => `máx. ${dist} m, ${dur} s, ángulo ${angle}°`,
     msg_error_prefix: "Error: ",
     err_leaflet_load: "No se ha podido cargar Leaflet",
     err_create_map: "No se ha podido crear el mapa",
@@ -3055,6 +3091,17 @@ function sunMoodFor(altDeg) {
   return                { fog: "#cfe2f2", sky: "#a8d2ff", sun: "#ffffff", label: "day" };
 }
 
+// Trick Check trick types (see trick_check.py). Names are deliberately left
+// untranslated across all languages - the Bosch Flow app itself shows them
+// as "Jump" even in its German UI (confirmed via a real screenshot, issue
+// #65 follow-up), so a translation would likely just be wrong/unfamiliar.
+const TRICK_TYPE_DEFS = [
+  { key: "jumps", nameKey: "trick_jump", hasHeight: true },
+  { key: "manuals", nameKey: "trick_manual", hasHeight: false },
+  { key: "stoppies", nameKey: "trick_stoppie", hasHeight: false },
+  { key: "wheelies", nameKey: "trick_wheelie", hasHeight: false },
+];
+
 class BoschEBikeMapCard extends HTMLElement {
   constructor() {
     super();
@@ -3914,6 +3961,35 @@ class BoschEBikeMapCard extends HTMLElement {
     this._show(0, true);
   }
 
+  /// Short "1x Jump, 2x Wheelie" summary for the trick-dot's tooltip.
+  _trickSummary(trick) {
+    if (!trick) return "";
+    const parts = [];
+    for (const { key, nameKey } of TRICK_TYPE_DEFS) {
+      const t = trick[key];
+      if (t && t.amount) parts.push(`${t.amount}× ${this._t(nameKey)}`);
+    }
+    return parts.join(", ");
+  }
+
+  /// One extra .eb-stat tile per trick type that actually happened, with
+  /// the full max distance/duration/height-or-angle breakdown as a hover
+  /// tooltip (see trick_check.py for the parsed field shapes).
+  _trickStatsHtml(trick) {
+    if (!trick || !trick.has_any) return "";
+    const fmt = (v, digits) => (v == null ? "–" : v.toFixed(digits));
+    return TRICK_TYPE_DEFS.map(({ key, nameKey, hasHeight }) => {
+      const t = trick[key];
+      if (!t || !t.amount) return "";
+      const dist = fmt(t.max_distance_m, 1);
+      const dur = fmt(t.max_duration_s, 2);
+      const detail = hasHeight
+        ? this._t("trick_detail_height", dist, dur, fmt(t.max_height_m, 2))
+        : this._t("trick_detail_angle", dist, dur, fmt(t.max_angle_deg, 1));
+      return `<div class="eb-stat" title="${this._escapeHtml(detail)}"><div class="eb-val">${t.amount}×</div><div class="eb-lbl">${this._escapeHtml(this._t(nameKey))}</div></div>`;
+    }).join("");
+  }
+
   async _show(index, forceTrackReload = true) {
     if (index < 0 || index >= this._activities.length) return;
     this._idx = index;
@@ -3949,7 +4025,9 @@ class BoschEBikeMapCard extends HTMLElement {
       bikeBadge.textContent = bikeLabel ? `${bikeLabel} —` : "";
       bikeBadge.style.display = bikeLabel ? "inline-block" : "none";
     }
-    this._$("eb-trick-dot").style.display = activity.trickHint ? "inline-block" : "none";
+    const trickDot = this._$("eb-trick-dot");
+    trickDot.style.display = activity.trickHint ? "inline-block" : "none";
+    trickDot.title = this._trickSummary(activity.trickCheck) || this._t("trick_hint_tooltip");
 
     if (activity.startTime) {
       this._$("eb-date-lbl").textContent = new Date(activity.startTime).toLocaleDateString("de-DE", {
@@ -3986,6 +4064,7 @@ class BoschEBikeMapCard extends HTMLElement {
       <div class="eb-stat"><div class="eb-val">${difficulty} m/km</div><div class="eb-lbl">${this._t("stat_difficulty")}</div></div>
       <div class="eb-stat"><div class="eb-val">${battWh} Wh</div><div class="eb-lbl">${this._t("stat_battery")}</div></div>
       <div class="eb-stat"><div class="eb-val">${battPct} %</div><div class="eb-lbl">${this._t("stat_battery_pct")}</div></div>
+      ${this._trickStatsHtml(activity.trickCheck)}
     `;
     this._$("eb-stats").innerHTML = statsHtml;
     this._$("eb-fullscreen-title-text").textContent = baseTitle;
@@ -3994,7 +4073,9 @@ class BoschEBikeMapCard extends HTMLElement {
       fsBikeBadge.textContent = bikeLabel ? `${bikeLabel} —` : "";
       fsBikeBadge.style.display = bikeLabel ? "inline-block" : "none";
     }
-    this._$("eb-fullscreen-trick-dot").style.display = activity.trickHint ? "inline-block" : "none";
+    const fsTrickDot = this._$("eb-fullscreen-trick-dot");
+    fsTrickDot.style.display = activity.trickHint ? "inline-block" : "none";
+    fsTrickDot.title = trickDot.title;
     this._$("eb-fullscreen-meta").innerHTML = statsHtml;
     this._renderFullscreenProfile();
 

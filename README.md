@@ -310,6 +310,10 @@ cards:
 
 Beide Karten zeigen dann immer Touren des jeweils gelockten Kontos und können mit der Datums-/Sortierauswahl unabhängig voneinander durch die Touren-Historie geblättert werden - ideal um z. B. zwei am selben Tag gefahrene Touren direkt zu vergleichen. Die gleichen Optionen funktionieren auch in der `bosch-ebike-heatmap-card`.
 
+### Trick Check (Jump/Manual/Stoppie/Wheelie)
+
+Erkennt Bosch bei einer Tour einen Trick (automatische Erkennung seit Flow-App 1.34), zeigt die Karte einen kleinen grünen Punkt neben dem Tourennamen und zusätzliche Kacheln in der Statistik-Übersicht, z. B. "1×" mit Beschriftung "Jump". Ein Hover über die Kachel zeigt maximale Weite, Dauer und Höhe (bei Sprüngen) bzw. Winkel (bei Manual/Stoppie/Wheelie). Ohne Trick auf der Tour erscheint weder Punkt noch Kachel.
+
 <a name="de-pois"></a>
 
 ### POIs entlang der Route
@@ -1034,6 +1038,10 @@ cards:
 ```
 
 Both cards then always show rides of their locked account and can be navigated independently with the date/sort controls - ideal for comparing two rides taken on the same day. The same options work in `bosch-ebike-heatmap-card`.
+
+### Trick Check (Jump/Manual/Stoppie/Wheelie)
+
+When Bosch detects a trick on a ride (automatic detection since Flow app 1.34), the card shows a small green dot next to the ride title, plus extra tiles in the stats overview, e.g. "1×" labeled "Jump". Hovering a tile shows the maximum distance, duration, and height (jumps) or angle (manual/stoppie/wheelie). Rides without a trick show neither the dot nor a tile.
 
 <a name="en-pois"></a>
 
