@@ -163,6 +163,7 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     # Register websocket commands once
     websocket_api.async_register_command(hass, ws_list_instances)
     websocket_api.async_register_command(hass, ws_list_activities)
+    websocket_api.async_register_command(hass, ws_assign_activity)
     websocket_api.async_register_command(hass, ws_get_track)
     websocket_api.async_register_command(hass, ws_get_all_tracks)
     websocket_api.async_register_command(hass, ws_list_maintenance)
@@ -436,6 +437,75 @@ async def ws_list_activities(
             result.append(entry)
 
     connection.send_result(msg["id"], {"activities": result})
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "bosch_ebike/assign_activity",
+        vol.Required("activity_id"): str,
+        vol.Required("bike_id"): str,
+        vol.Optional("config_entry_id"): str,
+    }
+)
+@websocket_api.async_response
+async def ws_assign_activity(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict
+) -> None:
+    """Manually (re)assign one ride to a bike, from the map card (issue #65).
+
+    Same persisted override mechanism the options flow's assignment wizard
+    uses (see coordinator.async_assign_activities and
+    unassigned_activities.merge_manual_overrides): a manual assignment
+    always wins over the odometer heuristic, so this also CORRECTS rides
+    the heuristic confidently but wrongly attributed - not just ones it
+    could not attribute at all, which is all the wizard ever offered.
+    """
+    activity_id = msg["activity_id"]
+    bike_id = msg["bike_id"]
+
+    # The owning coordinator is resolved from the ACTIVITY, not from the
+    # bike: attribution overrides are per-account state, so writing one
+    # into a different account's coordinator than the ride belongs to
+    # would store an override that is never applied (and would silently
+    # do nothing). Cross-account assignment is rejected below instead.
+    #
+    # The card passes the account it is displaying the ride under, which
+    # is preferred over the id scan below: two config entries can wrap the
+    # SAME Bosch account (the unique id is the client_id, not the account),
+    # in which case both coordinators know the same activity ids and a bare
+    # scan could write the override into the entry the user was not looking
+    # at, leaving their correction with no visible effect.
+    def _knows(coord: BoschEBikeCoordinator) -> bool:
+        activities = coord.data.get("all_activities", []) if coord.data else []
+        return any(a.get("id") == activity_id for a in activities)
+
+    coordinator = None
+    requested_entry = msg.get("config_entry_id")
+    if requested_entry:
+        candidate = _all_coordinators(hass).get(requested_entry)
+        if candidate and _knows(candidate):
+            coordinator = candidate
+    if not coordinator:
+        coordinator = next(
+            (c for c in _all_coordinators(hass).values() if _knows(c)), None
+        )
+    if not coordinator:
+        connection.send_error(msg["id"], "not_found", f"Activity {activity_id} not found")
+        return
+
+    known_bikes = {
+        b.get("id") for b in (coordinator.data.get("bikes", []) if coordinator.data else [])
+    }
+    if bike_id not in known_bikes:
+        connection.send_error(
+            msg["id"],
+            "not_found",
+            f"Bike {bike_id} does not belong to this ride's account",
+        )
+        return
+
+    await coordinator.async_assign_activities({activity_id: bike_id})
+    connection.send_result(msg["id"], {"ok": True})
 
 
 @websocket_api.websocket_command(

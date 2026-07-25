@@ -68,6 +68,9 @@ const I18N = {
     trick_wheelie: "Wheelie",
     trick_detail_height: (dist, dur, height) => `max ${dist} m, ${dur} s, ${height} m high`,
     trick_detail_angle: (dist, dur, angle) => `max ${dist} m, ${dur} s, ${angle}° angle`,
+    bike_reassign_hint: "Click to assign this ride to a different bike",
+    bike_unassigned: "Not assigned",
+    bike_reassign_failed: (msg) => `Could not reassign ride: ${msg}`,
     msg_error_prefix: "Error: ",
     err_leaflet_load: "Leaflet could not be loaded",
     err_create_map: "Could not create the map",
@@ -474,6 +477,9 @@ const I18N = {
     trick_wheelie: "Wheelie",
     trick_detail_height: (dist, dur, height) => `max. ${dist} m, ${dur} s, ${height} m hoch`,
     trick_detail_angle: (dist, dur, angle) => `max. ${dist} m, ${dur} s, ${angle}° Winkel`,
+    bike_reassign_hint: "Klicken, um diese Fahrt einem anderen Bike zuzuordnen",
+    bike_unassigned: "Nicht zugeordnet",
+    bike_reassign_failed: (msg) => `Fahrt konnte nicht neu zugeordnet werden: ${msg}`,
     msg_error_prefix: "Fehler: ",
     err_leaflet_load: "Leaflet konnte nicht geladen werden",
     err_create_map: "Fehler beim Erzeugen der Karte",
@@ -872,6 +878,9 @@ const I18N = {
     trick_wheelie: "Wheelie",
     trick_detail_height: (dist, dur, height) => `max ${dist} m, ${dur} s, ${height} m hoog`,
     trick_detail_angle: (dist, dur, angle) => `max ${dist} m, ${dur} s, ${angle}° hoek`,
+    bike_reassign_hint: "Klik om deze rit aan een andere bike toe te wijzen",
+    bike_unassigned: "Niet toegewezen",
+    bike_reassign_failed: (msg) => `Rit kon niet opnieuw worden toegewezen: ${msg}`,
     msg_error_prefix: "Fout: ",
     err_leaflet_load: "Leaflet kon niet worden geladen",
     err_create_map: "Kan kaart niet maken",
@@ -1275,6 +1284,9 @@ const I18N = {
     trick_wheelie: "Wheelie",
     trick_detail_height: (dist, dur, height) => `max ${dist} m, ${dur} s, ${height} m de haut`,
     trick_detail_angle: (dist, dur, angle) => `max ${dist} m, ${dur} s, angle ${angle}°`,
+    bike_reassign_hint: "Cliquer pour attribuer cette sortie à un autre vélo",
+    bike_unassigned: "Non attribuée",
+    bike_reassign_failed: (msg) => `Impossible de réattribuer la sortie : ${msg}`,
     msg_error_prefix: "Erreur : ",
     err_leaflet_load: "Impossible de charger Leaflet",
     err_create_map: "Impossible de créer la carte",
@@ -1685,6 +1697,9 @@ const I18N = {
     trick_wheelie: "Wheelie",
     trick_detail_height: (dist, dur, height) => `max ${dist} m, ${dur} s, ${height} m di altezza`,
     trick_detail_angle: (dist, dur, angle) => `max ${dist} m, ${dur} s, angolo ${angle}°`,
+    bike_reassign_hint: "Clicca per assegnare questa uscita a un'altra bici",
+    bike_unassigned: "Non assegnata",
+    bike_reassign_failed: (msg) => `Impossibile riassegnare l'uscita: ${msg}`,
     msg_error_prefix: "Errore: ",
     err_leaflet_load: "Impossibile caricare Leaflet",
     err_create_map: "Impossibile creare la mappa",
@@ -2095,6 +2110,9 @@ const I18N = {
     trick_wheelie: "Wheelie",
     trick_detail_height: (dist, dur, height) => `máx. ${dist} m, ${dur} s, ${height} m de altura`,
     trick_detail_angle: (dist, dur, angle) => `máx. ${dist} m, ${dur} s, ángulo ${angle}°`,
+    bike_reassign_hint: "Haz clic para asignar esta ruta a otra bici",
+    bike_unassigned: "Sin asignar",
+    bike_reassign_failed: (msg) => `No se pudo reasignar la ruta: ${msg}`,
     msg_error_prefix: "Error: ",
     err_leaflet_load: "No se ha podido cargar Leaflet",
     err_create_map: "No se ha podido crear el mapa",
@@ -3454,6 +3472,18 @@ class BoschEBikeMapCard extends HTMLElement {
         overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
         margin-right:6px; opacity:0.72; font-weight:500;
       }
+      .eb-bike-badge.eb-editable { cursor:pointer; }
+      .eb-bike-badge.eb-editable:hover,
+      .eb-bike-badge.eb-editable:focus-visible {
+        opacity:1; text-decoration:underline dotted; outline:none;
+      }
+      .eb-bike-select {
+        display:none; flex-shrink:0; max-width:52%; margin-right:6px;
+        font-size:13px; font-weight:500; padding:1px 4px; border-radius:6px;
+        border:1px solid var(--divider-color,#bbb);
+        background:var(--card-background-color,#fff);
+        color:var(--primary-text-color,#333);
+      }
       .eb-trick-dot {
         display: none; flex-shrink: 0; width: 9px; height: 9px; margin-left: 7px;
         border-radius: 50%; background: #43a047; vertical-align: middle;
@@ -3592,13 +3622,13 @@ class BoschEBikeMapCard extends HTMLElement {
         <div id="eb-overlay-msg" class="eb-overlay-msg"></div>
         <div id="eb-batt-inline" class="eb-batt-badge"></div>
       </div>
-      <div id="eb-title" class="eb-title"><span id="eb-bike-badge" class="eb-bike-badge"></span><span id="eb-title-text"></span><span id="eb-trick-dot" class="eb-trick-dot" style="display:none" title="${t("trick_hint_tooltip")}"></span></div>
+      <div id="eb-title" class="eb-title"><span id="eb-bike-badge" class="eb-bike-badge"></span><select id="eb-bike-select" class="eb-bike-select"></select><span id="eb-title-text"></span><span id="eb-trick-dot" class="eb-trick-dot" style="display:none" title="${t("trick_hint_tooltip")}"></span></div>
       <div id="eb-date-lbl" class="eb-datelbl"></div>
       <div id="eb-stats" class="eb-stats"></div>
       <div id="eb-fullscreen-overlay" class="eb-fullscreen" aria-hidden="true">
         <div class="eb-fullscreen-card">
           <div class="eb-fullscreen-head">
-            <div id="eb-fullscreen-title" class="eb-fullscreen-title"><span id="eb-fullscreen-bike-badge" class="eb-bike-badge"></span><span id="eb-fullscreen-title-text">${t("rides_title")}</span><span id="eb-fullscreen-trick-dot" class="eb-trick-dot" style="display:none" title="${t("trick_hint_tooltip")}"></span></div>
+            <div id="eb-fullscreen-title" class="eb-fullscreen-title"><span id="eb-fullscreen-bike-badge" class="eb-bike-badge"></span><select id="eb-fullscreen-bike-select" class="eb-bike-select"></select><span id="eb-fullscreen-title-text">${t("rides_title")}</span><span id="eb-fullscreen-trick-dot" class="eb-trick-dot" style="display:none" title="${t("trick_hint_tooltip")}"></span></div>
             <div class="eb-fullscreen-nav">
               <button id="eb-full-prev" class="eb-icon-btn" title="${t("btn_prev")}" aria-label="${t("btn_prev")}">◀</button>
               <input type="date" id="eb-full-date">
@@ -3894,6 +3924,20 @@ class BoschEBikeMapCard extends HTMLElement {
     // Reused by _show() to prefix the ride title with its bike name when
     // the "All Bikes" filter can't otherwise disambiguate (issue #65).
     this._bikeLabelById = new Map(bikes.map((b) => [b.id, b.label]));
+    // Per-account bike lists for the in-card reassignment dropdown (issue
+    // #65 follow-up). Deliberately built from ALL instances, ignoring the
+    // account filter above: the reassignment options for a ride depend on
+    // which account the RIDE belongs to, not on what the user is currently
+    // filtering by. A ride can only ever move between bikes of its own
+    // account (the backend rejects anything else), so each account's list
+    // stays separate rather than being flattened like `bikes` above.
+    this._bikesByAccount = new Map();
+    for (const inst of this._instances) {
+      this._bikesByAccount.set(
+        inst.config_entry_id,
+        (inst.bikes || []).map((b) => ({ id: b.id, label: b.label })),
+      );
+    }
 
     // Bike dropdown: hidden if locked via config OR <=1 bike total
     if (this._lockedBike) {
@@ -3990,6 +4034,119 @@ class BoschEBikeMapCard extends HTMLElement {
     }).join("");
   }
 
+  /// Bikes a ride may be reassigned to: those of its OWN account only.
+  /// The backend rejects anything else, since the attribution override it
+  /// writes is per-account state (see ws_assign_activity in __init__.py).
+  _reassignOptionsFor(activity) {
+    if (!activity || !activity.accountId) return [];
+    return (this._bikesByAccount && this._bikesByAccount.get(activity.accountId)) || [];
+  }
+
+  /// Render the bike badge, and make it a click-to-reassign control when
+  /// this ride's account actually has more than one bike to choose from
+  /// (issue #65: the odometer heuristic sometimes attributes a ride to the
+  /// wrong bike, and until now only the options-flow wizard could fix
+  /// that - and only for rides it failed to attribute at all).
+  _updateBikeBadge(badgeId, selectId, activity, bikeLabel) {
+    const badge = this._$(badgeId);
+    const select = this._$(selectId);
+    if (!badge) return;
+    badge.textContent = bikeLabel ? `${bikeLabel} —` : "";
+    badge.style.display = bikeLabel ? "inline-block" : "none";
+    if (select) select.style.display = "none";
+
+    if (select && !badge.dataset.reassignWired) {
+      badge.dataset.reassignWired = "1";
+      badge.addEventListener("click", () => this._openBikeEditor(badgeId, selectId));
+      badge.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          this._openBikeEditor(badgeId, selectId);
+        }
+      });
+      select.addEventListener("change", () =>
+        this._commitBikeAssignment(select.value, badgeId, selectId));
+      select.addEventListener("blur", () => this._closeBikeEditor(badgeId, selectId));
+      select.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") {
+          // Must not bubble: the window-level handler in _onKeydown closes
+          // the whole fullscreen overlay on Escape, so without this,
+          // aborting the dropdown would also tear down fullscreen.
+          e.stopPropagation();
+          this._closeBikeEditor(badgeId, selectId);
+        }
+      });
+    }
+
+    const editable = Boolean(bikeLabel) && this._reassignOptionsFor(activity).length > 1;
+    badge.classList.toggle("eb-editable", editable);
+    badge.title = editable ? this._t("bike_reassign_hint") : "";
+    if (editable) {
+      badge.setAttribute("role", "button");
+      badge.setAttribute("tabindex", "0");
+    } else {
+      badge.removeAttribute("role");
+      badge.removeAttribute("tabindex");
+    }
+  }
+
+  _closeBikeEditor(badgeId, selectId) {
+    const badge = this._$(badgeId);
+    const select = this._$(selectId);
+    if (select) select.style.display = "none";
+    if (badge && badge.textContent) badge.style.display = "inline-block";
+  }
+
+  _openBikeEditor(badgeId, selectId) {
+    const activity = this._activities[this._idx];
+    const badge = this._$(badgeId);
+    const select = this._$(selectId);
+    if (!activity || !badge || !select) return;
+    const options = this._reassignOptionsFor(activity);
+    if (options.length < 2) return;
+    // When the ride's current bike is unknown, lead with a selected
+    // placeholder so the first real bike is not silently shown as if it
+    // were the current assignment. Its empty value is treated as "no
+    // change" by _commitBikeAssignment.
+    const known = options.some((b) => b.id === activity.bikeId);
+    const opts = known ? [] : [`<option value="" selected>${this._escapeHtml(this._t("bike_unassigned"))}</option>`];
+    for (const b of options) {
+      opts.push(`<option value="${this._escapeHtml(b.id)}"${b.id === activity.bikeId ? " selected" : ""}>${this._escapeHtml(b.label)}</option>`);
+    }
+    select.innerHTML = opts.join("");
+    badge.style.display = "none";
+    select.style.display = "inline-block";
+    select.focus();
+  }
+
+  async _commitBikeAssignment(bikeId, badgeId, selectId) {
+    const activity = this._activities[this._idx];
+    if (!activity || !bikeId || bikeId === activity.bikeId || !this._hass) {
+      this._closeBikeEditor(badgeId, selectId);
+      return;
+    }
+    try {
+      await this._hass.callWS({
+        type: "bosch_ebike/assign_activity",
+        activity_id: activity.id,
+        bike_id: bikeId,
+        config_entry_id: activity.accountId,
+      });
+      // A manual assignment always beats the odometer heuristic backend
+      // side (see merge_manual_overrides), so this optimistic local update
+      // is guaranteed to match what the next poll reports. Updating in
+      // place rather than refetching keeps the user on the ride they are
+      // looking at. _activities holds the same objects as _allActivities
+      // (_applyFilter only copies the array), so one write covers both.
+      activity.bikeId = bikeId;
+      this._show(this._idx, false);
+    } catch (err) {
+      console.warn("[Bosch eBike Map] assign_activity failed:", err?.message || err);
+      this._closeBikeEditor(badgeId, selectId);
+      alert(this._t("bike_reassign_failed", err?.message || err));
+    }
+  }
+
   async _show(index, forceTrackReload = true) {
     if (index < 0 || index >= this._activities.length) return;
     this._idx = index;
@@ -4017,14 +4174,18 @@ class BoschEBikeMapCard extends HTMLElement {
     // (a separate element, not concatenated text, so a long bike name can't
     // push the actual ride title past the fullscreen title's own ellipsis
     // truncation - issue #65).
+    // A ride whose bikeId is missing (heuristic never attributed it) or no
+    // longer resolvable (assigned to a bike since removed from the account)
+    // still gets a badge, labelled as unassigned. Otherwise it would render
+    // no badge at all, which used to make it uneditable and therefore
+    // permanently stuck on a wrong/dead bike - the exact dead end this
+    // reassignment feature exists to remove.
     const showBikeLabel = this._filterBike === "all" && (this._bikeLabelById?.size || 0) > 1;
-    const bikeLabel = showBikeLabel ? this._bikeLabelById.get(activity.bikeId) : null;
+    const bikeLabel = showBikeLabel
+      ? (this._bikeLabelById.get(activity.bikeId) || this._t("bike_unassigned"))
+      : null;
     this._$("eb-title-text").textContent = baseTitle;
-    const bikeBadge = this._$("eb-bike-badge");
-    if (bikeBadge) {
-      bikeBadge.textContent = bikeLabel ? `${bikeLabel} —` : "";
-      bikeBadge.style.display = bikeLabel ? "inline-block" : "none";
-    }
+    this._updateBikeBadge("eb-bike-badge", "eb-bike-select", activity, bikeLabel);
     const trickDot = this._$("eb-trick-dot");
     trickDot.style.display = activity.trickHint ? "inline-block" : "none";
     trickDot.title = this._trickSummary(activity.trickCheck) || this._t("trick_hint_tooltip");
@@ -4068,11 +4229,8 @@ class BoschEBikeMapCard extends HTMLElement {
     `;
     this._$("eb-stats").innerHTML = statsHtml;
     this._$("eb-fullscreen-title-text").textContent = baseTitle;
-    const fsBikeBadge = this._$("eb-fullscreen-bike-badge");
-    if (fsBikeBadge) {
-      fsBikeBadge.textContent = bikeLabel ? `${bikeLabel} —` : "";
-      fsBikeBadge.style.display = bikeLabel ? "inline-block" : "none";
-    }
+    this._updateBikeBadge(
+      "eb-fullscreen-bike-badge", "eb-fullscreen-bike-select", activity, bikeLabel);
     const fsTrickDot = this._$("eb-fullscreen-trick-dot");
     fsTrickDot.style.display = activity.trickHint ? "inline-block" : "none";
     fsTrickDot.title = trickDot.title;

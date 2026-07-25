@@ -289,6 +289,8 @@ Die Auswahl filtert die angezeigten Touren live; das Sortieren funktioniert wie 
 
 Bei **"Alle Bikes"** und mehr als einem Bike wird dem Tour-Titel zusätzlich der Name des jeweiligen Bikes vorangestellt (z. B. "Trekking Rad — Bike Fahrt"), da Bosch selbst oft nur generische Titel liefert und man sonst beim Durchblättern nicht sieht, zu welchem Bike eine Tour gehört.
 
+**Zuordnung direkt in der Karte korrigieren:** Ein Klick auf diesen Bike-Namen öffnet eine Auswahlliste mit allen Bikes des jeweiligen Kontos. Damit lässt sich eine falsch zugeordnete Tour direkt im Dashboard dem richtigen Bike zuweisen, ohne den Umweg über die Integrations-Einstellungen. Die Korrektur wird gespeichert und hat dauerhaft Vorrang vor der automatischen Kilometerstand-Heuristik. Touren, die gar nicht zugeordnet werden konnten (oder einem inzwischen entfernten Bike zugeordnet waren), erscheinen als "Nicht zugeordnet" und lassen sich genauso zuweisen. Hinweis: Der Akku-Verbrauchswert einer Tour wird beim Umzuordnen verworfen, da er aus dem Kilometerstand-Verlauf des ursprünglich zugeordneten Bikes stammt und nicht nachträglich neu berechnet werden kann.
+
 #### Karte fest einem Konto oder Bike zuordnen
 
 Soll eine Karte dauerhaft genau ein Konto oder Bike zeigen (z. B. um zwei Karten nebeneinander für Vergleichsansichten zu haben), trägst Du in der Card-Konfiguration `account_id` und/oder `bike_id` ein. Das gewählte Dropdown wird dann ausgeblendet und der Filter ist gelockt.
@@ -1019,6 +1021,8 @@ The integration supports both multiple accounts and multiple bikes per account.
 The selection filters the displayed activities live; sorting works as usual within the filtered result.
 
 With **"All Bikes"** and more than one bike, the ride title is also prefixed with that ride's bike name (e.g. "Trekking Rad — Bike Fahrt"), since Bosch itself often only supplies a generic title, so you can otherwise not tell which bike a ride belongs to while stepping through the history.
+
+**Correcting the attribution from the card:** Clicking that bike name opens a dropdown listing every bike of the ride's account, so a wrongly attributed ride can be moved to the right bike straight from the dashboard, without going through the integration settings. The correction is stored and permanently takes precedence over the automatic odometer heuristic. Rides that could not be attributed at all (or were attributed to a bike since removed) show as "Not assigned" and can be assigned the same way. Note: a ride's battery consumption figure is discarded when it is reassigned, because it was derived from the originally attributed bike's odometer history and cannot be recomputed afterwards.
 
 #### Pinning a card to a specific account or bike
 

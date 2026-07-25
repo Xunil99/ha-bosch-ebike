@@ -1585,6 +1585,18 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         merge_manual_overrides) and persist across restarts.
         """
         self._manual_activity_bike.update(mapping)
+        # Drop any battery figure derived for these rides under the OLD
+        # attribution. consumed_wh comes from the then-attributed bike's
+        # lifetime-Wh delta at the single poll where the ride first showed
+        # up (see _track_battery_consumption); that delta was consumed when
+        # the baseline advanced and cannot be recomputed, so keeping the
+        # value would just move a number derived from the wrong bike onto
+        # the corrected one, and feed it into that bike's range/energy
+        # stats. Rides without a consumption entry are already the normal
+        # case (every historically imported ride lacks one), so consumers
+        # handle the gap and simply show no battery figure.
+        for activity_id in mapping:
+            self._activity_consumption.pop(activity_id, None)
         await self._async_save_state()
         await self.async_request_refresh()
 
