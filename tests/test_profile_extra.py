@@ -204,6 +204,11 @@ def test_assist_mode_display_name_topa451_codes():
     assert assist_mode_display_name("A100M40010") == "TURBO"
 
 
+def test_assist_mode_display_name_rudi159_code():
+    # BDU3360 Performance Line drive unit, reported by @rudi159 in issue #37.
+    assert assist_mode_display_name("A100M30030") == "TOUR"
+
+
 def test_reachable_ranges_unknown_code_kept_raw():
     assert reachable_ranges({"driveUnit": {"activeAssistModes": [
         {"name": "A100M99999", "reachableRange": 42}]}}) == [
