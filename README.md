@@ -287,6 +287,8 @@ Die Integration unterstützt sowohl mehrere Konten als auch mehrere Bikes pro Ko
 
 Die Auswahl filtert die angezeigten Touren live; das Sortieren funktioniert wie gewohnt innerhalb des gefilterten Ergebnisses.
 
+Bei **"Alle Bikes"** und mehr als einem Bike wird dem Tour-Titel zusätzlich der Name des jeweiligen Bikes vorangestellt (z. B. "Trekking Rad — Bike Fahrt"), da Bosch selbst oft nur generische Titel liefert und man sonst beim Durchblättern nicht sieht, zu welchem Bike eine Tour gehört.
+
 #### Karte fest einem Konto oder Bike zuordnen
 
 Soll eine Karte dauerhaft genau ein Konto oder Bike zeigen (z. B. um zwei Karten nebeneinander für Vergleichsansichten zu haben), trägst Du in der Card-Konfiguration `account_id` und/oder `bike_id` ein. Das gewählte Dropdown wird dann ausgeblendet und der Filter ist gelockt.
@@ -1011,6 +1013,8 @@ The integration supports both multiple accounts and multiple bikes per account.
 - **Bike** (visible only with multiple bikes)
 
 The selection filters the displayed activities live; sorting works as usual within the filtered result.
+
+With **"All Bikes"** and more than one bike, the ride title is also prefixed with that ride's bike name (e.g. "Trekking Rad — Bike Fahrt"), since Bosch itself often only supplies a generic title, so you can otherwise not tell which bike a ride belongs to while stepping through the history.
 
 #### Pinning a card to a specific account or bike
 

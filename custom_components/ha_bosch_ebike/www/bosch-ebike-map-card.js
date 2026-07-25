@@ -3402,6 +3402,11 @@ class BoschEBikeMapCard extends HTMLElement {
         box-shadow:0 2px 8px rgba(0,0,0,.25);
       }
       .eb-title { display:flex; justify-content:center; align-items:center; padding:10px 16px 2px; font-size:16px; font-weight:600; color:var(--primary-text-color,#333); }
+      .eb-bike-badge {
+        display:none; flex-shrink:0; max-width:42%;
+        overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+        margin-right:6px; opacity:0.72; font-weight:500;
+      }
       .eb-trick-dot {
         display: none; flex-shrink: 0; width: 9px; height: 9px; margin-left: 7px;
         border-radius: 50%; background: #43a047; vertical-align: middle;
@@ -3540,13 +3545,13 @@ class BoschEBikeMapCard extends HTMLElement {
         <div id="eb-overlay-msg" class="eb-overlay-msg"></div>
         <div id="eb-batt-inline" class="eb-batt-badge"></div>
       </div>
-      <div id="eb-title" class="eb-title"><span id="eb-title-text"></span><span id="eb-trick-dot" class="eb-trick-dot" style="display:none" title="${t("trick_hint_tooltip")}"></span></div>
+      <div id="eb-title" class="eb-title"><span id="eb-bike-badge" class="eb-bike-badge"></span><span id="eb-title-text"></span><span id="eb-trick-dot" class="eb-trick-dot" style="display:none" title="${t("trick_hint_tooltip")}"></span></div>
       <div id="eb-date-lbl" class="eb-datelbl"></div>
       <div id="eb-stats" class="eb-stats"></div>
       <div id="eb-fullscreen-overlay" class="eb-fullscreen" aria-hidden="true">
         <div class="eb-fullscreen-card">
           <div class="eb-fullscreen-head">
-            <div id="eb-fullscreen-title" class="eb-fullscreen-title"><span id="eb-fullscreen-title-text">${t("rides_title")}</span><span id="eb-fullscreen-trick-dot" class="eb-trick-dot" style="display:none" title="${t("trick_hint_tooltip")}"></span></div>
+            <div id="eb-fullscreen-title" class="eb-fullscreen-title"><span id="eb-fullscreen-bike-badge" class="eb-bike-badge"></span><span id="eb-fullscreen-title-text">${t("rides_title")}</span><span id="eb-fullscreen-trick-dot" class="eb-trick-dot" style="display:none" title="${t("trick_hint_tooltip")}"></span></div>
             <div class="eb-fullscreen-nav">
               <button id="eb-full-prev" class="eb-icon-btn" title="${t("btn_prev")}" aria-label="${t("btn_prev")}">◀</button>
               <input type="date" id="eb-full-date">
@@ -3839,6 +3844,9 @@ class BoschEBikeMapCard extends HTMLElement {
         bikes.push({ id: b.id, label });
       }
     }
+    // Reused by _show() to prefix the ride title with its bike name when
+    // the "All Bikes" filter can't otherwise disambiguate (issue #65).
+    this._bikeLabelById = new Map(bikes.map((b) => [b.id, b.label]));
 
     // Bike dropdown: hidden if locked via config OR <=1 bike total
     if (this._lockedBike) {
@@ -3926,7 +3934,21 @@ class BoschEBikeMapCard extends HTMLElement {
     const fullNext = this._$("eb-full-next");
     if (fullPrev) fullPrev.disabled = index <= 0;
     if (fullNext) fullNext.disabled = index >= this._activities.length - 1;
-    this._$("eb-title-text").textContent = activity.title || this._t("msg_unnamed_ride");
+    const baseTitle = activity.title || this._t("msg_unnamed_ride");
+    // Bosch's own ride titles are often generic (e.g. "Bike Fahrt"), so when
+    // "All Bikes" is selected and there's more than one bike to tell apart,
+    // show the specific bike's name as its own badge next to the title
+    // (a separate element, not concatenated text, so a long bike name can't
+    // push the actual ride title past the fullscreen title's own ellipsis
+    // truncation - issue #65).
+    const showBikeLabel = this._filterBike === "all" && (this._bikeLabelById?.size || 0) > 1;
+    const bikeLabel = showBikeLabel ? this._bikeLabelById.get(activity.bikeId) : null;
+    this._$("eb-title-text").textContent = baseTitle;
+    const bikeBadge = this._$("eb-bike-badge");
+    if (bikeBadge) {
+      bikeBadge.textContent = bikeLabel ? `${bikeLabel} —` : "";
+      bikeBadge.style.display = bikeLabel ? "inline-block" : "none";
+    }
     this._$("eb-trick-dot").style.display = activity.trickHint ? "inline-block" : "none";
 
     if (activity.startTime) {
@@ -3966,7 +3988,12 @@ class BoschEBikeMapCard extends HTMLElement {
       <div class="eb-stat"><div class="eb-val">${battPct} %</div><div class="eb-lbl">${this._t("stat_battery_pct")}</div></div>
     `;
     this._$("eb-stats").innerHTML = statsHtml;
-    this._$("eb-fullscreen-title-text").textContent = activity.title || this._t("msg_unnamed_ride");
+    this._$("eb-fullscreen-title-text").textContent = baseTitle;
+    const fsBikeBadge = this._$("eb-fullscreen-bike-badge");
+    if (fsBikeBadge) {
+      fsBikeBadge.textContent = bikeLabel ? `${bikeLabel} —` : "";
+      fsBikeBadge.style.display = bikeLabel ? "inline-block" : "none";
+    }
     this._$("eb-fullscreen-trick-dot").style.display = activity.trickHint ? "inline-block" : "none";
     this._$("eb-fullscreen-meta").innerHTML = statsHtml;
     this._renderFullscreenProfile();

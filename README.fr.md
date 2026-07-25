@@ -215,6 +215,8 @@ L'intégration prend en charge aussi bien plusieurs comptes que plusieurs vélos
 
 La sélection filtre les sorties affichées en direct ; le tri fonctionne comme d'habitude au sein du résultat filtré.
 
+Avec **"Tous les vélos"** et plus d'un vélo, le titre de la sortie est aussi précédé du nom de ce vélo (p. ex. "Trekking Rad — Bike Fahrt"), car Bosch ne fournit souvent qu'un titre générique, ce qui empêcherait sinon de savoir à quel vélo appartient une sortie en parcourant l'historique.
+
 #### Verrouiller une carte sur un compte ou un vélo
 
 Si une carte doit afficher en permanence exactement un compte ou un vélo (par ex. pour mettre deux cartes côte à côte pour des comparaisons), renseigne `account_id` et/ou `bike_id` dans la configuration de la carte. Le menu déroulant choisi est alors masqué et le filtre est verrouillé.

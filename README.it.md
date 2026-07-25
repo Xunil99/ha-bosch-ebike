@@ -215,6 +215,8 @@ L'integrazione supporta sia più account sia più bici per account.
 
 La selezione filtra i tour visualizzati in tempo reale; l'ordinamento funziona come di consueto all'interno del risultato filtrato.
 
+Con **"Tutte le bici"** e più di una bici, al titolo del tour viene anteposto anche il nome di quella bici (es. "Trekking Rad — Bike Fahrt"), perché Bosch stesso spesso fornisce solo un titolo generico, quindi altrimenti non si capirebbe a quale bici appartiene un tour scorrendo la cronologia.
+
 #### Fissare una card a un account o a una bici
 
 Se una card deve mostrare in modo permanente esattamente un account o una bici (ad es. per avere due card affiancate per viste di confronto), inserisci nella configurazione della card `account_id` e/o `bike_id`. Il dropdown corrispondente viene quindi nascosto e il filtro è bloccato.

@@ -215,6 +215,8 @@ La integración admite tanto varias cuentas como varias bicis por cuenta.
 
 La selección filtra en vivo los recorridos mostrados; la ordenación funciona como de costumbre dentro del resultado filtrado.
 
+Con **"Todas las bicis"** y más de una bici, el título del recorrido también se antepone con el nombre de esa bici (p. ej. "Trekking Rad — Bike Fahrt"), ya que Bosch a menudo solo entrega un título genérico, así que de lo contrario no se puede saber a qué bici pertenece un recorrido al recorrer el historial.
+
 #### Fijar una tarjeta a una cuenta o bici
 
 Si una tarjeta debe mostrar permanentemente exactamente una cuenta o una bici (p. ej. para tener dos tarjetas una junto a otra como vistas comparativas), añade `account_id` y/o `bike_id` en la configuración de la tarjeta. El desplegable correspondiente se oculta entonces y el filtro queda bloqueado.
