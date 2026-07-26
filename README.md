@@ -581,7 +581,7 @@ target_soc_entity: input_number.ebike_target_soc
 - **Bike-Foto** mit eingebautem Upload im Karten-Editor (Bild auswählen, Karte schreibt den Pfad selbst). Alternativ klassisch über `/config/www/` und `/local/datei.jpg` referenzieren. Platzhalter mit Fahrrad-Icon, solange nichts gesetzt ist.
 - **Tachostand-Kachel** und optional **Letzte-Tour-Distanz**, **Ladeleistung in Watt**
 - **Geschätzte Restreichweite** als Kachel (`≈ 62 km`) — automatisch, sobald der Sensor „Geschätzte Reichweite (aktuell)“ existiert, oder explizit über `range_entity`. Wie bei den Sensoren eine **Schätzung**.
-- **Status-Pills** für Lade-Zustand und Akku-Prozent
+- **Status-Pills** für Lade-Zustand und Akku-Prozent. Schläft das Bike (die BLE-Bridge trennt dann die Verbindung und alle SoC-Sensoren werden `unavailable`), zeigt die Pill statt „n/v" den zuletzt bekannten Wert, erkennbar an `~`, ausgegraut und kursiv; der Tooltip nennt das Alter. Einen Cloud-Wert als Ersatz gibt es nicht, Boschs API liefert überhaupt keinen Ladestand
 - **Ziel-SoC-Schieberegler**, der den Wert eines `input_number` setzt
 - **Start- und Stop-Buttons** mit Zwei-Klick-Bestätigung bei Stop (Versehensschutz)
 - **Akku-Balken** unten, der unter 35 % auf Orange und unter 15 % auf Rot wechselt
@@ -1315,7 +1315,7 @@ target_soc_entity: input_number.ebike_target_soc
 - **Bike photo** with a built-in upload right in the card editor (pick a file, the card fills the path itself). Or paste a classic `/local/file.jpg` URL after dropping a file into `/config/www/`. A placeholder with a bicycle icon is shown when nothing is set.
 - **Odometer tile**, plus optional **last-tour distance** and **charging power in watts**
 - **Estimated remaining range** as a tile (`≈ 62 km`) — automatic as soon as the "Estimated range (current)" sensor exists, or explicitly via `range_entity`. Like the sensors, an **estimate**.
-- **Status pills** for charging state and battery percent
+- **Status pills** for charging state and battery percent. While the bike sleeps (the BLE bridge disconnects and every SoC sensor goes `unavailable`), the pill shows the last known value instead of "n/a", marked with `~`, dimmed and italic, with its age in the tooltip. There is no cloud value to fall back to, Bosch's API exposes no state of charge at all
 - **Target-SoC slider** that writes to an `input_number`
 - **Start and Stop buttons** with a two-click confirm on Stop (accident protection)
 - **Battery bar** at the bottom that turns amber under 35 % and red under 15 %

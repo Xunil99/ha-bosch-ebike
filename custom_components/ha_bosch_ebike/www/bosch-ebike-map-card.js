@@ -207,6 +207,10 @@ const I18N = {
     dash_state_charging: "Charging",
     dash_state_not_charging: "Not charging",
     dash_state_unknown: "n/a",
+    dash_soc_stale_hint: (age) => `Bike is asleep, last known value from ${age}`,
+    dash_soc_stale_min: (n) => `${n} min ago`,
+    dash_soc_stale_hour: (n) => `${n} h ago`,
+    dash_soc_stale_day: (n) => `${n} d ago`,
     dash_btn_start: "Start charging",
     dash_btn_stop: "Stop charging",
     dash_btn_confirm: "Sure?",
@@ -609,6 +613,10 @@ const I18N = {
     dash_state_charging: "Lädt",
     dash_state_not_charging: "Lädt nicht",
     dash_state_unknown: "n/v",
+    dash_soc_stale_hint: (age) => `Bike schläft, letzter bekannter Wert von vor ${age}`,
+    dash_soc_stale_min: (n) => `${n} Min.`,
+    dash_soc_stale_hour: (n) => `${n} Std.`,
+    dash_soc_stale_day: (n) => `${n} Tagen`,
     dash_btn_start: "Laden starten",
     dash_btn_stop: "Laden stoppen",
     dash_btn_confirm: "Sicher?",
@@ -1010,6 +1018,10 @@ const I18N = {
     dash_state_charging: "Aan het laden",
     dash_state_not_charging: "Niet aan het laden",
     dash_state_unknown: "n.v.t.",
+    dash_soc_stale_hint: (age) => `Bike slaapt, laatst bekende waarde van ${age}`,
+    dash_soc_stale_min: (n) => `${n} min geleden`,
+    dash_soc_stale_hour: (n) => `${n} uur geleden`,
+    dash_soc_stale_day: (n) => `${n} dgn geleden`,
     dash_btn_start: "Laden starten",
     dash_btn_stop: "Laden stoppen",
     dash_btn_confirm: "Zeker weten?",
@@ -1423,6 +1435,10 @@ const I18N = {
     dash_state_charging: "En charge",
     dash_state_not_charging: "Pas en charge",
     dash_state_unknown: "n/d",
+    dash_soc_stale_hint: (age) => `Le vélo dort, dernière valeur connue il y a ${age}`,
+    dash_soc_stale_min: (n) => `${n} min`,
+    dash_soc_stale_hour: (n) => `${n} h`,
+    dash_soc_stale_day: (n) => `${n} j`,
     dash_btn_start: "Démarrer la charge",
     dash_btn_stop: "Arrêter la charge",
     dash_btn_confirm: "Sûr ?",
@@ -1836,6 +1852,10 @@ const I18N = {
     dash_state_charging: "In carica",
     dash_state_not_charging: "Non in carica",
     dash_state_unknown: "n/d",
+    dash_soc_stale_hint: (age) => `La bici dorme, ultimo valore noto di ${age} fa`,
+    dash_soc_stale_min: (n) => `${n} min`,
+    dash_soc_stale_hour: (n) => `${n} h`,
+    dash_soc_stale_day: (n) => `${n} g`,
     dash_btn_start: "Avvia ricarica",
     dash_btn_stop: "Interrompi ricarica",
     dash_btn_confirm: "Sicuro?",
@@ -2249,6 +2269,10 @@ const I18N = {
     dash_state_charging: "Cargando",
     dash_state_not_charging: "Sin carga",
     dash_state_unknown: "n/d",
+    dash_soc_stale_hint: (age) => `La bici duerme, último valor conocido de hace ${age}`,
+    dash_soc_stale_min: (n) => `${n} min`,
+    dash_soc_stale_hour: (n) => `${n} h`,
+    dash_soc_stale_day: (n) => `${n} d`,
     dash_btn_start: "Iniciar carga",
     dash_btn_stop: "Detener carga",
     dash_btn_confirm: "¿Seguro?",
@@ -3469,13 +3493,23 @@ class BoschEBikeMapCard extends HTMLElement {
       .eb-title { display:flex; justify-content:center; align-items:center; padding:10px 16px 2px; font-size:16px; font-weight:600; color:var(--primary-text-color,#333); }
       .eb-bike-badge {
         display:none; flex-shrink:0; max-width:42%;
-        overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
-        margin-right:6px; opacity:0.72; font-weight:500;
+        align-items:center; margin-right:6px; opacity:0.72; font-weight:500;
       }
-      .eb-bike-badge.eb-editable { cursor:pointer; }
+      /* Truncation lives on the inner text span, never on the badge itself,
+         so a long bike name cannot clip the caret next to it. */
+      .eb-bike-badge-text { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
+      .eb-bike-caret { flex-shrink:0; margin-left:3px; font-size:9px; line-height:1; opacity:0.8; }
+      /* Resting-state affordance: without it the name is indistinguishable
+         from plain text, so nobody discovers it is clickable - and on touch
+         devices there is no hover to reveal it either (issue #65). */
+      .eb-bike-badge.eb-editable {
+        cursor:pointer; opacity:0.9; padding:1px 6px; margin-right:8px;
+        border:1px solid var(--divider-color,#d0d0d0); border-radius:999px;
+        background:var(--secondary-background-color,rgba(127,127,127,.10));
+      }
       .eb-bike-badge.eb-editable:hover,
       .eb-bike-badge.eb-editable:focus-visible {
-        opacity:1; text-decoration:underline dotted; outline:none;
+        opacity:1; border-color:var(--primary-color,#03a9f4); outline:none;
       }
       .eb-bike-select {
         display:none; flex-shrink:0; max-width:52%; margin-right:6px;
@@ -4051,8 +4085,16 @@ class BoschEBikeMapCard extends HTMLElement {
     const badge = this._$(badgeId);
     const select = this._$(selectId);
     if (!badge) return;
-    badge.textContent = bikeLabel ? `${bikeLabel} —` : "";
-    badge.style.display = bikeLabel ? "inline-block" : "none";
+    // Built from element nodes rather than innerHTML: bikeLabel is a
+    // backend-supplied device name, and textContent needs no escaping.
+    badge.textContent = "";
+    if (bikeLabel) {
+      const text = document.createElement("span");
+      text.className = "eb-bike-badge-text";
+      text.textContent = `${bikeLabel} —`;
+      badge.appendChild(text);
+    }
+    badge.style.display = bikeLabel ? "inline-flex" : "none";
     if (select) select.style.display = "none";
 
     if (select && !badge.dataset.reassignWired) {
@@ -4082,6 +4124,10 @@ class BoschEBikeMapCard extends HTMLElement {
     badge.classList.toggle("eb-editable", editable);
     badge.title = editable ? this._t("bike_reassign_hint") : "";
     if (editable) {
+      const caret = document.createElement("span");
+      caret.className = "eb-bike-caret";
+      caret.textContent = "▼";
+      badge.appendChild(caret);
       badge.setAttribute("role", "button");
       badge.setAttribute("tabindex", "0");
     } else {
@@ -4094,7 +4140,11 @@ class BoschEBikeMapCard extends HTMLElement {
     const badge = this._$(badgeId);
     const select = this._$(selectId);
     if (select) select.style.display = "none";
-    if (badge && badge.textContent) badge.style.display = "inline-block";
+    // Must match _updateBikeBadge's inline-flex: the ellipsis truncation
+    // lives on the inner text span, and a span only picks it up while the
+    // badge is a flex container. Restoring inline-block here would let a
+    // long bike name spill over the ride title until the next _show().
+    if (badge && badge.textContent) badge.style.display = "inline-flex";
   }
 
   _openBikeEditor(badgeId, selectId) {
@@ -8473,6 +8523,9 @@ class BoschEBikeDashboardCard extends HTMLElement {
       .dash-pill ha-icon { --mdc-icon-size: 18px; }
       .dash-pill.charging { background: rgba(76,175,80,.18); color: #2e7d32; }
       .dash-pill.charging ha-icon { color: #2e7d32; }
+      /* Remembered, no-longer-live SoC: dimmed and italic so it reads as an
+         old reading at a glance, not as a current one (issue #65). */
+      .dash-pill.stale { opacity: 0.6; font-style: italic; }
       /* Per-mode reachable-range pills (colour set inline per mode). */
       .dash-pill.range { gap: 8px; font-weight: 600; }
       .dash-pill.range .mode { letter-spacing: .02em; }
@@ -8729,6 +8782,59 @@ class BoschEBikeDashboardCard extends HTMLElement {
     return s.state === "on" || s.state === "true" || s.state === "charging";
   }
 
+  /// Remember the newest real SoC so the pill can still show something once
+  /// the bike sleeps and its sensors go unavailable (issue #65). Kept in
+  /// localStorage, keyed by the configured entities, so it also survives a
+  /// dashboard reload - which is exactly when the value is needed, since a
+  /// sleeping bike will not produce a fresh reading to re-seed it.
+  _rememberBattery(cfg, freshValue) {
+    const key = "bosch_ebike_last_soc:"
+      + (cfg.battery_live_entity || "") + "|" + (cfg.battery_entity || "");
+    // Drop the memo when the configured entities change: HA reuses the same
+    // element across a card-editor change, so without this a previously
+    // remembered SoC would be shown under the newly picked bike's name.
+    if (this._lastSocKey !== key) {
+      this._lastSoc = null;
+      this._lastSocKey = key;
+    }
+    if (freshValue != null) {
+      // set hass -> _render runs on every state change anywhere in HA, so
+      // only touch localStorage when the value actually moved (or the stamp
+      // aged past the tooltip's own one-minute granularity). A synchronous
+      // write per render on a high-frequency *_live sensor is exactly the
+      // kind of main-thread work that froze this card before (issue #19).
+      if (this._lastSoc && this._lastSoc.value === freshValue
+          && Date.now() - this._lastSoc.ts < 60000) {
+        return this._lastSoc;
+      }
+      const entry = { value: freshValue, ts: Date.now() };
+      this._lastSoc = entry;
+      try { localStorage.setItem(key, JSON.stringify(entry)); } catch (_) { /* quota/private mode */ }
+      return entry;
+    }
+    if (this._lastSoc) return this._lastSoc;
+    try {
+      const raw = localStorage.getItem(key);
+      const parsed = raw ? JSON.parse(raw) : null;
+      if (parsed && Number.isFinite(parsed.value)) {
+        this._lastSoc = parsed;
+        return parsed;
+      }
+    } catch (_) { /* corrupt or unavailable */ }
+    return { value: null, ts: null };
+  }
+
+  /// "2 h ago" style age for the stale-SoC tooltip.
+  _socAgeText(ts) {
+    if (!ts) return "";
+    // Floor at 1 so a value cached seconds ago never reads as "0 min ago".
+    const mins = Math.max(1, Math.round((Date.now() - ts) / 60000));
+    if (mins < 60) return this._t("dash_soc_stale_min", mins);
+    const hours = Math.round(mins / 60);
+    if (hours < 48) return this._t("dash_soc_stale_hour", hours);
+    return this._t("dash_soc_stale_day", Math.round(hours / 24));
+  }
+
   _formatKm(v) {
     if (v == null || !Number.isFinite(v)) return this._t("dash_state_unknown");
     return v.toLocaleString(undefined, { maximumFractionDigits: 1 }) + " km";
@@ -8831,9 +8937,17 @@ class BoschEBikeDashboardCard extends HTMLElement {
     const batteryLive = cfg.battery_live_entity ? this._num(cfg.battery_live_entity) : null;
     const batteryCloud = this._num(cfg.battery_entity);
     // Prefer the real-time value from the local LDI bridge when it is
-    // available; otherwise fall back to the periodically-updated cloud SoC.
-    const battery = (batteryLive != null) ? batteryLive : batteryCloud;
+    // available; otherwise fall back to the second configured SoC entity.
+    const batteryFresh = (batteryLive != null) ? batteryLive : batteryCloud;
     const batteryIsLive = (batteryLive != null);
+    // Both sources gone: the bike sleeps and the BLE bridge disconnects, so
+    // every SoC entity goes unavailable at once (issue #65). Bosch's cloud
+    // API exposes no state of charge at all, so there is nothing else to read
+    // - show the last value we saw instead of "n/a", clearly marked as stale
+    // so a days-old reading is never mistaken for a current one.
+    const batteryRemembered = this._rememberBattery(cfg, batteryFresh);
+    const battery = (batteryFresh != null) ? batteryFresh : batteryRemembered.value;
+    const batteryIsStale = (batteryFresh == null) && (batteryRemembered.value != null);
     const isCharging = this._onOff(cfg.charging_entity);
 
     const row = this.querySelector("#dash-row-stats");
@@ -8920,9 +9034,17 @@ class BoschEBikeDashboardCard extends HTMLElement {
 
       if (cfg.battery_entity || cfg.battery_live_entity) {
         const bp = document.createElement("span");
-        bp.className = "dash-pill";
-        const battIcon = batteryIsLive ? "mdi:battery-sync" : "mdi:battery";
-        bp.innerHTML = `<ha-icon icon="${battIcon}"></ha-icon><span>${this._formatPct(battery)}</span>`;
+        bp.className = "dash-pill" + (batteryIsStale ? " stale" : "");
+        const battIcon = batteryIsLive
+          ? "mdi:battery-sync"
+          : (batteryIsStale ? "mdi:battery-clock" : "mdi:battery");
+        // A remembered reading is prefixed with "~" and dimmed, and names its
+        // age in the tooltip, so it can never pass for a live value.
+        const battText = (batteryIsStale ? "~ " : "") + this._formatPct(battery);
+        bp.innerHTML = `<ha-icon icon="${battIcon}"></ha-icon><span>${battText}</span>`;
+        if (batteryIsStale) {
+          bp.title = this._t("dash_soc_stale_hint", this._socAgeText(batteryRemembered.ts));
+        }
         pills.appendChild(bp);
       }
     }
