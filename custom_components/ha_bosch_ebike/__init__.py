@@ -60,7 +60,12 @@ PLATFORMS = [
     Platform.DEVICE_TRACKER,
 ]
 
-CARD_URL = "/ha_bosch_ebike/bosch-ebike-map-card.js"
+# Directory the card modules are served from, and the entry module inside it
+# that gets registered as the Lovelace resource. CARD_URL must keep this exact
+# value: it is what users already have in their Lovelace resources (and what
+# YAML-mode users added by hand), so renaming it would break every dashboard.
+CARD_DIR_URL = "/ha_bosch_ebike"
+CARD_URL = f"{CARD_DIR_URL}/bosch-ebike-map-card.js"
 
 
 async def _async_register_card_resource(hass: HomeAssistant) -> None:
@@ -206,15 +211,21 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
 
     _register_services(hass)
 
-    # Register static path for the Lovelace card
+    # Serve the whole www directory, not just the single card file: the card
+    # is loaded as an ES module and now imports siblings from the same folder
+    # (bosch-ebike-i18n.js), which the browser resolves against CARD_URL's own
+    # directory. Registering only the one file would 404 those imports and the
+    # card would not load at all. The entry file keeps its exact URL, so
+    # existing Lovelace resources - including hand-added ones in YAML mode -
+    # are unaffected. cache_headers=False is kept as-is, but note it does NOT
+    # by itself guarantee a fresh copy after an update: it was already set
+    # back when users were being served stale card JS, which is why the
+    # resource URL carries ?v=<version>. The card propagates that same query
+    # onto its sibling imports, so they cannot go stale either.
     card_dir = os.path.join(os.path.dirname(__file__), "www")
     if os.path.isdir(card_dir):
         await hass.http.async_register_static_paths([
-            StaticPathConfig(
-                CARD_URL,
-                os.path.join(card_dir, "bosch-ebike-map-card.js"),
-                cache_headers=False,
-            )
+            StaticPathConfig(CARD_DIR_URL, card_dir, cache_headers=False)
         ])
 
         # Auto-register the card as a Lovelace resource, but ONLY after Home
