@@ -112,6 +112,18 @@ switch:
     pin:
       number: 4
     restore_mode: ALWAYS_OFF
+    on_turn_on:
+      # Arm the safety watchdog when charging starts, not only once SoC values
+      # arrive (forum report by Friedhofsblond): if the BLE link never comes up
+      # for the whole charge, no SoC value is ever received, so nothing armed
+      # the timer and nothing enforced the charge limit either - the bike just
+      # charged through. Gated on the SoC sensor already having a value, so a
+      # plain non-Bosch charger (which never reports SoC) is still never cut.
+      - if:
+          condition:
+            lambda: 'return !std::isnan(id(battery_soc).state);'
+          then:
+            - script.execute: soc_watchdog
 
 status_led:
   pin:
@@ -136,6 +148,7 @@ sensor:
     bosch_ebike_ldi_id: ebike_bridge
     battery_soc:
       name: "eBike Battery"
+      id: battery_soc
       on_value:
         then:
           - script.execute: soc_watchdog

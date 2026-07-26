@@ -182,6 +182,20 @@ static bool pairing_window_open() {
 static constexpr uint32_t ADV_WATCHDOG_INTERVAL_MS = 30000;
 static uint32_t g_last_adv_watchdog_ms = 0;
 
+// Periodic forced re-arm (Friedhofsblond, forum follow-up to issue #59). The
+// watchdog above only fires when ble_gap_adv_active() reports FALSE, so it is
+// blind to the failure that was actually reported: the switch is on, NimBLE
+// still considers itself to be advertising, and yet a waking bike never
+// connects - until the user flips the "eBike Advertising" switch off and on.
+// That switch does something the watchdog never does: a real
+// ble_gap_adv_stop() followed by start_advertising(), which also rebuilds the
+// bond whitelist. So do exactly that on a slow timer while disconnected. The
+// gap is a few milliseconds and there is no connection to disturb.
+// start_advertising() resets the clock, so this only triggers when
+// advertising has been running untouched for the full interval.
+static constexpr uint32_t ADV_REARM_INTERVAL_MS = 300000;  // 5 min
+static uint32_t g_last_adv_rearm_ms = 0;
+
 // Upper bound for reading bonded peers (well above NimBLE's default 3 bonds).
 static constexpr int MAX_BOND_PROBE = 8;
 
@@ -246,6 +260,10 @@ static int start_advertising() {
   if (rc != 0) {
     ESP_LOGE(TAG, "ble_gap_adv_start failed: %d", rc);
   } else {
+    // Any successful (re)start restarts the forced-re-arm clock, so the
+    // periodic re-arm in loop() only fires after advertising has genuinely
+    // been left alone for the whole interval.
+    g_last_adv_rearm_ms = millis();
     ESP_LOGI(TAG, "Advertising started (%s), name='%s'",
              pairing ? "PAIRING: discoverable + solicitation eb20"
                      : "private reconnect: non-discoverable, whitelist, no solicitation",
@@ -657,9 +675,20 @@ void BoschEbikeLdi::loop() {
     uint32_t now = millis();
     if (now - g_last_adv_watchdog_ms >= ADV_WATCHDOG_INTERVAL_MS) {
       g_last_adv_watchdog_ms = now;
-      bool should_advertise = pairing_window_open() || (g_adv_enabled && bonded_peer_count() > 0);
+      const bool pairing = pairing_window_open();
+      bool should_advertise = pairing || (g_adv_enabled && bonded_peer_count() > 0);
       if (should_advertise && !ble_gap_adv_active()) {
         ESP_LOGW(TAG, "Advertising watchdog: expected to be advertising but was not - restarting");
+        start_advertising();
+      } else if (should_advertise && !pairing &&
+                 now - g_last_adv_rearm_ms >= ADV_REARM_INTERVAL_MS) {
+        // Advertising claims to be active but nothing has connected for a
+        // long time. Force the same stop+start the manual switch performs,
+        // which also refreshes the bond whitelist. Skipped while a pairing
+        // window is open so an in-progress pairing is never interrupted.
+        ESP_LOGI(TAG, "Advertising re-arm: still disconnected after %u min - restarting advertising",
+                 (unsigned) (ADV_REARM_INTERVAL_MS / 60000));
+        ble_gap_adv_stop();
         start_advertising();
       }
     }
