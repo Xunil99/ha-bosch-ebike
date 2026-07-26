@@ -59,11 +59,26 @@ class BoschServiceDueDateEntity(CoordinatorEntity[BoschEBikeCoordinator], DateEn
             model=drive_name,
         )
 
+    def _bosch_service_date(self) -> str | None:
+        """This bike's own serviceDue.date from the Bosch API, if any."""
+        bikes = self.coordinator.data.get("bikes", []) if self.coordinator.data else []
+        for bike in bikes:
+            if bike.get("id") == self._bike_id:
+                return (bike.get("serviceDue") or {}).get("date")
+        return None
+
     @property
     def native_value(self) -> date | None:
-        raw = self.coordinator.get_service_due_date(self._bike_id)
+        # User override first, Bosch's own value as the fallback - the same
+        # order every other consumer of this override already uses (see
+        # sensor.py's service_due_in_days). Doing it here at read time,
+        # rather than by pre-filling the override, is what lets the override
+        # be cleared again and lets a later Bosch-side change come through
+        # (issue #66).
+        raw = self.coordinator.get_service_due_date(self._bike_id) or self._bosch_service_date()
         if not raw:
             return None
+        raw = str(raw)
         try:
             # raw is "YYYY-MM-DD" or full ISO string; date.fromisoformat handles both 10-char and full-date forms
             if "T" in raw:

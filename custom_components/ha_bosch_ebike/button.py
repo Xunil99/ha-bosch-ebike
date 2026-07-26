@@ -168,8 +168,55 @@ async def async_setup_entry(
         entities.append(
             BoschGPSImportSingleButton(coordinator, bike_id, drive_name)
         )
+        entities.append(
+            BoschServiceDueResetButton(coordinator, bike_id, drive_name)
+        )
 
     async_add_entities(entities)
+
+
+class BoschServiceDueResetButton(ButtonEntity):
+    """Clear the manually set service-due date and odometer for one bike.
+
+    Home Assistant's date picker cannot express "no value" (DateEntity only
+    ever receives a real date), so without this there is no way back to the
+    default once a date has been set (issue #66). Pressing this drops both
+    overrides, after which the Service Due Date / Odometer entities fall back
+    to whatever Bosch reports, or show nothing if Bosch reports nothing.
+    """
+
+    # Deliberately NOT EntityCategory.CONFIG and deliberately a literal
+    # _attr_name with no translation_key, matching the three sibling buttons
+    # in this file: a config-category entity is filtered off the default
+    # dashboard, which is the one place the user hits this problem, and
+    # _attr_name takes precedence over a translation key anyway.
+    _attr_has_entity_name = True
+    _attr_icon = "mdi:calendar-remove"
+
+    def __init__(
+        self,
+        coordinator: BoschEBikeCoordinator,
+        bike_id: str,
+        drive_name: str,
+    ) -> None:
+        self._coordinator = coordinator
+        self._bike_id = bike_id
+        self._attr_unique_id = f"{bike_id}_service_due_reset"
+        self._attr_name = "Reset Service Due"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, bike_id)},
+            name=drive_name,
+            manufacturer="Bosch",
+            model=drive_name,
+        )
+
+    async def async_press(self) -> None:
+        """Drop both service-due overrides for this bike."""
+        self._coordinator.set_service_due_date(self._bike_id, None)
+        self._coordinator.set_service_due_km(self._bike_id, None)
+        # Push the already-known data to every coordinator entity so the date
+        # and number entities re-read immediately, without costing a poll.
+        self._coordinator.async_update_listeners()
 
 
 class BoschGPSImportButton(ButtonEntity):

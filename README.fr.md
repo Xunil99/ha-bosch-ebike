@@ -259,7 +259,9 @@ Pour chaque vélo, il existe deux entités modifiables :
 - **`date.<bike>_service_due_date`** – date à laquelle le prochain entretien est dû
 - **`number.<bike>_service_due_odometer`** – kilométrage auquel le prochain entretien est dû
 
-Lors de la première récupération de données, ces valeurs sont automatiquement pré-remplies depuis l'API Bosch (si elles y sont renseignées). Les modifications des entités écrasent les valeurs Bosch et sont utilisées pour les rappels d'entretien. Si tu mets le kilométrage à `0`, l'affichage retombe sur la valeur Bosch.
+Tant que tu ne saisis rien, les deux affichent la valeur de l'API Bosch (si elle y est renseignée), sinon rien. Les modifications des entités écrasent les valeurs Bosch et sont utilisées pour les rappels d'entretien.
+
+Pour revenir en arrière, chaque vélo dispose d'un bouton **`button.<bike>_reset_service_due`** ("Reset Service Due") : il supprime les deux valeurs manuelles, après quoi la valeur Bosch s'applique de nouveau (ou rien, si Bosch n'en fournit aucune). Pour le kilométrage, saisir `0` suffit également. Ce bouton est nécessaire car le sélecteur de date de Home Assistant ne permet pas de valeur vide.
 
 #### Tâches d'entretien personnalisées
 

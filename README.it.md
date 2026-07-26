@@ -259,7 +259,9 @@ Per ogni bici ci sono due entità modificabili:
 - **`date.<bike>_service_due_date`** – data in cui è previsto il prossimo tagliando
 - **`number.<bike>_service_due_odometer`** – chilometraggio al quale è previsto il prossimo tagliando
 
-Al primo recupero dei dati questi valori vengono precompilati automaticamente dall'API Bosch (se lì presenti). Le modifiche alle entità sovrascrivono i valori Bosch e vengono usate per i promemoria di manutenzione. Se imposti il chilometraggio su `0`, la visualizzazione torna al valore Bosch.
+Finché non inserisci nulla, entrambe mostrano il valore dell'API Bosch (se lì presente), altrimenti nulla. Le modifiche alle entità sovrascrivono i valori Bosch e vengono usate per i promemoria di manutenzione.
+
+Per annullare, ogni bici dispone di un pulsante **`button.<bike>_reset_service_due`** ("Reset Service Due"): elimina entrambi i valori manuali, dopodiché vale di nuovo il valore Bosch (o nulla, se Bosch non ne fornisce uno). Per il chilometraggio basta anche inserire `0`. Il pulsante serve perché il selettore di data di Home Assistant non prevede un valore vuoto.
 
 #### Voci di manutenzione personalizzate
 

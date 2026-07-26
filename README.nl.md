@@ -255,7 +255,9 @@ Per fiets zijn er twee bewerkbare entiteiten:
 - **`date.<bike>_service_due_date`** – datum waarop de volgende servicebeurt nodig is
 - **`number.<bike>_service_due_odometer`** – kilometerstand waarbij de volgende servicebeurt nodig is
 
-Bij de eerste gegevensophaal worden deze waarden automatisch vooringevuld vanuit de Bosch-API (indien daar aanwezig). Wijzigingen aan de entiteiten overschrijven de Bosch-waarden en worden gebruikt voor de serviceherinneringen. Zet je de kilometerstand op `0`, dan valt de weergave terug op de Bosch-waarde.
+Zolang je zelf niets invult, tonen beide de waarde uit de Bosch-API (indien daar aanwezig), anders niets. Wijzigingen aan de entiteiten overschrijven de Bosch-waarden en worden gebruikt voor de serviceherinneringen.
+
+Om dat ongedaan te maken is er per fiets een knop **`button.<bike>_reset_service_due`** ("Reset Service Due"): die verwijdert beide handmatige waarden, waarna weer de Bosch-waarde geldt (of niets, als Bosch er geen levert). Voor de kilometerstand volstaat ook de invoer `0`. De knop is nodig omdat de datumkiezer van Home Assistant geen "leeg" kent.
 
 #### Eigen onderhoudsitems
 

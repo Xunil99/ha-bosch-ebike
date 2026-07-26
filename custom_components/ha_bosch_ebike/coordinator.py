@@ -298,24 +298,21 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             ov["odometer_km"] = value_km
             self.hass.async_create_task(self._async_save_state())
 
-    def _seed_service_overrides(self, bikes: list[dict[str, Any]]) -> bool:
-        """Initialise per-bike overrides from the Bosch values when not yet set."""
-        changed = False
-        for bike in bikes:
-            bike_id = bike.get("id")
-            if not bike_id:
-                continue
-            ov = self._bike_override(bike_id)
-            service = bike.get("serviceDue") or {}
-            if ov["date"] is None and service.get("date"):
-                # serviceDue.date is e.g. "2026-09-15" or full ISO timestamp; trim to date
-                raw = str(service["date"])
-                ov["date"] = raw[:10] if len(raw) >= 10 else raw
-                changed = True
-            if ov["odometer_km"] is None and isinstance(service.get("odometer"), (int, float)):
-                ov["odometer_km"] = float(service["odometer"]) / 1000.0
-                changed = True
-        return changed
+    # NOTE: there used to be a _seed_service_overrides() here that copied the
+    # Bosch serviceDue values into these overrides whenever an override was
+    # None. It was removed (issue #66): despite its "on first sight of a bike"
+    # comment it ran on EVERY poll, so `None` effectively meant "refill me
+    # from Bosch" rather than "no override" - which made clearing an override
+    # impossible, since the next poll silently restored it. It also persisted
+    # Bosch's own value as if the user had entered it, permanently shadowing
+    # any later Bosch-side change.
+    #
+    # It was also redundant: every consumer of these overrides already falls
+    # back to bike["serviceDue"] on its own (sensor.py's service_due_in_*
+    # sensors, _check_service_and_maintenance below). Only the two editable
+    # entities lacked that fallback, so they now do it at read time instead
+    # (see date.py / number.py). `None` therefore now means exactly what the
+    # user expects: no override, use Bosch's value, or nothing if Bosch has none.
 
     @staticmethod
     def attribute_activities_to_bikes(
@@ -1342,10 +1339,6 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if await self._enrich_activities_with_live_data():
             state_changed = True
 
-        # Seed service-due overrides from Bosch on first sight of a bike
-        if self._seed_service_overrides(bikes):
-            state_changed = True
-
         # Service & maintenance reminders
         if self._check_service_and_maintenance(bikes):
             state_changed = True
@@ -1869,7 +1862,22 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             bosch_service = bike.get("serviceDue") or {}
             service_warned = bs["service_warned"]
 
-            service_date = ov["date"] or bosch_service.get("date")
+            # Trim Bosch's value to YYYY-MM-DD like the old seeder did, so the
+            # event payload's "due_date" keeps its 10-char contract for user
+            # templates now that the raw Bosch string can reach it (issue #66).
+            bosch_date = bosch_service.get("date")
+            if bosch_date is not None:
+                bosch_date = str(bosch_date)[:10] or None
+            service_date = ov["date"] or bosch_date
+            if not service_date:
+                # No effective due date at all (override cleared and Bosch has
+                # none). The warn flags are only ever reset inside the branch
+                # below, so without this they would stay latched and a later
+                # due date would silently fire no event (issue #66).
+                if service_warned.get("date_due_soon") or service_warned.get("date_overdue"):
+                    service_warned["date_due_soon"] = False
+                    service_warned["date_overdue"] = False
+                    changed = True
             if service_date:
                 try:
                     due = dt_util.parse_datetime(service_date) or dt_util.parse_datetime(service_date + "T00:00:00")
@@ -1910,6 +1918,13 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 service_odo = float(ov_km) * 1000.0
             else:
                 service_odo = bosch_service.get("odometer")
+            if not isinstance(service_odo, (int, float)):
+                # Same latch as the date branch above: with no effective
+                # service odometer the reset below is unreachable (issue #66).
+                if service_warned.get("km_due_soon") or service_warned.get("km_overdue"):
+                    service_warned["km_due_soon"] = False
+                    service_warned["km_overdue"] = False
+                    changed = True
             if isinstance(service_odo, (int, float)) and current_odo is not None:
                 remaining_m = float(service_odo) - current_odo
                 remaining_km = remaining_m / 1000.0

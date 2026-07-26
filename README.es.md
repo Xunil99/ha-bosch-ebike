@@ -259,7 +259,9 @@ Por cada bici hay dos entidades editables:
 - **`date.<bike>_service_due_date`**: fecha en la que vence el próximo mantenimiento
 - **`number.<bike>_service_due_odometer`**: kilometraje en el que vence el próximo mantenimiento
 
-En la primera recuperación de datos, estos valores se rellenan automáticamente desde la API de Bosch (si están registrados allí). Los cambios en las entidades sobrescriben los valores de Bosch y se utilizan para los recordatorios de mantenimiento. Si pones el kilometraje a `0`, la visualización vuelve al valor de Bosch.
+Mientras no introduzcas nada, ambas muestran el valor de la API de Bosch (si está registrado allí), y si no, nada. Los cambios en las entidades sobrescriben los valores de Bosch y se utilizan para los recordatorios de mantenimiento.
+
+Para deshacerlo, cada bici tiene un botón **`button.<bike>_reset_service_due`** ("Reset Service Due"): descarta ambos valores manuales, tras lo cual vuelve a regir el valor de Bosch (o nada, si Bosch no proporciona ninguno). Para el kilometraje también basta con introducir `0`. El botón es necesario porque el selector de fecha de Home Assistant no admite un valor vacío.
 
 #### Elementos de mantenimiento propios
 

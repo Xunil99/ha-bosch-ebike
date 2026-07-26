@@ -148,7 +148,24 @@ class BoschServiceDueKmEntity(CoordinatorEntity[BoschEBikeCoordinator], NumberEn
 
     @property
     def native_value(self) -> float | None:
-        return self.coordinator.get_service_due_km(self._bike_id)
+        # User override first, Bosch's own value as the fallback, mirroring
+        # date.py and sensor.py's service_due_in_km. Doing it at read time is
+        # what makes the "set 0 to clear" path below actually stick (issue
+        # #66): the override used to be re-seeded from Bosch on every poll.
+        ov_km = self.coordinator.get_service_due_km(self._bike_id)
+        if ov_km is not None:
+            return ov_km
+        bikes = self.coordinator.data.get("bikes", []) if self.coordinator.data else []
+        for bike in bikes:
+            if bike.get("id") == self._bike_id:
+                odo_m = (bike.get("serviceDue") or {}).get("odometer")
+                if isinstance(odo_m, (int, float)):
+                    # Deliberately unrounded, exactly as the removed seeder
+                    # stored it, so this stays consistent with the km sensor
+                    # and the service event, which both use the raw metres.
+                    return float(odo_m) / 1000.0
+                return None
+        return None
 
     async def async_set_native_value(self, value: float) -> None:
         # Treat 0 (or below) as "clear override"

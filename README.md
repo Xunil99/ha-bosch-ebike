@@ -341,7 +341,9 @@ Pro Bike gibt es zwei editierbare Entitäten:
 - **`date.<bike>_service_due_date`** - Datum, an dem der nächste Kundendienst fällig ist
 - **`number.<bike>_service_due_odometer`** - Kilometerstand, bei dem der nächste Kundendienst fällig ist
 
-Beim ersten Datenabruf werden diese Werte automatisch aus der Bosch-API vorbelegt (sofern dort hinterlegt). Änderungen an den Entitäten überschreiben die Bosch-Werte und werden für die Service-Erinnerungen herangezogen. Setzt Du den Kilometerstand auf `0`, fällt die Anzeige auf den Bosch-Wert zurück.
+Solange Du nichts einträgst, zeigen beide den Wert aus der Bosch-API an (sofern dort hinterlegt), sonst nichts. Änderungen an den Entitäten überschreiben die Bosch-Werte und werden für die Service-Erinnerungen herangezogen.
+
+Zum Zurücksetzen gibt es pro Bike einen Button **`button.<bike>_reset_service_due`** ("Reset Service Due"): Er verwirft beide manuellen Werte, danach gilt wieder der Bosch-Wert (bzw. nichts, wenn Bosch keinen liefert). Beim Kilometerstand reicht alternativ die Eingabe `0`. Der Button ist nötig, weil Home Assistants Datumsauswahl kein "leer" kennt.
 
 #### Eigene Wartungsposten
 
@@ -1072,7 +1074,9 @@ Each bike exposes two user-editable entities:
 - **`date.<bike>_service_due_date`** - date the next service is due
 - **`number.<bike>_service_due_odometer`** - odometer reading at which the next service is due
 
-On first data fetch these are seeded from the Bosch API (when present). Changes you make take precedence over Bosch's values and feed into the service-due sensors and events. Setting the odometer to `0` clears the override and falls back to the Bosch value.
+Until you enter something, both show whatever the Bosch API reports (when present), otherwise nothing. Changes you make take precedence over Bosch's values and feed into the service-due sensors and events.
+
+To undo that, each bike has a **`button.<bike>_reset_service_due`** ("Reset Service Due") button: it drops both manual values, after which the Bosch value applies again (or nothing, if Bosch reports none). For the odometer, entering `0` does the same. The button exists because Home Assistant's date picker has no way to express "empty".
 
 #### Custom maintenance items
 
