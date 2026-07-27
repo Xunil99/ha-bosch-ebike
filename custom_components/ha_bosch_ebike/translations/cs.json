@@ -125,6 +125,24 @@
       "last_ride_elevation_gain": {
         "name": "Poslední jízda: Převýšení ↑"
       },
+      "last_ride_jumps": {
+        "name": "Poslední jízda: Skoky"
+      },
+      "last_ride_max_jump_height": {
+        "name": "Poslední jízda: Max. výška skoku"
+      },
+      "last_ride_manuals": {
+        "name": "Poslední jízda: Manuály"
+      },
+      "last_ride_stoppies": {
+        "name": "Poslední jízda: Stoppies"
+      },
+      "last_ride_wheelies": {
+        "name": "Poslední jízda: Wheelies"
+      },
+      "last_charge_energy": {
+        "name": "Poslední nabíjení: Energie"
+      },
       "last_ride_elevation_loss": {
         "name": "Poslední jízda: Převýšení ↓"
       },

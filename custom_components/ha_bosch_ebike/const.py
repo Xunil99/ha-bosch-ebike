@@ -39,6 +39,11 @@ EVENT_SERVICE_DUE_SOON = f"{DOMAIN}_service_due_soon"
 EVENT_SERVICE_OVERDUE = f"{DOMAIN}_service_overdue"
 EVENT_MAINTENANCE_DUE_SOON = f"{DOMAIN}_maintenance_due_soon"
 EVENT_MAINTENANCE_OVERDUE = f"{DOMAIN}_maintenance_overdue"
+# Fired once per ride, the first time a finished activity shows up in a poll.
+# Deliberately NOT fired during the initial import (an account with years of
+# history would fire hundreds of events at setup) and not when an
+# already-tracked ride merely moves to the front of the list.
+EVENT_NEW_ACTIVITY = f"{DOMAIN}_new_activity"
 
 REDIRECT_URI = "http://localhost:8888/callback"
 

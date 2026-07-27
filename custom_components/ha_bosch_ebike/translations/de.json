@@ -125,6 +125,24 @@
       "last_ride_elevation_gain": {
         "name": "Letzte Fahrt: Höhenmeter ↑"
       },
+      "last_ride_jumps": {
+        "name": "Letzte Fahrt: Sprünge"
+      },
+      "last_ride_max_jump_height": {
+        "name": "Letzte Fahrt: Max. Sprunghöhe"
+      },
+      "last_ride_manuals": {
+        "name": "Letzte Fahrt: Manuals"
+      },
+      "last_ride_stoppies": {
+        "name": "Letzte Fahrt: Stoppies"
+      },
+      "last_ride_wheelies": {
+        "name": "Letzte Fahrt: Wheelies"
+      },
+      "last_charge_energy": {
+        "name": "Letzte Ladung: Energie"
+      },
       "last_ride_elevation_loss": {
         "name": "Letzte Fahrt: Höhenmeter ↓"
       },

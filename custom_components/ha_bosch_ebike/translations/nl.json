@@ -125,6 +125,24 @@
       "last_ride_elevation_gain": {
         "name": "Laatste rit: hoogtemeters ↑"
       },
+      "last_ride_jumps": {
+        "name": "Laatste rit: sprongen"
+      },
+      "last_ride_max_jump_height": {
+        "name": "Laatste rit: max. spronghoogte"
+      },
+      "last_ride_manuals": {
+        "name": "Laatste rit: manuals"
+      },
+      "last_ride_stoppies": {
+        "name": "Laatste rit: stoppies"
+      },
+      "last_ride_wheelies": {
+        "name": "Laatste rit: wheelies"
+      },
+      "last_charge_energy": {
+        "name": "Laatste lading: energie"
+      },
       "last_ride_elevation_loss": {
         "name": "Laatste rit: hoogtemeters ↓"
       },

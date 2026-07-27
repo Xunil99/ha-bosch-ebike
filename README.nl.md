@@ -278,6 +278,24 @@ Naast de door Bosch geleverde servicebeurt (`Next Service Date`/`Next Service Od
 
 Daarmee kun je bijv. een pushmelding of een verlichtingsherinnering bouwen.
 
+**Event bij een nieuwe rit (vanaf v1.19.36):** Zodra een afgeronde rit voor het eerst in een pollronde opduikt, wordt `ha_bosch_ebike_new_activity` afgevuurd – precies één keer per rit. Voor ritten die al bestonden toen je de integratie instelde, gebeurt dat bewust **niet**, zodat een nieuwe automatisering niet wordt overspoeld door honderden oude ritten.
+
+De payload is plat en gebruikt al dezelfde eenheden als de sensoren, zodat een template geen rekenwerk hoeft te doen:
+
+| Veld | Eenheid | Inhoud |
+|---|---|---|
+| `bike_id` | - | De fiets waaraan de rit is toegewezen (kan `null` zijn bij accounts met meerdere fietsen) |
+| `activity_id`, `title`, `start_time` | - | Identificatie, naam en starttijd van de rit |
+| `distance_km` | km | Afstand |
+| `duration_min` | min | Rijduur zonder stops |
+| `average_speed`, `max_speed` | km/h | Gemiddelde en maximale snelheid |
+| `elevation_gain` | m | Hoogtemeters (stijging) |
+| `calories` | kcal | Calorieverbruik |
+| `has_tricks` | - | `true` als Bosch voor de rit Trick-Check-gegevens levert |
+| `tricks` | - | De volledige Trick-Check-waarden, anders `null` |
+
+Elk veld kan `null` zijn als Bosch het voor die rit niet levert. Let op: Bosch publiceert een rit pas nadat de app hem heeft geüpload – het event komt dus binnen zodra de rit de cloud bereikt, niet op het moment dat je stopt met trappen.
+
 ### Actieradius-schatting
 
 Per fiets zijn er twee sensoren die de actieradius **schatten** — op basis
@@ -297,6 +315,27 @@ van je werkelijke verbruik (afstandsgewogen gemiddelde over de laatste
 > accuconditie. De berekeningsbasis is in te zien in de sensorattributen
 > (`wh_per_km`, `tours_used`, `window_km`). Zolang er minder dan 3 tours
 > of 30 km aan verbruiksgegevens beschikbaar zijn, blijven de sensoren leeg.
+
+### Laadsessie-samenvatting
+
+De Bosch-cloud kent het begrip laden helemaal niet – ze meldt alleen het accuniveau op het moment van de laatste synchronisatie. Wie de [ESPHome-LDI-bridge](https://github.com/Xunil99/ha-bosch-ebike/tree/main/esphome) gebruikt, heeft echter een **live-accuniveau**, en dat is genoeg om de hele laadsessie te reconstrueren.
+
+Is in de opties voor een fiets een live-SoC-sensor ingesteld, dan krijgt die fiets een sensor **`Last Charge Energy`** (Wh). De waarde ervan is de energie die tijdens de laatste afgeronde laadsessie in de accu is gegaan, afgeleid uit de stijging van het accuniveau en de ingestelde accucapaciteit. Als attributen zijn beschikbaar:
+
+| Attribuut | Inhoud |
+|---|---|
+| `start_soc`, `end_soc`, `soc_delta` | Accuniveau aan het begin en aan het eind, plus het verschil (%) |
+| `energy_wh` | Toegevoegde energie in Wh (`null` als er geen capaciteit bekend is) |
+| `duration_min` | Duur van de laadsessie in minuten |
+| `started_at`, `ended_at` | Begin en einde als ISO 8601-tijdstempels |
+| `signal_gaps` | Hoe vaak de live-sensor tijdens het laden is weggevallen |
+| `in_progress` | `true` zolang er een laadsessie loopt |
+
+**Waarom dit tegen verbindingsonderbrekingen bestand is:** een BLE-bridge verliest de fiets af en toe – dat is het normale geval, niet de uitzondering (zie issue #68). Een wegvallende verbinding beëindigt een laadsessie daarom **nooit**; ze wordt alleen meegeteld in `signal_gaps`. Anders zou elk kort wegrollen buiten het zendbereik als een afgeronde lading van 20 % worden gemeld.
+
+Een laadsessie geldt als beëindigd zodra het accuniveau ofwel met minstens 1 % daalt (er wordt weer gefietst) ofwel 30 minuten lang niet meer stijgt (lader klaar of losgekoppeld). Gemeld wordt altijd de **hoogste stand**, niet de laatste meetwaarde – een accu die 100 % bereikt en daarna door zelfontlading naar 99 % zakt, is tot 100 % geladen. Ladingen onder 3 % worden helemaal niet gepubliceerd, zodat het korte bijladen in de gang de echte laadsessie van vannacht niet overschrijft.
+
+De sensor overleeft een herstart van Home Assistant: de laatste afgeronde laadsessie wordt hersteld. Een laadsessie die op het moment van de herstart *bezig* was, wordt bewust niet gereconstrueerd. Werkt ook met eBike System 2, omdat uitsluitend het live-signaal wordt gebruikt.
 
 ### Routeplanner-kaart (BRouter)
 
@@ -513,6 +552,7 @@ Op de Lovelace-kaart zit een 📚-toggle in de kaartbediening. Is die actief, da
 | Next Service Odometer | km | Kilometerstand volgende servicebeurt |
 | Estimated Range (Full Battery) | km | Geschatte actieradius met volle accu (uit gem. verbruik, schatting!) |
 | Estimated Range (Current) | km | Geschatte resterende actieradius (live-SoC vereist, schatting!) |
+| Last Charge Energy | Wh | Energie van de laatste laadsessie (live-SoC vereist) |
 
 #### Accusensoren (per accu)
 | Sensor | Eenheid | Beschrijving |

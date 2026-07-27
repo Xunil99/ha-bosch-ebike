@@ -282,6 +282,24 @@ En plus de l'échéance d'entretien fournie par Bosch (`Next Service Date`/`Next
 
 Tu peux ainsi construire par exemple une notification push ou un rappel lumineux.
 
+**Événement de nouvelle sortie (à partir de la v1.19.36) :** dès qu'une sortie terminée apparaît pour la première fois lors d'une interrogation, l'événement `ha_bosch_ebike_new_activity` est déclenché – exactement une fois par sortie. Les sorties qui existaient déjà au moment de la configuration de l'intégration ne le déclenchent volontairement **pas**, afin qu'une nouvelle automatisation ne soit pas noyée sous des centaines de sorties historiques.
+
+Les données transmises sont à plat et déjà dans les unités utilisées par les capteurs – un template n'a donc aucun calcul à faire :
+
+| Champ | Unité | Contenu |
+|---|---|---|
+| `bike_id` | - | Le vélo auquel la sortie a été attribuée (peut être `null` sur les comptes avec plusieurs vélos) |
+| `activity_id`, `title`, `start_time` | - | Identifiant, nom et heure de départ de la sortie |
+| `distance_km` | km | Distance |
+| `duration_min` | min | Durée de conduite (sans les arrêts) |
+| `average_speed`, `max_speed` | km/h | Vitesse moyenne et vitesse maximale |
+| `elevation_gain` | m | Dénivelé positif |
+| `calories` | kcal | Calories brûlées |
+| `has_tricks` | - | `true` lorsque Bosch fournit des données Trick Check pour la sortie |
+| `tricks` | - | Les valeurs détaillées du Trick Check, sinon `null` |
+
+Chaque champ peut valoir `null` si Bosch ne le fournit pas pour cette sortie. À noter : Bosch ne publie une sortie qu'une fois que l'app l'a transmise – l'événement arrive donc quand la sortie atteint le cloud, pas au moment où tu arrêtes de pédaler.
+
 ### Estimation de l'autonomie
 
 Pour chaque vélo, deux capteurs **estiment** l'autonomie — sur la base de
@@ -303,6 +321,27 @@ ta consommation réelle (moyenne pondérée par la distance sur les derniers
 > dans les attributs du capteur (`wh_per_km`, `tours_used`, `window_km`).
 > Tant que moins de 3 sorties ou 30 km de données de consommation sont
 > disponibles, les capteurs restent vides.
+
+### Bilan de la session de charge
+
+Le cloud Bosch ne connaît tout simplement pas la notion de charge – il ne fournit que le niveau de batterie au moment de la dernière synchronisation. Mais quiconque fait tourner la [passerelle ESPHome LDI](https://github.com/Xunil99/ha-bosch-ebike/tree/main/esphome) dispose d'un **niveau de batterie en direct**, et cela suffit à reconstituer toute la charge.
+
+Dès qu'un capteur de niveau de batterie en direct est renseigné pour un vélo dans les options, celui-ci reçoit un capteur **`Last Charge Energy`** (Wh). Sa valeur est l'énergie apportée par la dernière charge terminée, calculée à partir de la hausse du niveau de batterie et de la capacité de batterie configurée. Disponible en attributs :
+
+| Attribut | Contenu |
+|---|---|
+| `start_soc`, `end_soc`, `soc_delta` | Niveau de batterie au début et à la fin, et la différence (%) |
+| `energy_wh` | Énergie apportée, en Wh (`null` si aucune capacité n'est connue) |
+| `duration_min` | Durée de la charge en minutes |
+| `started_at`, `ended_at` | Début et fin sous forme d'horodatages ISO 8601 |
+| `signal_gaps` | Nombre de fois où le capteur en direct a décroché pendant la charge |
+| `in_progress` | `true` tant qu'une charge est en cours |
+
+**Pourquoi cela résiste aux coupures :** une passerelle BLE perd le vélo de temps en temps – c'est le cas normal, pas l'exception (voir issue #68). Une coupure ne met donc **jamais** fin à une charge ; elle est seulement comptabilisée dans `signal_gaps`. Sinon, chaque brève sortie de portée radio serait signalée comme une charge de 20 % terminée.
+
+Une charge est considérée comme terminée lorsque le niveau de batterie soit baisse d'au moins 1 % (le vélo roule de nouveau), soit cesse de monter pendant 30 minutes (charge finie ou chargeur débranché). Ce qui est retenu est toujours la valeur **maximale**, pas la dernière mesure : une batterie qui atteint 100 % puis retombe à 99 % par autodécharge a bien été chargée à 100 %. Les charges de moins de 3 % ne sont pas publiées du tout – ainsi, une petite recharge d'appoint dans le couloir n'écrase pas la vraie charge de la nuit précédente.
+
+Le capteur survit à un redémarrage de Home Assistant : la dernière charge terminée est restaurée. Une charge *en cours* au moment du redémarrage n'est volontairement pas reconstituée. Fonctionne aussi avec l'eBike System 2, puisque seul le signal en direct est utilisé.
 
 ### Carte planificateur d'itinéraires (BRouter)
 
@@ -525,6 +564,7 @@ Sur la carte Lovelace, il y a une bascule 📚 dans les commandes de la carte. Q
 | Next Service Odometer | km | Kilométrage du prochain entretien |
 | Estimated Range (Full Battery) | km | Autonomie estimée avec batterie pleine (d'après la conso moyenne, estimation !) |
 | Estimated Range (Current) | km | Autonomie restante estimée (SoC en direct requis, estimation !) |
+| Last Charge Energy | Wh | Énergie de la dernière session de charge (SoC en direct requis) |
 
 #### Capteurs de batterie (par batterie)
 | Capteur | Unité | Description |

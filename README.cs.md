@@ -278,6 +278,24 @@ Kromě servisní prohlídky dodávané Boschem (`Next Service Date`/`Next Servic
 
 Díky tomu si můžeš postavit třeba push oznámení nebo světelnou připomínku.
 
+**Událost při nové jízdě (od v1.19.36):** Jakmile se dokončená jízda poprvé objeví při některém z pravidelných dotazů, vyvolá se `ha_bosch_ebike_new_activity` – přesně jednou za jízdu. U jízd, které už existovaly při prvním nastavení integrace, se to záměrně **nestane**, takže novou automatizaci nezahltí stovky starých jízd.
+
+Data události jsou plochá a rovnou v jednotkách, které používají senzory, šablona tedy nemusí nic přepočítávat:
+
+| Pole | Jednotka | Obsah |
+|---|---|---|
+| `bike_id` | - | Kolo, ke kterému byla jízda přiřazena (u účtů s více koly může být `null`) |
+| `activity_id`, `title`, `start_time` | - | Identifikátor, název a čas začátku jízdy |
+| `distance_km` | km | Vzdálenost |
+| `duration_min` | min | Čas jízdy bez přestávek |
+| `average_speed`, `max_speed` | km/h | Průměrná a nejvyšší rychlost |
+| `elevation_gain` | m | Nastoupané převýšení |
+| `calories` | kcal | Spálené kalorie |
+| `has_tricks` | - | `true`, pokud Bosch k jízdě dodává data funkce Trick Check |
+| `tricks` | - | Kompletní hodnoty funkce Trick Check, jinak `null` |
+
+Kterékoli pole může být `null`, pokud ho Bosch pro danou jízdu nedodá. Důležité: Bosch zveřejní jízdu až ve chvíli, kdy ji nahraje aplikace – událost tedy přijde, jakmile se jízda dostane do cloudu, ne v okamžiku, kdy sesedneš z kola.
+
 ### Odhad dojezdu
 
 Pro každé kolo existují dva senzory, které **odhadují** dojezd — na základě
@@ -297,6 +315,27 @@ tvé skutečné spotřeby (vážený průměr podle vzdálenosti za posledních
 > Základ výpočtu si můžeš prohlédnout v atributech čidla
 > (`wh_per_km`, `tours_used`, `window_km`). Dokud jsou k dispozici údaje
 > o spotřebě z méně než 3 jízd nebo z méně než 30 km, zůstávají čidla prázdná.
+
+### Souhrn nabíjení
+
+Cloud od Bosche pojem „nabíjení“ vůbec nezná – hlásí jen stav nabití k okamžiku poslední synchronizace. Kdo ale provozuje [ESPHome LDI bridge](https://github.com/Xunil99/ha-bosch-ebike/tree/main/esphome), ten má **živý stav nabití**, a z něj se dá celý nabíjecí cyklus zrekonstruovat.
+
+Pokud je v nastavení integrace pro kolo zadán živý senzor SoC, vznikne pro něj senzor **`Last Charge Energy`** (Wh). Jeho hodnotou je energie dodaná při posledním dokončeném nabíjení, vypočtená z nárůstu stavu nabití a z nastavené kapacity baterie. Jako atributy jsou k dispozici:
+
+| Atribut | Obsah |
+|---|---|
+| `start_soc`, `end_soc`, `soc_delta` | Stav nabití na začátku a na konci a rozdíl mezi nimi (%) |
+| `energy_wh` | Dodaná energie ve Wh (`null`, pokud není známá kapacita) |
+| `duration_min` | Doba nabíjení v minutách |
+| `started_at`, `ended_at` | Začátek a konec jako časové značky ISO 8601 |
+| `signal_gaps` | Kolikrát během nabíjení vypadl živý senzor |
+| `in_progress` | `true`, dokud nabíjení probíhá |
+
+**Proč to přežije výpadky spojení:** BLE bridge kolo tu a tam ztratí – to je normální stav, ne výjimka (viz issue #68). Výpadek proto nabíjení **nikdy** neukončí, jen se započítá do `signal_gaps`. Jinak by se každé krátké vyjetí z dosahu hlásilo jako dokončené nabití o 20 %.
+
+Nabíjení se považuje za ukončené, jakmile stav nabití buď klesne alespoň o 1 % (na kole se zase jezdí), nebo 30 minut nestoupá (nabíječka je hotová nebo odpojená). Hlásí se vždy **nejvyšší dosažená hodnota**, ne poslední naměřená – baterie, která dosáhne 100 % a pak samovybíjením klesne na 99 %, byla nabita na 100 %. Nabíjení pod 3 % se vůbec nezveřejňují, aby krátké dobití na chodbě nepřepsalo skutečné noční nabíjení.
+
+Senzor přežije restart Home Assistantu: poslední dokončené nabíjení se obnoví. Nabíjení, které v okamžiku restartu *probíhalo*, se záměrně nerekonstruuje. Funguje i s eBike System 2, protože se vyhodnocuje výhradně živý signál.
 
 ### Karta plánovače tras (BRouter)
 
@@ -513,6 +552,7 @@ Na Lovelace kartě je v ovládání mapy přepínač 📚. Když je aktivní, hl
 | Next Service Odometer | km | Stav kilometrů při příštím servisu |
 | Estimated Range (Full Battery) | km | Odhadovaný dojezd s plnou baterií (z prům. spotřeby, odhad!) |
 | Estimated Range (Current) | km | Odhadovaný zbývající dojezd (vyžaduje živý SoC, odhad!) |
+| Last Charge Energy | Wh | Energie posledního nabíjení (vyžaduje živý SoC) |
 
 #### Senzory baterie (pro každou baterii)
 | Senzor | Jednotka | Popis |

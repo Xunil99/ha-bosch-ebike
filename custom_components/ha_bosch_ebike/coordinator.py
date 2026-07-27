@@ -29,6 +29,7 @@ from .const import (
     EVENT_SERVICE_OVERDUE,
     EVENT_MAINTENANCE_DUE_SOON,
     EVENT_MAINTENANCE_OVERDUE,
+    EVENT_NEW_ACTIVITY,
     CONF_LIVE_ODOMETER_ENTITY,
     CONF_LIVE_SOC_ENTITY,
     CONF_LIVE_SENSORS,
@@ -43,6 +44,7 @@ from .range_estimate import (
 )
 from .unassigned_activities import compute_unassigned_activities, merge_manual_overrides
 from .trick_check import parse_trick_check
+from .activity_event import build_new_activity_payload
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -93,6 +95,16 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._bes2_serial = bes2_serial
         self._bes2_part = bes2_part
         self._initial_import_done = False
+        # BES2 rebuilds its activity list from scratch on every poll instead of
+        # merging into _all_activities, so "have I already seen this ride?" has
+        # to be tracked separately there. None means "no poll has completed
+        # yet" - the first one only seeds the set, so setup never fires a burst
+        # of events for rides that happened before the integration existed.
+        self._bes2_seen_activity_ids: set[str] | None = None
+        # (activity_id, activity) pairs awaiting an EVENT_NEW_ACTIVITY. See
+        # the comment at the top of _async_update_data for why this outlives
+        # a single poll.
+        self._pending_new_activities: list[tuple[Any, dict[str, Any]]] = []
         # Sorted newest-first; range_estimate and latest_activity rely on this.
         self._all_activities: list[dict[str, Any]] = []
         self._latest_activity_details: dict[str, Any] | None = None
@@ -784,9 +796,16 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # tokens for the BES2 path is deferred to a later phase.
 
         activities: list[dict[str, Any]] = []
+        # Distinguishes "no rides" from "the fetch failed", which the empty
+        # list alone cannot. The new-ride detection below needs that: seeding
+        # its seen-set from a failed fetch would record zero known rides and
+        # make the next successful poll fire an event for every ride in the
+        # window at once.
+        activities_fetched = False
         try:
             raw_acts = await self.api.get_activities_bes2(limit=20, offset=0)
             activities = [bes2.normalize_activity_summary(a) for a in (raw_acts or []) if isinstance(a, dict)]
+            activities_fetched = True
         except Exception as err:  # noqa: BLE001
             _LOGGER.debug("Could not fetch BES2 activities: %s", err)
 
@@ -849,6 +868,32 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         await self._fetch_capacity_testers(bikes, SYSTEM_BES2)
         await self._fetch_bes2_diagnosis_field_data(bikes)
+
+        # New-ride events. This path rebuilds `activities` from scratch every
+        # poll, so "new" means "an id no earlier poll reported". The very
+        # first poll only seeds the set: it would otherwise fire one event
+        # per ride in the fetched window the moment the integration is set
+        # up. BES2 entries are single-bike, so every ride belongs to bikes[0].
+        # Ids are kept even after they scroll out of the fetched window
+        # (limit=20) rather than pruned to it, so a ride that reappears
+        # because the window shifted cannot fire a second time. That grows
+        # the set by one short string per ride ridden while HA is running,
+        # which is nothing next to the activity list itself.
+        seen_ids = {str(a.get("id")) for a in activities if a.get("id") is not None}
+        if not activities_fetched:
+            # Nothing was learned this poll, so nothing may be recorded as
+            # seen and nothing may be reported as new.
+            pass
+        elif self._bes2_seen_activity_ids is None:
+            self._bes2_seen_activity_ids = seen_ids
+        else:
+            fresh_ids = seen_ids - self._bes2_seen_activity_ids
+            self._bes2_seen_activity_ids |= seen_ids
+            if fresh_ids:
+                bes2_bike_id = bikes[0].get("id") if bikes else None
+                for activity in activities:
+                    if str(activity.get("id")) in fresh_ids:
+                        self._fire_new_activity(activity, bes2_bike_id)
 
         return {
             "bikes": bikes,
@@ -1062,10 +1107,41 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 activity["_trick_check"] = trick
             activity["_trick_hint"] = bool(trick and trick["has_any"])
 
+    def _fire_new_activity(
+        self, activity: dict[str, Any], bike_id: str | None
+    ) -> None:
+        """Fire EVENT_NEW_ACTIVITY for one freshly appeared ride.
+
+        Callers are responsible for firing this only for genuinely new rides
+        (see the event's comment in const.py) and for calling it only after
+        bike attribution has run for this poll - the activity dicts
+        themselves never carry a bikeId, it lives in the separate
+        _activity_bike mapping, so bike_id has to be passed in. The payload
+        itself is built by activity_event.py, which is import-free of Home
+        Assistant so the test suite can cover it.
+        """
+        self.hass.bus.async_fire(
+            EVENT_NEW_ACTIVITY, build_new_activity_payload(activity, bike_id)
+        )
+
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch bikes and activities from Bosch API."""
         if self._system == SYSTEM_BES2:
             return await self._update_bes2()
+
+        # Rides spotted for the first time, as (id, activity) pairs. They are
+        # collected here but only turned into events much further down, once
+        # bike attribution has run - the event carries a bike_id, and that
+        # mapping does not exist yet at the point where a new ride is spotted.
+        #
+        # Held on the coordinator rather than in a local, because several
+        # unguarded awaits sit between the two points (live enrichment, state
+        # persistence, capacity testers). If one of them raises, the poll
+        # fails - but the ride is already in _all_activities by then, so no
+        # later poll would ever see it as new again and the event would be
+        # lost for good. Carrying the list across the failure lets the next
+        # successful poll fire it.
+        new_activities = self._pending_new_activities
 
         try:
             bikes = await self.api.get_bikes()
@@ -1150,6 +1226,12 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                         _LOGGER.info(
                             "Bosch eBike: New activity detected: %s", latest.get("title")
                         )
+                        # Only when this ride was not already tracked further
+                        # down the list: existing_idx being set means we knew
+                        # about it and Bosch merely started reporting it as
+                        # "latest" (issue #57), which is not a new ride.
+                        if existing_idx is None:
+                            new_activities.append((latest.get("id"), latest))
 
                 # Backfill any OTHER activities in this same batch that are
                 # not yet tracked at all. Only the single overall-newest one
@@ -1184,6 +1266,7 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     and str(a.get("startTime") or "") not in known_start_times
                 ]
                 if missing:
+                    new_activities.extend((a.get("id"), a) for a in missing)
                     self._all_activities.extend(missing)
                     self._all_activities.sort(
                         key=self._activity_sort_key, reverse=True
@@ -1448,6 +1531,29 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         await self._fetch_capacity_testers(bikes, SYSTEM_SMART)
 
         self._apply_trick_check(self._all_activities)
+
+        # Deliberately the last thing before returning: by now the ride has
+        # its bike attribution, its live-data corrections and its Trick Check
+        # result, so the event carries the same numbers the sensors will show
+        # rather than the raw cloud values from the moment it was spotted.
+        # Same single-bike fallback as _track_battery_consumption: on a
+        # one-bike account there is nothing to guess, and attribution can
+        # legitimately come back empty (it needs odometer data, which not
+        # every bike reports). Multi-bike accounts keep None rather than
+        # attribute the ride to an arbitrary bike.
+        single_bike_id = bikes[0].get("id") if len(bikes) == 1 else None
+        by_id = {a.get("id"): a for a in self._all_activities if a.get("id")}
+        for activity_id, activity in new_activities:
+            # Prefer the copy currently in the list: a ride carried over from
+            # a failed poll may since have been refreshed in place, and the
+            # event should report what the sensors report. The captured dict
+            # is the fallback for a ride whose id is missing entirely (a
+            # response shape that has been observed in the wild).
+            current = by_id.get(activity_id, activity)
+            self._fire_new_activity(
+                current, self._activity_bike.get(activity_id) or single_bike_id
+            )
+        new_activities.clear()
 
         return {
             "bikes": bikes,

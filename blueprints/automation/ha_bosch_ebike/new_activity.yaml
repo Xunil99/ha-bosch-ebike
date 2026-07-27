@@ -1,0 +1,71 @@
+blueprint:
+  name: Bosch eBike - New Ride Recorded
+  description: >
+    Notifies you when a finished ride shows up in your Bosch account. Reacts
+    to the ha_bosch_ebike_new_activity event, which the integration fires
+    exactly once per ride, the first time a poll sees it. Rides that already
+    existed when you set the integration up never fire it, so adding this
+    automation will not flood you with your ride history.
+
+    Note that Bosch publishes a ride only after the app has uploaded it, so
+    the event arrives when the ride reaches the cloud, not the moment you
+    stop pedalling.
+  domain: automation
+  source_url: https://github.com/Xunil99/ha-bosch-ebike/blob/main/blueprints/automation/ha_bosch_ebike/new_activity.yaml
+  input:
+    min_distance_km:
+      name: Minimum distance
+      description: >
+        Ignore rides shorter than this. Set to 0 to be notified about every
+        ride, including the short trip to the bakery.
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 200
+          step: 0.5
+          unit_of_measurement: km
+          mode: box
+    notify_action:
+      name: Notification action
+      description: >
+        The action to run for a new ride. A ready-made message is precomputed
+        for you as {{ message }} - reference it in your action's message
+        field, or build your own from trigger.event.data.title / .distance_km
+        / .duration_min / .average_speed / .max_speed / .elevation_gain /
+        .calories / .bike_id / .activity_id / .start_time / .has_tricks /
+        .tricks.
+      selector:
+        action: {}
+
+trigger:
+  - platform: event
+    event_type: ha_bosch_ebike_new_activity
+
+variables:
+  min_distance_km: !input min_distance_km
+  distance_km: "{{ trigger.event.data.distance_km }}"
+  duration_min: "{{ trigger.event.data.duration_min }}"
+  elevation_gain: "{{ trigger.event.data.elevation_gain }}"
+  ride_title: "{{ trigger.event.data.title or 'Ride' }}"
+  message: >-
+    {{ ride_title }}:
+    {%- if distance_km is not none %} {{ '%.1f' | format(distance_km) }} km{% endif -%}
+    {%- if duration_min is not none %}, {{ '%.0f' | format(duration_min) }} min{% endif -%}
+    {%- if elevation_gain is not none %}, {{ '%.0f' | format(elevation_gain) }} m elevation{% endif -%}
+    {%- if trigger.event.data.has_tricks %} (Trick Check data available){% endif -%}
+
+condition:
+  # A ride whose distance Bosch did not report at all (distance_km is null)
+  # still counts as a ride, so it only gets filtered out when a minimum was
+  # actually asked for.
+  - condition: template
+    value_template: >-
+      {{ min_distance_km | float(0) <= 0
+         or (distance_km is not none and distance_km | float(0) >= min_distance_km | float(0)) }}
+
+action:
+  - !input notify_action
+
+mode: queued
+max: 10

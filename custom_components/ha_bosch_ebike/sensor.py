@@ -27,9 +27,16 @@ from homeassistant.const import (
 from homeassistant.core import Event, HomeAssistant, callback
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.event import async_track_state_change_event
+from homeassistant.helpers.event import async_call_later, async_track_state_change_event
+from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
+from .charge_session import (
+    IDLE_TIMEOUT_S,
+    SUMMARY_KEYS as CHARGE_SUMMARY_KEYS,
+    ChargeSessionTracker,
+    iso_or_none,
+)
 from .const import DOMAIN
 from .coordinator import BoschEBikeCoordinator
 from .profile_extra import (
@@ -94,6 +101,10 @@ class BoschBikeSensorDescription(SensorEntityDescription):
     is_aggregate: bool = False
     # False = Smart-System-only (data BES2 never provides); skipped for BES2.
     bes2: bool = True
+    # Optional extra state attributes, taking the same argument value_fn
+    # does. Used by the Trick Check sensors to hang the "max" figures off
+    # the count rather than spending a separate entity on each of them.
+    attrs_fn: Callable[[dict], dict[str, Any]] | None = None
 
 
 def _calc_difficulty(activity: dict) -> float | None:
@@ -546,6 +557,117 @@ BES2_STATISTICS_SENSORS: tuple[BoschBikeSensorDescription, ...] = (
 )
 
 
+def _trick_entry(activity: dict, trick_type: str) -> dict[str, Any] | None:
+    """Return one parsed trick type off the latest ride, or None.
+
+    parse_trick_check() omits trick types it could not parse rather than
+    filling them with zeros, so a missing key means "no data", not "none
+    happened" - the distinction matters, which is why this returns None
+    instead of an empty dict.
+    """
+    parsed = activity.get("_trick_check")
+    if not isinstance(parsed, dict):
+        return None
+    entry = parsed.get(trick_type)
+    return entry if isinstance(entry, dict) else None
+
+
+def _trick_count(trick_type: str) -> Callable[[dict], int | None]:
+    def _value(activity: dict) -> int | None:
+        entry = _trick_entry(activity, trick_type)
+        return entry.get("amount") if entry else None
+
+    return _value
+
+
+def _trick_attrs(trick_type: str) -> Callable[[dict], dict[str, Any]]:
+    def _attrs(activity: dict) -> dict[str, Any]:
+        entry = _trick_entry(activity, trick_type)
+        if not entry:
+            return {}
+        # Everything except the count, which is already the state.
+        return {k: v for k, v in entry.items() if k != "amount"}
+
+    return _attrs
+
+
+# Trick Check (Flow app v1.34, see trick_check.py). Only created for bikes
+# whose activities actually carry a `tricks` block - accounts and systems
+# Bosch has not rolled this out to would otherwise get five permanently
+# unknown entities. A bike that starts reporting tricks later picks them up
+# on the next reload of the config entry, the same way the BES2 statistics
+# sensors above appear.
+TRICK_SENSORS: tuple[BoschBikeSensorDescription, ...] = (
+    BoschBikeSensorDescription(
+        key="last_ride_jumps",
+        translation_key="last_ride_jumps",
+        name="Last Ride Jumps",
+        icon="mdi:arrow-up-bold-hexagon-outline",
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=_trick_count("jumps"),
+        attrs_fn=_trick_attrs("jumps"),
+        is_activity=True,
+    ),
+    # Broken out of the jumps attributes into its own entity because it is
+    # the one trick figure people want to plot over time.
+    BoschBikeSensorDescription(
+        key="last_ride_max_jump_height",
+        translation_key="last_ride_max_jump_height",
+        name="Last Ride Max Jump Height",
+        native_unit_of_measurement=UnitOfLength.METERS,
+        device_class=SensorDeviceClass.DISTANCE,
+        state_class=SensorStateClass.MEASUREMENT,
+        icon="mdi:arrow-expand-up",
+        suggested_display_precision=2,
+        value_fn=lambda d: (_trick_entry(d, "jumps") or {}).get("max_height_m"),
+        is_activity=True,
+    ),
+    BoschBikeSensorDescription(
+        key="last_ride_manuals",
+        translation_key="last_ride_manuals",
+        name="Last Ride Manuals",
+        icon="mdi:bike",
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=_trick_count("manuals"),
+        attrs_fn=_trick_attrs("manuals"),
+        is_activity=True,
+    ),
+    BoschBikeSensorDescription(
+        key="last_ride_stoppies",
+        translation_key="last_ride_stoppies",
+        name="Last Ride Stoppies",
+        icon="mdi:bike",
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=_trick_count("stoppies"),
+        attrs_fn=_trick_attrs("stoppies"),
+        is_activity=True,
+    ),
+    BoschBikeSensorDescription(
+        key="last_ride_wheelies",
+        translation_key="last_ride_wheelies",
+        name="Last Ride Wheelies",
+        icon="mdi:bike",
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=_trick_count("wheelies"),
+        attrs_fn=_trick_attrs("wheelies"),
+        is_activity=True,
+    ),
+)
+
+
+def _bike_has_trick_data(data: dict, bike_id: str) -> bool:
+    """True if any of this bike's rides carries parsed Trick Check data.
+
+    Checked across all of the bike's activities, not just the latest one -
+    the newest ride having no `tricks` block would otherwise hide the
+    sensors from someone whose previous ride did report tricks.
+    """
+    return any(
+        isinstance(a.get("_trick_check"), dict)
+        for a in _activities_for_bike(data, bike_id)
+    )
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
@@ -599,6 +721,11 @@ async def async_setup_entry(
         # BES2 lifetime totals (only when /statistics data is present)
         if bike.get("_bes2_statistics"):
             for desc in BES2_STATISTICS_SENSORS:
+                entities.append(BoschEBikeSensor(coordinator, desc, bike_id, drive_name))
+
+        # Trick Check (only for bikes whose rides actually report tricks)
+        if _bike_has_trick_data(coordinator.data, bike_id):
+            for desc in TRICK_SENSORS:
                 entities.append(BoschEBikeSensor(coordinator, desc, bike_id, drive_name))
 
         # Battery sensors (per battery). BES2 batteries carry no cloud fields
@@ -740,12 +867,21 @@ async def async_setup_entry(
         entities.append(BoschServiceDueSensor(coordinator, bike_id, drive_name, kind="days"))
         entities.append(BoschServiceDueSensor(coordinator, bike_id, drive_name, kind="km"))
 
+        # Per-bike live SoC sensor (issue #44): each bike's own bridge, not
+        # a single account-wide entity, so two bikes never share a value.
+        soc_entity = coordinator.live_soc_entity(bike_id)
+
+        # Charge session summary. Outside the BES2 gate below on purpose:
+        # it is derived purely from the live SoC signal, so it works for
+        # eBike System 2 users running the bridge just as well.
+        if soc_entity:
+            entities.append(
+                BoschChargeSessionSensor(coordinator, bike_id, drive_name, soc_entity)
+            )
+
         # Estimated range (clearly labelled estimate, derived from history)
         if not is_bes2:
             entities.append(BoschRangeEstimateSensor(coordinator, bike_id, drive_name))
-            # Per-bike live SoC sensor (issue #44): each bike's own bridge, not
-            # a single account-wide entity, so two bikes never share a value.
-            soc_entity = coordinator.live_soc_entity(bike_id)
             if soc_entity:
                 entities.append(
                     BoschCurrentRangeSensor(coordinator, bike_id, drive_name, soc_entity)
@@ -914,6 +1050,34 @@ class BoschEBikeSensor(CoordinatorEntity[BoschEBikeCoordinator], SensorEntity):
                     value = self.coordinator._floored_odometer_km(self._bike_id, value)
                 return value
         return None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        """Description-supplied extra attributes, if any.
+
+        Only the Trick Check descriptions set attrs_fn; every other sensor
+        keeps returning None here exactly as before.
+        """
+        attrs_fn = self.entity_description.attrs_fn
+        if attrs_fn is None:
+            return None
+        if self.entity_description.is_activity:
+            activities = _activities_for_bike(self.coordinator.data, self._bike_id)
+            source = activities[0] if activities else None
+        elif self.entity_description.is_aggregate:
+            source = _activities_for_bike(self.coordinator.data, self._bike_id)
+        else:
+            source = next(
+                (
+                    bike
+                    for bike in self.coordinator.data.get("bikes", [])
+                    if bike.get("id") == self._bike_id
+                ),
+                None,
+            )
+        if source is None:
+            return None
+        return attrs_fn(source) or None
 
 
 class BoschReachableRangeSensor(CoordinatorEntity[BoschEBikeCoordinator], SensorEntity):
@@ -1754,6 +1918,173 @@ class BoschCurrentRangeSensor(BoschRangeEstimateSensor):
         attrs = dict(super().extra_state_attributes or {})
         attrs["soc_source"] = self._soc_entity_id
         attrs["current_soc"] = self._current_soc()
+        return attrs
+
+
+class BoschChargeSessionSensor(
+    CoordinatorEntity[BoschEBikeCoordinator], RestoreEntity, SensorEntity
+):
+    """Summary of the last completed charge, derived from the live SoC sensor.
+
+    The Bosch cloud has no notion of charging at all - it reports the SoC as
+    of the last sync and nothing else. The ESPHome LDI bridge does provide a
+    live SoC, and that is enough to reconstruct when a charge started, how
+    long it took and how much energy went in. See charge_session.py for the
+    state machine and for why a dropout of the bridge (issue #68) never ends
+    a session.
+
+    Only created when a live SoC entity is configured for this bike. Works
+    for eBike System 2 as well: nothing here touches cloud-only data.
+    """
+
+    _attr_has_entity_name = True
+    _attr_translation_key = "last_charge_energy"
+    _attr_native_unit_of_measurement = UnitOfEnergy.WATT_HOUR
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_icon = "mdi:battery-charging"
+    _attr_suggested_display_precision = 0
+
+    def __init__(
+        self,
+        coordinator: BoschEBikeCoordinator,
+        bike_id: str,
+        drive_name: str,
+        soc_entity_id: str,
+    ) -> None:
+        super().__init__(coordinator)
+        self._bike_id = bike_id
+        self._soc_entity_id = soc_entity_id
+        self._tracker = ChargeSessionTracker()
+        self._cancel_idle: Callable[[], None] | None = None
+        self._attr_unique_id = f"{bike_id}_last_charge_energy"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, bike_id)},
+            name=drive_name,
+            manufacturer="Bosch",
+            model=drive_name,
+        )
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+
+        # Bring back the last completed charge, so a restart does not blank
+        # out last night's summary. An in-flight charge is deliberately not
+        # restored - see ChargeSessionTracker.restore_summary.
+        last_state = await self.async_get_last_state()
+        if last_state is not None:
+            restored = {
+                k: v for k, v in last_state.attributes.items()
+                if k in CHARGE_SUMMARY_KEYS
+            }
+            # Gated on soc_delta rather than on the entity state, because a
+            # perfectly good summary can have a null state: energy_wh is
+            # None when no battery capacity is known, and the percentages
+            # are still worth keeping in that case.
+            if "soc_delta" in restored:
+                self._tracker.restore_summary(restored)
+
+        # Baseline, so the first genuine rise after a restart is measured
+        # against a real value instead of being swallowed.
+        state = self.hass.states.get(self._soc_entity_id)
+        self._tracker.seed(
+            state.state if state is not None else None, self._now()
+        )
+
+        self.async_on_remove(
+            async_track_state_change_event(
+                self.hass, [self._soc_entity_id], self._on_soc_change
+            )
+        )
+        self.async_on_remove(self._cancel_idle_timer)
+
+    @staticmethod
+    def _now() -> float:
+        return datetime.now(timezone.utc).timestamp()
+
+    def _cancel_idle_timer(self) -> None:
+        if self._cancel_idle is not None:
+            self._cancel_idle()
+            self._cancel_idle = None
+
+    @callback
+    def _on_soc_change(self, event: Event) -> None:
+        new_state = event.data.get("new_state")
+        # The sample's own timestamp, not "now": it is what the duration in
+        # the summary is measured with, and the two can differ noticeably
+        # when HA is busy or has just started up.
+        when = self._now()
+        if new_state is not None and new_state.last_updated is not None:
+            when = new_state.last_updated.timestamp()
+        was_charging = self._tracker.in_progress
+        changed = self._tracker.feed(
+            new_state.state if new_state is not None else None,
+            when,
+            self.coordinator.battery_capacity_wh(self._bike_id),
+        )
+        # Rearm regardless of whether this sample moved anything: a charge
+        # normally ends by the SoC simply stopping, with no final sample to
+        # detect it from, so the timer is what actually closes most sessions.
+        self._cancel_idle_timer()
+        if self._tracker.in_progress:
+            self._cancel_idle = async_call_later(
+                self.hass, IDLE_TIMEOUT_S + 1, self._on_idle_timeout
+            )
+        # Also write when a charge merely started or stopped: the state
+        # itself only changes when a session COMPLETES, but `in_progress` is
+        # an attribute users watch to see that charging is happening at all,
+        # and it would otherwise sit stale until the next unrelated write.
+        if changed or self._tracker.in_progress != was_charging:
+            self.async_write_ha_state()
+
+    @callback
+    def _on_idle_timeout(self, _now: Any) -> None:
+        self._cancel_idle = None
+        was_charging = self._tracker.in_progress
+        if self._tracker.check_timeout(self._now()) or (
+            self._tracker.in_progress != was_charging
+        ):
+            # The second case is a session that timed out without producing a
+            # summary (too small to publish): nothing about the state
+            # changed, but in_progress went false and has to be written.
+            self.async_write_ha_state()
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        # Safety net: a session left open because the timer never fired (HA
+        # suspended, the callback lost) is closed on the next poll at the
+        # latest, instead of blocking every later charge from starting.
+        self._tracker.check_timeout(self._now())
+        super()._handle_coordinator_update()
+
+    @property
+    def available(self) -> bool:
+        """Always available - this sensor does not depend on the cloud.
+
+        The default CoordinatorEntity behaviour would mark it unavailable
+        whenever a cloud poll fails, which says nothing about a value
+        derived purely from the live SoC entity. Worse, an unavailable
+        entity restores as "unavailable" with no attributes, so a cloud
+        outage that happened to span a Home Assistant restart would destroy
+        the last charge summary outright.
+        """
+        return True
+
+    @property
+    def native_value(self) -> float | None:
+        summary = self._tracker.summary
+        return summary.get("energy_wh") if summary else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        summary = self._tracker.summary
+        attrs: dict[str, Any] = {
+            "soc_source": self._soc_entity_id,
+            "in_progress": self._tracker.in_progress,
+        }
+        if summary:
+            attrs.update(summary)
+            attrs["started_at"] = iso_or_none(summary.get("started_at"))
+            attrs["ended_at"] = iso_or_none(summary.get("ended_at"))
         return attrs
 
 

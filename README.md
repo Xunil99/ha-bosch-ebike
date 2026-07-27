@@ -31,7 +31,7 @@
 
 ## Deutsch
 
-<a name="de-inhalt"></a>**Inhalt:** [Beschreibung](#de-beschreibung) · [eBike System 2 (BES2)](#de-bes2) · [Funktionen](#de-funktionen) · [Setup-Anleitung](#de-setup) · [Mehrere Bikes/Konten](#de-mehrere-bikes) · [Karten & Cards](#de-pois) · [Wartung](#de-wartung) · [Reichweiten-Schätzung](#de-reichweite) · [Fehlerbehebung](#de-fehlerbehebung) · [Verfügbare Sensoren](#de-sensoren)
+<a name="de-inhalt"></a>**Inhalt:** [Beschreibung](#de-beschreibung) · [eBike System 2 (BES2)](#de-bes2) · [Funktionen](#de-funktionen) · [Setup-Anleitung](#de-setup) · [Mehrere Bikes/Konten](#de-mehrere-bikes) · [Karten & Cards](#de-pois) · [Laden](#de-laden) · [Wartung](#de-wartung) · [Reichweiten-Schätzung](#de-reichweite) · [Fehlerbehebung](#de-fehlerbehebung) · [Verfügbare Sensoren](#de-sensoren)
 
 <a name="de-beschreibung"></a>
 
@@ -316,6 +316,33 @@ Beide Karten zeigen dann immer Touren des jeweils gelockten Kontos und können m
 
 Erkennt Bosch bei einer Tour einen Trick (automatische Erkennung seit Flow-App 1.34), zeigt die Karte einen kleinen grünen Punkt neben dem Tourennamen und zusätzliche Kacheln in der Statistik-Übersicht, z. B. "1×" mit Beschriftung "Jump". Ein Hover über die Kachel zeigt maximale Weite, Dauer und Höhe (bei Sprüngen) bzw. Winkel (bei Manual/Stoppie/Wheelie). Ohne Trick auf der Tour erscheint weder Punkt noch Kachel.
 
+**Trick-Sensoren (ab v1.19.36):** Für Räder, deren Touren tatsächlich Trick-Daten liefern, entstehen zusätzlich fünf Sensoren zur letzten Fahrt: `Letzte Fahrt: Sprünge`, `Letzte Fahrt: Manuals`, `Letzte Fahrt: Stoppies`, `Letzte Fahrt: Wheelies` (Zustand = Anzahl) und `Letzte Fahrt: Max. Sprunghöhe` in Metern, damit sich die Sprunghöhe über die Zeit auftragen lässt. Die vier Zähl-Sensoren führen maximale Weite, Dauer und Höhe bzw. Winkel als Attribute mit.
+
+Meldet dein Rad überhaupt keine Trick-Daten, werden die Sensoren gar nicht erst angelegt — statt dauerhaft „unbekannt" anzuzeigen. Fängt Bosch später damit an, erscheinen sie nach einem Neuladen der Integration. Ein Zähler von `0` heißt „auf dieser Fahrt kein Trick", `unbekannt` heißt „dafür liefert Bosch nichts" — das ist bewusst unterschieden.
+
+<a name="de-laden"></a>
+
+### Ladevorgangs-Zusammenfassung
+
+Die Bosch-Cloud kennt „Laden" gar nicht — sie meldet nur den Ladestand zum Zeitpunkt der letzten Synchronisierung. Wer die [ESPHome-LDI-Bridge](https://github.com/Xunil99/ha-bosch-ebike/tree/main/esphome) betreibt, hat aber einen **Live-Ladestand**, und daraus lässt sich der komplette Ladevorgang rekonstruieren.
+
+Ist in den Optionen ein Live-SoC-Sensor für ein Rad hinterlegt, entsteht dafür der Sensor **`Letzte Ladung: Energie`** (Wh). Sein Zustand ist die im letzten abgeschlossenen Ladevorgang zugeführte Energie, berechnet aus dem Ladestand-Zuwachs und der eingestellten Akkukapazität. Als Attribute stehen zur Verfügung:
+
+| Attribut | Inhalt |
+|---|---|
+| `start_soc`, `end_soc`, `soc_delta` | Ladestand am Anfang und Ende sowie die Differenz (%) |
+| `energy_wh` | Zugeführte Energie in Wh (`null`, wenn keine Kapazität bekannt ist) |
+| `duration_min` | Dauer des Ladevorgangs in Minuten |
+| `started_at`, `ended_at` | Beginn und Ende als ISO-8601-Zeitstempel |
+| `signal_gaps` | Wie oft der Live-Sensor während des Ladens ausgefallen ist |
+| `in_progress` | `true`, solange gerade geladen wird |
+
+**Warum das robust gegen Verbindungsabbrüche ist:** Eine BLE-Bridge verliert das Rad zwischendurch — das ist der Normalfall, nicht die Ausnahme (siehe Issue #68). Ein Ausfall des Sensors beendet einen Ladevorgang deshalb **nie**; er wird nur in `signal_gaps` mitgezählt. Sonst würde jedes kurze Wegrollen aus der Funkreichweite als abgeschlossene Ladung von 20 % gemeldet.
+
+Ein Ladevorgang gilt als beendet, wenn der Ladestand entweder um mindestens 1 % fällt (Rad wird wieder gefahren) oder 30 Minuten lang nicht mehr steigt (Ladegerät fertig oder abgezogen). Gemeldet wird immer der **Höchststand**, nicht der letzte Messwert — ein Akku, der 100 % erreicht und danach durch Selbstentladung auf 99 % rutscht, wurde auf 100 % geladen. Aufladungen unter 3 % werden gar nicht erst veröffentlicht, damit das kurze Nachladen im Flur nicht die echte Ladung von letzter Nacht überschreibt.
+
+Der Sensor überlebt einen Neustart von Home Assistant: die letzte abgeschlossene Ladung wird wiederhergestellt. Ein zum Neustart-Zeitpunkt *laufender* Ladevorgang wird bewusst nicht rekonstruiert. Funktioniert auch mit eBike System 2, da ausschließlich das Live-Signal ausgewertet wird.
+
 <a name="de-pois"></a>
 
 ### POIs entlang der Route
@@ -364,9 +391,27 @@ Neben dem von Bosch gelieferten Service-Termin (`Next Service Date`/`Next Servic
 
 Damit kann man z. B. eine Push-Mitteilung oder eine Beleuchtungs-Erinnerung bauen.
 
+**Event bei neuer Fahrt (ab v1.19.36):** Sobald eine abgeschlossene Tour zum ersten Mal in einer Abfrage auftaucht, wird `ha_bosch_ebike_new_activity` ausgelöst — genau einmal pro Fahrt. Beim ersten Einrichten der Integration passiert das bewusst **nicht** für die bereits vorhandene Historie, eine neue Automation wird also nicht von hunderten Alt-Fahrten überflutet.
+
+Die Nutzdaten sind flach und bereits in den Einheiten der Sensoren, ein Template muss also nicht rechnen:
+
+| Feld | Einheit | Inhalt |
+|---|---|---|
+| `bike_id` | - | Rad, dem die Fahrt zugeordnet wurde (kann bei Mehr-Rad-Konten `null` sein) |
+| `activity_id`, `title`, `start_time` | - | Kennung, Name und Startzeitpunkt der Tour |
+| `distance_km` | km | Strecke |
+| `duration_min` | min | Fahrzeit ohne Pausen |
+| `average_speed`, `max_speed` | km/h | Durchschnitts- und Höchstgeschwindigkeit |
+| `elevation_gain` | m | Höhenmeter aufwärts |
+| `calories` | kcal | Verbrannte Kalorien |
+| `has_tricks` | - | `true`, wenn Bosch für die Tour Trick-Check-Daten liefert |
+| `tricks` | - | Die vollständigen Trick-Check-Werte (siehe oben), sonst `null` |
+
+Jedes Feld kann `null` sein, wenn Bosch es für die Tour nicht liefert. Wichtig: Bosch veröffentlicht eine Tour erst, wenn die App sie hochgeladen hat — das Event kommt also an, wenn die Fahrt in der Cloud ankommt, nicht in dem Moment, in dem du absteigst.
+
 #### 🆕 Fertige Blueprints (ab v1.19.31)
 
-Für die gängigsten Benachrichtigungen liegen im Repo unter [`blueprints/automation/ha_bosch_ebike/`](blueprints/automation/ha_bosch_ebike/) vier fertige Automations-Blueprints. Button klicken öffnet direkt den Import-Dialog in deiner eigenen Home-Assistant-Instanz (setzt eine verknüpfte "My Home Assistant"-Instanz voraus); alternativ die Raw-URL der jeweiligen Datei manuell unter **Einstellungen → Automatisierungen → Blueprints → Blueprint importieren** einfügen.
+Für die gängigsten Benachrichtigungen liegen im Repo unter [`blueprints/automation/ha_bosch_ebike/`](blueprints/automation/ha_bosch_ebike/) fünf fertige Automations-Blueprints. Button klicken öffnet direkt den Import-Dialog in deiner eigenen Home-Assistant-Instanz (setzt eine verknüpfte "My Home Assistant"-Instanz voraus); alternativ die Raw-URL der jeweiligen Datei manuell unter **Einstellungen → Automatisierungen → Blueprints → Blueprint importieren** einfügen.
 
 | Blueprint | Reagiert auf | Import |
 |---|---|---|
@@ -374,6 +419,7 @@ Für die gängigsten Benachrichtigungen liegen im Repo unter [`blueprints/automa
 | `maintenance_reminder.yaml` | `ha_bosch_ebike_maintenance_due_soon` / `_maintenance_overdue` | [![Blueprint importieren](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fraw.githubusercontent.com%2FXunil99%2Fha-bosch-ebike%2Fmain%2Fblueprints%2Fautomation%2Fha_bosch_ebike%2Fmaintenance_reminder.yaml) |
 | `theft_alert.yaml` | `Theft Reported`-Sensor (Zustand „ein") | [![Blueprint importieren](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fraw.githubusercontent.com%2FXunil99%2Fha-bosch-ebike%2Fmain%2Fblueprints%2Fautomation%2Fha_bosch_ebike%2Ftheft_alert.yaml) |
 | `software_update_available.yaml` | `Software Update Available`-Sensor (Zustand „ein") | [![Blueprint importieren](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fraw.githubusercontent.com%2FXunil99%2Fha-bosch-ebike%2Fmain%2Fblueprints%2Fautomation%2Fha_bosch_ebike%2Fsoftware_update_available.yaml) |
+| `new_activity.yaml` | `ha_bosch_ebike_new_activity` | [![Blueprint importieren](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fraw.githubusercontent.com%2FXunil99%2Fha-bosch-ebike%2Fmain%2Fblueprints%2Fautomation%2Fha_bosch_ebike%2Fnew_activity.yaml) |
 
 Jeder Blueprint erwartet nur eine Benachrichtigungs-Aktion deiner Wahl (z. B. eine Mobile-App-Push-Nachricht) als Eingabe und liefert bereits einen fertig formulierten Text mit; die beiden zustandsbasierten Blueprints fragen zusätzlich nach dem/den zu überwachenden Sensor(en).
 
@@ -663,6 +709,7 @@ Auf der Lovelace-Karte gibt es einen 📚-Toggle in den Karten-Steuerelementen. 
 | Next Service Odometer | km | Nächster Service-Kilometerstand |
 | Estimated Range (Full Battery) | km | Geschätzte Reichweite mit vollem Akku (aus Ø-Verbrauch, Schätzung!) |
 | Estimated Range (Current) | km | Geschätzte Restreichweite (Live-SoC nötig, Schätzung!) |
+| Last Charge Energy | Wh | Energie des letzten Ladevorgangs (Live-SoC nötig) |
 
 #### Batterie-Sensoren (pro Batterie)
 | Sensor | Einheit | Beschreibung |
@@ -766,7 +813,7 @@ Zusätzlich zu den Data-Act-Entitäten oben nutzt die Integration ab dieser Vers
 
 > **⚠️ Upgrade note (since v1.17.6):** The integration folder is now `ha_bosch_ebike` (was `bosch_ebike`). Your setup, devices and settings stay unchanged. If **both** folders exist in `config/custom_components/` after the HACS update, delete the old `bosch_ebike` once and restart Home Assistant.
 
-<a name="en-inhalt"></a>**Contents:** [Description](#en-description) · [eBike System 2 (BES2)](#en-bes2) · [Features](#en-features) · [Setup Guide](#en-setup) · [Multiple bikes/accounts](#en-multiple-bikes) · [Cards](#en-pois) · [Maintenance](#en-maintenance) · [Range estimation](#en-range) · [Troubleshooting](#en-troubleshooting) · [Available Sensors](#en-sensors)
+<a name="en-inhalt"></a>**Contents:** [Description](#en-description) · [eBike System 2 (BES2)](#en-bes2) · [Features](#en-features) · [Setup Guide](#en-setup) · [Multiple bikes/accounts](#en-multiple-bikes) · [Cards](#en-pois) · [Charging](#en-charging) · [Maintenance](#en-maintenance) · [Range estimation](#en-range) · [Troubleshooting](#en-troubleshooting) · [Available Sensors](#en-sensors)
 
 <a name="en-description"></a>
 
@@ -1049,6 +1096,33 @@ Both cards then always show rides of their locked account and can be navigated i
 
 When Bosch detects a trick on a ride (automatic detection since Flow app 1.34), the card shows a small green dot next to the ride title, plus extra tiles in the stats overview, e.g. "1×" labeled "Jump". Hovering a tile shows the maximum distance, duration, and height (jumps) or angle (manual/stoppie/wheelie). Rides without a trick show neither the dot nor a tile.
 
+**Trick sensors (from v1.19.36):** bikes whose rides actually carry trick data also get five sensors for the latest ride: `Last Ride Jumps`, `Last Ride Manuals`, `Last Ride Stoppies`, `Last Ride Wheelies` (state = the count) and `Last Ride Max Jump Height` in metres, so jump height can be plotted over time. The four count sensors carry the maximum distance, duration and height or angle as attributes.
+
+If your bike reports no trick data at all, the sensors are not created in the first place, rather than sitting at "unknown" forever. If Bosch starts reporting it later, they appear after a reload of the integration. A count of `0` means "no trick on this ride", `unknown` means "Bosch reports nothing here" - the two are deliberately kept apart.
+
+<a name="en-charging"></a>
+
+### Charge session summary
+
+The Bosch cloud has no notion of charging at all - it only reports the state of charge as of the last sync. Anyone running the [ESPHome LDI bridge](https://github.com/Xunil99/ha-bosch-ebike/tree/main/esphome) does have a **live state of charge**, and that is enough to reconstruct the whole charge.
+
+When a live SoC sensor is configured for a bike in the options, it gets a **`Last Charge Energy`** sensor (Wh). Its state is the energy that went into the last completed charge, derived from the rise in state of charge and the configured battery capacity. Available as attributes:
+
+| Attribute | Content |
+|---|---|
+| `start_soc`, `end_soc`, `soc_delta` | State of charge at the start and end, and the difference (%) |
+| `energy_wh` | Energy added, in Wh (`null` when no capacity is known) |
+| `duration_min` | Duration of the charge in minutes |
+| `started_at`, `ended_at` | Start and end as ISO 8601 timestamps |
+| `signal_gaps` | How often the live sensor dropped out during the charge |
+| `in_progress` | `true` while a charge is running |
+
+**Why this survives dropouts:** a BLE bridge loses the bike from time to time - that is the normal case, not the exception (see issue #68). A dropout therefore **never** ends a charge; it is only counted in `signal_gaps`. Otherwise every brief roll out of radio range would be reported as a completed 20% charge.
+
+A charge is considered finished when the state of charge either drops by at least 1% (the bike is being ridden again) or stops rising for 30 minutes (charger done or unplugged). What gets reported is always the **peak**, not the last reading - a battery that reaches 100% and then slips to 99% through self-discharge was charged to 100%. Charges below 3% are not published at all, so topping up in the hallway does not overwrite last night's real charge.
+
+The sensor survives a Home Assistant restart: the last completed charge is restored. A charge that was *in progress* at restart is deliberately not reconstructed. Works with eBike System 2 too, since only the live signal is used.
+
 <a name="en-pois"></a>
 
 ### POIs along the route
@@ -1097,9 +1171,27 @@ Beyond the official Bosch service info (`Next Service Date` / `Next Service Odom
 
 You can wire these up to push notifications, light reminders, etc.
 
+**New-ride event (from v1.19.36):** the first time a finished ride shows up in a poll, `ha_bosch_ebike_new_activity` fires - exactly once per ride. Rides that already existed when you set the integration up deliberately do **not** fire it, so a new automation will not be flooded by hundreds of historic rides.
+
+The payload is flat and already in the units the sensors use, so a template does not have to do any arithmetic:
+
+| Field | Unit | Content |
+|---|---|---|
+| `bike_id` | - | The bike the ride was attributed to (can be `null` on multi-bike accounts) |
+| `activity_id`, `title`, `start_time` | - | Identifier, name and start time of the ride |
+| `distance_km` | km | Distance |
+| `duration_min` | min | Riding time without stops |
+| `average_speed`, `max_speed` | km/h | Average and top speed |
+| `elevation_gain` | m | Elevation gained |
+| `calories` | kcal | Calories burned |
+| `has_tricks` | - | `true` when Bosch reports Trick Check data for the ride |
+| `tricks` | - | The full Trick Check figures (see above), otherwise `null` |
+
+Any field can be `null` when Bosch does not report it for that ride. Note that Bosch only publishes a ride once the app has uploaded it, so the event arrives when the ride reaches the cloud, not the moment you stop pedalling.
+
 #### 🆕 Ready-made blueprints (from v1.19.31)
 
-For the most common notifications, the repo ships four ready-made automation blueprints under [`blueprints/automation/ha_bosch_ebike/`](blueprints/automation/ha_bosch_ebike/). Clicking the button opens the import dialog directly in your own Home Assistant instance (requires a linked "My Home Assistant" instance); alternatively, paste the raw URL of the file manually under **Settings → Automations → Blueprints → Import Blueprint**.
+For the most common notifications, the repo ships five ready-made automation blueprints under [`blueprints/automation/ha_bosch_ebike/`](blueprints/automation/ha_bosch_ebike/). Clicking the button opens the import dialog directly in your own Home Assistant instance (requires a linked "My Home Assistant" instance); alternatively, paste the raw URL of the file manually under **Settings → Automations → Blueprints → Import Blueprint**.
 
 | Blueprint | Reacts to | Import |
 |---|---|---|
@@ -1107,6 +1199,7 @@ For the most common notifications, the repo ships four ready-made automation blu
 | `maintenance_reminder.yaml` | `ha_bosch_ebike_maintenance_due_soon` / `_maintenance_overdue` | [![Import Blueprint](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fraw.githubusercontent.com%2FXunil99%2Fha-bosch-ebike%2Fmain%2Fblueprints%2Fautomation%2Fha_bosch_ebike%2Fmaintenance_reminder.yaml) |
 | `theft_alert.yaml` | `Theft Reported` sensor turning "on" | [![Import Blueprint](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fraw.githubusercontent.com%2FXunil99%2Fha-bosch-ebike%2Fmain%2Fblueprints%2Fautomation%2Fha_bosch_ebike%2Ftheft_alert.yaml) |
 | `software_update_available.yaml` | `Software Update Available` sensor turning "on" | [![Import Blueprint](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fraw.githubusercontent.com%2FXunil99%2Fha-bosch-ebike%2Fmain%2Fblueprints%2Fautomation%2Fha_bosch_ebike%2Fsoftware_update_available.yaml) |
+| `new_activity.yaml` | `ha_bosch_ebike_new_activity` | [![Import Blueprint](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fraw.githubusercontent.com%2FXunil99%2Fha-bosch-ebike%2Fmain%2Fblueprints%2Fautomation%2Fha_bosch_ebike%2Fnew_activity.yaml) |
 
 Each blueprint only needs a notification action of your choice as input (e.g. a mobile app push action) and comes with a ready-made message text; the two state-based blueprints additionally ask which sensor(s) to watch.
 
@@ -1397,6 +1490,7 @@ The Lovelace card has a 📚 toggle in the map controls. When enabled, the card 
 | Next Service Odometer | km | Next service due at odometer reading |
 | Estimated Range (Full Battery) | km | Estimated range on a full battery (from avg consumption, estimate!) |
 | Estimated Range (Current) | km | Estimated remaining range (live SoC required, estimate!) |
+| Last Charge Energy | Wh | Energy of the last charge session (live SoC required) |
 
 #### Battery Sensors (per battery)
 | Sensor | Unit | Description |

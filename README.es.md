@@ -282,6 +282,24 @@ Además del mantenimiento proporcionado por Bosch (`Next Service Date`/`Next Ser
 
 Con ello puedes crear, p. ej., una notificación push o un recordatorio luminoso.
 
+**Evento de recorrido nuevo (desde la v1.19.36):** la primera vez que un recorrido finalizado aparece en un sondeo se lanza `ha_bosch_ebike_new_activity`, exactamente una vez por recorrido. Los recorridos que ya existían al configurar la integración **no** lo lanzan, a propósito, para que una automatización nueva no se vea inundada por cientos de recorridos antiguos.
+
+El payload es plano y viene ya en las unidades que usan los sensores, de modo que una plantilla no tiene que hacer ningún cálculo:
+
+| Campo | Unidad | Contenido |
+|---|---|---|
+| `bike_id` | - | La bici a la que se atribuyó el recorrido (puede ser `null` en cuentas con varias bicis) |
+| `activity_id`, `title`, `start_time` | - | Identificador, nombre y hora de inicio del recorrido |
+| `distance_km` | km | Distancia |
+| `duration_min` | min | Tiempo de conducción sin paradas |
+| `average_speed`, `max_speed` | km/h | Velocidad media y máxima |
+| `elevation_gain` | m | Desnivel acumulado de subida |
+| `calories` | kcal | Calorías consumidas |
+| `has_tricks` | - | `true` si Bosch proporciona datos de Trick Check para el recorrido |
+| `tricks` | - | Los valores completos de Trick Check; si no, `null` |
+
+Cualquier campo puede ser `null` si Bosch no lo proporciona para ese recorrido. Ten en cuenta que Bosch solo publica un recorrido una vez que la app lo ha subido, así que el evento llega cuando el recorrido llega a la nube, no en el momento en que dejas de pedalear.
+
 ### Estimación de autonomía
 
 Por cada bici hay dos sensores que **estiman** la autonomía — a partir de
@@ -303,6 +321,27 @@ de historial de recorridos):
 > atributos del sensor (`wh_per_km`, `tours_used`, `window_km`). Mientras
 > haya menos de 3 recorridos o 30 km de datos de consumo, los sensores
 > permanecen vacíos.
+
+### Resumen del proceso de carga
+
+La nube de Bosch no conoce siquiera el concepto de "cargar": solo informa del nivel de batería en el momento de la última sincronización. Sin embargo, quien utiliza el [puente LDI de ESPHome](https://github.com/Xunil99/ha-bosch-ebike/tree/main/esphome) dispone de un **nivel de batería en vivo**, y con eso se puede reconstruir el proceso de carga completo.
+
+Si en las opciones hay un sensor de SoC en vivo vinculado a una bici, para ella se crea el sensor **`Last Charge Energy`** (Wh). Su valor es la energía suministrada en el último proceso de carga completado, calculada a partir del aumento del nivel de batería y de la capacidad de batería configurada. Como atributos están disponibles:
+
+| Atributo | Contenido |
+|---|---|
+| `start_soc`, `end_soc`, `soc_delta` | Nivel de batería al principio y al final, así como la diferencia (%) |
+| `energy_wh` | Energía suministrada en Wh (`null` si no se conoce ninguna capacidad) |
+| `duration_min` | Duración del proceso de carga en minutos |
+| `started_at`, `ended_at` | Inicio y fin como marcas de tiempo ISO 8601 |
+| `signal_gaps` | Cuántas veces falló el sensor en vivo durante la carga |
+| `in_progress` | `true` mientras se está cargando |
+
+**Por qué esto resiste los cortes de conexión:** un puente BLE pierde la bici de vez en cuando; ese es el caso normal, no la excepción (véase el issue #68). Por eso, un corte **nunca** da por terminado un proceso de carga; solo se contabiliza en `signal_gaps`. De lo contrario, cada breve salida del alcance de radio se notificaría como una carga completada del 20 %.
+
+Un proceso de carga se considera terminado cuando el nivel de batería baja al menos un 1 % (se vuelve a rodar con la bici) o deja de subir durante 30 minutos (cargador terminado o desenchufado). Siempre se notifica el **valor máximo**, no la última medición: una batería que alcanza el 100 % y después cae al 99 % por autodescarga se cargó al 100 %. Las cargas por debajo del 3 % ni siquiera se publican, para que una recarga breve en el pasillo no sobrescriba la carga real de la noche anterior.
+
+El sensor sobrevive a un reinicio de Home Assistant: la última carga completada se restaura. Un proceso de carga *en curso* en el momento del reinicio no se reconstruye, a propósito. Funciona también con eBike System 2, ya que solo se evalúa la señal en vivo.
 
 ### Tarjeta planificador de rutas (BRouter)
 
@@ -523,6 +562,7 @@ En la tarjeta Lovelace hay un interruptor 📚 en los controles del mapa. Si est
 | Next Service Odometer | km | Kilometraje del próximo mantenimiento |
 | Estimated Range (Full Battery) | km | Autonomía estimada con batería llena (a partir del consumo medio, ¡estimación!) |
 | Estimated Range (Current) | km | Autonomía restante estimada (SoC en vivo necesario, ¡estimación!) |
+| Last Charge Energy | Wh | Energía del último proceso de carga (SoC en vivo necesario) |
 
 #### Sensores de batería (por batería)
 | Sensor | Unidad | Descripción |
