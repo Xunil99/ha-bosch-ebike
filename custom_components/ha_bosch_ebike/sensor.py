@@ -555,10 +555,16 @@ GPS_COORDINATE_SENSORS: tuple[BoschBikeSensorDescription, ...] = (
 # bike carries `_bes2_statistics` (i.e. eBike System 2); the value resolves
 # live from coordinator.data. Smart System bikes never get these.
 BES2_STATISTICS_SENSORS: tuple[BoschBikeSensorDescription, ...] = (
+    # Same key - and therefore the same entity id - as the AGGREGATE_SENSORS
+    # entry that is skipped for BES2, so it has to be presented the same way
+    # too: the shipped card and the blueprints must not care which system
+    # produced the value.
     BoschBikeSensorDescription(
         key="total_elevation_gain",
+        translation_key="total_elevation_gain",
         name="Total Elevation Gain",
         native_unit_of_measurement=UnitOfLength.METERS,
+        state_class=SensorStateClass.TOTAL_INCREASING,
         icon="mdi:elevation-rise",
         value_fn=lambda d: _safe_get(d, "_bes2_statistics", "total_elevation_gain_m"),
     ),

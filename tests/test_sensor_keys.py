@@ -71,13 +71,26 @@ def _description_tuples() -> dict[str, list[dict]]:
             assert isinstance(element, ast.Call), (
                 f"{target} holds something other than a description call"
             )
-            fields = {
+            # Literal values for the flags this test branches on, and the
+            # unparsed source of every argument for the ones it only compares
+            # (native_unit_of_measurement=UnitOfLength.METERS and friends are
+            # attribute lookups, not constants).
+            consts = {
                 kw.arg: kw.value.value
                 for kw in element.keywords
                 if isinstance(kw.value, ast.Constant)
             }
-            assert "key" in fields, f"a description in {target} has no literal key="
-            descriptions.append({"key": fields["key"], "bes2": fields.get("bes2", True)})
+            fields = {
+                kw.arg: ast.unparse(kw.value)
+                for kw in element.keywords
+                if kw.arg is not None
+            }
+            assert "key" in consts, f"a description in {target} has no literal key="
+            descriptions.append({
+                "key": consts["key"],
+                "bes2": consts.get("bes2", True),
+                "fields": fields,
+            })
         found[target] = descriptions
     return found
 
@@ -137,6 +150,45 @@ def test_keys_unique_per_system() -> None:
                     f"<bike>_{key} and Home Assistant drops one of them"
                 )
                 seen[key] = name
+
+
+def test_shared_keys_are_presented_identically() -> None:
+    """One key means one entity_id, whichever system the user is on.
+
+    The dashboard card and the blueprints address these entities by id, so a
+    key that exists twice has to describe the same thing both times - same
+    unit, same state_class, same translated name. Everything else (name as a
+    fallback, value_fn, the gating flags) is free to differ.
+    """
+    fields_that_must_match = (
+        "translation_key",
+        "native_unit_of_measurement",
+        "device_class",
+        "state_class",
+        "suggested_display_precision",
+        "icon",
+        "entity_category",
+    )
+    by_key: dict[str, list[tuple[str, dict]]] = {}
+    for name, descriptions in TUPLES.items():
+        for description in descriptions:
+            by_key.setdefault(description["key"], []).append((name, description))
+
+    for key, entries in sorted(by_key.items()):
+        if len(entries) < 2:
+            continue
+        (first_name, first), *rest = entries
+        for other_name, other in rest:
+            for field in fields_that_must_match:
+                mine = first["fields"].get(field)
+                theirs = other["fields"].get(field)
+                assert mine == theirs, (
+                    f"key={key!r} is defined in both {first_name} and "
+                    f"{other_name}, but they disagree on {field}: "
+                    f"{mine!r} vs {theirs!r}. Both end up on entity id "
+                    f"sensor.<bike>_{key}, so a card or blueprint written "
+                    "against one system would break on the other."
+                )
 
 
 def test_bes2_flag_is_honoured_by_its_loop() -> None:
