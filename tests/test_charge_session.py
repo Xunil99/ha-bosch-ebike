@@ -257,6 +257,105 @@ def test_check_timeout_is_safe_when_idle():
     assert t.check_timeout(10**9) is False
 
 
+def test_total_energy_accumulates_only_published_sessions():
+    t = Tracker()
+    assert t.total_energy_wh == 0.0
+    t.seed(20, 0.0)
+    t.feed(25, 5 * MIN, capacity_wh=750)
+    t.feed(60, 60 * MIN, capacity_wh=750)      # 20 -> 60 = 40% of 750 = 300 Wh
+    t.check_timeout(60 * MIN + IDLE_TIMEOUT_S)
+    assert t.total_energy_wh == 300.0
+
+    # A second real charge adds on top; it never resets.
+    t.feed(65, 600 * MIN, capacity_wh=750)
+    t.feed(95, 700 * MIN, capacity_wh=750)     # 60 -> 95 = 35% of 750 = 262.5 Wh
+    t.check_timeout(700 * MIN + IDLE_TIMEOUT_S)
+    assert t.total_energy_wh == 562.5
+
+    # A sub-threshold top-up is discarded, so it must not creep into the
+    # total either - otherwise the discarded sessions would still show up
+    # on the Energy Dashboard, just without ever being reported as charges.
+    before = t.total_energy_wh
+    t.feed(97, 1200 * MIN, capacity_wh=750)
+    t.check_timeout(1200 * MIN + IDLE_TIMEOUT_S)
+    assert t.total_energy_wh == before
+
+
+def test_total_energy_ignores_sessions_without_capacity():
+    # No capacity means no Wh figure at all. Contributing a guess here
+    # would put invented energy into a dashboard people read as measured.
+    t = Tracker()
+    t.seed(10, 0.0)
+    t.feed(60, 5 * MIN, capacity_wh=None)
+    t.check_timeout(5 * MIN + IDLE_TIMEOUT_S)
+    assert t.summary["soc_delta"] == 50
+    assert t.summary["energy_wh"] is None
+    assert t.total_energy_wh == 0.0
+
+
+def test_total_energy_is_monotonic_across_restore():
+    t = Tracker()
+    t.restore_total_energy(1234.5)
+    assert t.total_energy_wh == 1234.5
+    t.seed(50, 0.0)
+    t.feed(55, 5 * MIN, capacity_wh=500)
+    t.feed(90, 60 * MIN, capacity_wh=500)      # 50 -> 90 = 40% of 500 = 200 Wh
+    t.check_timeout(60 * MIN + IDLE_TIMEOUT_S)
+    assert t.total_energy_wh == 1434.5
+
+    # Junk or a backwards value from a corrupted restored state must not be
+    # adopted: a TOTAL_INCREASING sensor reads a drop as a meter reset.
+    for junk in (None, "", "abc", -1, float("nan"), float("inf"), [5]):
+        t2 = Tracker()
+        t2.restore_total_energy(500.0)
+        t2.restore_total_energy(junk)
+        assert t2.total_energy_wh == 500.0, junk
+
+
+def test_restore_total_adopts_valid_values_on_a_fresh_tracker():
+    # The entity restores via RestoreSensor.async_get_last_sensor_data(),
+    # which hands back the NATIVE value - a float, or None. It deliberately
+    # does NOT read the entity state string: a user who switches the unit to
+    # kWh (the natural unit in the Energy Dashboard this sensor exists for)
+    # would make that string kWh, and reading it back as Wh would divide the
+    # meter by 1000 on every restart. See BoschChargedEnergySensor.
+    #
+    # A fresh tracker, matching the one real call site: restore_total_energy
+    # runs exactly once, in async_added_to_hass, against a tracker that has
+    # just been created and is still at 0.0.
+    assert _fresh_restored(562.5) == 562.5
+    assert _fresh_restored(0) == 0.0
+    # Strings are still covered here because this function must not care
+    # where its argument came from, and because HA stores restore data as
+    # JSON, which can hand back surprises after a version change.
+    assert _fresh_restored("562.5") == 562.5
+
+
+def test_restore_total_rejects_garbage_without_lowering_an_existing_total():
+    # Anything not a usable non-negative number must leave the total alone:
+    # for a TOTAL_INCREASING sensor, silently dropping it reads as a meter
+    # reset and takes the accumulated cost out of the Energy Dashboard. Using
+    # a non-zero baseline here (rather than a fresh tracker) is what actually
+    # exercises "leaves it alone" - restoring garbage onto a fresh 0.0 would
+    # pass even if the guard were altogether missing.
+    for junk in (None, "unknown", "unavailable", "", "None", -5, "-5",
+                 float("nan"), float("inf"), [1], {}):
+        assert _restored_onto_baseline(junk) == 99.0, junk
+
+
+def _fresh_restored(raw):
+    t = Tracker()
+    t.restore_total_energy(raw)
+    return t.total_energy_wh
+
+
+def _restored_onto_baseline(raw):
+    t = Tracker()
+    t.restore_total_energy(99.0)
+    t.restore_total_energy(raw)
+    return t.total_energy_wh
+
+
 if __name__ == "__main__":
     for name, fn in sorted(globals().items()):
         if name.startswith("test_") and callable(fn):

@@ -343,6 +343,14 @@ Ein Ladevorgang gilt als beendet, wenn der Ladestand entweder um mindestens 1 % 
 
 Der Sensor überlebt einen Neustart von Home Assistant: die letzte abgeschlossene Ladung wird wiederhergestellt. Ein zum Neustart-Zeitpunkt *laufender* Ladevorgang wird bewusst nicht rekonstruiert. Funktioniert auch mit eBike System 2, da ausschließlich das Live-Signal ausgewertet wird.
 
+#### Im Energie-Dashboard
+
+Zusätzlich entsteht der Sensor **`Total Charged Energy`**, ein fortlaufend steigender Zähler über alle abgeschlossenen Ladungen. Er lässt sich unter **Einstellungen → Dashboards → Energie → Einzelne Geräte** hinzufügen, danach taucht das eBike mit eigenen Kosten neben dem Hausverbrauch auf.
+
+> ⚠️ **Das ist die Energie, die in den Akku geht, nicht die aus der Steckdose.** Sie wird aus dem Ladestand-Zuwachs und der eingestellten Akkukapazität berechnet. Ein Ladegerät verliert grob 10 bis 15 Prozent, der tatsächlich bezahlte Strom liegt also höher. Wer eine messende Zwischensteckdose am Ladegerät hat, sollte **diese** ins Energie-Dashboard eintragen statt dieses Sensors, denn sie misst genau das, was abgerechnet wird.
+
+Der vorhandene Sensor `Wh Lifetime` eignet sich dafür übrigens nicht, obwohl Home Assistant ihn anbietet: er zählt die vom Akku **abgegebene** Energie, also die Fahrleistung, nicht das Laden.
+
 <a name="de-pois"></a>
 
 ### POIs entlang der Route
@@ -628,7 +636,7 @@ target_soc_entity: input_number.ebike_target_soc
 - **Tachostand-Kachel** und optional **Letzte-Tour-Distanz**, **Ladeleistung in Watt**
 - **Geschätzte Restreichweite** als Kachel (`≈ 62 km`) — automatisch, sobald der Sensor „Geschätzte Reichweite (aktuell)“ existiert, oder explizit über `range_entity`. Wie bei den Sensoren eine **Schätzung**.
 - **Status-Pills** für Lade-Zustand und Akku-Prozent. Schläft das Bike (die BLE-Bridge trennt dann die Verbindung und alle SoC-Sensoren werden `unavailable`), zeigt die Pill statt „n/v" den zuletzt bekannten Wert, erkennbar an `~`, ausgegraut und kursiv; der Tooltip nennt das Alter. Einen Cloud-Wert als Ersatz gibt es nicht, Boschs API liefert überhaupt keinen Ladestand
-- **Ziel-SoC-Schieberegler**, der den Wert eines `input_number` setzt
+- **Ziel-SoC-Schieberegler**, der den Wert eines `input_number` oder einer beliebigen `number`-Entität setzt (z. B. das eigene `Charge Limit` der Charge-Limiter-Firmware)
 - **Start- und Stop-Buttons** mit Zwei-Klick-Bestätigung bei Stop (Versehensschutz)
 - **Akku-Balken** unten, der unter 35 % auf Orange und unter 15 % auf Rot wechselt
 - **Wartungs-Liste** mit beliebig vielen frei definierbaren Posten (Kette ölen, Kundendienst, Bremsen prüfen, …):
@@ -710,6 +718,7 @@ Auf der Lovelace-Karte gibt es einen 📚-Toggle in den Karten-Steuerelementen. 
 | Estimated Range (Full Battery) | km | Geschätzte Reichweite mit vollem Akku (aus Ø-Verbrauch, Schätzung!) |
 | Estimated Range (Current) | km | Geschätzte Restreichweite (Live-SoC nötig, Schätzung!) |
 | Last Charge Energy | Wh | Energie des letzten Ladevorgangs (Live-SoC nötig) |
+| Total Charged Energy | Wh | Summe aller Ladungen, für das Energie-Dashboard (Live-SoC nötig) |
 
 #### Batterie-Sensoren (pro Batterie)
 | Sensor | Einheit | Beschreibung |
@@ -1123,6 +1132,14 @@ A charge is considered finished when the state of charge either drops by at leas
 
 The sensor survives a Home Assistant restart: the last completed charge is restored. A charge that was *in progress* at restart is deliberately not reconstructed. Works with eBike System 2 too, since only the live signal is used.
 
+#### In the Energy Dashboard
+
+A second sensor, **`Total Charged Energy`**, is a monotonically increasing meter over all completed charges. Add it under **Settings → Dashboards → Energy → Individual devices** and the eBike appears with its own cost next to the household consumption.
+
+> ⚠️ **This is energy going into the battery, not energy drawn from the wall.** It is derived from the rise in state of charge and the configured battery capacity. A charger loses roughly 10 to 15 percent, so the electricity actually billed is higher. If you have a measuring smart plug on the charger, put **that** into the Energy Dashboard instead of this sensor, because it measures the thing you are billed for.
+
+Note that the existing `Wh Lifetime` sensor is not suitable here, even though Home Assistant offers it: it counts the energy the battery **delivered**, i.e. riding, not charging.
+
 <a name="en-pois"></a>
 
 ### POIs along the route
@@ -1409,7 +1426,7 @@ target_soc_entity: input_number.ebike_target_soc
 - **Odometer tile**, plus optional **last-tour distance** and **charging power in watts**
 - **Estimated remaining range** as a tile (`≈ 62 km`) — automatic as soon as the "Estimated range (current)" sensor exists, or explicitly via `range_entity`. Like the sensors, an **estimate**.
 - **Status pills** for charging state and battery percent. While the bike sleeps (the BLE bridge disconnects and every SoC sensor goes `unavailable`), the pill shows the last known value instead of "n/a", marked with `~`, dimmed and italic, with its age in the tooltip. There is no cloud value to fall back to, Bosch's API exposes no state of charge at all
-- **Target-SoC slider** that writes to an `input_number`
+- **Target-SoC slider** that writes to an `input_number` or any `number` entity (e.g. the Charge Limiter firmware's own `Charge Limit`)
 - **Start and Stop buttons** with a two-click confirm on Stop (accident protection)
 - **Battery bar** at the bottom that turns amber under 35 % and red under 15 %
 - **Maintenance list** with any number of freely defined tasks (clean chain, major service, check brakes, …):
@@ -1491,6 +1508,7 @@ The Lovelace card has a 📚 toggle in the map controls. When enabled, the card 
 | Estimated Range (Full Battery) | km | Estimated range on a full battery (from avg consumption, estimate!) |
 | Estimated Range (Current) | km | Estimated remaining range (live SoC required, estimate!) |
 | Last Charge Energy | Wh | Energy of the last charge session (live SoC required) |
+| Total Charged Energy | Wh | Sum of all charges, for the Energy Dashboard (live SoC required) |
 
 #### Battery Sensors (per battery)
 | Sensor | Unit | Description |

@@ -6275,7 +6275,18 @@ class BoschEBikeDashboardCard extends HTMLElement {
     slider.addEventListener("change", () => {
       const target = this._config.target_soc_entity;
       if (!target || !this._hass) return;
-      this._hass.callService("input_number", "set_value", {
+      // Domain-aware, like _callSwitch(): target_soc_entity is documented as
+      // an input_number helper, but the Charge Limiter firmware this project
+      // ships its own ESPHome "Charge Limit" number entity, i.e. a plain
+      // `number.*` entity, not an `input_number.*` one. Hardcoding the
+      // input_number domain here made the slider visibly move and then
+      // silently snap back for exactly that setup (issue #68): the service
+      // call targeted a domain the configured entity does not belong to, so
+      // it matched nothing, and the next render reasserted the unchanged
+      // real state. Both domains name the service identically ("set_value"),
+      // so deriving it from the entity_id is enough for either.
+      const [domain] = target.split(".");
+      this._hass.callService(domain, "set_value", {
         entity_id: target, value: Number(slider.value),
       }).catch((err) => console.error("[Bosch eBike Dashboard] set_value failed", err));
     });
@@ -7499,8 +7510,11 @@ class BoschEBikeDashboardCardEditor extends HTMLElement {
         ["sensor"]),
       charge_switch_entity: mkEntity("charge_switch_entity", "dash_editor_charge_switch", null,
         ["switch"]),
+      // Both domains work identically here (see the slider's change handler
+      // for why): an input_number helper the user created, or the Charge
+      // Limiter firmware's own native ESPHome "Charge Limit" number entity.
       target_soc_entity: mkEntity("target_soc_entity", "dash_editor_target_soc", "dash_editor_target_soc_hint",
-        ["input_number"]),
+        ["input_number", "number"]),
     };
 
     // --- Reichweite je Fahrmodus (Piles) -------------------------------------

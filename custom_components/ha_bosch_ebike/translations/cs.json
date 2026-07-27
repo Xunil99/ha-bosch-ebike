@@ -143,6 +143,9 @@
       "last_charge_energy": {
         "name": "Poslední nabíjení: Energie"
       },
+      "total_charged_energy": {
+        "name": "Celková nabitá energie"
+      },
       "last_ride_elevation_loss": {
         "name": "Poslední jízda: Převýšení ↓"
       },

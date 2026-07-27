@@ -343,6 +343,14 @@ Un proceso de carga se considera terminado cuando el nivel de batería baja al m
 
 El sensor sobrevive a un reinicio de Home Assistant: la última carga completada se restaura. Un proceso de carga *en curso* en el momento del reinicio no se reconstruye, a propósito. Funciona también con eBike System 2, ya que solo se evalúa la señal en vivo.
 
+#### En el panel de energía
+
+Además se crea el sensor **`Total Charged Energy`**, un contador que solo aumenta y que abarca todos los procesos de carga completados. Puedes añadirlo en **Ajustes → Paneles de control → Energía → Dispositivos individuales**; después el eBike aparece con sus propios costes junto al consumo doméstico.
+
+> ⚠️ **Esta es la energía que entra en la batería, no la que se toma del enchufe de la pared.** Se calcula a partir del aumento del nivel de batería y de la capacidad de batería configurada. Un cargador pierde aproximadamente entre un 10 y un 15 %, así que la electricidad realmente facturada es mayor. Si tienes un enchufe inteligente con medición en el cargador, registra **ese** en el panel de energía en lugar de este sensor, porque mide exactamente lo que se factura.
+
+Por cierto, el sensor ya existente `Wh Lifetime` no sirve para esto, aunque Home Assistant lo ofrezca: cuenta la energía **suministrada** por la batería, es decir, la de rodar, no la de cargar.
+
 ### Tarjeta planificador de rutas (BRouter)
 
 La tarjeta `bosch-ebike-routeplanner-card` planifica rutas en bici
@@ -563,6 +571,7 @@ En la tarjeta Lovelace hay un interruptor 📚 en los controles del mapa. Si est
 | Estimated Range (Full Battery) | km | Autonomía estimada con batería llena (a partir del consumo medio, ¡estimación!) |
 | Estimated Range (Current) | km | Autonomía restante estimada (SoC en vivo necesario, ¡estimación!) |
 | Last Charge Energy | Wh | Energía del último proceso de carga (SoC en vivo necesario) |
+| Total Charged Energy | Wh | Suma de todas las cargas, para el panel de energía (SoC en vivo necesario) |
 
 #### Sensores de batería (por batería)
 | Sensor | Unidad | Descripción |

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import math
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -9,6 +10,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from homeassistant.components.sensor import (
+    RestoreSensor,
     SensorDeviceClass,
     SensorEntity,
     SensorEntityDescription,
@@ -27,16 +29,12 @@ from homeassistant.const import (
 from homeassistant.core import Event, HomeAssistant, callback
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.event import async_call_later, async_track_state_change_event
+from homeassistant.helpers.event import async_track_state_change_event
 from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .charge_session import (
-    IDLE_TIMEOUT_S,
-    SUMMARY_KEYS as CHARGE_SUMMARY_KEYS,
-    ChargeSessionTracker,
-    iso_or_none,
-)
+from .charge_monitor import ChargeSessionMonitor
+from .charge_session import SUMMARY_KEYS as CHARGE_SUMMARY_KEYS, iso_or_none
 from .const import DOMAIN
 from .coordinator import BoschEBikeCoordinator
 from .profile_extra import (
@@ -54,6 +52,8 @@ from .diagnosis_field_data import (
     drive_unit_field_data,
 )
 from .unassigned_activities import ATTRIBUTE_DISPLAY_LIMIT
+
+_LOGGER = logging.getLogger(__name__)
 
 RANGE_DISCLAIMER = (
     "Estimate based on your past consumption over the last ~500 km. "
@@ -884,12 +884,23 @@ async def async_setup_entry(
         # a single account-wide entity, so two bikes never share a value.
         soc_entity = coordinator.live_soc_entity(bike_id)
 
-        # Charge session summary. Outside the BES2 gate below on purpose:
-        # it is derived purely from the live SoC signal, so it works for
-        # eBike System 2 users running the bridge just as well.
+        # Charge session summary plus the running total that feeds Home
+        # Assistant's Energy Dashboard. Outside the BES2 gate below on
+        # purpose: both are derived purely from the live SoC signal, so they
+        # work for eBike System 2 users running the bridge just as well.
+        # One tracker per bike, shared by the pair - see
+        # BoschChargedEnergySensor for which of the two owns it.
         if soc_entity:
+            monitor = ChargeSessionMonitor(hass, coordinator, bike_id, soc_entity)
+            # Tied to the config entry, not to an entity: see charge_monitor.py
+            # for why the subscription must outlive either sensor being
+            # disabled in the entity registry.
+            entry.async_on_unload(monitor.async_start())
             entities.append(
-                BoschChargeSessionSensor(coordinator, bike_id, drive_name, soc_entity)
+                BoschChargeSessionSensor(bike_id, drive_name, monitor)
+            )
+            entities.append(
+                BoschChargedEnergySensor(bike_id, drive_name, monitor)
             )
 
         # Estimated range (clearly labelled estimate, derived from history)
@@ -1934,9 +1945,7 @@ class BoschCurrentRangeSensor(BoschRangeEstimateSensor):
         return attrs
 
 
-class BoschChargeSessionSensor(
-    CoordinatorEntity[BoschEBikeCoordinator], RestoreEntity, SensorEntity
-):
+class BoschChargeSessionSensor(RestoreEntity, SensorEntity):
     """Summary of the last completed charge, derived from the live SoC sensor.
 
     The Bosch cloud has no notion of charging at all - it reports the SoC as
@@ -1946,11 +1955,19 @@ class BoschChargeSessionSensor(
     state machine and for why a dropout of the bridge (issue #68) never ends
     a session.
 
+    A pure reader: ChargeSessionMonitor owns the subscription and feeds the
+    tracker, so disabling this entity does not stop charges from being
+    counted. Deliberately not a CoordinatorEntity either - nothing here comes
+    from the cloud, and a failed poll must not blank the summary. An
+    unavailable entity restores with no attributes, so a cloud outage that
+    happened to span a restart would destroy it outright.
+
     Only created when a live SoC entity is configured for this bike. Works
     for eBike System 2 as well: nothing here touches cloud-only data.
     """
 
     _attr_has_entity_name = True
+    _attr_should_poll = False
     _attr_translation_key = "last_charge_energy"
     _attr_native_unit_of_measurement = UnitOfEnergy.WATT_HOUR
     _attr_state_class = SensorStateClass.MEASUREMENT
@@ -1958,17 +1975,9 @@ class BoschChargeSessionSensor(
     _attr_suggested_display_precision = 0
 
     def __init__(
-        self,
-        coordinator: BoschEBikeCoordinator,
-        bike_id: str,
-        drive_name: str,
-        soc_entity_id: str,
+        self, bike_id: str, drive_name: str, monitor: ChargeSessionMonitor
     ) -> None:
-        super().__init__(coordinator)
-        self._bike_id = bike_id
-        self._soc_entity_id = soc_entity_id
-        self._tracker = ChargeSessionTracker()
-        self._cancel_idle: Callable[[], None] | None = None
+        self._monitor = monitor
         self._attr_unique_id = f"{bike_id}_last_charge_energy"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, bike_id)},
@@ -1982,7 +1991,9 @@ class BoschChargeSessionSensor(
 
         # Bring back the last completed charge, so a restart does not blank
         # out last night's summary. An in-flight charge is deliberately not
-        # restored - see ChargeSessionTracker.restore_summary.
+        # restored - see ChargeSessionTracker.restore_summary. Read from the
+        # ATTRIBUTES, which Home Assistant stores verbatim; the state string
+        # would be unit-converted (see BoschChargedEnergySensor).
         last_state = await self.async_get_last_state()
         if last_state is not None:
             restored = {
@@ -1994,111 +2005,114 @@ class BoschChargeSessionSensor(
             # None when no battery capacity is known, and the percentages
             # are still worth keeping in that case.
             if "soc_delta" in restored:
-                self._tracker.restore_summary(restored)
+                self._monitor.tracker.restore_summary(restored)
 
-        # Baseline, so the first genuine rise after a restart is measured
-        # against a real value instead of being swallowed.
-        state = self.hass.states.get(self._soc_entity_id)
-        self._tracker.seed(
-            state.state if state is not None else None, self._now()
-        )
-
-        self.async_on_remove(
-            async_track_state_change_event(
-                self.hass, [self._soc_entity_id], self._on_soc_change
-            )
-        )
-        self.async_on_remove(self._cancel_idle_timer)
-
-    @staticmethod
-    def _now() -> float:
-        return datetime.now(timezone.utc).timestamp()
-
-    def _cancel_idle_timer(self) -> None:
-        if self._cancel_idle is not None:
-            self._cancel_idle()
-            self._cancel_idle = None
-
-    @callback
-    def _on_soc_change(self, event: Event) -> None:
-        new_state = event.data.get("new_state")
-        # The sample's own timestamp, not "now": it is what the duration in
-        # the summary is measured with, and the two can differ noticeably
-        # when HA is busy or has just started up.
-        when = self._now()
-        if new_state is not None and new_state.last_updated is not None:
-            when = new_state.last_updated.timestamp()
-        was_charging = self._tracker.in_progress
-        changed = self._tracker.feed(
-            new_state.state if new_state is not None else None,
-            when,
-            self.coordinator.battery_capacity_wh(self._bike_id),
-        )
-        # Rearm regardless of whether this sample moved anything: a charge
-        # normally ends by the SoC simply stopping, with no final sample to
-        # detect it from, so the timer is what actually closes most sessions.
-        self._cancel_idle_timer()
-        if self._tracker.in_progress:
-            self._cancel_idle = async_call_later(
-                self.hass, IDLE_TIMEOUT_S + 1, self._on_idle_timeout
-            )
-        # Also write when a charge merely started or stopped: the state
-        # itself only changes when a session COMPLETES, but `in_progress` is
-        # an attribute users watch to see that charging is happening at all,
-        # and it would otherwise sit stale until the next unrelated write.
-        if changed or self._tracker.in_progress != was_charging:
-            self.async_write_ha_state()
-
-    @callback
-    def _on_idle_timeout(self, _now: Any) -> None:
-        self._cancel_idle = None
-        was_charging = self._tracker.in_progress
-        if self._tracker.check_timeout(self._now()) or (
-            self._tracker.in_progress != was_charging
-        ):
-            # The second case is a session that timed out without producing a
-            # summary (too small to publish): nothing about the state
-            # changed, but in_progress went false and has to be written.
-            self.async_write_ha_state()
-
-    @callback
-    def _handle_coordinator_update(self) -> None:
-        # Safety net: a session left open because the timer never fired (HA
-        # suspended, the callback lost) is closed on the next poll at the
-        # latest, instead of blocking every later charge from starting.
-        self._tracker.check_timeout(self._now())
-        super()._handle_coordinator_update()
-
-    @property
-    def available(self) -> bool:
-        """Always available - this sensor does not depend on the cloud.
-
-        The default CoordinatorEntity behaviour would mark it unavailable
-        whenever a cloud poll fails, which says nothing about a value
-        derived purely from the live SoC entity. Worse, an unavailable
-        entity restores as "unavailable" with no attributes, so a cloud
-        outage that happened to span a Home Assistant restart would destroy
-        the last charge summary outright.
-        """
-        return True
+        self.async_on_remove(self._monitor.add_listener(self.async_write_ha_state))
 
     @property
     def native_value(self) -> float | None:
-        summary = self._tracker.summary
+        summary = self._monitor.tracker.summary
         return summary.get("energy_wh") if summary else None
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
-        summary = self._tracker.summary
+        summary = self._monitor.tracker.summary
         attrs: dict[str, Any] = {
-            "soc_source": self._soc_entity_id,
-            "in_progress": self._tracker.in_progress,
+            "soc_source": self._monitor.soc_entity_id,
+            "in_progress": self._monitor.tracker.in_progress,
         }
         if summary:
             attrs.update(summary)
             attrs["started_at"] = iso_or_none(summary.get("started_at"))
             attrs["ended_at"] = iso_or_none(summary.get("ended_at"))
         return attrs
+
+
+class BoschChargedEnergySensor(RestoreSensor):
+    """Running total of energy put into this bike's battery, for the Energy Dashboard.
+
+    Home Assistant's Energy Dashboard can only take a monotonically
+    increasing meter, which the existing rolling 7/30/365-day sensors are
+    not, so it needs an entity of its own. The value is the sum of every
+    charge session the shared tracker has published (see charge_session.py).
+
+    IMPORTANT, and stated the same way in the README: this is energy that
+    went INTO THE BATTERY, derived from the rise in state of charge and the
+    configured capacity. It is not energy drawn from the wall. A charger
+    loses roughly 10 to 15 percent, so the electricity actually paid for is
+    higher than what this reports. Anyone with a measuring smart plug on the
+    charger should put that plug into the Energy Dashboard instead, since it
+    measures the thing being billed.
+
+    RestoreSensor rather than RestoreEntity, and that distinction is
+    load-bearing rather than cosmetic. SensorDeviceClass.ENERGY is in Home
+    Assistant's UNIT_CONVERTERS, so the entity gets a unit picker and a user
+    who switches it to kWh (the natural unit in the Energy Dashboard this
+    very sensor is meant for) makes the persisted STATE STRING kWh. Reading
+    that back as Wh would divide the meter by 1000 on every restart, and each
+    collapse books a bogus reset on a TOTAL_INCREASING series.
+    async_get_last_sensor_data() returns the NATIVE value together with the
+    native unit, which is immune to that.
+    """
+
+    _attr_has_entity_name = True
+    _attr_should_poll = False
+    _attr_translation_key = "total_charged_energy"
+    _attr_native_unit_of_measurement = UnitOfEnergy.WATT_HOUR
+    _attr_device_class = SensorDeviceClass.ENERGY
+    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    _attr_icon = "mdi:transmission-tower-export"
+    _attr_suggested_display_precision = 0
+
+    def __init__(
+        self, bike_id: str, drive_name: str, monitor: ChargeSessionMonitor
+    ) -> None:
+        self._monitor = monitor
+        self._attr_unique_id = f"{bike_id}_total_charged_energy"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, bike_id)},
+            name=drive_name,
+            manufacturer="Bosch",
+            model=drive_name,
+        )
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+
+        # Resume the meter where it left off. Starting from zero would look
+        # like a meter reset and silently drop everything charged so far out
+        # of the Energy Dashboard's running cost.
+        stored = await self.async_get_last_sensor_data()
+        if stored is not None:
+            unit = stored.native_unit_of_measurement
+            # Only adopt a value stored in the unit this sensor natively
+            # reports. Anything else is a shape this code has never written,
+            # and guessing at it risks a meter that is wrong by a factor of
+            # a thousand - far worse than one that restarts from zero.
+            if unit in (None, UnitOfEnergy.WATT_HOUR):
+                self._monitor.tracker.restore_total_energy(stored.native_value)
+            else:
+                _LOGGER.warning(
+                    "Bosch eBike: ignoring a restored charge total in %s, "
+                    "expected %s; the meter restarts from its current value",
+                    unit,
+                    UnitOfEnergy.WATT_HOUR,
+                )
+
+        self.async_on_remove(self._monitor.add_listener(self.async_write_ha_state))
+
+    @property
+    def native_value(self) -> float:
+        return self._monitor.tracker.total_energy_wh
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        return {
+            "soc_source": self._monitor.soc_entity_id,
+            # Spelled out on the entity as well as in the README, because
+            # this is the number people will read as their charging cost.
+            "measures": "energy into the battery, not from the wall socket",
+        }
 
 
 # (window_key, translation_key, unique_id_suffix)

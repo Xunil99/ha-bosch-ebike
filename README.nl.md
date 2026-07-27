@@ -337,6 +337,14 @@ Een laadsessie geldt als beëindigd zodra het accuniveau ofwel met minstens 1 % 
 
 De sensor overleeft een herstart van Home Assistant: de laatste afgeronde laadsessie wordt hersteld. Een laadsessie die op het moment van de herstart *bezig* was, wordt bewust niet gereconstrueerd. Werkt ook met eBike System 2, omdat uitsluitend het live-signaal wordt gebruikt.
 
+#### In het Energie-dashboard
+
+Een tweede sensor, **`Total Charged Energy`**, is een doorlopend oplopende teller over alle afgeronde laadsessies. Voeg hem toe onder **Instellingen → Dashboards → Energie → Individuele apparaten**, dan verschijnt de eBike met eigen kosten naast het huishoudelijk verbruik.
+
+> ⚠️ **Dit is de energie die in de accu gaat, niet de energie uit het stopcontact.** Ze wordt afgeleid uit de stijging van het accuniveau en de ingestelde accucapaciteit. Een lader verliest ruwweg 10 tot 15 procent, dus de stroom die daadwerkelijk wordt afgerekend ligt hoger. Heb je een slimme stekker met vermogensmeting aan de lader hangen, zet dan **die** in het Energie-dashboard in plaats van deze sensor, want die meet precies wat er wordt afgerekend.
+
+Let op: de bestaande sensor `Wh Lifetime` is hier niet geschikt voor, ook al biedt Home Assistant hem aan: die telt de door de accu **geleverde** energie, dus het rijden, niet het laden.
+
 ### Routeplanner-kaart (BRouter)
 
 De kaart `bosch-ebike-routeplanner-card` plant fietsroutes direct in het
@@ -553,6 +561,7 @@ Op de Lovelace-kaart zit een 📚-toggle in de kaartbediening. Is die actief, da
 | Estimated Range (Full Battery) | km | Geschatte actieradius met volle accu (uit gem. verbruik, schatting!) |
 | Estimated Range (Current) | km | Geschatte resterende actieradius (live-SoC vereist, schatting!) |
 | Last Charge Energy | Wh | Energie van de laatste laadsessie (live-SoC vereist) |
+| Total Charged Energy | Wh | Som van alle laadsessies, voor het Energie-dashboard (live-SoC vereist) |
 
 #### Accusensoren (per accu)
 | Sensor | Eenheid | Beschrijving |

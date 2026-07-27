@@ -8,8 +8,11 @@ signal is enough to reconstruct all three - which is what this module does.
 
 Deliberately free of Home Assistant imports so the dependency-free suite
 under tests/ can cover the state machine, which is the part with the
-interesting failure modes. The entity in sensor.py owns the wiring: it feeds
-samples in, arms the idle timer, and publishes the summary.
+interesting failure modes. charge_monitor.ChargeSessionMonitor owns the
+wiring: it feeds samples in, arms the idle timer, and publishes the summary.
+It is tied to the config entry rather than to either sensor entity, so that
+disabling one of them in the entity registry cannot silently stop charges
+from being counted.
 
 Design notes on the thresholds below:
 
@@ -133,6 +136,7 @@ class ChargeSessionTracker:
         self._capacity_wh: float | None = None
         self._gaps = 0
         self._summary: dict[str, Any] | None = None
+        self._total_energy_wh = 0.0
 
     @property
     def in_progress(self) -> bool:
@@ -142,6 +146,42 @@ class ChargeSessionTracker:
     def summary(self) -> dict[str, Any] | None:
         """The last completed session, or None if none has completed yet."""
         return self._summary
+
+    @property
+    def total_energy_wh(self) -> float:
+        """Wh added by every published session, monotonically increasing.
+
+        Only sessions that were actually published count, so the sub-3%
+        top-ups that _close() discards do not quietly accumulate either.
+        Sessions with no known battery capacity contribute nothing rather
+        than a guess, which means the total can lag reality on a bike whose
+        capacity was configured late - preferable to inventing kilowatt
+        hours that were never measured.
+        """
+        return round(self._total_energy_wh, 2)
+
+    def restore_total_energy(self, value: Any) -> None:
+        """Adopt a running total read back from a restored entity state.
+
+        Called instead of starting from zero after a restart. A negative or
+        unusable value is ignored: this total feeds a TOTAL_INCREASING
+        sensor, where going backwards is read as a meter reset and would
+        corrupt the Energy Dashboard's history.
+
+        Takes the larger of the restored value and whatever is already
+        accumulated, rather than overwriting it. The caller subscribes to
+        live SoC updates before it has necessarily restored this value (the
+        subscription has to exist early so no sample is missed), so a
+        session could in principle complete and add to the total before this
+        runs; overwriting would silently erase it. Idempotent for the same
+        reason, if this is ever called more than once.
+        """
+        try:
+            restored = float(value)
+        except (TypeError, ValueError):
+            return
+        if math.isfinite(restored) and restored >= 0:
+            self._total_energy_wh = max(self._total_energy_wh, restored)
 
     def restore_summary(self, summary: dict[str, Any] | None) -> None:
         """Adopt a summary read back from a restored entity state.
@@ -252,6 +292,8 @@ class ChargeSessionTracker:
         energy_wh: float | None = None
         if capacity_wh and capacity_wh > 0:
             energy_wh = round(delta / 100.0 * capacity_wh, 1)
+        if energy_wh:
+            self._total_energy_wh += energy_wh
         self._summary = {
             "start_soc": round(start_soc, 1),
             "end_soc": round(peak_soc, 1),

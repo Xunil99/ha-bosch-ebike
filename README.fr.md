@@ -343,6 +343,14 @@ Une charge est considérée comme terminée lorsque le niveau de batterie soit b
 
 Le capteur survit à un redémarrage de Home Assistant : la dernière charge terminée est restaurée. Une charge *en cours* au moment du redémarrage n'est volontairement pas reconstituée. Fonctionne aussi avec l'eBike System 2, puisque seul le signal en direct est utilisé.
 
+#### Dans le tableau de bord Énergie
+
+Un deuxième capteur, **`Total Charged Energy`**, est un compteur croissant en continu sur l'ensemble des charges terminées. Ajoute-le sous **Paramètres → Tableaux de bord → Énergie → Appareils individuels** : l'eBike apparaît ensuite avec son propre coût à côté de la consommation du foyer.
+
+> ⚠️ **C'est l'énergie qui entre dans la batterie, pas celle tirée de la prise.** Elle est calculée à partir de la hausse du niveau de batterie et de la capacité de batterie configurée. Un chargeur perd environ 10 à 15 %, l'électricité réellement facturée est donc plus élevée. Si tu as une prise connectée avec mesure de consommation sur le chargeur, inscris **celle-ci** dans le tableau de bord Énergie plutôt que ce capteur, car elle mesure justement ce qui t'est facturé.
+
+Note que le capteur `Wh Lifetime` existant ne convient pas ici, même si Home Assistant le propose : il comptabilise l'énergie **fournie** par la batterie, c'est-à-dire les sorties, pas la charge.
+
 ### Carte planificateur d'itinéraires (BRouter)
 
 La carte `bosch-ebike-routeplanner-card` planifie des itinéraires à vélo
@@ -565,6 +573,7 @@ Sur la carte Lovelace, il y a une bascule 📚 dans les commandes de la carte. Q
 | Estimated Range (Full Battery) | km | Autonomie estimée avec batterie pleine (d'après la conso moyenne, estimation !) |
 | Estimated Range (Current) | km | Autonomie restante estimée (SoC en direct requis, estimation !) |
 | Last Charge Energy | Wh | Énergie de la dernière session de charge (SoC en direct requis) |
+| Total Charged Energy | Wh | Somme de toutes les charges, pour le tableau de bord Énergie (SoC en direct requis) |
 
 #### Capteurs de batterie (par batterie)
 | Capteur | Unité | Description |

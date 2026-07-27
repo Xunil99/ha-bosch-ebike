@@ -337,6 +337,14 @@ Nabíjení se považuje za ukončené, jakmile stav nabití buď klesne alespoň
 
 Senzor přežije restart Home Assistantu: poslední dokončené nabíjení se obnoví. Nabíjení, které v okamžiku restartu *probíhalo*, se záměrně nerekonstruuje. Funguje i s eBike System 2, protože se vyhodnocuje výhradně živý signál.
 
+#### V energetickém dashboardu
+
+Navíc vzniká senzor **`Total Charged Energy`**, průběžně rostoucí počítadlo přes všechna dokončená nabíjení. Přidat ho můžeš v **Nastavení → Dashboardy → Energie → Jednotlivá zařízení** – eBike se pak objeví s vlastními náklady vedle domácí spotřeby.
+
+> ⚠️ **Jde o energii, která jde do baterie, ne o energii odebranou ze zásuvky.** Počítá se z nárůstu stavu nabití a z nastavené kapacity baterie. Nabíječka ztratí zhruba 10 až 15 procent, skutečně účtovaná elektřina je tedy vyšší. Kdo má na nabíječce měřicí chytrou zásuvku, měl by do energetického dashboardu zadat **ji** místo tohoto senzoru, protože měří přesně to, co se účtuje.
+
+Stávající senzor `Wh Lifetime` se k tomu mimochodem nehodí, i když ho Home Assistant nabízí: počítá energii **dodanou** baterií, tedy jízdu, ne nabíjení.
+
 ### Karta plánovače tras (BRouter)
 
 Karta `bosch-ebike-routeplanner-card` plánuje cyklotrasy přímo v
@@ -553,6 +561,7 @@ Na Lovelace kartě je v ovládání mapy přepínač 📚. Když je aktivní, hl
 | Estimated Range (Full Battery) | km | Odhadovaný dojezd s plnou baterií (z prům. spotřeby, odhad!) |
 | Estimated Range (Current) | km | Odhadovaný zbývající dojezd (vyžaduje živý SoC, odhad!) |
 | Last Charge Energy | Wh | Energie posledního nabíjení (vyžaduje živý SoC) |
+| Total Charged Energy | Wh | Součet všech nabíjení, pro energetický dashboard (vyžaduje živý SoC) |
 
 #### Senzory baterie (pro každou baterii)
 | Senzor | Jednotka | Popis |

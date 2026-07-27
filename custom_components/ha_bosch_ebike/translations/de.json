@@ -143,6 +143,9 @@
       "last_charge_energy": {
         "name": "Letzte Ladung: Energie"
       },
+      "total_charged_energy": {
+        "name": "Geladene Energie gesamt"
+      },
       "last_ride_elevation_loss": {
         "name": "Letzte Fahrt: Höhenmeter ↓"
       },

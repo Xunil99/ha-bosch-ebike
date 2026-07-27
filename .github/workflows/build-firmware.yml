@@ -28,6 +28,42 @@ jobs:
           fetch-depth: 0
           ref: ${{ github.event.inputs.ref || 'main' }}
 
+      # Stamp the release version into each YAML's esphome.project.version
+      # before compiling, so the firmware itself reports it (visible on the
+      # device's page in Home Assistant's ESPHome integration, and via
+      # `esphome_project_version` for anyone who scripts against the native
+      # API) instead of the placeholder "1.0.0" every factory-*.yaml commits
+      # with. Requested by pemcomp on issue #68: without this, there was no
+      # way to tell from the device itself which firmware release was
+      # actually flashed.
+      #
+      # Deliberately only patches the CHECKOUT here, never the committed
+      # files - manual/local builds via `esphome run` keep seeing "1.0.0",
+      # which is the right placeholder for a build with no release version
+      # to report. Exact-line sed (not a project:-block-aware edit) because
+      # each file is verified to contain that literal line exactly once;
+      # `grep -c` guards against the match silently disappearing if a
+      # template is ever restructured.
+      - name: Stamp firmware version into project.version
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"
+          if [ -z "$VERSION" ] || [ "$VERSION" = "$GITHUB_REF_NAME" ]; then
+            VERSION="dev"
+          fi
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          for f in esphome/factory.yaml esphome/factory-c3.yaml \
+                   esphome/factory-dual.yaml esphome/factory-charge-limiter.yaml; do
+            count=$(grep -c '^    version: "1.0.0"$' "$f")
+            if [ "$count" -ne 1 ]; then
+              echo "::error::$f: expected exactly one 'version: \"1.0.0\"' line, found $count - project: block may have been restructured, update this step" >&2
+              exit 1
+            fi
+            sed -i.bak "s/^    version: \"1.0.0\"\$/    version: \"$VERSION\"/" "$f"
+            rm -f "$f.bak"
+            grep '    version:' "$f"
+          done
+
       - name: Build classic ESP32 firmware
         id: esphome-build-esp32
         uses: esphome/build-action@v7
@@ -89,10 +125,9 @@ jobs:
 
       - name: Generate manifest.json for ESP Web Tools (release-asset variant)
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
-          if [ -z "$VERSION" ] || [ "$VERSION" = "$GITHUB_REF_NAME" ]; then
-            VERSION="dev"
-          fi
+          # VERSION already computed and exported to $GITHUB_ENV by the
+          # "Stamp firmware version" step above, so both the manifest and
+          # the compiled firmware agree on the same version string.
           cat > firmware-output/manifest.json <<EOF
           {
             "name": "Bosch eBike LDI Bridge",

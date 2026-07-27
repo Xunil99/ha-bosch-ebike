@@ -20,6 +20,30 @@ jobs:
           fetch-depth: 0
           ref: main
 
+      # See build-firmware.yml's identical step for the full rationale
+      # (issue #68): stamps the release version into esphome.project.version
+      # so the device itself reports which firmware it is running, in a
+      # fresh checkout only - never committed. This firmware has its own
+      # display-vX.Y.Z tag scheme, independent of the main integration/bridge
+      # version.
+      - name: Stamp firmware version into project.version
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#display-v}"
+          if [ -z "$VERSION" ] || [ "$VERSION" = "$GITHUB_REF_NAME" ]; then
+            VERSION="dev"
+          fi
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          f="esphome/display-jc4827w543.yaml"
+          count=$(grep -c '^    version: "0.1.0"$' "$f")
+          if [ "$count" -ne 1 ]; then
+            echo "::error::$f: expected exactly one 'version: \"0.1.0\"' line, found $count - project: block may have been restructured, update this step" >&2
+            exit 1
+          fi
+          sed -i.bak "s/^    version: \"0.1.0\"\$/    version: \"$VERSION\"/" "$f"
+          rm -f "$f.bak"
+          grep '    version:' "$f"
+
       - name: Build display firmware
         id: esphome-build
         uses: esphome/build-action@v7
@@ -40,10 +64,8 @@ jobs:
 
       - name: Generate display manifest.json for the release asset
         run: |
-          VERSION="${GITHUB_REF_NAME#display-v}"
-          if [ -z "$VERSION" ] || [ "$VERSION" = "$GITHUB_REF_NAME" ]; then
-            VERSION="dev"
-          fi
+          # VERSION already computed and exported to $GITHUB_ENV by the
+          # "Stamp firmware version" step above.
           cat > firmware-output/manifest-display.json <<EOF
           {
             "name": "Bosch eBike LDI Display",

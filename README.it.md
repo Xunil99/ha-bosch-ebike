@@ -342,6 +342,14 @@ Una ricarica è considerata conclusa quando il livello di carica scende di almen
 
 Il sensore sopravvive a un riavvio di Home Assistant: l'ultima ricarica completata viene ripristinata. Una ricarica *in corso* al momento del riavvio non viene volutamente ricostruita. Funziona anche con eBike System 2, perché viene analizzato esclusivamente il segnale live.
 
+#### Nel dashboard Energia
+
+Inoltre nasce il sensore **`Total Charged Energy`**, un contatore in costante aumento su tutte le ricariche completate. Si può aggiungere in **Impostazioni → Dashboard → Energia → Dispositivi individuali**: da quel momento l'eBike compare con i propri costi accanto al consumo domestico.
+
+> ⚠️ **Questa è l'energia che entra nella batteria, non quella prelevata dalla presa di corrente.** Viene calcolata dall'aumento del livello di carica e dalla capacità della batteria configurata. Un caricabatterie perde all'incirca dal 10 al 15 per cento, quindi la corrente effettivamente fatturata è superiore. Chi ha una presa smart con misurazione collegata al caricabatterie dovrebbe inserire **quella** nel dashboard Energia al posto di questo sensore, perché misura esattamente ciò che viene fatturato.
+
+Il sensore `Wh Lifetime` già esistente, del resto, non è adatto a questo scopo, anche se Home Assistant lo propone: conta l'energia **erogata** dalla batteria, cioè la percorrenza, non la ricarica.
+
 ### Card pianificatore di percorsi (BRouter)
 
 La card `bosch-ebike-routeplanner-card` pianifica percorsi in bici
@@ -561,6 +569,7 @@ Sulla card Lovelace c'è un toggle 📚 nei controlli della mappa. Se attivato, 
 | Estimated Range (Full Battery) | km | Autonomia stimata con batteria piena (dal consumo medio, stima!) |
 | Estimated Range (Current) | km | Autonomia residua stimata (SoC live necessario, stima!) |
 | Last Charge Energy | Wh | Energia dell'ultima sessione di ricarica (SoC live necessario) |
+| Total Charged Energy | Wh | Somma di tutte le ricariche, per il dashboard Energia (SoC live necessario) |
 
 #### Sensori della batteria (per batteria)
 | Sensore | Unità | Descrizione |
