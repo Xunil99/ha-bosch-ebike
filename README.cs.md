@@ -34,7 +34,7 @@ Integrace nyní podporuje **také** starší **eBike System 2 (BES2)**, nejen Sm
 
 > **⚠️ Poznámka:** Podpora BES2 je **nová a momentálně v testování (alpha)**.
 
-**Instalace (rozdíl oproti Smart System):** na portálu Bosch Data Act ([portal.bosch-ebike.com/data-act](https://portal.bosch-ebike.com/data-act)) se majitelé BES2 přihlašují přes **„Bosch eBike Connect user? Log in here“** (identita eBike Connect), **nikoli** přes SingleKey ID. Poté jako obvykle vytvoř App / Client ID a udělíš souhlas podle Data Act – zbytek postupu je identický. Při přidávání integrace do Home Assistantu zvol v **prvním kroku (volba systému)** možnost **eBike System 2** a následně zadej Client ID.
+**Instalace (rozdíl oproti Smart System):** na portálu Bosch Data Act ([portal.bosch-ebike.com/data-act](https://portal.bosch-ebike.com/data-act)) se majitelé BES2 přihlašují přes **„Bosch eBike Connect user? Log in here“** (identita eBike Connect), **nikoli** přes SingleKey ID, a jako obvykle vytvoří App / Client ID. Pro **udělení souhlasu se sdílením dat** ale běžný vstupní bod flow.bosch-ebike.com u účtů eBike Connect často nefunguje – místo něj potřebuješ tento přímý odkaz, který tě přihlásí jako uživatele eBike Connect a zavede rovnou na stránku Data Act: [flow.bosch-ebike.com/login?returnTo=%2Fdata-act&kc_idp_hint=ebike-connect](https://flow.bosch-ebike.com/login?returnTo=%2Fdata-act&kc_idp_hint=ebike-connect). Tam aktivuj přepínač pro Client vytvořený v předchozím kroku. Při přidávání integrace do Home Assistantu zvol v **prvním kroku (volba systému)** možnost **eBike System 2** a následně zadej Client ID.
 
 **Menší rozsah dat než u Smart Systemu.** BES2 poskytuje méně údajů:
 
@@ -537,6 +537,7 @@ Na Lovelace kartě je v ovládání mapy přepínač 📚. Když je aktivní, hl
 | Problém | Řešení |
 |---------|--------|
 | Po nastavení se neobjeví žádné entity | Aktivuj přepínač sdílení dat v eBike Manageru (krok 5) |
+| BES2: hlášen úspěch, ale 0 kol | Aktivuj sdílení dat přes odkaz pro eBike Connect výše |
 | „Client not found“ při přihlašování | Použij „Service aktivieren“ v eBike Manageru (krok 4) a zkontroluj Client-ID na překlepy/mezery |
 | „Invalid state“ / návrat se nezdařil | Je v HA zapnuté „My Home Assistant“? Redirect URI v portálu musí být `https://my.home-assistant.io/redirect/oauth` |
 | „Invalid parameters are given“ při kliknutí na „Service aktivieren“, nebo „Invalid parameter: redirect_uri“ od Bosch při autorizaci | Nemáš prohozené Redirect URI a Login URL v portálu Bosch? Zkontroluj krok 1 - obojí jsou adresy `my.home-assistant.io`, které vypadají podobně; každá hodnota musí být v poli s odpovídajícím názvem |

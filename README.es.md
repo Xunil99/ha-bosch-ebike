@@ -34,7 +34,7 @@ La integración ahora **también** admite el más antiguo **eBike System 2 (BES2
 
 > **⚠️ Nota:** La compatibilidad con BES2 es **nueva y actualmente está en pruebas (alpha)**.
 
-**Configuración (diferencia respecto al Smart System):** en el portal Bosch Data Act ([portal.bosch-ebike.com/data-act](https://portal.bosch-ebike.com/data-act)), los propietarios de BES2 inician sesión mediante **"Bosch eBike Connect user? Log in here"** (la identidad de eBike Connect), **no** con SingleKey ID. Después crea una App / Client-ID como de costumbre y concede el consentimiento de Data Act; el resto del procedimiento es idéntico. Al añadir la integración en Home Assistant, elige **eBike System 2** en el **primer paso (selección de sistema)** y luego introduce el Client-ID.
+**Configuración (diferencia respecto al Smart System):** en el portal Bosch Data Act ([portal.bosch-ebike.com/data-act](https://portal.bosch-ebike.com/data-act)), los propietarios de BES2 inician sesión mediante **"Bosch eBike Connect user? Log in here"** (la identidad de eBike Connect), **no** con SingleKey ID, y crean una App / Client-ID como de costumbre. Para conceder el consentimiento de Data Act, el punto de entrada habitual en flow.bosch-ebike.com a menudo no funciona con cuentas eBike Connect - en su lugar necesitas este enlace directo, que te inicia sesión como usuario de eBike Connect y te lleva directamente a la página de Data Act: [flow.bosch-ebike.com/login?returnTo=%2Fdata-act&kc_idp_hint=ebike-connect](https://flow.bosch-ebike.com/login?returnTo=%2Fdata-act&kc_idp_hint=ebike-connect). Activa allí el **interruptor (toggle)** para el cliente creado anteriormente. Al añadir la integración en Home Assistant, elige **eBike System 2** en el **primer paso (selección de sistema)** y luego introduce el Client-ID.
 
 **Conjunto de datos reducido frente al Smart System.** BES2 proporciona menos datos:
 
@@ -547,6 +547,7 @@ En la tarjeta Lovelace hay un interruptor 📚 en los controles del mapa. Si est
 | Problema | Solución |
 |----------|----------|
 | Sin entidades tras la configuración | Activar el interruptor de compartición de datos en el eBike Manager (paso 5) |
+| BES2: se notifica éxito, pero 0 bicis | Activar la compartición de datos mediante el enlace de eBike Connect indicado arriba |
 | "Cliente no encontrado" al iniciar sesión | Usar "Service aktivieren" en el eBike Manager (paso 4) y comprobar errores tipográficos/espacios en el Client-ID |
 | "Invalid state" / falla el retorno | ¿Está "My Home Assistant" activado en HA? La Redirect URI en el portal debe ser `https://my.home-assistant.io/redirect/oauth` |
 | "Invalid parameters are given" al hacer clic en "Service aktivieren", o "Invalid parameter: redirect_uri" de Bosch al autorizar | ¿Has intercambiado Redirect URI y Login URL en el portal de Bosch? Revisa el paso 1 - ambas son direcciones `my.home-assistant.io` y se parecen; cada valor debe ir en el campo con el nombre correspondiente |
