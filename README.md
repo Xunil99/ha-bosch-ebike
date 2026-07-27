@@ -4,7 +4,7 @@
 [![HA Version](https://img.shields.io/badge/Home%20Assistant-2024.1%2B-blue.svg)](https://www.home-assistant.io/)
 [![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=Xunil99&repository=ha-bosch-ebike&category=integration)
 
-> **Deutsch** | [English](#english) | [Nederlands](https://github.com/Xunil99/ha-bosch-ebike/blob/main/README.nl.md) | [Français](https://github.com/Xunil99/ha-bosch-ebike/blob/main/README.fr.md) | [Italiano](https://github.com/Xunil99/ha-bosch-ebike/blob/main/README.it.md) | [Español](https://github.com/Xunil99/ha-bosch-ebike/blob/main/README.es.md)
+> **Deutsch** | [English](#english) | [Nederlands](https://github.com/Xunil99/ha-bosch-ebike/blob/main/README.nl.md) | [Français](https://github.com/Xunil99/ha-bosch-ebike/blob/main/README.fr.md) | [Italiano](https://github.com/Xunil99/ha-bosch-ebike/blob/main/README.it.md) | [Español](https://github.com/Xunil99/ha-bosch-ebike/blob/main/README.es.md) | [Čeština](https://github.com/Xunil99/ha-bosch-ebike/blob/main/README.cs.md)
 
 > **Bosch eBike Smart System & eBike System 2 (BES2) für Home Assistant** – liest Fahrrad- und Fahrtdaten direkt von der offiziellen Bosch Data Act API: Kilometerstand, Akkuzustand, letzte Fahrten mit GPS-Track und mehr. Mit Custom-Lovelace-Karten (2D, 3D, Heatmap, Kalender, Routenplaner, Dashboard) und optionalen Live-Daten per Bluetooth.
 >

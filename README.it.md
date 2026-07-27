@@ -3,7 +3,7 @@
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
 [![HA Version](https://img.shields.io/badge/Home%20Assistant-2024.1%2B-blue.svg)](https://www.home-assistant.io/)
 
-> [Deutsch](README.md) | [English](README.md#english) | [Nederlands](README.nl.md) | [Français](README.fr.md) | **Italiano** | [Español](README.es.md)
+> [Deutsch](README.md) | [English](README.md#english) | [Nederlands](README.nl.md) | [Français](README.fr.md) | **Italiano** | [Español](README.es.md) | [Čeština](README.cs.md)
 
 > **⚠️ Nota di aggiornamento (da v1.17.6):** La cartella dell'integrazione ora si chiama `ha_bosch_ebike` (prima `bosch_ebike`). La tua configurazione, i dispositivi e le impostazioni restano invariati. Se dopo l'aggiornamento HACS sono presenti **entrambe** le cartelle in `config/custom_components/`, elimina una volta la vecchia `bosch_ebike` e riavvia Home Assistant.
 

@@ -3,7 +3,7 @@
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
 [![HA Version](https://img.shields.io/badge/Home%20Assistant-2024.1%2B-blue.svg)](https://www.home-assistant.io/)
 
-> [Deutsch](README.md) | [English](README.md#english) | **Nederlands** | [Français](README.fr.md) | [Italiano](README.it.md) | [Español](README.es.md)
+> [Deutsch](README.md) | [English](README.md#english) | **Nederlands** | [Français](README.fr.md) | [Italiano](README.it.md) | [Español](README.es.md) | [Čeština](README.cs.md)
 
 > **⚠️ Update-opmerking (vanaf v1.17.6):** De integratiemap heet nu `ha_bosch_ebike` (voorheen `bosch_ebike`). Je installatie, apparaten en instellingen blijven ongewijzigd. Als na de HACS-update **beide** mappen in `config/custom_components/` staan, verwijder dan eenmalig de oude `bosch_ebike` en herstart Home Assistant.
 
