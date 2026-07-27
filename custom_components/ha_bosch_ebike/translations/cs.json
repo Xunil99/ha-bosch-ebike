@@ -1,0 +1,279 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Bosch eBike",
+        "description": "Který systém eBike chceš integrovat?",
+        "menu_options": {
+          "smart_system": "Smart System (novější modely)",
+          "ebike_system_2": "eBike System 2 (starší modely, eBike Connect)"
+        }
+      },
+      "credentials": {
+        "title": "Nastavení Bosch eBike",
+        "description": "Zadej **Client-ID** z registrace aplikace na portálu [Bosch Data Act Portal]({portal_url}).\n\nAplikaci registruješ podle systému přes různá přihlášení: **Smart System** pomocí SingleKey ID, **eBike System 2** přes přihlášení eBike Connect.\n\nPo odeslání budeš přesměrován na přihlášení Bosch a automaticky vrácen zpět do Home Assistant. Sdílení dat pak aktivuješ pro každé kolo zvlášť v Bosch eBike Manageru.",
+        "data": {
+          "client_id": "Client-ID"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Znovu přihlásit Bosch eBike",
+        "description": "Tvoje přihlášení k Bosch vypršelo. Klikni na **Odeslat** a přihlas se znovu. Zkontroluj, že je tvoje Client-ID na portálu [Flow Portal]({portal_url}) stále aktivní."
+      }
+    },
+    "abort": {
+      "already_configured": "Toto Client-ID je již nakonfigurováno.",
+      "reauth_successful": "Opětovné přihlášení proběhlo úspěšně.",
+      "oauth_error": "Od Bosch byla přijata neplatná data tokenu.",
+      "oauth_failed": "Chyba při získávání přístupového tokenu od Bosch.",
+      "oauth_timeout": "Vypršel časový limit při výměně tokenu s Bosch.",
+      "oauth_unauthorized": "Bosch odmítl žádost o token (neautorizováno). Je Client-ID na portálu Flow Portal aktivováno?",
+      "missing_configuration": "Integrace není nakonfigurována. Postupuj podle dokumentace.",
+      "authorize_url_timeout": "Vypršel časový limit při vytváření autorizační URL.",
+      "no_url_available": "Pro autorizaci není k dispozici žádná URL. Podrobnosti najdeš v dokumentaci.",
+      "user_rejected_authorize": "Autorizace u Bosch byla odmítnuta."
+    },
+    "create_entry": {
+      "default": "Přihlášení k Bosch eBike proběhlo úspěšně."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "menu_options": {
+          "live_sensors": "Nastavit živé BLE senzory",
+          "assign_activities": "Přiřadit nepřiřazené aktivity ke kolu"
+        }
+      },
+      "assign_activities": {
+        "title": "Přiřazení jízdy {position} z {total}",
+        "description": "{date}: {title}. Ke kterému kolu tato jízda patří? Nech prázdné a rozhodni se později, jízda se pak objeví znovu příště.",
+        "data": {
+          "bike_id": "Kolo"
+        }
+      },
+      "bike": {
+        "title": "Zdroje živých dat pro {bike_name} (volitelné)",
+        "description": "Volitelně můžeš propojit senzory živého stavu tachometru a stavu nabití baterie z vlastního ESPHome bridge Bosch eBike LDI tohoto kola. Každé kolo na tomto účtu se nastavuje zvlášť, takže dvě kola nikdy nesdílejí hodnoty jednoho bridge. Pokud jsou senzory nastavené, počítá z nich integrace přesnou vzdálenost jízdy a přesnou spotřebu baterie místo odhadů z cloudu. Nech prázdné, pokud chceš u tohoto kola zachovat dosavadní chování.",
+        "data": {
+          "live_odometer_entity": "Senzor živého stavu tachometru (km)",
+          "live_soc_entity": "Senzor živého stavu nabití baterie (%)"
+        },
+        "data_description": {
+          "live_odometer_entity": "Senzor se stavem tachometru kola v kilometrech (např. sensor.ebike_odometer_live).",
+          "live_soc_entity": "Senzor se stavem nabití baterie kola v procentech (např. sensor.ebike_battery_soc_live)."
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "odometer": {
+        "name": "Najeté kilometry"
+      },
+      "motor_total_hours": {
+        "name": "Provozní hodiny motoru"
+      },
+      "motor_assist_hours": {
+        "name": "Hodiny podpory motoru"
+      },
+      "max_assist_speed": {
+        "name": "Max. rychlost podpory"
+      },
+      "active_assist_modes": {
+        "name": "Aktivní režimy podpory"
+      },
+      "walk_assist_speed": {
+        "name": "Rychlost pomoci při vedení"
+      },
+      "next_service_odometer": {
+        "name": "Příští servis (km)"
+      },
+      "next_service_date": {
+        "name": "Příští servis (datum)"
+      },
+      "service_due_in_days": {
+        "name": "Do servisu (dny)"
+      },
+      "service_due_in_km": {
+        "name": "Do servisu (km)"
+      },
+      "maintenance_overview": {
+        "name": "Přehled údržby"
+      },
+      "estimated_range_full": {
+        "name": "Odhadovaný dojezd (plná baterie)"
+      },
+      "estimated_range_current": {
+        "name": "Odhadovaný dojezd (aktuální)"
+      },
+      "last_ride_distance": {
+        "name": "Poslední jízda: Vzdálenost"
+      },
+      "last_ride_duration": {
+        "name": "Poslední jízda: Doba trvání"
+      },
+      "last_ride_avg_speed": {
+        "name": "Poslední jízda: Ø rychlost"
+      },
+      "last_ride_max_speed": {
+        "name": "Poslední jízda: Max. rychlost"
+      },
+      "last_ride_calories": {
+        "name": "Poslední jízda: Kalorie"
+      },
+      "last_ride_elevation_gain": {
+        "name": "Poslední jízda: Převýšení ↑"
+      },
+      "last_ride_elevation_loss": {
+        "name": "Poslední jízda: Převýšení ↓"
+      },
+      "last_ride_date": {
+        "name": "Poslední jízda: Datum"
+      },
+      "last_ride_title": {
+        "name": "Poslední jízda: Název"
+      },
+      "last_ride_avg_cadence": {
+        "name": "Poslední jízda: Ø kadence"
+      },
+      "last_ride_max_cadence": {
+        "name": "Poslední jízda: Max. kadence"
+      },
+      "last_ride_avg_power": {
+        "name": "Poslední jízda: Ø výkon"
+      },
+      "last_ride_max_power": {
+        "name": "Poslední jízda: Max. výkon"
+      },
+      "last_ride_battery_wh": {
+        "name": "Poslední jízda: Spotřeba baterie (Wh)"
+      },
+      "last_ride_battery_percent": {
+        "name": "Poslední jízda: Spotřeba baterie (%)"
+      },
+      "last_ride_difficulty": {
+        "name": "Poslední jízda: Náročnost"
+      },
+      "last_ride_start_location": {
+        "name": "Poslední jízda: Místo startu"
+      },
+      "last_ride_end_location": {
+        "name": "Poslední jízda: Místo cíle"
+      },
+      "last_ride_start_time": {
+        "name": "Poslední jízda: Čas startu"
+      },
+      "last_ride_start_odometer": {
+        "name": "Poslední jízda: Stav tachometru na startu"
+      },
+      "last_ride_end_time": {
+        "name": "Poslední jízda: Čas konce"
+      },
+      "days_since_last_ride": {
+        "name": "Dní od poslední jízdy"
+      },
+      "total_rides": {
+        "name": "Jízdy celkem"
+      },
+      "total_distance_activities": {
+        "name": "Vzdálenost celkem (jízdy)"
+      },
+      "total_duration": {
+        "name": "Doba jízdy celkem"
+      },
+      "total_calories": {
+        "name": "Kalorie celkem"
+      },
+      "total_elevation_gain": {
+        "name": "Převýšení celkem"
+      },
+      "avg_speed_all_rides": {
+        "name": "Ø rychlost (všechny jízdy)"
+      },
+      "avg_power_all_rides": {
+        "name": "Ø výkon jezdce (všechny jízdy)"
+      },
+      "avg_cadence_all_rides": {
+        "name": "Ø kadence (všechny jízdy)"
+      },
+      "energy_charged_7d": {
+        "name": "Nabitá energie (7 dní)"
+      },
+      "energy_charged_30d": {
+        "name": "Nabitá energie (30 dní)"
+      },
+      "energy_charged_365d": {
+        "name": "Nabitá energie (365 dní)"
+      },
+      "unassigned_activities": {
+        "name": "Nepřiřazené aktivity"
+      },
+      "drive_unit_thermal_derating": {
+        "name": "Tepelné omezení motoru"
+      }
+    },
+    "number": {
+      "battery_capacity": {
+        "name": "Kapacita baterie"
+      },
+      "service_due_odometer": {
+        "name": "Termín servisu (km)"
+      }
+    },
+    "date": {
+      "service_due_date": {
+        "name": "Datum servisu"
+      }
+    }
+  },
+  "services": {
+    "add_maintenance": {
+      "name": "Přidat položku údržby",
+      "description": "Přidá novou vlastní položku údržby pro kolo (např. výměna řetězu každých 3000 km, prohlídka každých 365 dní). Musí být zadán alespoň interval_km nebo interval_days.",
+      "fields": {
+        "bike_id": {
+          "name": "ID kola",
+          "description": "ID kola (viz atribut senzorů kola)"
+        },
+        "name": {
+          "name": "Název",
+          "description": "Libovolný text, např. \"Výměna řetězu\""
+        },
+        "interval_km": {
+          "name": "Interval (km)",
+          "description": "Po kolika km připomenout"
+        },
+        "interval_days": {
+          "name": "Interval (dny)",
+          "description": "Po kolika dnech připomenout"
+        }
+      }
+    },
+    "complete_maintenance": {
+      "name": "Označit položku údržby jako hotovou",
+      "description": "Vynuluje počítadlo položky údržby (datum + stav tachometru).",
+      "fields": {
+        "bike_id": {
+          "name": "ID kola"
+        },
+        "item_id": {
+          "name": "ID položky",
+          "description": "Z atributu senzoru \"items\""
+        }
+      }
+    },
+    "remove_maintenance": {
+      "name": "Smazat položku údržby",
+      "description": "Smaže vlastní položku údržby.",
+      "fields": {
+        "bike_id": {
+          "name": "ID kola"
+        },
+        "item_id": {
+          "name": "ID položky"
+        }
+      }
+    }
+  }
+}
