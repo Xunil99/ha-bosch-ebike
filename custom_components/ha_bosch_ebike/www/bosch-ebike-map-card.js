@@ -6071,7 +6071,17 @@ class BoschEBikeDashboardCard extends HTMLElement {
       }
       .dash-btn:hover { filter: brightness(1.08); }
       .dash-btn.stop { background: #e53935; }
-      .dash-btn.stop.confirm { background: #b71c1c; }
+      /* Issue #68: a barely-darker red plus a text change from "Stop
+         charging" to "Sure?" was too easy to miss (a user reported that
+         pressing Stop "did nothing", which turned out to be an unnoticed
+         first click landing in this state, not a second click ever
+         happening). Amber + a pulse make the "needs one more press" state
+         impossible to miss even at a glance. */
+      .dash-btn.stop.confirm { background: #f57c00; animation: dash-stop-confirm-pulse 1s ease-in-out infinite; }
+      @keyframes dash-stop-confirm-pulse {
+        0%,100% { opacity: 1; }
+        50%     { opacity: .65; }
+      }
       .dash-btn:disabled { opacity: .4; cursor: not-allowed; }
       .dash-slider-row {
         display: flex; align-items: center; gap: 10px; margin: 10px 0 14px;
