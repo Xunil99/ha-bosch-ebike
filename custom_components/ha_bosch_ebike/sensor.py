@@ -99,7 +99,9 @@ class BoschBikeSensorDescription(SensorEntityDescription):
     value_fn: Callable[[dict], Any]
     is_activity: bool = False
     is_aggregate: bool = False
-    # False = Smart-System-only (data BES2 never provides); skipped for BES2.
+    # False = skipped for BES2, either because it is Smart-System-only (data
+    # BES2 never provides) or because a BES2-specific description of the same
+    # key supersedes it - see total_elevation_gain below.
     bes2: bool = True
     # Optional extra state attributes, taking the same argument value_fn
     # does. Used by the Trick Check sensors to hang the "max" figures off
@@ -493,6 +495,12 @@ AGGREGATE_SENSORS: tuple[BoschBikeSensorDescription, ...] = (
         icon="mdi:elevation-rise",
         value_fn=lambda activities: _sum_activities(activities, "elevation", "gain"),
         is_aggregate=True,
+        # BES2_STATISTICS_SENSORS defines the same key, and its value is the
+        # bike's own lifetime figure from /statistics rather than a sum over
+        # the rides we happen to have imported - so that one wins there.
+        # Both would otherwise claim unique_id <bike>_total_elevation_gain
+        # and Home Assistant would drop whichever was added second.
+        bes2=False,
     ),
     BoschBikeSensorDescription(
         key="avg_speed_all_rides",
@@ -847,8 +855,13 @@ async def async_setup_entry(
         for desc in ACTIVITY_SENSORS:
             entities.append(BoschEBikeSensor(coordinator, desc, bike_id, drive_name))
 
-        # Aggregate sensors (statistics across all rides)
+        # Aggregate sensors (statistics across all rides). The bes2 check is
+        # not decoration: total_elevation_gain also exists in
+        # BES2_STATISTICS_SENSORS above, and without it both descriptions
+        # claim the same unique_id on a BES2 account.
         for desc in AGGREGATE_SENSORS:
+            if is_bes2 and not desc.bes2:
+                continue
             entities.append(BoschEBikeSensor(coordinator, desc, bike_id, drive_name))
 
         # GPS coordinate sensors (start/end location)
