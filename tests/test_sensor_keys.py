@@ -207,6 +207,38 @@ def test_bes2_flag_is_honoured_by_its_loop() -> None:
         )
 
 
+def test_lifetime_sums_carry_total_increasing() -> None:
+    """AGGREGATE_SENSORS' running totals must declare TOTAL_INCREASING.
+
+    total_duration was missing it - the only one of its lifetime-sum
+    siblings (total_rides, total_distance_activities, total_calories,
+    total_elevation_gain) that was, and the only one that could not be
+    added to a statistics card or graphed in history as a result. Pinned
+    by name, not by scanning every AGGREGATE_SENSORS entry: the average
+    sensors in the same tuple (avg_speed_all_rides and friends) correctly
+    have no state_class at all, since an average is not monotonic and
+    TOTAL_INCREASING would misrepresent it.
+    """
+    lifetime_sums = {
+        "total_rides", "total_distance_activities", "total_duration",
+        "total_calories", "total_elevation_gain",
+    }
+    by_key = {
+        d["key"]: d
+        for name, descs in TUPLES.items()
+        for d in descs
+        if name in ("AGGREGATE_SENSORS", "BES2_STATISTICS_SENSORS")
+    }
+    for key in lifetime_sums:
+        assert key in by_key, f"{key} no longer exists - update this test"
+        state_class = by_key[key]["fields"].get("state_class")
+        assert state_class == "SensorStateClass.TOTAL_INCREASING", (
+            f"{key}: state_class is {state_class!r}, expected "
+            "SensorStateClass.TOTAL_INCREASING - without it this sensor "
+            "cannot be used in a statistics card or history graph"
+        )
+
+
 if __name__ == "__main__":
     for _name, _test in sorted(globals().items()):
         if _name.startswith("test_") and callable(_test):

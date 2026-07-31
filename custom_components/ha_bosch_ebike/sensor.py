@@ -472,6 +472,7 @@ AGGREGATE_SENSORS: tuple[BoschBikeSensorDescription, ...] = (
         name="Total Ride Duration",
         native_unit_of_measurement=UnitOfTime.HOURS,
         device_class=SensorDeviceClass.DURATION,
+        state_class=SensorStateClass.TOTAL_INCREASING,
         icon="mdi:timer-outline",
         value_fn=lambda activities: _sum_activities(activities, "durationWithoutStops", divisor=3600),
         is_aggregate=True,
