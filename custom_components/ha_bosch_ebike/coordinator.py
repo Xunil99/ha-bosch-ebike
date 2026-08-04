@@ -48,6 +48,44 @@ from .activity_event import build_new_activity_payload
 
 _LOGGER = logging.getLogger(__name__)
 
+# How long a bike's most-recently-attributed activity stays eligible to
+# receive further deliveredWhOverLifetime delta (see _track_battery_consumption's
+# top-up step). Bosch's cloud counter can still be catching up with a ride's
+# real energy use for a while after the ride first appears - reported (issue
+# #67 forum thread) after a fast recharge started right after the ride ended.
+# Long enough to span several poll cycles at the default 30-minute interval,
+# short enough that a genuinely separate, unrelated later ride is very
+# unlikely to fall inside it and get misattributed backward.
+CONSUMPTION_TOPUP_WINDOW = timedelta(hours=3)
+
+# How far a bike's own odometer (bike["driveUnit"]["odometer"], metres) may
+# drift, in TOTAL across a top-up window's whole lifetime (not per poll -
+# the reference point only ever moves when the window itself opens or is
+# legitimately superseded, see _track_battery_consumption), before a further
+# deliveredWhOverLifetime increase is trusted as "the same watched ride
+# still catching up" rather than "a genuinely separate ride that just
+# hasn't synced into the activity list yet". A backend-lag top-up should
+# correlate with NO meaningful new riding; real riding almost always moves
+# the odometer by far more than ordinary reporting noise. Generous enough
+# to tolerate a short walked/pushed distance, tight enough that an actual
+# ride reliably exceeds it.
+CONSUMPTION_TOPUP_ODOMETER_TOLERANCE_M = 300.0
+
+# The largest deliveredWhOverLifetime DROP between two polls still treated
+# as ordinary reporting noise (a transient backend glitch/correction) rather
+# than a genuine reset. A real e-bike battery is removable - swapping in a
+# second/replacement pack, or replacing the drive unit, makes the counter
+# start over near zero, which looks identical to a glitch dip except for
+# magnitude: a glitch is a small wobble, a swap drops nearly the WHOLE
+# lifetime total at once. Small enough that no plausible glitch exceeds it,
+# large enough that no plausible swap stays under it - see
+# _track_battery_consumption's baseline update for why the distinction
+# matters (a dip must not regress the reference point, but a genuine reset
+# must, or the bike's consumption tracking stays wrongly stuck at the old
+# battery's final reading until the new one's own counter climbs back past
+# it - months to years of silence, not one extra poll).
+MAX_PROTECTED_DELIVERED_WH_DIP = 50.0
+
 STORAGE_VERSION = 1
 STORAGE_KEY_SUFFIX = "consumption_state"
 
@@ -128,9 +166,39 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # Battery consumption tracking (Wh delta between polls), per bike:
         # each bike has its own independent lifetime energy counter, and a
         # single shared scalar previously mixed up bikes whenever more than
-        # one had a new activity in the same poll.
+        # one had a new activity in the same poll. Kept monotonically
+        # non-decreasing (see _track_battery_consumption's baseline update)
+        # so a cloud counter dip can never make a later activity's delta
+        # look bigger than it really is.
         self._prev_delivered_wh: dict[str, float] = {}
         self._prev_activity_ids: set[str] = set()
+        # bike_id -> activity_id of that bike's most recently attributed
+        # activity, still eligible for a top-up if deliveredWhOverLifetime
+        # keeps climbing on a later poll without a newer activity appearing
+        # (see CONSUMPTION_TOPUP_WINDOW / _track_battery_consumption). Not
+        # persisted across restarts, deliberately: like
+        # _live_enrichment_cache below, this is a short-lived, self-healing
+        # cache - losing an open window on restart just means that one ride
+        # keeps whatever it already had, the same behaviour as before this
+        # mechanism existed.
+        self._consumption_topup_activity: dict[str, str] = {}
+        self._consumption_topup_deadline: dict[str, datetime] = {}
+        # deliveredWhOverLifetime value at the moment the top-up window was
+        # opened (or last topped up) - a separate, monotonically
+        # non-decreasing reference from _prev_delivered_wh, which is
+        # overwritten every poll regardless of direction. Computing "extra"
+        # against THIS instead means a counter dip that later recovers to
+        # its old high point is never re-credited a second time.
+        self._consumption_topup_baseline_wh: dict[str, float] = {}
+        # The bike's own odometer (metres) at the same moment, used to
+        # corroborate a later top-up: real riding almost always moves this
+        # far more than CONSUMPTION_TOPUP_ODOMETER_TOLERANCE_M, so a jump
+        # alongside a stationary odometer is trusted as backend catch-up on
+        # the watched ride, while a jump alongside real movement is not - it
+        # is far more likely to belong to a separate ride that has not
+        # synced into the activity list yet, and would otherwise get
+        # silently transplanted onto the wrong one.
+        self._consumption_topup_odometer_m: dict[str, float] = {}
         # Per-bike battery capacity in Wh (issue #44 follow-up): a single
         # account-wide value was wrong for multi-bike accounts whose bikes
         # have different battery sizes. See battery_capacity_wh() for the
@@ -463,6 +531,10 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         Returns True if persistent state changed and should be saved.
         """
         current_wh_by_bike: dict[str, float] = {}
+        # Same pass, for the top-up odometer corroboration below - already
+        # relied upon elsewhere in this file (attribute_activities_to_bikes,
+        # _floored_odometer_km) as a normal, near-always-present field.
+        current_odo_by_bike: dict[str, float] = {}
         for bike in bikes:
             bike_id = bike.get("id")
             if not bike_id:
@@ -472,6 +544,9 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 if wh is not None:
                     current_wh_by_bike[bike_id] = wh
                     break
+            odo = (bike.get("driveUnit") or {}).get("odometer")
+            if isinstance(odo, (int, float)):
+                current_odo_by_bike[bike_id] = float(odo)
 
         if not current_wh_by_bike:
             return False
@@ -479,6 +554,14 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         current_ids = {a.get("id") for a in self._all_activities if a.get("id")}
         new_ids = current_ids - self._prev_activity_ids
         new_activities = [a for a in self._all_activities if a.get("id") in new_ids]
+        # For the top-up window-supersession check below: Bosch's backend can
+        # sync activities out of order (see _newest_by_start_time), so
+        # "discovered this poll" does NOT imply "chronologically newest" - an
+        # older ride can be attributed a poll or more after a newer one. This
+        # lets that check compare a newly-discovered activity's OWN
+        # chronological position against whatever activity a bike's top-up
+        # window is already watching, not just against its poll-mates.
+        activities_by_id = {a["id"]: a for a in self._all_activities if a.get("id")}
 
         state_changed = False
         # Ids that stayed unresolved this poll (no bike attribution yet, or
@@ -490,6 +573,11 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # handling), so leaving them out here is what actually makes the
         # "retried next poll" behaviour true instead of just a comment.
         unresolved_ids: set[str] = set()
+        # bike_id -> activities that received a delta share THIS poll. Also
+        # consulted by the top-up step below (a bike that just got a fresh
+        # attribution this poll must not ALSO be topped up this same poll -
+        # its delta_wh already reflects the full current_wh - prev_wh gap).
+        by_bike: dict[str, list[dict[str, Any]]] = {}
 
         if new_activities:
             # Single-bike accounts get a fallback to that one bike when an
@@ -500,7 +588,6 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             # it belongs to.
             single_bike_id = bikes[0].get("id") if len(bikes) == 1 else None
 
-            by_bike: dict[str, list[dict[str, Any]]] = {}
             for activity in new_activities:
                 aid = activity.get("id")
                 if not aid:
@@ -533,12 +620,22 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 for activity in bike_activities:
                     aid = activity.get("id")
                     dist = activity.get("distance", 0) or 0
-                    if total_distance > 0 and len(bike_activities) > 1:
-                        share = delta_wh * (dist / total_distance)
+                    if len(bike_activities) > 1:
+                        if total_distance > 0:
+                            share = delta_wh * (dist / total_distance)
+                        else:
+                            # None of this batch reports a usable distance
+                            # yet (e.g. tracks still uploading) - split the
+                            # shared delta evenly. Falling through to
+                            # share = delta_wh here (the single-activity
+                            # case's value) would credit the FULL delta to
+                            # EVERY activity in the batch, multiplying the
+                            # bike's real energy growth by the batch size.
+                            share = delta_wh / len(bike_activities)
                         is_exact = False
                     else:
                         share = delta_wh
-                        is_exact = len(bike_activities) == 1
+                        is_exact = True
 
                     self._activity_consumption[aid] = {
                         "consumed_wh": round(share, 1),
@@ -556,10 +653,198 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                         if capacity_wh > 0 else 0,
                     )
 
+                # Issue #67: the cloud counter can still be catching up with
+                # this bike's TRUE energy use for a while after the ride
+                # first appears (see CONSUMPTION_TOPUP_WINDOW). Register the
+                # chronologically latest of this poll's newly attributed
+                # activities (same deterministic ordering as everywhere else
+                # in this file - see _activity_sort_key) so a further
+                # current_wh increase on a later poll - with no even-newer
+                # activity in between - tops it up instead of silently
+                # vanishing into the next baseline.
+                latest_new = max(bike_activities, key=self._activity_sort_key)
+                latest_aid = latest_new.get("id")
+                if latest_aid:
+                    # Only supersede a still-open window if this really IS
+                    # newer than whatever it is currently watching - "newly
+                    # discovered this poll" does not mean "chronologically
+                    # newest" (backend sync can be out of order). An older
+                    # activity that only just got attributed must not hijack
+                    # a legitimately newer ride's still-open window: it
+                    # already got its own correct delta credited above via
+                    # the normal per-activity accounting, it just doesn't
+                    # ALSO take over the top-up watch. An existing window
+                    # whose deadline has already lapsed (but hasn't been
+                    # purged yet - that only happens below, in the
+                    # reconciliation loop) no longer has a legitimate claim
+                    # either, so it does not block a fresh one from opening.
+                    existing_aid = self._consumption_topup_activity.get(bike_id)
+                    existing_activity = (
+                        activities_by_id.get(existing_aid) if existing_aid else None
+                    )
+                    existing_deadline = self._consumption_topup_deadline.get(bike_id)
+                    existing_expired = (
+                        existing_deadline is not None
+                        and dt_util.utcnow() >= existing_deadline
+                    )
+                    supersedes = (
+                        existing_activity is None
+                        or existing_expired
+                        or self._activity_sort_key(latest_new)
+                        > self._activity_sort_key(existing_activity)
+                    )
+                    if supersedes:
+                        self._consumption_topup_activity[bike_id] = latest_aid
+                        self._consumption_topup_deadline[bike_id] = (
+                            dt_util.utcnow() + CONSUMPTION_TOPUP_WINDOW
+                        )
+                    # Both the energy AND odometer references advance
+                    # together whenever this poll's delta for this bike was
+                    # fully resolved above - whether by opening/refreshing
+                    # the window on a genuinely newer activity, or by
+                    # crediting a non-superseding older one its own separate,
+                    # distance-backed delta. Advancing only the energy side
+                    # here would leave the odometer side stale, so a LATER
+                    # poll's corroboration would re-litigate distance that
+                    # was already fully explained this poll and could wrongly
+                    # close an otherwise still-legitimate window over it.
+                    odo = current_odo_by_bike.get(bike_id)
+                    if odo is not None:
+                        self._consumption_topup_odometer_m[bike_id] = odo
+                    else:
+                        self._consumption_topup_odometer_m.pop(bike_id, None)
+                    # This poll's ENTIRE delta_wh for this bike was just
+                    # spent above (on latest_new's own batch - whether that
+                    # credited the newly/still-watched activity itself when
+                    # supersedes, or a DIFFERENT, non-superseding,
+                    # out-of-order older ride when not). Either way the
+                    # watched activity's own high-water mark must advance to
+                    # current_wh regardless of which branch ran above - if
+                    # it were left at its old value here (or never set at
+                    # all, for a brand new window), the next poll would
+                    # compute "extra" across a span that was already paid
+                    # out to this poll's activity/activities, double-
+                    # crediting it onto the (still or newly) watched one.
+                    self._consumption_topup_baseline_wh[bike_id] = current_wh
+
         # Basislinien pro Bike aktualisieren
         for bike_id, current_wh in current_wh_by_bike.items():
-            if self._prev_delivered_wh.get(bike_id) != current_wh:
-                self._prev_delivered_wh[bike_id] = current_wh
+            topup_aid = self._consumption_topup_activity.get(bike_id)
+            deadline = self._consumption_topup_deadline.get(bike_id)
+            if topup_aid and deadline is not None and dt_util.utcnow() >= deadline:
+                # Window closed: stop watching this ride, whether or not it
+                # ever got a top-up. A later increase now belongs to
+                # whatever activity shows up next, handled the normal way.
+                self._consumption_topup_activity.pop(bike_id, None)
+                self._consumption_topup_deadline.pop(bike_id, None)
+                self._consumption_topup_baseline_wh.pop(bike_id, None)
+                self._consumption_topup_odometer_m.pop(bike_id, None)
+                topup_aid = None
+            topup_baseline = self._consumption_topup_baseline_wh.get(bike_id)
+            if (
+                topup_aid
+                and bike_id not in by_bike  # not already handled above this poll
+                and topup_baseline is not None
+                and current_wh > topup_baseline
+                # Re-attribution (attribute_activities_to_bikes, just above
+                # in _async_update_data) can move an activity to a different
+                # bike between polls; only top it up while it's still on the
+                # SAME bike this counter belongs to.
+                and self._activity_bike.get(topup_aid) == bike_id
+            ):
+                # Corroborate against the bike's own odometer before trusting
+                # this growth as "still the same watched ride" rather than a
+                # separate, not-yet-synced ride: real riding almost always
+                # moves it far more than ordinary noise. Cannot corroborate
+                # (odometer missing either reading) -> be conservative and
+                # skip, same fail-safe default as a mismatch.
+                captured_odo = self._consumption_topup_odometer_m.get(bike_id)
+                current_odo = current_odo_by_bike.get(bike_id)
+                corroborated = (
+                    captured_odo is not None
+                    and current_odo is not None
+                    and (current_odo - captured_odo) <= CONSUMPTION_TOPUP_ODOMETER_TOLERANCE_M
+                )
+                if not corroborated:
+                    # Likely a separate ride still syncing in, not this one
+                    # still catching up - stop watching it rather than risk
+                    # transplanting another ride's energy onto it. The extra
+                    # Wh falls through to the baseline update below, same as
+                    # before this mechanism existed (silently absorbed, not
+                    # misattributed - the safe direction to fail in).
+                    self._consumption_topup_activity.pop(bike_id, None)
+                    self._consumption_topup_deadline.pop(bike_id, None)
+                    self._consumption_topup_baseline_wh.pop(bike_id, None)
+                    self._consumption_topup_odometer_m.pop(bike_id, None)
+                    _LOGGER.info(
+                        "Battery consumption top-up for activity %s (bike %s) "
+                        "skipped: odometer moved %s while watching, likely a "
+                        "separate ride still syncing in",
+                        topup_aid, bike_id,
+                        None if captured_odo is None or current_odo is None
+                        else f"{current_odo - captured_odo:.0f} m",
+                    )
+                else:
+                    entry = self._activity_consumption.get(topup_aid)
+                    # A missing entry (manually reassigned to another bike,
+                    # see async_assign_activities) or a ble_live-sourced one
+                    # (already exact, cloud delta is irrelevant to it) is
+                    # left alone; the extra Wh instead simply becomes part of
+                    # this bike's next baseline below, same as before this
+                    # mechanism existed.
+                    if entry is not None and entry.get("source") != "ble_live":
+                        extra = current_wh - topup_baseline
+                        capacity_wh = entry.get("capacity_wh") or self.battery_capacity_wh(bike_id)
+                        new_wh = float(entry.get("consumed_wh", 0) or 0) + extra
+                        entry["consumed_wh"] = round(new_wh, 1)
+                        entry["percentage"] = round(
+                            (new_wh / capacity_wh) * 100, 1
+                        ) if capacity_wh > 0 else 0
+                        state_changed = True
+                        # Advance the high-water mark to what was just
+                        # credited: a future dip-then-recovery is measured
+                        # against this new high point, never re-crediting
+                        # the same energy twice. The odometer reference is
+                        # deliberately NOT advanced here - it stays pinned to
+                        # whatever it was when the window last opened, so the
+                        # tolerance is a budget for the window's WHOLE
+                        # lifetime, not a fresh one every poll. Advancing it
+                        # on every top-up would let several separate short
+                        # rides each individually pass under the tolerance
+                        # and collectively be absorbed without ever
+                        # exceeding it.
+                        self._consumption_topup_baseline_wh[bike_id] = current_wh
+                        _LOGGER.info(
+                            "Battery consumption for activity %s (bike %s) topped "
+                            "up by %.1f Wh (cloud counter still catching up): "
+                            "now %.1f Wh (%.1f%%)",
+                            topup_aid, bike_id, extra, new_wh, entry["percentage"],
+                        )
+            # Hold the line on a SMALL dip (cloud glitch / correction) so a
+            # newly-DISCOVERED activity's own initial share (further up,
+            # "prev_wh = self._prev_delivered_wh.get(bike_id)", which reads
+            # THIS dict directly and has no protection of its own the way
+            # the top-up CONTINUATION path's _consumption_topup_baseline_wh
+            # does) can't double-count a dip's depth once the counter
+            # recovers. But a LARGE drop is a genuine reset, not noise - a
+            # removable e-bike battery swap or drive-unit replacement makes
+            # the counter start over near zero, and pinning THAT would lock
+            # the bike out of consumption tracking until the new battery's
+            # own total organically climbs back past the old one's final
+            # reading (months to years), instead of self-healing within one
+            # extra poll the way the un-pinned code did before this
+            # protection existed. MAX_PROTECTED_DELIVERED_WH_DIP is the
+            # boundary between the two.
+            existing_prev_wh = self._prev_delivered_wh.get(bike_id)
+            if (
+                existing_prev_wh is not None
+                and 0 < existing_prev_wh - current_wh <= MAX_PROTECTED_DELIVERED_WH_DIP
+            ):
+                new_prev_wh = existing_prev_wh
+            else:
+                new_prev_wh = current_wh
+            if self._prev_delivered_wh.get(bike_id) != new_prev_wh:
+                self._prev_delivered_wh[bike_id] = new_prev_wh
                 state_changed = True
         current_ids = current_ids - unresolved_ids
         if self._prev_activity_ids != current_ids:
@@ -1696,6 +1981,17 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # handle the gap and simply show no battery figure.
         for activity_id in mapping:
             self._activity_consumption.pop(activity_id, None)
+        # Also stop watching any of these for a consumption top-up (see
+        # _track_battery_consumption): the bike it was tracked under may no
+        # longer be the one it's now assigned to, and the entry it would
+        # have topped up is gone anyway.
+        reassigned = set(mapping)
+        for bike_id, topup_aid in list(self._consumption_topup_activity.items()):
+            if topup_aid in reassigned:
+                self._consumption_topup_activity.pop(bike_id, None)
+                self._consumption_topup_deadline.pop(bike_id, None)
+                self._consumption_topup_baseline_wh.pop(bike_id, None)
+                self._consumption_topup_odometer_m.pop(bike_id, None)
         await self._async_save_state()
         await self.async_request_refresh()
 
