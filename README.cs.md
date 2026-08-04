@@ -54,7 +54,7 @@ Tyto entity pro kola s BES2 jednoduše neexistují.
 - **3D mapa s chase-cam, časovým posuvníkem a stíny budov:** vlastní Lovelace karta (`bosch-ebike-3d-map-card`) pro detailní zobrazení jízdy s 3D budovami, kamerou sledující kolo zezadu, poměrnou rychlostí přehrávání (standardně 60× reálný čas) a vrženými stíny podle polohy slunce v čase jízdy (MapLibre + OpenFreeMap, zdarma a bez API klíče)
 - **Dashboardová karta s fotkou kola, živými daty a ovládáním nabíjení:** vlastní Lovelace karta (`bosch-ebike-dashboard-card`) s vlastní fotkou kola, najetými kilometry, stavem baterie, stavem nabíjení, volitelným senzorem nabíjecího výkonu, posuvníkem cílového SoC a tlačítky start/stop přes chytrou zásuvku
 - **Automatická obnova tokenu** pomocí refresh tokenu
-- **Interval dotazování 30 minut** (při prvním spuštění se naimportují všechny jízdy)
+- **Interval dotazování 10 minut** (při prvním spuštění se naimportují všechny jízdy)
 
 ### 🆕 Živá data přes Bluetooth (ESPHome bridge)
 

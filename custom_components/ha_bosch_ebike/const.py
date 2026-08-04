@@ -27,7 +27,7 @@ BES2_STATISTICS_ENDPOINT = "/activity/ebike-system-2/v1/statistics"
 CONF_BES2_SERIAL = "bes2_drive_unit_serial"
 CONF_BES2_PART = "bes2_drive_unit_part"
 
-DEFAULT_SCAN_INTERVAL = 30  # minutes
+DEFAULT_SCAN_INTERVAL = 10  # minutes
 DEFAULT_BATTERY_CAPACITY_WH = 750  # Default battery capacity in Wh
 
 # Service / maintenance reminder thresholds

@@ -710,7 +710,7 @@ async def async_setup_entry(
             # issue #60 follow-up: the odometer sensor's floor/live-boost
             # value is only recomputed when this entity's own state is
             # rewritten. As a plain CoordinatorEntity, that only happened on
-            # the coordinator's own 30-minute cloud poll, so a live odometer
+            # the coordinator's own cloud poll, so a live odometer
             # update (bike reconnecting at home) sat unused until the next
             # poll happened to catch up too - by which point the cloud value
             # had usually also synced, making the boost look like it never
@@ -1046,7 +1046,7 @@ class BoschEBikeSensor(CoordinatorEntity[BoschEBikeCoordinator], SensorEntity):
 
         Without this, the floor/live-boost value computed in
         coordinator._floored_odometer_km() was only ever re-read when the
-        CLOUD coordinator's own 30-minute poll rewrote this entity's state -
+        CLOUD coordinator's own poll rewrote this entity's state -
         the live entity itself updating (e.g. the bike reconnecting at home)
         did not, by itself, trigger a re-read. In practice that made the
         boost appear to only kick in whenever the cloud poll happened to
@@ -1894,7 +1894,7 @@ class BoschCurrentRangeSensor(BoschRangeEstimateSensor):
 
     Only created when the live SoC sensor (ESPHome bridge) is linked in the
     options. Listens to that entity so the value updates immediately, not
-    just on the 30-minute poll.
+    just on the regular cloud poll.
     """
 
     _attr_translation_key = "estimated_range_current"

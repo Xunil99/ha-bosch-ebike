@@ -54,7 +54,7 @@ Estas entidades simplemente no existen para las bicis BES2.
 - **Mapa 3D con chase-cam, control deslizante de tiempo y sombras de edificios:** tarjeta Lovelace personalizada (`bosch-ebike-3d-map-card`) para la vista de detalle del recorrido con edificios en 3D, una cámara que sigue a la bici desde atrás, velocidad de reproducción proporcional (por defecto 60× tiempo real) y sombras proyectadas según la posición del sol a la hora del recorrido (MapLibre + OpenFreeMap, gratuito y sin clave de API)
 - **Tarjeta de dashboard con foto de la bici, datos en vivo y control de carga:** tarjeta Lovelace personalizada (`bosch-ebike-dashboard-card`) con foto propia de la bici, kilometraje, nivel de batería, estado de carga, sensor opcional de potencia de carga, control deslizante de SoC objetivo y botones de inicio/parada mediante un enchufe inteligente
 - **Renovación automática del token** mediante refresh-token
-- **Intervalo de sondeo de 30 minutos** (en el primer arranque se importan todos los trayectos)
+- **Intervalo de sondeo de 10 minutos** (en el primer arranque se importan todos los trayectos)
 
 ### 🆕 Datos en vivo por Bluetooth (puente ESPHome)
 

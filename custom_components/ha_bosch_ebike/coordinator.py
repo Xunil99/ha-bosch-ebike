@@ -53,9 +53,9 @@ _LOGGER = logging.getLogger(__name__)
 # top-up step). Bosch's cloud counter can still be catching up with a ride's
 # real energy use for a while after the ride first appears - reported (issue
 # #67 forum thread) after a fast recharge started right after the ride ended.
-# Long enough to span several poll cycles at the default 30-minute interval,
-# short enough that a genuinely separate, unrelated later ride is very
-# unlikely to fall inside it and get misattributed backward.
+# Long enough to span several poll cycles at the default scan interval
+# (DEFAULT_SCAN_INTERVAL), short enough that a genuinely separate, unrelated
+# later ride is very unlikely to fall inside it and get misattributed backward.
 CONSUMPTION_TOPUP_WINDOW = timedelta(hours=3)
 
 # How far a bike's own odometer (bike["driveUnit"]["odometer"], metres) may
@@ -1341,8 +1341,8 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         ``_activity_sort_key``), so the result is a pure function of which
         activities are present, never of the (unreliable) order the cloud
         happened to return them in this poll - otherwise two same-instant
-        activities could flip back and forth as "latest" every 30 minutes
-        purely from batch-order noise.
+        activities could flip back and forth as "latest" every poll purely
+        from batch-order noise.
         """
         if not activities:
             return None

@@ -54,7 +54,7 @@ Deze entiteiten bestaan voor BES2-fietsen eenvoudigweg niet.
 - **3D-kaart met chase-cam, tijdschuif en gebouwschaduwen:** custom Lovelace-kaart (`bosch-ebike-3d-map-card`) voor de tour-detailweergave met 3D-gebouwen, een camera die de fiets van achteren volgt, proportionele afspeelsnelheid (standaard 60× realtime) en slagschaduwen volgens de zonnestand op het tijdstip van de tour (MapLibre + OpenFreeMap, gratis en zonder API-key)
 - **Dashboard-kaart met fietsfoto, live-data en laadbediening:** custom Lovelace-kaart (`bosch-ebike-dashboard-card`) met eigen fietsfoto, kilometerstand, accuniveau, laadstatus, optionele laadvermogenssensor, doel-SoC-schuifregelaar en start-/stopknoppen via een slimme stekker
 - **Automatische tokenvernieuwing** via refresh-token
-- **Polling-interval van 30 minuten** (bij de eerste start worden alle ritten geïmporteerd)
+- **Polling-interval van 10 minuten** (bij de eerste start worden alle ritten geïmporteerd)
 
 ### 🆕 Live-data via Bluetooth (ESPHome-bridge)
 

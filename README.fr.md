@@ -54,7 +54,7 @@ Ces entités n'existent tout simplement pas pour les vélos BES2.
 - **Carte 3D avec chase-cam, curseur temporel et ombres des bâtiments :** carte Lovelace personnalisée (`bosch-ebike-3d-map-card`) pour la vue détaillée d'une sortie avec bâtiments en 3D, une caméra qui suit le vélo par derrière, vitesse de lecture proportionnelle (par défaut 60× le temps réel) et ombres portées selon la position du soleil à l'heure de la sortie (MapLibre + OpenFreeMap, gratuit et sans clé API)
 - **Carte de tableau de bord avec photo du vélo, données en direct et pilotage de la charge :** carte Lovelace personnalisée (`bosch-ebike-dashboard-card`) avec ta propre photo du vélo, kilométrage, niveau de batterie, état de charge, capteur de puissance de charge optionnel, curseur de SoC cible ainsi que boutons Start/Stop via une prise connectée
 - **Renouvellement automatique du token** via refresh token
-- **Intervalle d'interrogation de 30 minutes** (toutes les sorties sont importées au premier démarrage)
+- **Intervalle d'interrogation de 10 minutes** (toutes les sorties sont importées au premier démarrage)
 
 ### 🆕 Données en direct via Bluetooth (passerelle ESPHome)
 
