@@ -5916,6 +5916,513 @@ function boschReachableRanges(hass, anchorEntityId, bikeId, modeOrder) {
   return chosen.map(({ device_id, ...r }) => r);
 }
 
+// ===========================================================================
+// Trick List card: sortable table of every recorded jump/manual/stoppie/
+// wheelie (issue #65 follow-up). Bosch's `tricks` API field is a per-RIDE
+// aggregate per trick type (amount + max distance/duration/height-or-angle
+// for that ride, see trick_check.py's docstring - confirmed via a real
+// diagnostics dump, no per-event GPS or timestamp exists to list instead),
+// so "one row per trick" is approximated as one row per (ride, trick type)
+// that actually happened - a ride with both a jump and two wheelies becomes
+// two rows, each carrying that type's own full stat set.
+// ===========================================================================
+
+const TRICKLIST_TYPES = ["jumps", "manuals", "stoppies", "wheelies"];
+
+// {type -> i18n key} for the already-existing per-type labels (see the
+// trick tooltip on the map card) - reused as-is rather than duplicated.
+const TRICKLIST_TYPE_LABEL_KEY = {
+  jumps: "trick_jump",
+  manuals: "trick_manual",
+  stoppies: "trick_stoppie",
+  wheelies: "trick_wheelie",
+};
+
+// Flattens activities into one row per (ride, trick type) with amount > 0.
+// Pure and DOM-free so it can be verified standalone (see this session's
+// scratchpad verify_trick_list.mjs) before being pasted here.
+function trickListBuildRows(activities) {
+  const rows = [];
+  for (const a of (activities || [])) {
+    const tc = a && a.trickCheck;
+    if (!tc || !tc.has_any) continue;
+    for (const type of TRICKLIST_TYPES) {
+      const t = tc[type];
+      if (!t || !(t.amount > 0)) continue;
+      rows.push({
+        activityId: a.id,
+        startTime: a.startTime,
+        title: a.title || "",
+        bikeId: a.bikeId,
+        type,
+        amount: t.amount,
+        maxDistanceM: Number.isFinite(t.max_distance_m) ? t.max_distance_m : null,
+        maxDurationS: Number.isFinite(t.max_duration_s) ? t.max_duration_s : null,
+        maxHeightM: Number.isFinite(t.max_height_m) ? t.max_height_m : null,
+        maxAngleDeg: Number.isFinite(t.max_angle_deg) ? t.max_angle_deg : null,
+      });
+    }
+  }
+  return rows;
+}
+
+// Column definitions: `value` extracts the sort key (a locale-aware string
+// resolver is passed in separately for the two label columns, since their
+// display text depends on ebT()/bike-label lookups the pure row itself
+// doesn't carry). `numeric` marks columns whose N/A cells (null) must
+// always sort last regardless of direction - a "-" is neither the smallest
+// nor the largest real value for that stat, so it must never interleave
+// with actual numbers at either end of a numeric sort.
+const TRICKLIST_COLUMNS = [
+  {
+    key: "startTime", labelKey: "tricklist_col_date", numeric: false,
+    // A missing/invalid startTime must resolve to null, not epoch 0 - only
+    // null gets trickListSort's "always sorts to the end, either direction"
+    // treatment (see its own comment and README's documented promise for
+    // this table); epoch 0 sorts as a real, extremely old timestamp and
+    // would pin such a row at the very top the moment the date column is
+    // sorted ascending, contradicting the "-" placeholder its own render
+    // cell already shows for the exact same row.
+    value: (r) => {
+      const t = Date.parse(r.startTime);
+      return Number.isNaN(t) ? null : t;
+    },
+  },
+  { key: "title", labelKey: "tricklist_col_ride", numeric: false, value: (r) => (r.title || "").toLowerCase() },
+  { key: "bike", labelKey: "tricklist_col_bike", numeric: false, value: (r, ctx) => (ctx.bikeLabel(r.bikeId) || "").toLowerCase() },
+  { key: "type", labelKey: "tricklist_col_trick", numeric: false, value: (r, ctx) => (ctx.typeLabel(r.type) || "").toLowerCase() },
+  { key: "amount", labelKey: "tricklist_col_amount", numeric: true, value: (r) => r.amount },
+  { key: "maxDistanceM", labelKey: "tricklist_col_distance", numeric: true, value: (r) => r.maxDistanceM },
+  { key: "maxDurationS", labelKey: "tricklist_col_duration", numeric: true, value: (r) => r.maxDurationS },
+  { key: "maxHeightM", labelKey: "tricklist_col_height", numeric: true, value: (r) => r.maxHeightM },
+  { key: "maxAngleDeg", labelKey: "tricklist_col_angle", numeric: true, value: (r) => r.maxAngleDeg },
+];
+
+// Sorts `rows` in place by the given column (see TRICKLIST_COLUMNS) and
+// direction ("asc" | "desc"). `ctx` supplies the two label resolvers the
+// bike/type columns need. Null values (a stat that doesn't apply to this
+// row's trick type, e.g. maxHeightM on a wheelie) always sort to the very
+// end, independent of `dir` - see TRICKLIST_COLUMNS' comment for why.
+function trickListSort(rows, columnKey, dir, ctx) {
+  const col = TRICKLIST_COLUMNS.find((c) => c.key === columnKey) || TRICKLIST_COLUMNS[0];
+  const sign = dir === "asc" ? 1 : -1;
+  rows.sort((a, b) => {
+    const av = col.value(a, ctx);
+    const bv = col.value(b, ctx);
+    const aNull = av === null || av === undefined;
+    const bNull = bv === null || bv === undefined;
+    if (aNull && bNull) return 0;
+    if (aNull) return 1;
+    if (bNull) return -1;
+    if (av < bv) return -1 * sign;
+    if (av > bv) return 1 * sign;
+    return 0;
+  });
+  return rows;
+}
+
+class BoschEBikeTrickListCard extends HTMLElement {
+  constructor() {
+    super();
+    this._hass = null;
+    this._config = {};
+    this._activities = [];
+    this._instances = [];
+    this._filterAccount = "all";
+    this._filterBike = "all";
+    this._sortColumn = "startTime";
+    this._sortDir = "desc";
+    this._lockedAccount = false;
+    this._lockedBike = false;
+    this._ready = false;
+    this._booting = false;
+  }
+
+  setConfig(config) {
+    this._config = { ...config };
+    if (config.account_id) { this._filterAccount = config.account_id; this._lockedAccount = true; }
+    else { this._lockedAccount = false; }
+    if (config.bike_id) { this._filterBike = config.bike_id; this._lockedBike = true; }
+    else { this._lockedBike = false; }
+    if (this._ready) {
+      this._applyTitle();
+      this._populateFilters();
+      this._render();
+    }
+  }
+
+  set hass(hass) {
+    const first = !this._hass;
+    this._hass = hass;
+    if (first) this._boot();
+  }
+
+  static getConfigElement() { return document.createElement("bosch-ebike-trick-list-card-editor"); }
+  static getStubConfig() { return {}; }
+  getCardSize() { return 6; }
+
+  async _boot() {
+    if (this._booting || this._ready) return;
+    this._booting = true;
+    try {
+      this._buildDOM();
+      this._ready = true;
+      this._applyTitle();
+      await this._fetchInstances();
+      this._populateFilters();
+      await this._loadActivities();
+      this._render();
+    } catch (err) {
+      console.error("[Bosch eBike Trick List] boot error", err);
+      const msg = this.querySelector("#trklist-msg");
+      if (msg) msg.textContent = "Error: " + (err?.message || err);
+    } finally {
+      this._booting = false;
+    }
+  }
+
+  _applyTitle() {
+    const head = this.querySelector(".trklist-head span");
+    if (head && this._config && this._config.title) head.textContent = this._config.title;
+  }
+
+  _buildDOM() {
+    this.innerHTML = "";
+    const card = document.createElement("ha-card");
+    this.appendChild(card);
+    const style = document.createElement("style");
+    style.textContent = `
+      .trklist-head {
+        display:flex; align-items:center; gap:8px; padding:12px 16px;
+        background:var(--primary-color,#03a9f4); color:#fff; font-size:16px; font-weight:500;
+      }
+      .trklist-filters {
+        display:flex; flex-wrap:wrap; gap:8px; padding:8px 12px;
+        background:var(--secondary-background-color,#f5f5f5);
+        border-bottom:1px solid var(--divider-color,#e0e0e0);
+      }
+      .trklist-filters select {
+        padding:5px 8px; border:1px solid var(--divider-color,#ccc);
+        border-radius:6px; font-size:13px;
+        background:var(--card-background-color,#fff); color:var(--primary-text-color,#333);
+      }
+      .trklist-filter-lbl { font-size:12px; color:var(--secondary-text-color,#666); align-self:center; }
+      .trklist-summary { padding:8px 16px 0; font-size:12px; color:var(--secondary-text-color,#666); }
+      .trklist-scroll { overflow-x:auto; padding:10px 16px 16px; }
+      .trklist-table { border-collapse:collapse; width:100%; font-size:13px; white-space:nowrap; }
+      .trklist-table th, .trklist-table td { padding:6px 10px; text-align:left; }
+      .trklist-table th {
+        cursor:pointer; user-select:none; font-weight:500;
+        color:var(--secondary-text-color,#666); border-bottom:2px solid var(--divider-color,#e0e0e0);
+      }
+      .trklist-table th.num, .trklist-table td.num { text-align:right; font-variant-numeric:tabular-nums; }
+      .trklist-table th.active { color:var(--primary-text-color,#222); }
+      .trklist-table td { border-bottom:1px solid var(--divider-color,#eee); }
+      .trklist-table tbody tr:hover { background:var(--secondary-background-color,#f5f5f5); }
+      .trklist-table td.title-cell { max-width:220px; overflow:hidden; text-overflow:ellipsis; }
+      .trklist-overlay { padding:18px 16px; color:var(--secondary-text-color,#999); font-size:13px; text-align:center; }
+      @media (prefers-color-scheme: dark) {
+        .trklist-table tbody tr:hover { background:rgba(255,255,255,0.06); }
+      }
+    `;
+    card.appendChild(style);
+
+    const t = (k, ...a) => ebT(this._hass, k, ...a);
+    const wrap = document.createElement("div");
+    wrap.innerHTML = `
+      <div class="trklist-head">
+        <svg viewBox="0 0 24 24" width="22" height="22"><path fill="white" d="M13.13,22.19L11.5,18.36C13.07,17.78 14.54,17 15.9,16.09L13.13,22.19M5.64,12.5L1.81,10.87L7.91,8.1C7,9.46 6.22,10.93 5.64,12.5M21.61,2.39C21.61,2.39 16.66,0.269 11.61,5.319C9.6,7.329 8.54,9.36 7.5,10.36C6.65,11.21 5.35,11.5 5.35,11.5L2.5,14.35C1.5,15.35 2.5,17.5 3.5,18.5C4.5,19.5 6.65,20.5 7.65,19.5L10.5,16.65C10.5,16.65 10.79,15.35 11.64,14.5C12.64,13.46 14.67,12.4 16.68,10.39C21.73,5.34 21.61,2.39 21.61,2.39Z"/></svg>
+        <span>${t("tricklist_title")}</span>
+      </div>
+      <div class="trklist-filters">
+        <span class="trklist-filter-lbl" id="trklist-acc-lbl" style="display:none;">${t("cal_account_label")}</span>
+        <select id="trklist-account" style="display:none;">
+          <option value="all">${t("cal_account_label")}</option>
+        </select>
+        <span class="trklist-filter-lbl" id="trklist-bike-lbl" style="display:none;">${t("cal_bike_label")}</span>
+        <select id="trklist-bike" style="display:none;">
+          <option value="all">${t("cal_bike_label")}</option>
+        </select>
+      </div>
+      <div class="trklist-summary" id="trklist-summary"></div>
+      <div class="trklist-scroll" id="trklist-body">
+        <div class="trklist-overlay" id="trklist-msg">${t("cal_loading")}</div>
+      </div>
+    `;
+    while (wrap.firstChild) card.appendChild(wrap.firstChild);
+
+    this.querySelector("#trklist-account").addEventListener("change", (e) => {
+      this._filterAccount = e.target.value;
+      if (!this._lockedBike) this._filterBike = "all";
+      this._populateBikeFilter();
+      this._render();
+    });
+    this.querySelector("#trklist-bike").addEventListener("change", (e) => {
+      this._filterBike = e.target.value;
+      this._render();
+    });
+  }
+
+  async _fetchInstances() {
+    try {
+      const res = await this._hass.callWS({ type: "bosch_ebike/list_instances" });
+      this._instances = res.instances || [];
+    } catch (_) { this._instances = []; }
+  }
+
+  async _loadActivities() {
+    try {
+      const res = await this._hass.callWS({ type: "bosch_ebike/list_activities" });
+      this._activities = res.activities || [];
+    } catch (err) {
+      console.error("[Bosch eBike Trick List] load_activities failed", err);
+      this._activities = [];
+    }
+  }
+
+  _populateFilters() {
+    const accSel = this.querySelector("#trklist-account");
+    const accLbl = this.querySelector("#trklist-acc-lbl");
+    if (this._lockedAccount) {
+      if (accSel) accSel.style.display = "none";
+      if (accLbl) accLbl.style.display = "none";
+    } else if (this._instances.length > 1) {
+      const t = (k) => ebT(this._hass, k);
+      const opts = [`<option value="all">${t("cal_account_label").replace(":", "")}</option>`];
+      for (const inst of this._instances) {
+        opts.push(`<option value="${this._escapeHtml(inst.config_entry_id)}">${this._escapeHtml(inst.label)}</option>`);
+      }
+      accSel.innerHTML = opts.join("");
+      accSel.value = this._filterAccount;
+      accSel.style.display = "";
+      accLbl.style.display = "";
+    }
+    this._populateBikeFilter();
+  }
+
+  // Bikes visible under the current account filter, in stable order - also
+  // used to resolve a row's bikeId into a display label (see _bikeLabel()).
+  _bikesInScope() {
+    const bikes = [];
+    for (const inst of this._instances) {
+      if (this._filterAccount !== "all" && inst.config_entry_id !== this._filterAccount) continue;
+      for (const b of (inst.bikes || [])) bikes.push(b);
+    }
+    return bikes;
+  }
+
+  _populateBikeFilter() {
+    const bikeSel = this.querySelector("#trklist-bike");
+    const bikeLbl = this.querySelector("#trklist-bike-lbl");
+    if (this._lockedBike) {
+      if (bikeSel) bikeSel.style.display = "none";
+      if (bikeLbl) bikeLbl.style.display = "none";
+      return;
+    }
+    const bikes = this._bikesInScope();
+    if (bikes.length <= 1) {
+      bikeSel.style.display = "none";
+      bikeLbl.style.display = "none";
+      return;
+    }
+    const t = (k) => ebT(this._hass, k);
+    const opts = [`<option value="all">${t("cal_bike_label").replace(":", "")}</option>`];
+    for (const b of bikes) {
+      opts.push(`<option value="${this._escapeHtml(b.id)}">${this._escapeHtml(b.label)}</option>`);
+    }
+    bikeSel.innerHTML = opts.join("");
+    bikeSel.value = this._filterBike;
+    bikeSel.style.display = "";
+    bikeLbl.style.display = "";
+  }
+
+  _escapeHtml(s) {
+    return String(s || "").replace(/[&<>"']/g, (c) => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+    })[c]);
+  }
+
+  _filteredActivities() {
+    return (this._activities || []).filter((a) => {
+      if (this._filterAccount !== "all" && a.accountId !== this._filterAccount) return false;
+      if (this._filterBike !== "all" && a.bikeId !== this._filterBike) return false;
+      return true;
+    });
+  }
+
+  // bikeId -> display label, "" for an unattributed ride (the "Bike" column
+  // then simply shows blank rather than a raw uuid or a misleading guess).
+  _bikeLabel(bikeId) {
+    if (!bikeId) return "";
+    const found = this._bikesInScope().find((b) => b.id === bikeId);
+    return found ? found.label : "";
+  }
+
+  _typeLabel(type) {
+    return ebT(this._hass, TRICKLIST_TYPE_LABEL_KEY[type] || type);
+  }
+
+  _render() {
+    if (!this._ready) return;
+    const body = this.querySelector("#trklist-body");
+    const summary = this.querySelector("#trklist-summary");
+    if (!body) return;
+    const t = (k, ...a) => ebT(this._hass, k, ...a);
+
+    const rows = trickListBuildRows(this._filteredActivities());
+    if (!rows.length) {
+      body.innerHTML = `<div class="trklist-overlay">${t("tricklist_no_match")}</div>`;
+      summary.innerHTML = "";
+      return;
+    }
+
+    const ctx = { bikeLabel: (id) => this._bikeLabel(id), typeLabel: (ty) => this._typeLabel(ty) };
+    trickListSort(rows, this._sortColumn, this._sortDir, ctx);
+
+    summary.textContent = t("tricklist_summary_count", rows.length);
+
+    // Hide once the table itself is already narrowed to one bike (dropdown
+    // pick or a config-locked bike_id) - showing a column that repeats the
+    // same name on every row is dead weight. Mirrors the exact same
+    // "_filterBike === 'all'" gate BoschEBikeStatsCard and BoschEBikeMapCard
+    // already use for the analogous decision.
+    const showBikeCol = this._filterBike === "all" && this._bikesInScope().length > 1;
+    const dateFmt = new Intl.DateTimeFormat(this._hassLocale(), {
+      year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
+    });
+    const na = "–"; // en dash, matches the existing "-" placeholder convention elsewhere in this card
+
+    const columns = TRICKLIST_COLUMNS.filter((c) => c.key !== "bike" || showBikeCol);
+    const headHtml = columns.map((c) => {
+      const active = c.key === this._sortColumn;
+      const arrow = active ? (this._sortDir === "asc" ? " ▲" : " ▼") : "";
+      return `<th class="${c.numeric ? "num " : ""}${active ? "active" : ""}" data-col="${c.key}">${t(c.labelKey)}${arrow}</th>`;
+    }).join("");
+
+    const bodyRows = rows.map((r) => {
+      const cells = [];
+      for (const c of columns) {
+        let text;
+        switch (c.key) {
+          case "startTime": {
+            // A missing/malformed startTime must degrade to "-", not throw
+            // and blank the whole table - Intl.DateTimeFormat.format()
+            // throws on an Invalid Date, and new Date(undefined) is exactly
+            // that (same guard shape as BoschEBikeCalendarCard's
+            // _aggregateByDay for the same field).
+            const parsed = r.startTime ? new Date(r.startTime) : null;
+            text = parsed && !isNaN(parsed.getTime())
+              ? this._escapeHtml(dateFmt.format(parsed))
+              : na;
+            break;
+          }
+          case "title": text = `<span title="${this._escapeHtml(r.title)}">${this._escapeHtml(r.title || na)}</span>`; break;
+          case "bike": text = this._escapeHtml(this._bikeLabel(r.bikeId) || na); break;
+          case "type": text = this._escapeHtml(this._typeLabel(r.type)); break;
+          case "amount": text = String(r.amount); break;
+          case "maxDistanceM": text = r.maxDistanceM != null ? r.maxDistanceM.toFixed(1) : na; break;
+          case "maxDurationS": text = r.maxDurationS != null ? r.maxDurationS.toFixed(2) : na; break;
+          case "maxHeightM": text = r.maxHeightM != null ? r.maxHeightM.toFixed(2) : na; break;
+          case "maxAngleDeg": text = r.maxAngleDeg != null ? r.maxAngleDeg.toFixed(1) : na; break;
+          default: text = na;
+        }
+        const cls = [c.numeric ? "num" : "", c.key === "title" ? "title-cell" : ""].filter(Boolean).join(" ");
+        cells.push(`<td${cls ? ` class="${cls}"` : ""}>${text}</td>`);
+      }
+      return `<tr>${cells.join("")}</tr>`;
+    }).join("");
+
+    body.innerHTML = `
+      <table class="trklist-table">
+        <thead><tr>${headHtml}</tr></thead>
+        <tbody>${bodyRows}</tbody>
+      </table>
+    `;
+
+    for (const th of body.querySelectorAll("th[data-col]")) {
+      th.addEventListener("click", () => {
+        const col = th.getAttribute("data-col");
+        if (this._sortColumn === col) {
+          this._sortDir = this._sortDir === "asc" ? "desc" : "asc";
+        } else {
+          this._sortColumn = col;
+          // A fresh column starts in its most useful direction: newest-
+          // first for the date column, biggest-first for every numeric
+          // stat (nobody opens a personal-bests table wanting the smallest
+          // jump on top), alphabetical for the two label columns.
+          const startCol = TRICKLIST_COLUMNS.find((c) => c.key === col);
+          this._sortDir = (col === "startTime" || (startCol && startCol.numeric)) ? "desc" : "asc";
+        }
+        this._render();
+      });
+    }
+  }
+
+  _hassLocale() {
+    if (this._hass && this._hass.locale && this._hass.locale.language) {
+      return this._hass.locale.language;
+    }
+    return (this._hass && this._hass.language) || navigator.language || "en-GB";
+  }
+}
+
+class BoschEBikeTrickListCardEditor extends BoschEBikeMapCardEditor {
+  _render() {
+    if (!this._config) return;
+    const cfg = this._config;
+    const inputStyle = "width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;background:var(--card-background-color,#fff);color:var(--primary-text-color,#222);";
+    const labelStyle = "display:block;margin-top:14px;margin-bottom:6px;font-weight:500";
+    const hintStyle = "display:block;margin-top:4px;font-size:12px;color:var(--secondary-text-color,#777)";
+    const t = (k, ...a) => ebT(this._hass, k, ...a);
+
+    let accountOpts = `<option value="">${ebT(this._hass, "editor_select_all")}</option>`;
+    for (const inst of (this._instances || [])) {
+      const selected = cfg.account_id === inst.config_entry_id ? " selected" : "";
+      accountOpts += `<option value="${this._escapeHtml(inst.config_entry_id)}"${selected}>${this._escapeHtml(inst.label)}</option>`;
+    }
+
+    let bikeOpts = `<option value="">${ebT(this._hass, "editor_select_all")}</option>`;
+    for (const b of this._bikeOptionsForAccount(cfg.account_id)) {
+      const selected = cfg.bike_id === b.id ? " selected" : "";
+      bikeOpts += `<option value="${this._escapeHtml(b.id)}"${selected}>${this._escapeHtml(b.label)}</option>`;
+    }
+
+    this.innerHTML = `<div style="padding:16px">
+      <label style="${labelStyle.replace('margin-top:14px;', '')}">${t("editor_title")}</label>
+      <input type="text" value="${this._escapeHtml(cfg.title || '')}" placeholder="${t("tricklist_title")}" style="${inputStyle}" id="title-in">
+
+      <label style="${labelStyle}">${t("editor_account_label")}</label>
+      <select id="acc-in" style="${inputStyle}">${accountOpts}</select>
+      <span style="${hintStyle}">${t("editor_account_hint")}</span>
+
+      <label style="${labelStyle}">${t("editor_bike_label")}</label>
+      <select id="bike-in" style="${inputStyle}">${bikeOpts}</select>
+      <span style="${hintStyle}">${t("editor_bike_hint")}</span>
+    </div>`;
+
+    this.querySelector("#title-in").addEventListener("change", (e) => {
+      const v = e.target.value.trim();
+      this._config = { ...this._config };
+      if (v) this._config.title = v; else delete this._config.title;
+      this._emit();
+    });
+    this.querySelector("#acc-in").addEventListener("change", (e) => {
+      const v = e.target.value;
+      this._config = { ...this._config };
+      if (v) this._config.account_id = v; else delete this._config.account_id;
+      delete this._config.bike_id;
+      this._emit();
+      this._render();
+    });
+    this.querySelector("#bike-in").addEventListener("change", (e) => {
+      const v = e.target.value;
+      this._config = { ...this._config };
+      if (v) this._config.bike_id = v; else delete this._config.bike_id;
+      this._emit();
+    });
+  }
+}
+
 class BoschEBikeDashboardCard extends HTMLElement {
   constructor() {
     super();
@@ -12728,6 +13235,12 @@ if (!customElements.get("bosch-ebike-stats-card")) {
 if (!customElements.get("bosch-ebike-stats-card-editor")) {
   customElements.define("bosch-ebike-stats-card-editor", BoschEBikeStatsCardEditor);
 }
+if (!customElements.get("bosch-ebike-trick-list-card")) {
+  customElements.define("bosch-ebike-trick-list-card", BoschEBikeTrickListCard);
+}
+if (!customElements.get("bosch-ebike-trick-list-card-editor")) {
+  customElements.define("bosch-ebike-trick-list-card-editor", BoschEBikeTrickListCardEditor);
+}
 
 window.customCards = window.customCards || [];
 if (!window.customCards.find((c) => c.type === "bosch-ebike-map-card")) {
@@ -12783,6 +13296,14 @@ if (!window.customCards.find((c) => c.type === "bosch-ebike-stats-card")) {
     type: "bosch-ebike-stats-card",
     name: "Bosch eBike Statistics",
     description: "Balkendiagramme für Distanz, Höhenmeter, Ø-Geschwindigkeit und Touren-Anzahl über die letzten 12 Wochen/Monate",
+    preview: false,
+  });
+}
+if (!window.customCards.find((c) => c.type === "bosch-ebike-trick-list-card")) {
+  window.customCards.push({
+    type: "bosch-ebike-trick-list-card",
+    name: "Bosch eBike Trick List",
+    description: "Sortierbare Liste aller erkannten Jumps/Manuals/Stoppies/Wheelies mit allen Details",
     preview: false,
   });
 }

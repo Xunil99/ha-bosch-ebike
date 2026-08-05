@@ -550,6 +550,25 @@ Alle vier `show_*`-Flags sind standardmäßig aktiv; einzeln auf `false` setzen 
 
 Bei "Alle Bikes" mit zwei oder mehr Bikes zeigt jedes Diagramm automatisch farblich unterschiedene Balken pro Bike (mit Legende) statt eines einzelnen Summenbalkens; nicht zuordenbare Touren erscheinen dabei als eigene Kategorie "Nicht zugeordnet". Jedes Diagramm hat außerdem eine dezente Y-Achse mit Skalenwerten und Einheit.
 
+### Trick-Liste - sortierbare Übersicht aller Jumps/Manuals/Stoppies/Wheelies
+
+Die Card `bosch-ebike-trick-list-card` listet jeden per Trick Check (siehe oben) erkannten Trick als eigene Zeile mit allen Details: Datum, Tour, Bike (nur bei mehreren Bikes sichtbar), Trick-Art, Anzahl, Weite, Dauer sowie Höhe (Jump) bzw. Winkel (Manual/Stoppie/Wheelie). Ein Klick auf eine Spaltenüberschrift sortiert danach, ein zweiter Klick kehrt die Richtung um. Standardsortierung ist Datum, neueste zuerst.
+
+```yaml
+type: custom:bosch-ebike-trick-list-card
+```
+
+Auf einen festen Konto- oder Bike-Filter kann per YAML gelockt werden (gleiche Optionen wie bei den anderen Cards):
+
+```yaml
+type: custom:bosch-ebike-trick-list-card
+title: Volkers Tricks
+account_id: 01HXYZ...
+bike_id: bike-uuid-1
+```
+
+Da Boschs API Trick-Daten pro Fahrt (nicht pro einzelnem Sprung mit eigenem GPS-Punkt oder Zeitstempel) liefert, entspricht eine Tabellenzeile "einer Trick-Art in einer Fahrt" - eine Fahrt mit einem Jump und zwei Wheelies erscheint als zwei Zeilen. Nicht zutreffende Werte (z. B. Winkel bei einem Jump) werden als "–" angezeigt und landen bei jeder Sortierung immer am Ende, nie an einem Extremwert.
+
 ### 3D-Karte - Chase-Cam-Verfolgung mit Zeit-Slider und Sonnenstand
 
 Die Card `bosch-ebike-3d-map-card` ist eine parallele Karte zur klassischen 2D-Map. Sie startet mit einer Liste der letzten Touren. Beim Klick auf eine Tour öffnet sich die 3D-Detailansicht mit MapLibre und kostenlosen OpenFreeMap-Vector-Tiles: die **Kamera folgt dem Bike in Third-Person-Perspektive** ("Chase-Cam"), Bearing dreht sich passend zur Fahrtrichtung, Pitch und Zoom sind konfigurierbar. Beim Slider-Bewegen schwenkt die Kamera mit. Die Kartenbeleuchtung passt sich dem Sonnenstand zur Tour-Zeit an.
@@ -1344,6 +1363,25 @@ show_ride_count: true
 All four `show_*` flags default to on; set any to `false` to hide that chart. You can lock the card to a specific account or bike via YAML (same options as the other cards). The time window is always fixed to the last 12 periods, so it never grows with account age.
 
 With "All Bikes" selected and two or more bikes in scope, each chart automatically shows color-coded bars per bike (with a legend) instead of one combined bar; rides that couldn't be attributed to a bike show up as their own "Unassigned" category. Every chart also gets a subtle Y-axis with scale values and units.
+
+### Trick List card - sortable overview of every jump/manual/stoppie/wheelie
+
+The card `bosch-ebike-trick-list-card` lists every trick detected by Trick Check (see above) as its own row with all details: date, ride, bike (only shown with more than one bike), trick type, count, distance, duration, and height (jump) or angle (manual/stoppie/wheelie). Click any column header to sort by it, click again to reverse the direction. Default sort is date, newest first.
+
+```yaml
+type: custom:bosch-ebike-trick-list-card
+```
+
+You can lock the card to a specific account or bike via YAML (same options as the other cards):
+
+```yaml
+type: custom:bosch-ebike-trick-list-card
+title: Volker's tricks
+account_id: 01HXYZ...
+bike_id: bike-uuid-1
+```
+
+Since Bosch's API reports trick data per ride (not per individual jump with its own GPS point or timestamp), one table row corresponds to "one trick type within one ride" - a ride with a jump and two wheelies shows up as two rows. Values that don't apply (e.g. an angle for a jump) display as "–" and always sort to the end, in either direction, never at either extreme.
 
 ### 3D map card - chase-cam, time slider, sun-aware building shadows
 
