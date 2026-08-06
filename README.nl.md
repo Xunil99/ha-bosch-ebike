@@ -434,7 +434,7 @@ playback_speed: 60     # 60x realtime (1 uur tour = 1 min weergave)
 - Play/pauze-knop voor de versnelde weergave (duur configureerbaar)
 - Live-statistieken bij de schuifpositie: cumulatieve afstand, snelheid, hoogte
 - Tijd- en zonnechip in de overlay toont de actuele tijd en daglichtfase (nacht, schemering, gouden uur, daglicht)
-- **Slagschaduwen van gebouwen** op de grond, geprojecteerd vanuit zonne-azimut en zonnehoogte op de schuiftijd. Schaduwen worden bij daglicht getoond, bij schemering korter, bij nacht verborgen. Automatische update wanneer de camera naar een nieuw stadsgebied zwenkt of de schuif wordt bewogen.
+- **Slagschaduwen van gebouwen** op de grond, geprojecteerd vanuit zonne-azimut en zonnehoogte op de schuiftijd. Schaduwen worden bij daglicht getoond, langer bij een lage zonnestand (begrensd op 400 m), bij nacht verborgen. Automatische update wanneer de camera naar een nieuw stadsgebied zwenkt of de schuif wordt bewogen.
 - **Video-export** rechts naast de schuifregelaar: de opnameknop start een weergave vanaf het begin van de tour en schrijft de kaartinhoud parallel weg als video. Bij het toureinde volgt automatisch een bestandsdownload (ca. 20-40 MB per minuut). Het formaat bepaalt de browser: **MP4** in modern Chrome (≥ 126) en Safari (≥ 14.4), anders **WebM**. Volledig in de browser via `canvas.captureStream()` + `MediaRecorder`; de HA-server heeft er niets mee te maken.
 - Terug-knop keert terug naar de tourlijst
 

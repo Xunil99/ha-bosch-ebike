@@ -446,7 +446,7 @@ playback_speed: 60     # 60x temps réel (sortie d'1 h = 1 min de lecture)
 - Bouton lecture/pause pour la lecture en accéléré (durée configurable)
 - Statistiques en direct à la position du curseur : distance cumulée, vitesse, altitude
 - Le chip heure et soleil dans l'overlay affiche l'heure actuelle et la phase de lumière du jour (nuit, crépuscule, heure dorée, plein jour)
-- **Ombres portées des bâtiments** au sol, projetées à partir de l'azimut et de la hauteur du soleil à l'heure du curseur. Les ombres sont affichées en plein jour, raccourcies au crépuscule, masquées la nuit. Mise à jour automatique quand la caméra pivote vers une nouvelle zone urbaine ou que le curseur est déplacé.
+- **Ombres portées des bâtiments** au sol, projetées à partir de l'azimut et de la hauteur du soleil à l'heure du curseur. Les ombres sont affichées en plein jour, plus longues quand le soleil est bas (limitées à 400 m), masquées la nuit. Mise à jour automatique quand la caméra pivote vers une nouvelle zone urbaine ou que le curseur est déplacé.
 - **Export vidéo** à droite du curseur : le bouton d'enregistrement lance une lecture depuis le début de la sortie et enregistre en parallèle le contenu de la carte sous forme de vidéo. À la fin de la sortie, un téléchargement de fichier démarre automatiquement (env. 20-40 Mo par minute). Le format est déterminé par le navigateur : **MP4** dans un Chrome moderne (≥ 126) et Safari (≥ 14.4), sinon **WebM**. Entièrement dans le navigateur via `canvas.captureStream()` + `MediaRecorder`, le serveur HA n'intervient pas du tout.
 - Le bouton retour ramène à la liste des sorties
 

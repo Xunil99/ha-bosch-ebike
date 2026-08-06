@@ -442,7 +442,7 @@ playback_speed: 60     # 60x il tempo reale (tour di 1 ora = 1 min di riproduzio
 - Pulsante play/pausa per la riproduzione accelerata (durata configurabile)
 - Statistiche live alla posizione dello slider: distanza cumulativa, velocità, altitudine
 - Chip di ora e sole nell'overlay che mostra l'ora corrente e la fase di luce diurna (notte, crepuscolo, ora dorata, luce diurna)
-- **Ombre proiettate dagli edifici** sul terreno, calcolate dall'azimut e dall'altezza del sole all'ora dello slider. Le ombre vengono mostrate con la luce diurna, si accorciano al crepuscolo e scompaiono di notte. Aggiornamento automatico quando la telecamera si sposta su una nuova zona urbana o si muove lo slider.
+- **Ombre proiettate dagli edifici** sul terreno, calcolate dall'azimut e dall'altezza del sole all'ora dello slider. Le ombre vengono mostrate con la luce diurna, si allungano quando il sole è basso (limitate a 400 m) e scompaiono di notte. Aggiornamento automatico quando la telecamera si sposta su una nuova zona urbana o si muove lo slider.
 - **Export video** a destra dello slider: il pulsante di registrazione avvia una riproduzione dall'inizio del tour e registra in parallelo il contenuto della mappa come video. Al termine del tour parte automaticamente il download del file (ca. 20-40 MB al minuto). Il formato è determinato dal browser: **MP4** nei Chrome moderni (≥ 126) e Safari (≥ 14.4), altrimenti **WebM**. Tutto avviene nel browser tramite `canvas.captureStream()` + `MediaRecorder`; il server HA non ha alcun ruolo.
 - Il pulsante Indietro riporta all'elenco dei tour
 

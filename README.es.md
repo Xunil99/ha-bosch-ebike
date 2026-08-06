@@ -444,7 +444,7 @@ playback_speed: 60     # 60x tiempo real (recorrido de 1 h = 1 min de reproducci
 - Botón de reproducción/pausa para la reproducción a cámara rápida (duración configurable)
 - Estadísticas en vivo según la posición del control deslizante: distancia acumulada, velocidad, altitud
 - El chip de hora y sol en la superposición muestra la hora actual y la fase de luz diurna (noche, crepúsculo, hora dorada, luz diurna)
-- **Sombras proyectadas de los edificios** sobre el suelo, proyectadas a partir del acimut y la altura del sol a la hora del control deslizante. Las sombras se muestran con luz diurna, se acortan en el crepúsculo y se ocultan de noche. Se actualizan automáticamente cuando la cámara gira hacia una nueva zona urbana o se mueve el control deslizante.
+- **Sombras proyectadas de los edificios** sobre el suelo, proyectadas a partir del acimut y la altura del sol a la hora del control deslizante. Las sombras se muestran con luz diurna, se alargan cuando el sol está bajo (limitadas a 400 m) y se ocultan de noche. Se actualizan automáticamente cuando la cámara gira hacia una nueva zona urbana o se mueve el control deslizante.
 - **Exportación de vídeo** a la derecha del control deslizante: el botón de grabación inicia una reproducción desde el principio del recorrido y graba en paralelo el contenido del mapa como vídeo. Al final del recorrido se descarga automáticamente el archivo (aprox. 20-40 MB por minuto). El formato lo determina el navegador: **MP4** en Chrome moderno (≥ 126) y Safari (≥ 14.4), de lo contrario **WebM**. Completamente en el navegador mediante `canvas.captureStream()` + `MediaRecorder`; el servidor de HA no interviene en absoluto.
 - El botón de retorno vuelve a la lista de recorridos
 

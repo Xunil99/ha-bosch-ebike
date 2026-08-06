@@ -434,7 +434,7 @@ playback_speed: 60     # 60x realtime (1 hodina jízdy = 1 min přehrávání)
 - Tlačítko play/pauza pro zrychlené přehrávání (délka konfigurovatelná)
 - Živé statistiky v pozici posuvníku: kumulativní vzdálenost, rychlost, nadmořská výška
 - Časový a sluneční chip v překryvu ukazuje aktuální čas a fázi denního světla (noc, soumrak, zlatá hodina, denní světlo)
-- **Vržené stíny budov** na zemi, promítnuté z azimutu a výšky Slunce v čase posuvníku. Stíny se zobrazují za denního světla, za soumraku jsou kratší, v noci jsou skryté. Automatická aktualizace, když se kamera natočí do nové městské oblasti nebo se pohne posuvníkem.
+- **Vržené stíny budov** na zemi, promítnuté z azimutu a výšky Slunce v čase posuvníku. Stíny se zobrazují za denního světla, při nízkém slunci jsou delší (omezené na 400 m), v noci jsou skryté. Automatická aktualizace, když se kamera natočí do nové městské oblasti nebo se pohne posuvníkem.
 - **Export videa** vpravo vedle posuvníku: tlačítko nahrávání spustí přehrávání od začátku jízdy a paralelně zapisuje obsah mapy jako video. Na konci jízdy následuje automaticky stažení souboru (cca 20-40 MB za minutu). Formát určuje prohlížeč: **MP4** v moderním Chrome (≥ 126) a Safari (≥ 14.4), jinak **WebM**. Kompletně v prohlížeči přes `canvas.captureStream()` + `MediaRecorder`; server HA s tím nemá nic společného.
 - Tlačítko zpět vrací na seznam jízd
 
