@@ -48,88 +48,6 @@ from .activity_event import build_new_activity_payload
 
 _LOGGER = logging.getLogger(__name__)
 
-# TEMPORARY diagnostic (2026-08, forum question): the SUMMARY-level `tricks`
-# object (see trick_check.py) was confirmed, via a real diagnostics dump, to
-# carry only ride-wide aggregates per trick type (amount/maxDistance/
-# maxDuration/maxHeight-or-maxAngle) - no per-event GPS coordinate or
-# timestamp. This scans the separately-fetched GPS-track DETAIL response
-# (a richer payload than the summary) for the same trick-hint field names,
-# to check whether Bosch happens to include something more granular there
-# instead. Only runs, and only ever logs, when DEBUG logging is enabled for
-# this integration - see _async_update_data's latest-activity detail fetch.
-# Remove once answered.
-_TRICK_DEBUG_KEY_HINTS = ("trick", "wheelie", "stoppie", "airtime", "air_time", "jump")
-# "manual"/"manuals" can't just join the generic substring hints above: the
-# always-present, unrelated drive-unit gear-shift field
-# "manualShiftRequired" contains BOTH "manual" (obviously) AND, less
-# obviously, "manuals" too - "manual" is immediately followed by the "s" of
-# "shift", so a naive substring hint would still flood every scan with this
-# one false positive (caught by this file's own standalone verification
-# before shipping). Handled instead as a dedicated startswith-with-
-# exclusions check in _debug_key_hints_match(), so the scanner isn't blind
-# to the "manuals" trick type (see trick_check.py for the confirmed field
-# name) the way a blanket exclusion of anything "manual"-shaped would leave it.
-_TRICK_DEBUG_MANUAL_EXCLUDE = {"manual", "manualshiftrequired"}
-_TRICK_DEBUG_REDACT_KEYS = {
-    # Mirrors diagnostics.py's TO_REDACT in full, not a hand-picked subset -
-    # any of these could plausibly nest under a matched trick-hint key.
-    "access_token", "refresh_token", "client_id",
-    "serialNumber", "serial_number", "partNumber",
-    "bes2_drive_unit_serial", "bes2_drive_unit_part",
-    "latitude", "longitude", "lat", "lon", "lng",
-    "frameNumber", "frameNumberPosition", "address", "description",
-}
-
-
-def _debug_key_hints_match(key: str) -> bool:
-    """True if *key* hints at trick data - see _TRICK_DEBUG_KEY_HINTS/
-    _TRICK_DEBUG_MANUAL_EXCLUDE for why "manual"-shaped keys need their own
-    startswith-with-exclusions check rather than a plain substring test."""
-    k = key.lower()
-    if any(hint in k for hint in _TRICK_DEBUG_KEY_HINTS):
-        return True
-    return k.startswith("manual") and k not in _TRICK_DEBUG_MANUAL_EXCLUDE
-
-
-def _debug_redact_trick_value(value: Any) -> Any:
-    """Recursively mask _TRICK_DEBUG_REDACT_KEYS anywhere inside *value*.
-
-    A matched hit's value can nest arbitrarily deep (e.g. a hypothetical
-    jump event carrying its own {"location": {"latitude": ..., ...}}), so
-    this has to walk the whole subtree, not just its top level - a single-
-    level dict comprehension would silently let a nested coordinate through.
-    """
-    if isinstance(value, dict):
-        return {
-            k: ("**REDACTED**" if isinstance(k, str) and k in _TRICK_DEBUG_REDACT_KEYS
-                else _debug_redact_trick_value(v))
-            for k, v in value.items()
-        }
-    if isinstance(value, list):
-        return [_debug_redact_trick_value(item) for item in value]
-    return value
-
-
-def _debug_scan_trick_hints(obj: Any, path: str = "") -> list[str]:
-    """Recursively find dict keys whose name hints at trick data.
-
-    Returns one formatted "path = value" string per match, redacting any
-    sensitive nested keys (mirrors diagnostics.py's TO_REDACT) so a
-    location/serial nested under a matched hit never reaches the log.
-    """
-    hits: list[str] = []
-    if isinstance(obj, dict):
-        for key, value in obj.items():
-            key_path = f"{path}.{key}" if path else str(key)
-            if isinstance(key, str) and _debug_key_hints_match(key):
-                hits.append(f"{key_path} = {_debug_redact_trick_value(value)!r}"[:300])
-            hits.extend(_debug_scan_trick_hints(value, key_path))
-    elif isinstance(obj, list):
-        for idx, item in enumerate(obj):
-            hits.extend(_debug_scan_trick_hints(item, f"{path}[{idx}]"))
-    return hits
-
-
 # How long a bike's most-recently-attributed activity stays eligible to
 # receive further deliveredWhOverLifetime delta (see _track_battery_consumption's
 # top-up step). Bosch's cloud counter can still be catching up with a ride's
@@ -1715,26 +1633,6 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     details = await self.api.get_activity_detail(activity_id)
                     self._latest_activity_details = details
                     self._latest_activity_id = activity_id
-                    # TEMPORARY diagnostic - see _debug_scan_trick_hints's
-                    # docstring at the top of this file. isEnabledFor guard
-                    # so the scan itself (activity details can be sizeable)
-                    # never runs unless DEBUG logging is actually on.
-                    if _LOGGER.isEnabledFor(logging.DEBUG):
-                        trick_hits = _debug_scan_trick_hints(details)
-                        if trick_hits:
-                            _LOGGER.debug(
-                                "trick-detail scan for activity %s found %d "
-                                "hit(s): %s",
-                                activity_id, len(trick_hits),
-                                "; ".join(trick_hits[:20]),
-                            )
-                        else:
-                            _LOGGER.debug(
-                                "trick-detail scan for activity %s: no "
-                                "trick-related fields in the GPS-track "
-                                "detail response",
-                                activity_id,
-                            )
                 except Exception as err:  # noqa: BLE001
                     # GPS details are optional - never fail the whole update.
                     _LOGGER.debug(
