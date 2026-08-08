@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/Xunil99/ha-bosch-ebike/security/advisories/new
+    about: Please report security issues privately here, not as a public issue - see SECURITY.md.

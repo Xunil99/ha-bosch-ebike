@@ -1,0 +1,42 @@
+name: Feature request
+description: Suggest an idea, a new sensor, or a new card
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the idea! A short description of the problem you're
+        trying to solve is often more useful than a fully worked-out
+        solution - there's sometimes already a piece of data or a similar
+        card that gets you most of the way there.
+
+  - type: checkboxes
+    id: existing
+    attributes:
+      label: Is there an existing request for this?
+      options:
+        - label: I searched and didn't find an existing feature request for this
+          required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve?
+      description: What are you trying to do that isn't possible (or is awkward) today?
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: What would you like to happen?
+      description: Your idea for how this could work. Doesn't need to be detailed.
+    validations:
+      required: false
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Anything you've already tried or considered?
+    validations:
+      required: false
