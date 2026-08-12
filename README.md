@@ -226,6 +226,20 @@ Die Integration enthält eine interaktive Lovelace-Karte zur Anzeige deiner GPS-
 
 > **Tipp:** Die Höhe (height) kannst du anpassen (200–1000 Pixel). Empfehlung: 400 für Smartphones, 500 für Desktops.
 
+Wer mehr Platz für die Karte selbst braucht, kann Kopfzeile, Datums-Navigator und Sortier-Dropdown einzeln per Editor oder YAML ausblenden:
+
+```yaml
+type: custom:bosch-ebike-map-card
+height: 400
+show_header: true
+show_nav: true
+show_sort: true
+```
+
+Alle drei `show_*`-Flags sind standardmäßig aktiv (sichtbar); einzeln auf `false` setzen blendet Kopfzeile, Datums-Navigator bzw. Sortier-Dropdown aus. `show_nav` steuert sowohl die eingebettete als auch die Vollbild-Navigationsleiste.
+
+> **Hinweis:** `show_nav: false` entfernt die einzige Möglichkeit, zwischen Fahrten zu wechseln - die Karte zeigt dann immer die laut aktueller Sortierung erste Fahrt (standardmäßig die neueste, da nach Datum absteigend sortiert wird).
+
 **Die Karte zeigt:**
 - GPS-Track mit geschwindigkeitsabhängiger Farbcodierung (blau → grün → gelb → rot)
 - Start-Marker (grün) und Ziel-Marker (rot)
@@ -1040,6 +1054,20 @@ The integration includes an interactive Lovelace card for displaying your GPS tr
 6. Click **Save**
 
 > **Tip:** You can adjust the height (200–1000 pixels). Recommendation: 400 for mobile, 500 for desktop.
+
+If you want to free up more space for the map itself, the header, date navigator and sort dropdown can each be hidden independently via the editor or YAML:
+
+```yaml
+type: custom:bosch-ebike-map-card
+height: 400
+show_header: true
+show_nav: true
+show_sort: true
+```
+
+All three `show_*` flags are visible by default; set any of them to `false` to hide the header, date navigator or sort dropdown respectively. `show_nav` controls both the embedded and the fullscreen navigator.
+
+> **Note:** `show_nav: false` removes the only way to switch between rides - the card will then always show whichever ride is first in the current sort order (the newest ride by default, since sorting starts by date, descending).
 
 **The card shows:**
 - GPS track with speed-based color coding (blue → green → yellow → red)

@@ -771,6 +771,7 @@ class BoschEBikeMapCard extends HTMLElement {
     // refresh UI and re-render
     if (this._ready) {
       this._applyConfigTitle();
+      this._applyVisibilityConfig();
       this._populateFilterUI();
       this._applyFilter();
       // Wikipedia radius changed → invalidate cached articles, re-fetch if layer active
@@ -850,11 +851,21 @@ class BoschEBikeMapCard extends HTMLElement {
   }
 
   getCardSize() {
-    return Math.ceil((this._config.height || 400) / 50) + 4;
+    const cfg = this._config || {};
+    // The "+4" base covers the surrounding chrome (header, nav, sort,
+    // title/stats). Header/nav/sort are each roughly one row and can be
+    // hidden independently via show_header/show_nav/show_sort, so shrink
+    // the estimate accordingly (title/stats always render, hence the
+    // floor of 1).
+    let chrome = 4;
+    if (cfg.show_header === false) chrome -= 1;
+    if (cfg.show_nav === false) chrome -= 1;
+    if (cfg.show_sort === false) chrome -= 1;
+    return Math.ceil((cfg.height || 400) / 50) + Math.max(chrome, 1);
   }
 
   static getConfigElement() { return document.createElement("bosch-ebike-map-card-editor"); }
-  static getStubConfig() { return { height: 400 }; }
+  static getStubConfig() { return { height: 400, show_sort: true, show_header: true, show_nav: true }; }
 
   async _boot() {
     if (this._booting || this._ready) return;
@@ -1151,7 +1162,7 @@ class BoschEBikeMapCard extends HTMLElement {
           <option value="all">${t("all_bikes")}</option>
         </select>
       </div>
-      <div class="eb-sort">
+      <div class="eb-sort" id="eb-sort-wrap">
         <span class="eb-sort-lbl">${t("sort_label")}</span>
         <select id="eb-sort-key">
           <option value="date">${t("sort_date")}</option>
@@ -1296,6 +1307,7 @@ class BoschEBikeMapCard extends HTMLElement {
     this._updateStyleButtons();
     this._updateWikiButtons();
     this._updatePoiButtons();
+    this._applyVisibilityConfig();
   }
 
   _attachLifecycleHooks() {
@@ -1525,6 +1537,23 @@ class BoschEBikeMapCard extends HTMLElement {
     if (head && this._config && this._config.title) {
       head.textContent = this._config.title;
     }
+  }
+
+  /// Show/hide the sort dropdown, header and date navigator (incl. the
+  /// fullscreen nav twin) per config. All three default to visible
+  /// (opt-out via show_sort/show_header/show_nav === false), matching the
+  /// stats-card convention. show_nav governs both the inline and the
+  /// fullscreen navigator so behavior stays consistent between views.
+  _applyVisibilityConfig() {
+    const cfg = this._config || {};
+    const set = (selector, visible) => {
+      const el = this.querySelector(selector);
+      if (el) el.style.display = visible ? "" : "none";
+    };
+    set(".eb-head", cfg.show_header !== false);
+    set(".eb-nav", cfg.show_nav !== false);
+    set(".eb-fullscreen-nav", cfg.show_nav !== false);
+    set("#eb-sort-wrap", cfg.show_sort !== false);
   }
 
   _escapeHtml(s) {
@@ -4249,6 +4278,14 @@ class BoschEBikeMapCardEditor extends HTMLElement {
       <select id="poi-radius-in" style="${inputStyle}">${poiRadiusOpts}</select>
       <span style="${hintStyle}">${t("editor_poi_radius_hint")}</span>
 
+      <label style="${labelStyle}">${t("map_editor_visibility")}</label>
+      <div>
+        <input type="checkbox" id="show-header-in"${cfg.show_header !== false ? " checked" : ""} style="margin-right:8px;vertical-align:middle;">${t("map_editor_show_header")}<br>
+        <input type="checkbox" id="show-nav-in"${cfg.show_nav !== false ? " checked" : ""} style="margin-right:8px;vertical-align:middle;">${t("map_editor_show_nav")}<br>
+        <input type="checkbox" id="show-sort-in"${cfg.show_sort !== false ? " checked" : ""} style="margin-right:8px;vertical-align:middle;">${t("map_editor_show_sort")}
+      </div>
+      <span style="${hintStyle}">${t("map_editor_visibility_hint")}</span>
+
       <div style="margin-top:18px;padding-top:14px;border-top:1px solid var(--divider-color);">
         <div style="font-weight:600;color:var(--primary-text-color);font-size:13px;">
           ${t("editor_chase_section")}
@@ -4345,6 +4382,16 @@ class BoschEBikeMapCardEditor extends HTMLElement {
       else delete this._config.poi_radius_m;
       this._emit();
     });
+    for (const [id, key] of [
+      ["show-header-in", "show_header"],
+      ["show-nav-in", "show_nav"],
+      ["show-sort-in", "show_sort"],
+    ]) {
+      this.querySelector(`#${id}`).addEventListener("change", (e) => {
+        this._config = { ...this._config, [key]: e.target.checked };
+        this._emit();
+      });
+    }
 
     // Shared playback fields: einmal hass-Settings nachladen, dann
     // Werte in die Inputs schreiben + Listener mit Debounce-Save.
