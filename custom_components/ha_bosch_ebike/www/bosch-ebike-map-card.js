@@ -1029,7 +1029,14 @@ class BoschEBikeMapCard extends HTMLElement {
         background:rgba(33,33,33,.72); backdrop-filter:blur(4px);
         box-shadow:0 2px 8px rgba(0,0,0,.25);
       }
-      .eb-title { display:flex; justify-content:center; align-items:center; padding:10px 16px 2px; font-size:16px; font-weight:600; color:var(--primary-text-color,#333); }
+      /* flex-wrap so a long title + the date can share one row when there's
+         room, and gracefully drop to two lines instead of overflowing when
+         there isn't (issue #71: combine title and date to save space). */
+      .eb-title {
+        display:flex; flex-wrap:wrap; justify-content:center; align-items:center;
+        column-gap:8px; row-gap:2px; padding:10px 16px 6px;
+        font-size:16px; font-weight:600; color:var(--primary-text-color,#333);
+      }
       .eb-bike-badge {
         display:none; flex-shrink:0; max-width:42%;
         align-items:center; margin-right:6px; opacity:0.72; font-weight:500;
@@ -1062,11 +1069,26 @@ class BoschEBikeMapCard extends HTMLElement {
         border-radius: 50%; background: #43a047; vertical-align: middle;
         box-shadow: 0 0 0 2px rgba(67,160,71,0.25);
       }
-      .eb-datelbl { text-align:center; font-size:12px; color:var(--secondary-text-color,#666); padding:0 16px 6px; }
+      /* Now an inline flex child of .eb-title (issue #71), not its own row.
+         The separator only appears once there is actual date text, so an
+         activity without a startTime renders no dangling "· ". */
+      .eb-datelbl { font-size:12px; font-weight:400; color:var(--secondary-text-color,#666); }
+      .eb-datelbl:not(:empty)::before { content:"· "; }
       .eb-stats { display:grid; grid-template-columns:repeat(3,1fr); gap:4px; padding:8px 16px 14px; }
       .eb-stat { text-align:center; }
       .eb-val { font-size:20px; font-weight:700; color:var(--primary-text-color,#212121); }
       .eb-lbl { font-size:11px; color:var(--secondary-text-color,#757575); }
+      /* Compact fallback navigator shown only when show_nav hides the main
+         prev/next bar (issue #71), so switching rides stays possible. */
+      .eb-stats-nav { display:flex; align-items:center; justify-content:center; gap:10px; padding:2px 16px 6px; }
+      .eb-stats-nav button {
+        width:28px; height:28px; flex-shrink:0;
+        background:var(--primary-color,#03a9f4); color:#fff;
+        border:none; border-radius:6px; cursor:pointer; font-size:13px;
+        display:flex; align-items:center; justify-content:center;
+      }
+      .eb-stats-nav button:disabled { opacity:.35; cursor:not-allowed; }
+      .eb-stats-nav .eb-ctr { font-size:12px; color:var(--secondary-text-color,#666); white-space:nowrap; }
 
       .eb-fullscreen {
         position:fixed; inset:0; z-index:99999;
@@ -1195,8 +1217,12 @@ class BoschEBikeMapCard extends HTMLElement {
         <div id="eb-overlay-msg" class="eb-overlay-msg"></div>
         <div id="eb-batt-inline" class="eb-batt-badge"></div>
       </div>
-      <div id="eb-title" class="eb-title"><span id="eb-bike-badge" class="eb-bike-badge"></span><select id="eb-bike-select" class="eb-bike-select"></select><span id="eb-title-text"></span><span id="eb-trick-dot" class="eb-trick-dot" style="display:none" title="${t("trick_hint_tooltip")}"></span></div>
-      <div id="eb-date-lbl" class="eb-datelbl"></div>
+      <div id="eb-title" class="eb-title"><span id="eb-bike-badge" class="eb-bike-badge"></span><select id="eb-bike-select" class="eb-bike-select"></select><span id="eb-title-text"></span><span id="eb-trick-dot" class="eb-trick-dot" style="display:none" title="${t("trick_hint_tooltip")}"></span><span id="eb-date-lbl" class="eb-datelbl"></span></div>
+      <div id="eb-stats-nav" class="eb-stats-nav" style="display:none;">
+        <button id="eb-stats-prev" title="${t("btn_prev")}" aria-label="${t("btn_prev")}">◀</button>
+        <span id="eb-stats-ctr" class="eb-ctr">–</span>
+        <button id="eb-stats-next" title="${t("btn_next")}" aria-label="${t("btn_next")}">▶</button>
+      </div>
       <div id="eb-stats" class="eb-stats"></div>
       <div id="eb-fullscreen-overlay" class="eb-fullscreen" aria-hidden="true">
         <div class="eb-fullscreen-card">
@@ -1230,6 +1256,11 @@ class BoschEBikeMapCard extends HTMLElement {
             <div id="eb-batt-full" class="eb-batt-badge"></div>
           </div>
           <div id="eb-fullscreen-profile" class="eb-profile eb-hidden"></div>
+          <div id="eb-fullscreen-stats-nav" class="eb-stats-nav" style="display:none;">
+            <button id="eb-fullscreen-stats-prev" title="${t("btn_prev")}" aria-label="${t("btn_prev")}">◀</button>
+            <span id="eb-fullscreen-stats-ctr" class="eb-ctr">–</span>
+            <button id="eb-fullscreen-stats-next" title="${t("btn_next")}" aria-label="${t("btn_next")}">▶</button>
+          </div>
           <div id="eb-fullscreen-meta" class="eb-fullscreen-meta"></div>
         </div>
       </div>
@@ -1239,6 +1270,10 @@ class BoschEBikeMapCard extends HTMLElement {
     this._$("eb-prev").addEventListener("click", () => this._go(-1));
     this._$("eb-next").addEventListener("click", () => this._go(1));
     this._$("eb-date").addEventListener("change", (e) => this._jumpDate(e.target.value));
+    // Compact fallback navigator in the stats area, only shown when
+    // show_nav hides the main prev/next bar (issue #71).
+    this._$("eb-stats-prev").addEventListener("click", () => this._go(-1));
+    this._$("eb-stats-next").addEventListener("click", () => this._go(1));
     this._$("eb-style").addEventListener("click", () => this._cycleMapStyle());
     this._$("eb-gpx").addEventListener("click", () => this._downloadCurrentGpx());
     this._$("eb-fullscreen").addEventListener("click", () => this._openFullscreen());
@@ -1258,6 +1293,8 @@ class BoschEBikeMapCard extends HTMLElement {
     this._$("eb-tab-elevation").addEventListener("click", () => this._setFullscreenTab("elevation"));
     this._$("eb-full-prev").addEventListener("click", () => this._go(-1));
     this._$("eb-full-next").addEventListener("click", () => this._go(1));
+    this._$("eb-fullscreen-stats-prev").addEventListener("click", () => this._go(-1));
+    this._$("eb-fullscreen-stats-next").addEventListener("click", () => this._go(1));
     this._$("eb-full-date").addEventListener("change", (e) => this._jumpDate(e.target.value));
     this._$("eb-fit").addEventListener("click", () => {
       this._fullscreenUserAdjustedView = false;
@@ -1554,6 +1591,11 @@ class BoschEBikeMapCard extends HTMLElement {
     set(".eb-nav", cfg.show_nav !== false);
     set(".eb-fullscreen-nav", cfg.show_nav !== false);
     set("#eb-sort-wrap", cfg.show_sort !== false);
+    // Inverted: the compact stats-area fallback navigator only appears
+    // once the main nav is hidden, so switching rides stays possible
+    // without duplicating both navigators at once (issue #71).
+    set("#eb-stats-nav", cfg.show_nav === false);
+    set("#eb-fullscreen-stats-nav", cfg.show_nav === false);
   }
 
   _escapeHtml(s) {
@@ -1774,6 +1816,21 @@ class BoschEBikeMapCard extends HTMLElement {
     const fullNext = this._$("eb-full-next");
     if (fullPrev) fullPrev.disabled = index <= 0;
     if (fullNext) fullNext.disabled = index >= this._activities.length - 1;
+    // Compact stats-area fallback navigator (issue #71): kept in sync the
+    // same way as the main nav, even while hidden, so it is correct the
+    // moment show_nav flips it visible.
+    const statsCtr = this._$("eb-stats-ctr");
+    if (statsCtr) statsCtr.textContent = `${index + 1} / ${this._activities.length}`;
+    const statsPrev = this._$("eb-stats-prev");
+    const statsNext = this._$("eb-stats-next");
+    if (statsPrev) statsPrev.disabled = index <= 0;
+    if (statsNext) statsNext.disabled = index >= this._activities.length - 1;
+    const fsStatsCtr = this._$("eb-fullscreen-stats-ctr");
+    if (fsStatsCtr) fsStatsCtr.textContent = `${index + 1} / ${this._activities.length}`;
+    const fsStatsPrev = this._$("eb-fullscreen-stats-prev");
+    const fsStatsNext = this._$("eb-fullscreen-stats-next");
+    if (fsStatsPrev) fsStatsPrev.disabled = index <= 0;
+    if (fsStatsNext) fsStatsNext.disabled = index >= this._activities.length - 1;
     const baseTitle = activity.title || this._t("msg_unnamed_ride");
     // Bosch's own ride titles are often generic (e.g. "Bike Fahrt"), so when
     // "All Bikes" is selected and there's more than one bike to tell apart,
@@ -1798,7 +1855,7 @@ class BoschEBikeMapCard extends HTMLElement {
     trickDot.title = this._trickSummary(activity.trickCheck) || this._t("trick_hint_tooltip");
 
     if (activity.startTime) {
-      this._$("eb-date-lbl").textContent = new Date(activity.startTime).toLocaleDateString("de-DE", {
+      this._$("eb-date-lbl").textContent = new Date(activity.startTime).toLocaleDateString(this._hassLocale(), {
         weekday: "long", year: "numeric", month: "long", day: "numeric", hour: "2-digit", minute: "2-digit"
       });
     } else {
@@ -2119,6 +2176,17 @@ class BoschEBikeMapCard extends HTMLElement {
   _wikiLanguage() {
     const locale = (this._hass && this._hass.locale && this._hass.locale.language) || "en";
     return String(locale).slice(0, 2).toLowerCase() || "en";
+  }
+
+  /// BCP-47 locale tag for Intl/toLocale* date formatting. Try to honor
+  /// HA's configured locale; fall back to browser default. Mirrors the
+  /// same _hassLocale() pattern already used by the Calendar and Trick
+  /// List cards, so date formatting is consistent across all cards.
+  _hassLocale() {
+    if (this._hass && this._hass.locale && this._hass.locale.language) {
+      return this._hass.locale.language;
+    }
+    return (this._hass && this._hass.language) || navigator.language || "en-GB";
   }
 
   /// Subsample the route every ~2 km along the actual driven distance.
@@ -9467,7 +9535,8 @@ class BoschEBike3DMapCard extends HTMLElement {
       this._showMessage(this._t("map3d_no_rides"));
       return;
     }
-    const lang = (this._hass && this._hass.language) ? this._hass.language : "de-DE";
+    const lang = (this._hass && this._hass.locale && this._hass.locale.language)
+      || (this._hass && this._hass.language) || navigator.language || "en-GB";
     const fmtDate = (iso) => {
       try { return new Date(iso).toLocaleDateString(lang, { day: "2-digit", month: "short", year: "numeric" }); }
       catch { return iso; }
@@ -11103,7 +11172,8 @@ class BoschEBike3DMapCard extends HTMLElement {
     if (tt) tt.textContent = fmtHm(time);
     const dt = this._root.querySelector("#m3d-date-text");
     if (dt) {
-      const lang = (this._hass && this._hass.language) ? this._hass.language : "de-DE";
+      const lang = (this._hass && this._hass.locale && this._hass.locale.language)
+        || (this._hass && this._hass.language) || navigator.language || "en-GB";
       try {
         dt.textContent = time.toLocaleDateString(lang, {
           weekday: "short", day: "2-digit", month: "short"

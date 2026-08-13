@@ -238,7 +238,7 @@ show_sort: true
 
 Alle drei `show_*`-Flags sind standardmäßig aktiv (sichtbar); einzeln auf `false` setzen blendet Kopfzeile, Datums-Navigator bzw. Sortier-Dropdown aus. `show_nav` steuert sowohl die eingebettete als auch die Vollbild-Navigationsleiste.
 
-> **Hinweis:** `show_nav: false` entfernt die einzige Möglichkeit, zwischen Fahrten zu wechseln - die Karte zeigt dann immer die laut aktueller Sortierung erste Fahrt (standardmäßig die neueste, da nach Datum absteigend sortiert wird).
+> **Hinweis:** Bei `show_nav: false` erscheinen als Ersatz kompakte ◀▶-Pfeile im Statistikbereich unterhalb der Karte, damit weiterhin zwischen Fahrten gewechselt werden kann.
 
 **Die Karte zeigt:**
 - GPS-Track mit geschwindigkeitsabhängiger Farbcodierung (blau → grün → gelb → rot)
@@ -1067,7 +1067,7 @@ show_sort: true
 
 All three `show_*` flags are visible by default; set any of them to `false` to hide the header, date navigator or sort dropdown respectively. `show_nav` controls both the embedded and the fullscreen navigator.
 
-> **Note:** `show_nav: false` removes the only way to switch between rides - the card will then always show whichever ride is first in the current sort order (the newest ride by default, since sorting starts by date, descending).
+> **Note:** With `show_nav: false`, compact ◀▶ arrows appear instead in the stats area below the map, so switching between rides is still possible.
 
 **The card shows:**
 - GPS track with speed-based color coding (blue → green → yellow → red)
