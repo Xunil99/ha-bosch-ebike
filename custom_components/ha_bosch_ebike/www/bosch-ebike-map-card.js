@@ -281,7 +281,7 @@ const SHARED_SETTING_KEYS = [
   "camera_presets", "active_camera_preset_id",
   "show_date", "show_time", "show_sun",
   "show_speed", "show_distance", "show_elevation",
-  "stats_as_chips",
+  "stats_as_chips", "show_weather",
   // Wartungs-Warnschwellen (Dashboard-Card)
   "maint_warn_km", "maint_warn_days",
 ];
@@ -9557,7 +9557,7 @@ class BoschEBike3DMapCard extends HTMLElement {
       north_up: 0,
       show_date: 1, show_time: 1, show_sun: 1,
       show_speed: 1, show_distance: 1, show_elevation: 1,
-      stats_as_chips: 0,
+      stats_as_chips: 0, show_weather: 1,
       auto_hide_ui: 0,
     };
   }
@@ -12287,6 +12287,7 @@ class BoschEBike3DMapCardEditor extends HTMLElement {
       show_distance: mkText("show_distance", "map3d_editor_show_distance", null, "number"),
       show_elevation: mkText("show_elevation", "map3d_editor_show_elevation", null, "number"),
       stats_as_chips: mkText("stats_as_chips", "map3d_editor_stats_as_chips", "map3d_editor_stats_as_chips_hint", "number"),
+      show_weather: mkText("show_weather", "map3d_editor_show_weather", "map3d_editor_show_weather_hint", "number"),
     });
 
     // Auto-hide-UI (kiosk mode): a real checkbox rather than the 0/1
