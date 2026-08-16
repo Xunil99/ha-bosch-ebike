@@ -607,6 +607,7 @@ playback_speed: 60     # 60x Echtzeit (1h-Tour = 1min Wiedergabe)
 - Live-Stats zur Slider-Position: kumulierte Distanz, Geschwindigkeit, Höhe
 - Zeit- und Sonnen-Chip im Overlay zeigt aktuelle Uhrzeit und Tageslicht-Phase (Nacht, Dämmerung, Goldene Stunde, Tageslicht)
 - **Cast-Shadows von Gebäuden** auf den Boden, projiziert aus Sonnen-Azimut und Sonnen-Höhe zur Slider-Zeit. Schatten werden bei Tageslicht angezeigt, bei tiefstehender Sonne länger (auf 400 m begrenzt), bei Nacht ausgeblendet. Update automatisch, wenn die Kamera in ein neues Stadtgebiet schwenkt oder der Slider bewegt wird.
+- **Wetter-Effekt** (`show_weather`, siehe oben bei der 2D-Karte): anders als dort ändert sich das Wetter hier passend zum Zeit-Slider über die Fahrtdauer hinweg (stündlich interpoliert), statt nur den Zustand zum Fahrtbeginn zu zeigen
 - **Video-Export** rechts neben dem Slider: Aufnahme-Button startet eine Wiedergabe vom Tour-Anfang und schreibt den Karten-Inhalt parallel als Video mit. Beim Tour-Ende kommt automatisch ein Datei-Download (ca. 20-40 MB pro Minute). Das Format wird vom Browser bestimmt: **MP4** in modernem Chrome (≥ 126) und Safari (≥ 14.4), sonst **WebM**. Komplett im Browser via `canvas.captureStream()` + `MediaRecorder`, der HA-Server hat damit nichts zu tun.
 - Zurück-Button kehrt zur Tour-Liste zurück
 - **Pitch/Zoom merken sich manuelle Anpassungen:** Neigst oder zoomst Du die Kamera per Hand (Drag, Scrollrad, Pinch), bleibt das über Reloads hinweg erhalten, statt bei jeder Tour wieder auf `default_pitch`/`chase_zoom` zurückzuspringen
@@ -634,6 +635,7 @@ playback_speed: 60     # 60x Echtzeit (1h-Tour = 1min Wiedergabe)
 | `show_distance` | 1 | Kumulierte Distanz in der Stats-Leiste anzeigen (0 = aus) |
 | `show_elevation` | 1 | Höhe anzeigen (0 = aus) |
 | `stats_as_chips` | 0 | 1 = Distanz, Geschwindigkeit und Höhe als Overlay-Chips oben links statt unten in der Stats-Leiste. 0 = klassische Stats-Zeile in der Steuerleiste (Default) |
+| `show_weather` | 1 | Atmosphärischen Wetter-Effekt (Grauschleier, Regen/Schnee, Blitz) passend zum Zeit-Slider anzeigen, siehe Wetter-Effekt-Abschnitt der 2D-Karte weiter oben (0 = aus) |
 | `auto_hide_ui` | 0 | 1 = Overlay und Wiedergabesteuerung blenden nach ein paar Sekunden Inaktivität aus (Kiosk-/Wandmontage-Modus), 0 = immer sichtbar (Default) |
 | `account_id` | (leer) | Auf ein Konto fixieren, wie bei der 2D-Karte |
 | `bike_id` | (leer) | Auf ein Bike fixieren |
@@ -721,6 +723,14 @@ Auf der Lovelace-Karte gibt es einen 📚-Toggle in den Karten-Steuerelementen. 
 - **Maximal 30 Marker** pro Tour, dichte Bereiche werden gebündelt
 - **Toggle-Status und Ergebnisse** werden im Browser gecacht (`localStorage`), beim Tour-Wechsel werden frische Daten geholt
 - **Datenschutz-Hinweis**: Beim Aktivieren des Layers werden Stützstellen-Koordinaten der Route an die Wikipedia-API gesendet; der Layer ist standardmäßig aus
+
+### Wetter-Effekt entlang der Fahrt
+
+Auf der Lovelace-Karte gibt es einen 🌦️-Toggle in den Karten-Steuerelementen. Ist er aktiviert, holt die Karte das historische Wetter (Bewölkung, Niederschlag, Schnee) für Startzeit und -ort der ausgewählten Fahrt von Open-Meteo (kostenlos, kein API-Key) und zeigt es als rein atmosphärischen Effekt über der Karte: Grauschleier bei Bewölkung, Regen- bzw. Schneepartikel, gelegentlicher Blitz bei Gewitter. Reine Stimmung, keine Wetter-Analyse oder -Statistik.
+
+- **Ergebnis wird pro Fahrt im Browser gecacht** (`localStorage`), kein erneuter Abruf bei erneutem Ansehen derselben Fahrt
+- **Datenschutz-Hinweis**: Beim Aktivieren wird die ungefähre Startposition der Fahrt an Open-Meteo gesendet; der Effekt ist standardmäßig aus
+- In der **Chase-Cam-Wiedergabe** (3D-Karte, siehe unten) ändert sich das Wetter passend zum Zeit-Slider über die Fahrtdauer hinweg, statt nur den Zustand zum Fahrtbeginn zu zeigen
 
 <a name="de-fehlerbehebung"></a>
 
@@ -1435,6 +1445,7 @@ playback_speed: 60     # 60× real time (1 h ride plays in 1 min)
 - Live stats at the slider position: cumulative distance, speed, elevation
 - Time and sun-altitude chip in the overlay showing the current time of day and daylight phase (Night, Twilight, Golden hour, Daylight)
 - **Cast shadows from buildings** projected onto the ground from sun azimuth and altitude at the slider's time. Shadows are visible during daylight, longer when the sun is low (capped at 400 m), hidden at night. They refresh automatically when the camera moves into a new neighbourhood or the slider is released.
+- **Weather effect** (`show_weather`, see the 2D card section above): unlike there, weather here changes along with the time slider across the ride's duration (interpolated hourly) instead of only showing the state at the ride's start
 - **Video export** next to the slider: the record button restarts playback from the tour beginning and captures the canvas content as a video file in parallel. When the playback ends, the file is offered for download automatically (about 20-40 MB per minute). Format depends on the browser: **MP4** on recent Chrome (≥ 126) and Safari (≥ 14.4), **WebM** otherwise. Pure browser-side via `canvas.captureStream()` + `MediaRecorder`; the HA server is not involved.
 - Back button returns to the tour list
 - **Pitch/zoom remember manual adjustments:** tilt or zoom the camera by hand (drag, scroll wheel, pinch) and it persists across reloads, instead of snapping back to `default_pitch`/`chase_zoom` on every tour
@@ -1462,6 +1473,7 @@ playback_speed: 60     # 60× real time (1 h ride plays in 1 min)
 | `show_distance` | 1 | Show cumulative distance in the stats bar (0 = hide) |
 | `show_elevation` | 1 | Show elevation (0 = hide) |
 | `stats_as_chips` | 0 | 1 = render distance, speed and elevation as chips in the top-left overlay instead of the bottom stats line. 0 = classic stats line in the control bar (default) |
+| `show_weather` | 1 | Show an atmospheric weather effect (grey veil, rain/snow, lightning) synced to the time slider, see the weather effect section under the 2D card above (0 = hide) |
 | `auto_hide_ui` | 0 | 1 = fade the overlay and playback controls after a few seconds of inactivity (kiosk/wall-mount mode), 0 = always visible (default) |
 | `account_id` | (empty) | Lock to a specific account, like the 2D card |
 | `bike_id` | (empty) | Lock to a specific bike |
@@ -1549,6 +1561,14 @@ The Lovelace card has a 📚 toggle in the map controls. When enabled, the card 
 - **Up to 30 markers** per ride; dense areas are clustered
 - **Toggle state and results** are cached in the browser (`localStorage`); fresh queries run when switching rides
 - **Privacy note**: Enabling the layer sends sample coordinates of the route to the Wikipedia API. The layer is off by default
+
+### Weather effect along the ride
+
+The Lovelace card has a 🌦️ toggle in the map controls. When enabled, the card fetches the historical weather (cloud cover, precipitation, snow) for the selected ride's start time and location from Open-Meteo (free, no API key) and shows it as a purely atmospheric effect over the map: a grey veil for cloud cover, rain or snow particles, an occasional flash of lightning for a thunderstorm. Purely mood, not a weather analysis or statistics tool.
+
+- **Result is cached per ride in the browser** (`localStorage`); no re-fetch when viewing the same ride again
+- **Privacy note**: Enabling it sends the ride's approximate start location to Open-Meteo. The effect is off by default
+- In **chase-cam playback** (3D map, see below) the weather changes along with the time slider across the ride's duration, instead of only showing the state at the ride's start
 
 <a name="en-troubleshooting"></a>
 
