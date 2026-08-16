@@ -814,6 +814,10 @@ class BoschEBikeMapCard extends HTMLElement {
     this._fullscreenPoiGroup = null;
     this._poiRenderedInline = null;
     this._poiRenderedFullscreen = null;
+    // Weather overlay (opt-in, mirrors _wikiEnabled/_poiEnabled exactly)
+    this._weatherEnabled = (typeof localStorage !== "undefined" && localStorage.getItem("eb-weather-enabled") === "1");
+    this._weatherData = new Map();    // activityId -> {cloud,precip,snow,code} at ride start
+    this._weatherLoading = new Set();
 
     this._map = null;
     this._trackGroup = null;
@@ -1317,6 +1321,7 @@ class BoschEBikeMapCard extends HTMLElement {
           <button id="eb-style" class="eb-icon-btn eb-style-btn" title="${t("btn_change_style")}" aria-label="${t("btn_change_style")}">OSM</button>
           <button id="eb-wiki" class="eb-icon-btn" title="${t("btn_wiki")}" aria-label="${t("btn_wiki")}">📚</button>
           <button id="eb-poi" class="eb-icon-btn" title="${t("btn_poi")}" aria-label="${t("btn_poi")}">📍</button>
+          <button id="eb-weather" class="eb-icon-btn" title="${t("btn_weather")}" aria-label="${t("btn_weather")}">🌦️</button>
           <button id="eb-gpx" class="eb-icon-btn" title="${t("btn_gpx")}" aria-label="${t("btn_gpx")}">GPX</button>
           <button id="eb-chase" class="eb-icon-btn" title="${t("btn_chase")}" aria-label="${t("btn_chase")}">
             <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M8 5v14l11-7z"/></svg>
@@ -1348,6 +1353,7 @@ class BoschEBikeMapCard extends HTMLElement {
             <button id="eb-full-style" class="eb-icon-btn eb-style-btn" title="${t("btn_change_style")}" aria-label="${t("btn_change_style")}">OSM</button>
             <button id="eb-full-wiki" class="eb-icon-btn" title="${t("btn_wiki")}" aria-label="${t("btn_wiki")}">📚</button>
             <button id="eb-full-poi" class="eb-icon-btn" title="${t("btn_poi")}" aria-label="${t("btn_poi")}">📍</button>
+            <button id="eb-full-weather" class="eb-icon-btn" title="${t("btn_weather")}" aria-label="${t("btn_weather")}">🌦️</button>
             <button id="eb-full-gpx" class="eb-icon-btn" title="${t("btn_gpx")}" aria-label="${t("btn_gpx")}">GPX</button>
             <button id="eb-full-chase" class="eb-icon-btn" title="${t("btn_chase")}" aria-label="${t("btn_chase")}">
               <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M8 5v14l11-7z"/></svg>
@@ -1400,6 +1406,9 @@ class BoschEBikeMapCard extends HTMLElement {
     this._$("eb-poi").addEventListener("click", () => this._togglePoi());
     const fullPoi = this._$("eb-full-poi");
     if (fullPoi) fullPoi.addEventListener("click", () => this._togglePoi());
+    this._$("eb-weather").addEventListener("click", () => this._toggleWeather());
+    const fullWeather = this._$("eb-full-weather");
+    if (fullWeather) fullWeather.addEventListener("click", () => this._toggleWeather());
     this._$("eb-tab-map").addEventListener("click", () => this._setFullscreenTab("map"));
     this._$("eb-tab-elevation").addEventListener("click", () => this._setFullscreenTab("elevation"));
     this._$("eb-full-prev").addEventListener("click", () => this._go(-1));
@@ -2508,6 +2517,35 @@ class BoschEBikeMapCard extends HTMLElement {
       this._clearPoiLayers();
     }
   }
+
+  // -- Weather overlay (opt-in, mirrors the Wiki/POI toggle pattern) --
+  // NOTE: _loadAndRenderWeather()/_clearWeatherOverlay() below are TEMPORARY STUBS.
+  // Task 3 replaces _clearWeatherOverlay()'s body; Task 4 replaces
+  // _loadAndRenderWeather()'s body. Replace in place - do NOT add a second method
+  // with either name.
+
+  _updateWeatherButtons() {
+    const inlineBtn = this._$("eb-weather");
+    const fullBtn = this._$("eb-full-weather");
+    if (inlineBtn) inlineBtn.classList.toggle("eb-active", this._weatherEnabled);
+    if (fullBtn) fullBtn.classList.toggle("eb-active", this._weatherEnabled);
+  }
+
+  _toggleWeather() {
+    this._weatherEnabled = !this._weatherEnabled;
+    try { localStorage.setItem("eb-weather-enabled", this._weatherEnabled ? "1" : "0"); } catch (_) {}
+    this._updateWeatherButtons();
+    if (this._weatherEnabled) {
+      this._loadAndRenderWeather();
+    } else {
+      this._clearWeatherOverlay();
+    }
+  }
+
+  // TODO(Task 4): fetch + render weather overlay
+  _loadAndRenderWeather() { /* stub - replaced by Task 4 */ }
+  // TODO(Task 3): hide weather overlay + stop any running particle/flash loops
+  _clearWeatherOverlay() { /* stub - replaced by Task 3 */ }
 
   _clearPoiLayers() {
     if (this._poiGroup) {
