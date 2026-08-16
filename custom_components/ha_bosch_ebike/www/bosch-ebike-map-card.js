@@ -727,10 +727,15 @@ function weatherLayers(cloud, precip, snowfall, wmoCode, sunAltitudeDeg) {
 
 // Linear interpolation between the two hourly samples bracketing targetDate.
 // hourly = { time: string[] (ISO hours), cloud: number[], precip: number[], snow: number[], code: number[] }
+// hourly.timesMs (number[], optional) - epoch-ms parse of hourly.time, precomputed
+// once by a caller that will call this repeatedly against the same series (the 3D
+// card's per-scrub-tick usage - see _loadTourWeather). Falls back to parsing
+// hourly.time on the fly when absent, so the 2D card's one-shot call (which has no
+// reason to precompute anything) keeps working unchanged.
 function interpolateWeatherAt(hourly, targetDate) {
   if (!hourly || !Array.isArray(hourly.time) || !hourly.time.length) return null;
   const t = targetDate.getTime();
-  const times = hourly.time.map((s) => new Date(s).getTime());
+  const times = hourly.timesMs || hourly.time.map((s) => new Date(s).getTime());
   if (t <= times[0]) return { cloud: hourly.cloud[0], precip: hourly.precip[0], snow: hourly.snow[0], code: hourly.code[0] };
   const last = times.length - 1;
   if (t >= times[last]) return { cloud: hourly.cloud[last], precip: hourly.precip[last], snow: hourly.snow[last], code: hourly.code[last] };
@@ -10126,6 +10131,10 @@ class BoschEBike3DMapCard extends HTMLElement {
       // The user may have opened a different tour while this was in
       // flight - do not let a late resolve overwrite that tour's state.
       if (this._currentActivity !== activity) return;
+      // Precompute epoch-ms once here rather than letting interpolateWeatherAt()
+      // re-parse the whole (up to ~192-entry) series on every _applyIndex() tick
+      // during autoplay/scrubbing (~60/s).
+      series.timesMs = series.time.map((s) => new Date(s).getTime());
       this._weatherSeries = series;
     } catch (err) {
       console.warn("[Bosch eBike 3D] weather fetch failed", err);
@@ -11656,7 +11665,12 @@ class BoschEBike3DMapCard extends HTMLElement {
     // common case right after _openTour() starts, before its fetch could
     // possibly have resolved). Reuses altDeg/t computed just above instead
     // of calling sunPositionAt() a second time.
-    if (this._weatherSeries) {
+    // Also re-check the live show_weather flag on every tick: toggling it
+    // off mid-playback must stop re-showing the overlay, since this block
+    // re-runs continuously during autoplay/scrubbing (see code-review notes
+    // on commit 047d694). We don't force-hide here - render()'s hide() call
+    // already set display:none - we just stop undoing it.
+    if (this._weatherSeries && this._showFlag("show_weather")) {
       try {
         const wxSample = interpolateWeatherAt(this._weatherSeries, t);
         if (wxSample) {
