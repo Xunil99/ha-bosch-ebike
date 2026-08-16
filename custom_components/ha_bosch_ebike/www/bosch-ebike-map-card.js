@@ -692,6 +692,10 @@ function intensityDensity(x, curve) {
 const RAIN_CURVE = [[0.1, 0.05], [2.5, 0.30], [10, 0.60], [50, 1.0]];
 const SNOW_CURVE = [[0.1, 0.08], [1, 0.35], [4, 0.70], [10, 1.0]];
 
+// Hard cap on live rain/snow particles per canvas (inline map + fullscreen map
+// each have their own canvas/state, so this is a per-overlay ceiling, not global).
+const MAX_PARTICLES = 120;
+
 // Map resolved weather (cloud %, precip mm/h, snowfall cm/h, WMO code, sun altitude in
 // degrees) to independent overlay strengths. Return fields, all [0,1] unless noted:
 //   sun   - warm sun-glow strength (fades under cloud and near/below the horizon)
@@ -782,6 +786,197 @@ const TRICK_TYPE_DEFS = [
   { key: "stoppies", nameKey: "trick_stoppie", hasHeight: false },
   { key: "wheelies", nameKey: "trick_wheelie", hasHeight: false },
 ];
+
+// -- Weather overlay particle/flash renderer --
+// Module-level (not class methods) since none of this needs `this`: state is
+// stashed directly on the canvas/flash DOM nodes so the inline overlay
+// (#eb-wx-overlay) and the fullscreen overlay (#eb-full-wx-overlay) each own
+// an independent rAF loop / timer chain and can never cancel one another.
+
+function _wxDominantKind(rain, snow) {
+  if (rain === 0 && snow === 0) return null;
+  return snow > rain ? "snow" : "rain";
+}
+
+function _wxSpawnParticle(kind, w, h) {
+  if (kind === "rain") {
+    return {
+      x: Math.random() * w,
+      y: Math.random() * h,
+      len: 10 + Math.random() * 12,
+      speed: 400 + Math.random() * 300,  // px/s, downward
+      drift: -40 + Math.random() * 20,   // px/s, slight sideways lean
+    };
+  }
+  // snow
+  return {
+    x: Math.random() * w,
+    y: Math.random() * h,
+    r: 1 + Math.random() * 2.2,
+    speed: 25 + Math.random() * 35,
+    drift: -15 + Math.random() * 30,
+    phase: Math.random() * Math.PI * 2, // gentle horizontal sway
+  };
+}
+
+function _wxStopCanvas(canvas) {
+  if (!canvas) return;
+  const st = canvas._wxState;
+  if (st && st.raf) cancelAnimationFrame(st.raf);
+  canvas._wxState = null;
+}
+
+function _wxTick(canvas, ts) {
+  const st = canvas._wxState;
+  if (!st) return; // stopped/torn down since this frame was scheduled
+
+  // Visibility gate: an ancestor (e.g. a closed .eb-fullscreen modal) with
+  // display:none yields offsetParent === null for this element too, so this
+  // single check covers both "overlay itself hidden" and "hidden ancestor".
+  const overlayEl = st.overlayEl;
+  if (!overlayEl || overlayEl.offsetParent === null) {
+    st.raf = null;
+    return; // do not reschedule - stop burning cycles while not visible
+  }
+
+  let dt = st.lastTs ? (ts - st.lastTs) / 1000 : 0;
+  if (dt > 0.05) dt = 0.05; // clamp so a throttled/backgrounded tab can't blow up physics on resume
+  st.lastTs = ts;
+
+  // Reconcile the backing store from live layout size every tick, so a
+  // dashboard resize or the fullscreen modal opening/closing can't leave the
+  // canvas stale-sized or 0x0. A 0-sized canvas just skips drawing this tick.
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  if (w > 0 && h > 0) {
+    if (canvas.width !== w || canvas.height !== h) {
+      canvas.width = w;
+      canvas.height = h;
+    }
+    const ctx = canvas.getContext("2d");
+    ctx.clearRect(0, 0, w, h);
+
+    // Only spawn new particles as density grows; shrink is a cheap length
+    // truncation. Never reallocate the whole array every frame.
+    const targetCount = Math.round(MAX_PARTICLES * st.density);
+    while (st.particles.length < targetCount) st.particles.push(_wxSpawnParticle(st.kind, w, h));
+    if (st.particles.length > targetCount) st.particles.length = targetCount;
+
+    // All particles share `st.kind` at any given moment (enforced by the
+    // kind-flip reset below), so style is set once per frame, not per-particle,
+    // and every particle is batched into a single path + one draw call.
+    if (st.kind === "rain") {
+      ctx.strokeStyle = "rgba(190,210,235,0.55)";
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      for (const p of st.particles) {
+        p.y += p.speed * dt;
+        p.x += p.drift * dt;
+        if (p.y > h) { p.y = -p.len; p.x = Math.random() * w; }
+        if (p.x < -10) p.x += w; else if (p.x > w + 10) p.x -= w;
+        ctx.moveTo(p.x, p.y);
+        ctx.lineTo(p.x + p.drift * 0.03, p.y + p.len);
+      }
+      ctx.stroke();
+    } else if (st.kind === "snow") {
+      ctx.fillStyle = "rgba(255,255,255,0.85)";
+      ctx.beginPath();
+      for (const p of st.particles) {
+        p.phase += dt * 1.6;
+        p.y += p.speed * dt;
+        p.x += Math.sin(p.phase) * 10 * dt + p.drift * dt * 0.15;
+        if (p.y > h) { p.y = -p.r * 2; p.x = Math.random() * w; }
+        if (p.x < -5) p.x += w; else if (p.x > w + 5) p.x -= w;
+        // explicit moveTo before each arc() so circles are separate
+        // disconnected subpaths, not joined into one connected shape
+        ctx.moveTo(p.x + p.r, p.y);
+        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      }
+      ctx.fill();
+    }
+  }
+
+  if (st.rain === 0 && st.snow === 0) {
+    st.raf = null;
+    canvas._wxState = null; // idle/clear - stop the loop entirely, nothing left to animate
+    return;
+  }
+  st.raf = requestAnimationFrame((ts2) => _wxTick(canvas, ts2));
+}
+
+// Starts/updates the per-canvas particle loop for one overlay from the
+// current rain/snow densities. Safe to call every time layers are applied,
+// whether or not a loop is already running.
+function _wxStartOrUpdateCanvas(overlayEl, canvas, rain, snow) {
+  const kind = _wxDominantKind(rain, snow);
+  let st = canvas._wxState;
+  if (!kind) {
+    _wxStopCanvas(canvas);
+    return;
+  }
+  const density = kind === "snow" ? snow : rain;
+  if (!st) {
+    st = canvas._wxState = { raf: null, particles: [], kind, lastTs: 0, density, rain, snow, overlayEl };
+  } else {
+    if (st.kind !== kind) {
+      st.kind = kind;
+      st.particles = []; // dominant kind flipped - drop stale-kind particles
+    }
+    st.density = density;
+    st.rain = rain;
+    st.snow = snow;
+    st.overlayEl = overlayEl;
+  }
+  if (!st.raf) {
+    if (overlayEl.offsetParent === null) return; // stay stopped while not visible
+    st.raf = requestAnimationFrame((ts) => _wxTick(canvas, ts));
+  }
+}
+
+function _wxStopFlash(flashEl) {
+  if (!flashEl) return;
+  const st = flashEl._wxFlashState;
+  if (st && st.timer) clearTimeout(st.timer);
+  flashEl._wxFlashState = null;
+  flashEl.style.opacity = "0";
+}
+
+// Schedules the next brief lightning pulse. Deliberately simple: if `storm`
+// changes mid-wait, the already-scheduled pulse still fires at the old
+// storm-derived cadence rather than instantly retiming - the *next*
+// scheduled pulse picks up the new cadence. Acceptable for a purely
+// atmospheric effect, not worth the extra bookkeeping to fix.
+function _wxScheduleFlash(flashEl) {
+  const st = flashEl._wxFlashState;
+  if (!st || !st.storm) return;
+  const gap = (2500 + Math.random() * 4500) / (0.4 + st.storm); // higher storm -> shorter avg gap
+  st.timer = setTimeout(() => {
+    const cur = flashEl._wxFlashState;
+    if (!cur || !cur.storm) return;
+    flashEl.style.transition = "opacity 80ms ease-out";
+    flashEl.style.opacity = String(0.5 + Math.random() * 0.35 * cur.storm);
+    setTimeout(() => {
+      const still = flashEl._wxFlashState;
+      if (!still) return; // torn down mid-pulse
+      flashEl.style.transition = "opacity 250ms ease-in";
+      flashEl.style.opacity = "0";
+    }, 90 + Math.random() * 60);
+    _wxScheduleFlash(flashEl);
+  }, gap);
+}
+
+function _wxUpdateFlash(flashEl, storm) {
+  const st = flashEl._wxFlashState;
+  if (storm <= 0) {
+    _wxStopFlash(flashEl);
+    return;
+  }
+  if (!st) {
+    flashEl._wxFlashState = { timer: null, storm };
+    _wxScheduleFlash(flashEl);
+  } else {
+    st.storm = storm;
+  }
+}
 
 class BoschEBikeMapCard extends HTMLElement {
   constructor() {
@@ -961,6 +1156,7 @@ class BoschEBikeMapCard extends HTMLElement {
     this._connected = false;
     this._detachLifecycleHooks();
     this._clearTimers();
+    this._clearWeatherOverlay();
     this._destroyFullscreenMap();
     this._destroyMap(false);
   }
@@ -1033,6 +1229,14 @@ class BoschEBikeMapCard extends HTMLElement {
       }
       .eb-batt-badge.eb-batt-low { color:#ff5252; }
       .eb-batt-badge svg { width:18px; height:18px; }
+      /* Opt-in weather overlay (Task 3), full-area on top of the map tiles.
+         z-index:1050 sits below .eb-map-tools/.eb-batt-badge's 1100 so the
+         toolbar and battery badge stay visually on top; pointer-events:none
+         so the map stays interactive underneath. */
+      .eb-wx-overlay { position:absolute; inset:0; z-index:1050; pointer-events:none; overflow:hidden; }
+      .eb-wx-veil { position:absolute; inset:0; background:#3a4552; opacity:0; transition:opacity 1.5s; }
+      .eb-wx-canvas { position:absolute; inset:0; width:100%; height:100%; }
+      .eb-wx-flash { position:absolute; inset:0; background:#fff; opacity:0; }
       .eb-fullscreen-map { position:relative; }
       .eb-nav {
         display:flex; align-items:center; gap:8px; padding:8px 12px;
@@ -1317,6 +1521,11 @@ class BoschEBikeMapCard extends HTMLElement {
       </div>
       <div class="eb-map-wrap">
         <div id="eb-map" class="eb-map"></div>
+        <div id="eb-wx-overlay" class="eb-wx-overlay" style="display:none;">
+          <div class="eb-wx-veil"></div>
+          <canvas class="eb-wx-canvas"></canvas>
+          <div class="eb-wx-flash"></div>
+        </div>
         <div class="eb-map-tools">
           <button id="eb-style" class="eb-icon-btn eb-style-btn" title="${t("btn_change_style")}" aria-label="${t("btn_change_style")}">OSM</button>
           <button id="eb-wiki" class="eb-icon-btn" title="${t("btn_wiki")}" aria-label="${t("btn_wiki")}">📚</button>
@@ -1371,6 +1580,11 @@ class BoschEBikeMapCard extends HTMLElement {
           </div>
           <div id="eb-fullscreen-map" class="eb-fullscreen-map">
             <div id="eb-batt-full" class="eb-batt-badge"></div>
+            <div id="eb-full-wx-overlay" class="eb-wx-overlay" style="display:none;">
+              <div class="eb-wx-veil"></div>
+              <canvas class="eb-wx-canvas"></canvas>
+              <div class="eb-wx-flash"></div>
+            </div>
           </div>
           <div id="eb-fullscreen-profile" class="eb-profile eb-hidden"></div>
           <div id="eb-fullscreen-stats-nav" class="eb-stats-nav" style="display:none;">
@@ -2519,10 +2733,12 @@ class BoschEBikeMapCard extends HTMLElement {
   }
 
   // -- Weather overlay (opt-in, mirrors the Wiki/POI toggle pattern) --
-  // NOTE: _loadAndRenderWeather()/_clearWeatherOverlay() below are TEMPORARY STUBS.
-  // Task 3 replaces _clearWeatherOverlay()'s body; Task 4 replaces
-  // _loadAndRenderWeather()'s body. Replace in place - do NOT add a second method
-  // with either name.
+  // NOTE: _loadAndRenderWeather() below is still a Task 4 stub - Task 3 only
+  // wires up the DOM overlay + particle/flash renderer (_applyWeatherLayers)
+  // and real teardown (_clearWeatherOverlay). _applyWeatherLayers() is
+  // intentionally NOT called from _loadAndRenderWeather() yet - it's
+  // exercised standalone (see the scratchpad mockup) until Task 4 connects it
+  // to real fetched ride weather.
 
   _updateWeatherButtons() {
     const inlineBtn = this._$("eb-weather");
@@ -2544,8 +2760,37 @@ class BoschEBikeMapCard extends HTMLElement {
 
   // TODO(Task 4): fetch + render weather overlay
   _loadAndRenderWeather() { /* stub - replaced by Task 4 */ }
-  // TODO(Task 3): hide weather overlay + stop any running particle/flash loops
-  _clearWeatherOverlay() { /* stub - replaced by Task 3 */ }
+
+  // Applies one resolved weatherLayers() result to one overlay's DOM (inline
+  // #eb-wx-overlay or fullscreen #eb-full-wx-overlay). Pure rendering - takes
+  // layers as given, does not fetch or interpolate weather itself.
+  _applyWeatherLayers(overlayEl, layers) {
+    if (!overlayEl) return;
+    const veil = overlayEl.querySelector(".eb-wx-veil");
+    const canvas = overlayEl.querySelector(".eb-wx-canvas");
+    const flash = overlayEl.querySelector(".eb-wx-flash");
+
+    const grey = layers.grey || 0, rain = layers.rain || 0, snow = layers.snow || 0, storm = layers.storm || 0;
+    // An entirely clear day shows nothing at all.
+    overlayEl.style.display = (grey > 0 || rain > 0 || snow > 0 || storm > 0) ? "" : "none";
+
+    if (veil) veil.style.opacity = String(grey * 0.55); // capped max darkening
+
+    if (canvas) _wxStartOrUpdateCanvas(overlayEl, canvas, rain, snow);
+    if (flash) _wxUpdateFlash(flash, storm);
+  }
+
+  // Hides both weather overlays and stops any running particle/flash loops -
+  // called on toggle-off and from disconnectedCallback().
+  _clearWeatherOverlay() {
+    const overlays = [this._$("eb-wx-overlay"), this._$("eb-full-wx-overlay")];
+    for (const overlayEl of overlays) {
+      if (!overlayEl) continue;
+      overlayEl.style.display = "none";
+      _wxStopCanvas(overlayEl.querySelector(".eb-wx-canvas"));
+      _wxStopFlash(overlayEl.querySelector(".eb-wx-flash"));
+    }
+  }
 
   _clearPoiLayers() {
     if (this._poiGroup) {
