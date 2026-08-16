@@ -9723,7 +9723,13 @@ class BoschEBike3DMapCard extends HTMLElement {
       .map3d-overlay {
         position: absolute; top: 8px; left: 8px; right: 8px;
         display: flex; flex-wrap: wrap; gap: 6px; pointer-events: none;
+        z-index: 1100;
       }
+      /* Shared weather-overlay CSS (WX_OVERLAY_CSS, declared above
+         BoschEBikeMapCard) - same light-DOM-per-instance constant used by
+         the 2D Map Card, since a <style> tag never crosses a shadow/light
+         DOM boundary between separate card instances (see
+         _ensureChaseCamStyles() for the same problem solved differently). */
       ${WX_OVERLAY_CSS}
       .map3d-chip {
         background: rgba(20,24,32,.78); color: #fff; backdrop-filter: blur(6px);
@@ -9759,6 +9765,7 @@ class BoschEBike3DMapCard extends HTMLElement {
         background: rgba(20,24,32,.78); color: #fff; backdrop-filter: blur(8px);
         border-radius: 12px; padding: 10px 12px;
         display: flex; flex-direction: column; gap: 8px;
+        z-index: 1100;
       }
       .map3d-controls .row1 {
         display: flex; align-items: center; gap: 10px;
