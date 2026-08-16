@@ -9504,6 +9504,7 @@ class BoschEBike3DMapCard extends HTMLElement {
     this._mode = "list";          // "list" or "detail"
     this._currentActivity = null;
     this._currentTrack = null;
+    this._weatherSeries = null;   // hourly series for the open tour (Task 7), or null when off/unfetched
     this._map = null;
     this._marker = null;
     this._fitDone = false;
@@ -10060,6 +10061,11 @@ class BoschEBike3DMapCard extends HTMLElement {
     this._mode = "detail";
     this._currentActivity = activity;
     this._currentTrack = null;
+    // Reset per-tour weather so a ride opened with show_weather off (or
+    // whose fetch fails) never keeps rendering the PREVIOUS tour's overlay.
+    // Re-populated below, only when the flag is on, once the new track has
+    // loaded and a start point is available.
+    this._weatherSeries = null;
     this._shadowDiagLogged = false;
     this._showMessage(this._t("map3d_loading_track"));
     try {
@@ -10084,10 +10090,46 @@ class BoschEBike3DMapCard extends HTMLElement {
       this._currentTrack = this._smoothTrackPositions(pts, w);
       this._buildCumulativeDistances();
       this._precomputeBearings();
+      // Fire-and-forget: the full-ride weather series is only needed by
+      // _applyIndex() on each scrub tick, so it must not delay the track
+      // render above. this._weatherSeries stays null (already reset)
+      // until/unless the fetch resolves for THIS still-open tour.
+      if (this._showFlag("show_weather")) {
+        this._loadTourWeather(activity);
+      }
       this._renderDetail();
     } catch (err) {
       console.error("[Bosch eBike 3D] track load failed", err);
       this._showMessage("Fehler: " + (err?.message || err));
+    }
+  }
+
+  // Fetches the full-ride hourly weather series (ride start → ride end) once
+  // for the whole open tour, so _applyIndex() can interpolate a per-scrub
+  // sample on every tick without a network call per frame. Uses this
+  // class's own smoothed _currentTrack (not the 2D card's _currentTrack,
+  // which is the raw/unsmoothed array on that class - see _openTour) for
+  // the start coordinate, since that is the same array _applyIndex() reads
+  // from during playback. Mirrors _loadAndRenderWeather()'s (Task 4, 2D
+  // card) fail-open convention: any failure is swallowed after a
+  // console.warn, leaving this._weatherSeries unset so the overlay simply
+  // never activates rather than throwing during playback.
+  async _loadTourWeather(activity) {
+    const startPoint = this._currentTrack && this._currentTrack[0];
+    if (!startPoint || !activity?.startTime) return;
+    try {
+      const startISO = activity.startTime;
+      const endISO = new Date(
+        new Date(activity.startTime).getTime() + this._tourDurationSec(activity) * 1000
+      ).toISOString();
+      const series = await fetchHistoricalWeather(startPoint.lat, startPoint.lon, startISO, endISO);
+      // The user may have opened a different tour while this was in
+      // flight - do not let a late resolve overwrite that tour's state.
+      if (this._currentActivity !== activity) return;
+      this._weatherSeries = series;
+    } catch (err) {
+      console.warn("[Bosch eBike 3D] weather fetch failed", err);
+      // fail open - no overlay, no error surfaced to the user
     }
   }
 
@@ -11608,6 +11650,22 @@ class BoschEBike3DMapCard extends HTMLElement {
     const t = new Date(startTime.getTime() + (clamped / Math.max(1, pts.length - 1)) * dur * 1000);
     const sun = sunPositionAt(t, p.lat, p.lon);
     const altDeg = sun.altitude * 180 / Math.PI;
+
+    // Weather overlay (Task 7): only once the full-ride series has arrived
+    // (this._weatherSeries stays null while unfetched/disabled/failed - the
+    // common case right after _openTour() starts, before its fetch could
+    // possibly have resolved). Reuses altDeg/t computed just above instead
+    // of calling sunPositionAt() a second time.
+    if (this._weatherSeries) {
+      try {
+        const wxSample = interpolateWeatherAt(this._weatherSeries, t);
+        if (wxSample) {
+          const layers = weatherLayers(wxSample.cloud, wxSample.precip, wxSample.snow, wxSample.code, altDeg);
+          _applyWeatherLayers(this._root.querySelector("#m3d-wx-overlay"), layers);
+        }
+      } catch (e) { console.warn("[Bosch eBike 3D] weather overlay update failed", e); }
+    }
+
     const mood = sunMoodFor(altDeg);
     this._updateTimeChips(clamped, t, altDeg, mood);
 
