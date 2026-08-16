@@ -2772,6 +2772,10 @@ class BoschEBikeMapCard extends HTMLElement {
     const aid = this._currentTrackActivityId;
     const activity = this._activities.find((a) => a.id === aid);
     if (!activity?.startTime) return;
+    // Captured once, up front - a forced reload of this same activity's track
+    // while its weather fetch is still in flight could otherwise leave
+    // this._currentTrack[0] undefined by the time we read it again below.
+    const startPoint = this._currentTrack[0];
 
     let weather = this._weatherData.get(aid);
     if (!weather) {
@@ -2785,8 +2789,7 @@ class BoschEBikeMapCard extends HTMLElement {
       if (this._weatherLoading.has(aid)) return;
       this._weatherLoading.add(aid);
       try {
-        const start = this._currentTrack[0];
-        const hourly = await fetchHistoricalWeather(start.lat, start.lon, activity.startTime, activity.startTime);
+        const hourly = await fetchHistoricalWeather(startPoint.lat, startPoint.lon, activity.startTime, activity.startTime);
         const sample = interpolateWeatherAt(hourly, new Date(activity.startTime));
         if (!sample) return;
         weather = sample;
@@ -2800,7 +2803,7 @@ class BoschEBikeMapCard extends HTMLElement {
       }
     }
     if (this._currentTrackActivityId !== aid) return; // user navigated away while fetching
-    const alt = sunPositionAt(new Date(activity.startTime), this._currentTrack[0].lat, this._currentTrack[0].lon).altitude * 180 / Math.PI;
+    const alt = sunPositionAt(new Date(activity.startTime), startPoint.lat, startPoint.lon).altitude * 180 / Math.PI;
     const layers = weatherLayers(weather.cloud, weather.precip, weather.snow, weather.code, alt);
     this._applyWeatherLayers(this._$("eb-wx-overlay"), layers);
     const fullOverlay = this._$("eb-full-wx-overlay");
