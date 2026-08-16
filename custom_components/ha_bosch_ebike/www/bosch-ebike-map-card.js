@@ -661,6 +661,117 @@ function sunMoodFor(altDeg) {
   return                { fog: "#cfe2f2", sky: "#a8d2ff", sun: "#ffffff", label: "day" };
 }
 
+// "Weather overlay": purely atmospheric cloud/rain/snow/storm effect strengths for a
+// past ride, independently written (not ported - Helios, the inspiration, is GPL-3.0
+// and this project is MIT; only the general idea - CSS/canvas layers driven by public
+// weather data - is reused, not any of its code). WMO weather codes and precipitation
+// intensity classes are public meteorological standards, not copyrightable.
+const clamp01 = (v) => Math.max(0, Math.min(1, v));
+
+const isSnowCode = (c) => (c >= 71 && c <= 77) || c === 85 || c === 86;
+const isStormCode = (c) => c === 95 || c === 96 || c === 99;
+
+// Below these floors, treat a rounding/dew trace as no precipitation to draw.
+const RAIN_MIN_MM = 0.1;
+const SNOW_MIN_CM = 0.1;
+
+// mm/h (or cm/h) -> particle density [0,1], piecewise-linear through the
+// meteorological intensity classes so light/moderate/heavy/violent each read as a
+// visibly distinct density instead of saturating early or over-drawing a trace.
+function intensityDensity(x, curve) {
+  if (x <= curve[0][0]) return curve[0][1];
+  for (let i = 1; i < curve.length; i++) {
+    const [x1, y1] = curve[i];
+    if (x <= x1) {
+      const [x0, y0] = curve[i - 1];
+      return y0 + (y1 - y0) * (x - x0) / (x1 - x0);
+    }
+  }
+  return curve[curve.length - 1][1];
+}
+const RAIN_CURVE = [[0.1, 0.05], [2.5, 0.30], [10, 0.60], [50, 1.0]];
+const SNOW_CURVE = [[0.1, 0.08], [1, 0.35], [4, 0.70], [10, 1.0]];
+
+// Map resolved weather (cloud %, precip mm/h, snowfall cm/h, WMO code, sun altitude in
+// degrees) to independent overlay strengths. Return fields, all [0,1] unless noted:
+//   sun   - warm sun-glow strength (fades under cloud and near/below the horizon)
+//   grey  - grey veil opacity, builds in from ~25% cloud cover
+//   cloud - drifting cloud-shape opacity, builds in from ~30% cloud cover
+//   rain/snow - particle density for the respective canvas layer
+//   storm - lightning-flash strength (0, 0.7 or 1)
+//   label - condition string for an optional small icon/badge, not required for the effect
+function weatherLayers(cloud, precip, snowfall, wmoCode, sunAltitudeDeg) {
+  const cloud01 = clamp01((cloud || 0) / 100);
+  const snowing = (snowfall || 0) >= SNOW_MIN_CM || isSnowCode(wmoCode);
+  const storm = isStormCode(wmoCode) ? (wmoCode === 95 ? 0.7 : 1) : 0;
+  const rain = (snowing || (precip || 0) < RAIN_MIN_MM) ? 0 : intensityDensity(precip, RAIN_CURVE);
+  const snow = (snowing && (snowfall || 0) >= SNOW_MIN_CM) ? intensityDensity(snowfall, SNOW_CURVE) : 0;
+  const dayFactor = clamp01((sunAltitudeDeg || 0) / 18);
+  return {
+    sun: dayFactor * clamp01(1 - cloud01 / 0.85),
+    grey: clamp01((cloud01 - 0.25) / 0.60),
+    cloud: clamp01((cloud01 - 0.30) / 0.55),
+    rain, snow, storm,
+    label:
+      storm > 0 ? "storm" :
+      snow > 0.5 ? "snow" : snow > 0 ? "light_snow" :
+      rain > 0.5 ? "rain" : rain > 0 ? "light_rain" :
+      cloud01 > 0.75 ? "overcast" : cloud01 > 0.40 ? "cloudy" :
+      cloud01 > 0.15 ? "partly_cloudy" : "clear",
+  };
+}
+
+// Linear interpolation between the two hourly samples bracketing targetDate.
+// hourly = { time: string[] (ISO hours), cloud: number[], precip: number[], snow: number[], code: number[] }
+function interpolateWeatherAt(hourly, targetDate) {
+  if (!hourly || !Array.isArray(hourly.time) || !hourly.time.length) return null;
+  const t = targetDate.getTime();
+  const times = hourly.time.map((s) => new Date(s).getTime());
+  if (t <= times[0]) return { cloud: hourly.cloud[0], precip: hourly.precip[0], snow: hourly.snow[0], code: hourly.code[0] };
+  const last = times.length - 1;
+  if (t >= times[last]) return { cloud: hourly.cloud[last], precip: hourly.precip[last], snow: hourly.snow[last], code: hourly.code[last] };
+  for (let i = 1; i <= last; i++) {
+    if (t <= times[i]) {
+      const f = (t - times[i - 1]) / (times[i] - times[i - 1]);
+      const lerp = (a) => a[i - 1] + (a[i] - a[i - 1]) * f;
+      return { cloud: lerp(hourly.cloud), precip: lerp(hourly.precip), snow: lerp(hourly.snow), code: hourly.code[i - 1] };
+    }
+  }
+  return null; // unreachable
+}
+
+// Fetches hourly weather for [startISO, endISO] at (lat, lon). Archive API has ~5 day
+// lag (ERA5 reanalysis), so recent rides fall back to the Forecast API (which also
+// serves recent past hours via past_days) - both share the same hourly param names.
+// Throws on a failed/empty response (unlike the Wikipedia/POI fetchers elsewhere in
+// this file, which swallow errors and return [] /null) - callers must catch this.
+async function fetchHistoricalWeather(lat, lon, startISO, endISO) {
+  const startDate = startISO.substring(0, 10);
+  const endDate = endISO.substring(0, 10);
+  const params = "cloud_cover_low,cloud_cover_mid,cloud_cover_high,precipitation,snowfall,weather_code";
+  const fiveDaysAgo = new Date(Date.now() - 5 * 86400000).toISOString().substring(0, 10);
+  const useForecast = endDate >= fiveDaysAgo;
+  const url = useForecast
+    ? `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=${params}&past_days=7&forecast_days=1&timezone=UTC`
+    : `https://archive-api.open-meteo.com/v1/archive?latitude=${lat}&longitude=${lon}&start_date=${startDate}&end_date=${endDate}&hourly=${params}&timezone=UTC`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`weather fetch failed: ${res.status}`);
+  const data = await res.json();
+  const h = data.hourly;
+  if (!h || !Array.isArray(h.time)) throw new Error("weather fetch: no hourly data");
+  const cover = h.time.map((_, i) => {
+    const low = h.cloud_cover_low?.[i] ?? 0, mid = h.cloud_cover_mid?.[i] ?? 0, high = h.cloud_cover_high?.[i] ?? 0;
+    return Math.min(100, low + 0.6 * mid + 0.2 * high); // same collapse formula Helios documents using
+  });
+  return {
+    time: h.time,
+    cloud: cover,
+    precip: h.precipitation || h.time.map(() => 0),
+    snow: h.snowfall || h.time.map(() => 0),
+    code: h.weather_code || h.time.map(() => 0),
+  };
+}
+
 // Trick Check trick types (see trick_check.py). Names are deliberately left
 // untranslated across all languages - the Bosch Flow app itself shows them
 // as "Jump" even in its German UI (confirmed via a real screenshot, issue
