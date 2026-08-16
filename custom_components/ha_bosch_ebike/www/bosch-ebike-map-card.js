@@ -976,6 +976,21 @@ function _wxStopFlash(flashEl) {
 function _wxScheduleFlash(flashEl) {
   const st = flashEl._wxFlashState;
   if (!st || !st.storm) return;
+
+  // Self-healing visibility/attachment gate, mirroring _wxTick's check above:
+  // an ancestor going display:none (e.g. a closed chase-cam/fullscreen modal)
+  // yields offsetParent === null here too, and isConnected catches full
+  // removal from the DOM (e.g. an innerHTML wipe). Either means this flash
+  // node is orphaned - stop rescheduling and fully tear down via
+  // _wxStopFlash() so a later _wxUpdateFlash() call (driven by the next
+  // _applyWeatherLayers() pass, once the node is visible/attached again)
+  // sees a fresh `!st` and re-arms the chain, instead of every current and
+  // future teardown path needing to remember to call _wxStopFlash() itself.
+  if (flashEl.offsetParent === null || !flashEl.isConnected) {
+    _wxStopFlash(flashEl);
+    return;
+  }
+
   const gap = (2500 + Math.random() * 4500) / (0.4 + st.storm); // higher storm -> shorter avg gap
   st.timer = setTimeout(() => {
     const cur = flashEl._wxFlashState;
@@ -1729,6 +1744,7 @@ class BoschEBikeMapCard extends HTMLElement {
     this._updateStyleButtons();
     this._updateWikiButtons();
     this._updatePoiButtons();
+    this._updateWeatherButtons();
     this._applyVisibilityConfig();
   }
 
@@ -2314,6 +2330,15 @@ class BoschEBikeMapCard extends HTMLElement {
       this._needsInlineFit = true;
       this._needsFullscreenFit = true;
 
+      // Switching rides (or reloading this one) always starts a fresh weather
+      // fetch below when enabled - clear whatever the PREVIOUS ride left on
+      // screen right away, before that fetch even starts, so a rainy ride's
+      // veil/particles/flash never lingers over the new ride's map. Must run
+      // before the `!pts.length` early-return below too, since that path
+      // (and a missing startTime, a failed fetch, etc.) never reaches
+      // _loadAndRenderWeather()/_applyWeatherLayers() at all.
+      if (this._weatherEnabled) this._clearWeatherOverlay();
+
       this._destroyMap(true);
       if (this._fullscreenOpen) this._destroyFullscreenMap();
 
@@ -2845,7 +2870,8 @@ class BoschEBikeMapCard extends HTMLElement {
         this._weatherLoading.delete(aid);
       }
     }
-    if (this._currentTrackActivityId !== aid) return; // user navigated away while fetching
+    // user navigated away while fetching, or toggled weather off before this resolved
+    if (this._currentTrackActivityId !== aid || !this._weatherEnabled) return;
     const alt = sunPositionAt(new Date(activity.startTime), startPoint.lat, startPoint.lon).altitude * 180 / Math.PI;
     const layers = weatherLayers(weather.cloud, weather.precip, weather.snow, weather.code, alt);
     _applyWeatherLayers(this._$("eb-wx-overlay"), layers);
@@ -10135,6 +10161,20 @@ class BoschEBike3DMapCard extends HTMLElement {
       // re-parse the whole (up to ~192-entry) series on every _applyIndex() tick
       // during autoplay/scrubbing (~60/s).
       series.timesMs = series.time.map((s) => new Date(s).getTime());
+      // The Forecast API branch of fetchHistoricalWeather() has no
+      // start_date bound - it always returns a fixed [now-7days, now+1day]
+      // window regardless of the ride's real start. For an unusually long
+      // multi-day tour whose END falls within the last 5 days but whose
+      // START predates that fixed window, the series would start LATER than
+      // the ride actually did; interpolateWeatherAt() can't detect this on
+      // its own since it just clamps out-of-range lookups to the first
+      // sample. Rather than silently show wrong-day weather for the early
+      // part of such a tour, treat too-short coverage the same as a failed
+      // fetch (fail open, matching this feature's convention elsewhere):
+      // leave this._weatherSeries unset so the overlay never activates for
+      // this tour. ~1h tolerance for the hourly sample bucketing itself.
+      const rideStartMs = new Date(activity.startTime).getTime();
+      if (rideStartMs < series.timesMs[0] - 3600000) return;
       this._weatherSeries = series;
     } catch (err) {
       console.warn("[Bosch eBike 3D] weather fetch failed", err);
