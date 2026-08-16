@@ -2294,6 +2294,9 @@ class BoschEBikeMapCard extends HTMLElement {
       if (this._poiEnabled) {
         this._setTimer(() => this._loadAndRenderPoi(), 700);
       }
+      if (this._weatherEnabled) {
+        this._setTimer(() => this._loadAndRenderWeather(), 800);
+      }
     } catch (error) {
       if (loadSeq < this._loadSeq) return;
       console.error("[Bosch eBike Map] track load error", error);
@@ -2741,12 +2744,6 @@ class BoschEBikeMapCard extends HTMLElement {
   }
 
   // -- Weather overlay (opt-in, mirrors the Wiki/POI toggle pattern) --
-  // NOTE: _loadAndRenderWeather() below is still a Task 4 stub - Task 3 only
-  // wires up the DOM overlay + particle/flash renderer (_applyWeatherLayers)
-  // and real teardown (_clearWeatherOverlay). _applyWeatherLayers() is
-  // intentionally NOT called from _loadAndRenderWeather() yet - it's
-  // exercised standalone (see the scratchpad mockup) until Task 4 connects it
-  // to real fetched ride weather.
 
   _updateWeatherButtons() {
     const inlineBtn = this._$("eb-weather");
@@ -2766,8 +2763,49 @@ class BoschEBikeMapCard extends HTMLElement {
     }
   }
 
-  // TODO(Task 4): fetch + render weather overlay
-  _loadAndRenderWeather() { /* stub - replaced by Task 4 */ }
+  // Fetches (or reuses cached) weather for the ride's start time/location,
+  // interpolates the sample at startTime, and applies the resolved layers to
+  // both overlays. Mirrors _loadAndRenderWiki()'s in-memory → localStorage →
+  // network cache cascade exactly.
+  async _loadAndRenderWeather() {
+    if (!this._currentTrackActivityId || !this._currentTrack.length) return;
+    const aid = this._currentTrackActivityId;
+    const activity = this._activities.find((a) => a.id === aid);
+    if (!activity?.startTime) return;
+
+    let weather = this._weatherData.get(aid);
+    if (!weather) {
+      const cacheKey = `eb-weather-${aid}`;
+      try {
+        const cached = localStorage.getItem(cacheKey);
+        if (cached) weather = JSON.parse(cached);
+      } catch (_) {}
+    }
+    if (!weather) {
+      if (this._weatherLoading.has(aid)) return;
+      this._weatherLoading.add(aid);
+      try {
+        const start = this._currentTrack[0];
+        const hourly = await fetchHistoricalWeather(start.lat, start.lon, activity.startTime, activity.startTime);
+        const sample = interpolateWeatherAt(hourly, new Date(activity.startTime));
+        if (!sample) return;
+        weather = sample;
+        this._weatherData.set(aid, weather);
+        try { localStorage.setItem(`eb-weather-${aid}`, JSON.stringify(weather)); } catch (_) {}
+      } catch (err) {
+        console.warn("[Bosch eBike Map] weather fetch failed", err);
+        return; // fail open - no overlay, no error surfaced to the user
+      } finally {
+        this._weatherLoading.delete(aid);
+      }
+    }
+    if (this._currentTrackActivityId !== aid) return; // user navigated away while fetching
+    const alt = sunPositionAt(new Date(activity.startTime), this._currentTrack[0].lat, this._currentTrack[0].lon).altitude * 180 / Math.PI;
+    const layers = weatherLayers(weather.cloud, weather.precip, weather.snow, weather.code, alt);
+    this._applyWeatherLayers(this._$("eb-wx-overlay"), layers);
+    const fullOverlay = this._$("eb-full-wx-overlay");
+    if (fullOverlay) this._applyWeatherLayers(fullOverlay, layers);
+  }
 
   // Applies one resolved weatherLayers() result to one overlay's DOM (inline
   // #eb-wx-overlay or fullscreen #eb-full-wx-overlay). Pure rendering - takes
@@ -3976,6 +4014,10 @@ ${trackPoints}
         this._loadAndRenderPoi();
       }
     }
+    // Re-apply the weather overlay if enabled. _loadAndRenderWeather() checks
+    // its own in-memory/localStorage cache first, so this is a cheap re-apply
+    // to the fullscreen overlay DOM when already cached, not a re-fetch.
+    if (this._weatherEnabled) this._loadAndRenderWeather();
 
     this._setTimer(() => {
       try { this._fullscreenMap?.invalidateSize({ pan: false, animate: false }); } catch (_) {}
