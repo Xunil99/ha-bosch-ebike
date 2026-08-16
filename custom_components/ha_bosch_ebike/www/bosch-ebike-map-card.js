@@ -1237,7 +1237,6 @@ class BoschEBikeMapCard extends HTMLElement {
       .eb-wx-veil { position:absolute; inset:0; background:#3a4552; opacity:0; transition:opacity 1.5s; }
       .eb-wx-canvas { position:absolute; inset:0; width:100%; height:100%; }
       .eb-wx-flash { position:absolute; inset:0; background:#fff; opacity:0; }
-      .eb-fullscreen-map { position:relative; }
       .eb-nav {
         display:flex; align-items:center; gap:8px; padding:8px 12px;
         background:var(--secondary-background-color,#f5f5f5);
@@ -1433,7 +1432,14 @@ class BoschEBikeMapCard extends HTMLElement {
       .eb-fullscreen-nav { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
       .eb-fullscreen-nav input[type="date"] { min-width:170px; padding:6px 10px; border:1px solid rgba(255,255,255,.2); border-radius:8px; background:rgba(255,255,255,.12); color:#fff; }
       .eb-fullscreen-nav .eb-ctr { color:rgba(255,255,255,.8); }
-      .eb-fullscreen-map { flex:1; min-height:280px; position:relative; }
+      /* Wrapper owns the fullscreen map's flex sizing/positioning (mirrors
+         .eb-map-wrap in the inline case). #eb-fullscreen-map itself must
+         stay a plain, un-sized child: Leaflet mounts directly onto it and
+         _syncFullscreenMap()/_destroyFullscreenMap() do
+         mapEl.innerHTML = "" on it, which would wipe #eb-full-wx-overlay
+         if the overlay lived inside it instead of as a wrapper sibling. */
+      .eb-fullscreen-map-wrap { flex:1; min-height:280px; position:relative; }
+      .eb-fullscreen-map { width:100%; height:100%; position:relative; }
       .eb-profile { background:var(--card-background-color,#fff); border-top:1px solid var(--divider-color,#ddd); padding:12px 14px 8px; overflow:visible; }
       .eb-profile-head { display:flex; align-items:baseline; justify-content:space-between; gap:12px; margin-bottom:8px; }
       .eb-profile-title { font-size:16px; font-weight:600; color:var(--primary-text-color,#222); }
@@ -1578,8 +1584,10 @@ class BoschEBikeMapCard extends HTMLElement {
             <button id="eb-tab-map" class="eb-fullscreen-tab active" role="tab" aria-selected="true">${t("tab_map")}</button>
             <button id="eb-tab-elevation" class="eb-fullscreen-tab" role="tab" aria-selected="false">${t("tab_elevation")}</button>
           </div>
-          <div id="eb-fullscreen-map" class="eb-fullscreen-map">
-            <div id="eb-batt-full" class="eb-batt-badge"></div>
+          <div id="eb-fullscreen-map-wrap" class="eb-fullscreen-map-wrap">
+            <div id="eb-fullscreen-map" class="eb-fullscreen-map">
+              <div id="eb-batt-full" class="eb-batt-badge"></div>
+            </div>
             <div id="eb-full-wx-overlay" class="eb-wx-overlay" style="display:none;">
               <div class="eb-wx-veil"></div>
               <canvas class="eb-wx-canvas"></canvas>
@@ -3503,7 +3511,12 @@ class BoschEBikeMapCard extends HTMLElement {
     const isMap = next === "map";
     const mapBtn = this._$("eb-tab-map");
     const eleBtn = this._$("eb-tab-elevation");
-    const mapEl = this._$("eb-fullscreen-map");
+    // Toggle the wrapper, not #eb-fullscreen-map itself: the weather
+    // overlay now lives as a wrapper sibling (see _buildDOM), so hiding
+    // just the inner map div would leave it visible over the elevation
+    // profile. Hiding the wrapper hides map + overlay together, same as
+    // when the overlay used to be a child of #eb-fullscreen-map.
+    const mapWrapEl = this._$("eb-fullscreen-map-wrap");
     const profileEl = this._$("eb-fullscreen-profile");
     const fitBtn = this._$("eb-fit");
     if (mapBtn) {
@@ -3514,7 +3527,7 @@ class BoschEBikeMapCard extends HTMLElement {
       eleBtn.classList.toggle("active", !isMap);
       eleBtn.setAttribute("aria-selected", !isMap ? "true" : "false");
     }
-    if (mapEl) mapEl.classList.toggle("eb-hidden", !isMap);
+    if (mapWrapEl) mapWrapEl.classList.toggle("eb-hidden", !isMap);
     if (profileEl) profileEl.classList.toggle("eb-hidden", isMap);
     if (fitBtn) fitBtn.classList.toggle("eb-hidden", !isMap);
     if (isMap) {
