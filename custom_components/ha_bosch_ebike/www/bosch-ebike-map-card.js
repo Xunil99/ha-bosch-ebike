@@ -793,6 +793,29 @@ const TRICK_TYPE_DEFS = [
 // (#eb-wx-overlay) and the fullscreen overlay (#eb-full-wx-overlay) each own
 // an independent rAF loop / timer chain and can never cancel one another.
 
+// CSS for the .eb-wx-overlay/.eb-wx-veil/.eb-wx-canvas/.eb-wx-flash DOM used
+// by _applyWeatherLayers() (Task 3). Shared as a module-level string - NOT
+// because CSS "isn't scoped" (it very much is: each card here builds its own
+// <style> tag inside its own light DOM, and neither card ever calls
+// attachShadow() itself, so whichever shadow root a card instance happens to
+// land in - its own hui-card wrapper in normal dashboard use, or none at all
+// in the document.body chase-cam portal (see _openChaseCam()) - is the only
+// scope that <style> ever reaches. A style tag built by BoschEBikeMapCard's
+// own _buildDOM() never reaches a separately-mounted BoschEBike3DMapCard;
+// verified empirically, mirrors why _ensureChaseCamStyles() already had to
+// inject its own flex-chain CSS rather than assume reuse). Every class that
+// renders one of these overlays must interpolate this into its OWN <style>
+// text so the rules land in that instance's own scope; this constant just
+// keeps the rule text itself single-sourced instead of copy-pasted twice.
+const WX_OVERLAY_CSS = `/* Opt-in weather overlay (Task 3), full-area on top of the map tiles.
+         z-index:1050 sits below .eb-map-tools/.eb-batt-badge's 1100 so the
+         toolbar and battery badge stay visually on top; pointer-events:none
+         so the map stays interactive underneath. */
+      .eb-wx-overlay { position:absolute; inset:0; z-index:1050; pointer-events:none; overflow:hidden; }
+      .eb-wx-veil { position:absolute; inset:0; background:#3a4552; opacity:0; transition:opacity 1.5s; }
+      .eb-wx-canvas { position:absolute; inset:0; width:100%; height:100%; }
+      .eb-wx-flash { position:absolute; inset:0; background:#fff; opacity:0; }`;
+
 function _wxDominantKind(rain, snow) {
   if (rain === 0 && snow === 0) return null;
   return snow > rain ? "snow" : "rain";
@@ -976,6 +999,28 @@ function _wxUpdateFlash(flashEl, storm) {
   } else {
     st.storm = storm;
   }
+}
+
+// Applies one resolved weatherLayers() result to one overlay's DOM (e.g.
+// BoschEBikeMapCard's inline #eb-wx-overlay / fullscreen #eb-full-wx-overlay,
+// or BoschEBike3DMapCard's #m3d-wx-overlay). Pure rendering - takes layers as
+// given, does not fetch or interpolate weather itself. Module-level (not a
+// class method) like the rest of this block: the body never touches `this`,
+// and both map-card classes call it against their own overlay element.
+function _applyWeatherLayers(overlayEl, layers) {
+  if (!overlayEl) return;
+  const veil = overlayEl.querySelector(".eb-wx-veil");
+  const canvas = overlayEl.querySelector(".eb-wx-canvas");
+  const flash = overlayEl.querySelector(".eb-wx-flash");
+
+  const grey = layers.grey || 0, rain = layers.rain || 0, snow = layers.snow || 0, storm = layers.storm || 0;
+  // An entirely clear day shows nothing at all.
+  overlayEl.style.display = (grey > 0 || rain > 0 || snow > 0 || storm > 0) ? "" : "none";
+
+  if (veil) veil.style.opacity = String(grey * 0.55); // capped max darkening
+
+  if (canvas) _wxStartOrUpdateCanvas(overlayEl, canvas, rain, snow);
+  if (flash) _wxUpdateFlash(flash, storm);
 }
 
 class BoschEBikeMapCard extends HTMLElement {
@@ -1229,14 +1274,7 @@ class BoschEBikeMapCard extends HTMLElement {
       }
       .eb-batt-badge.eb-batt-low { color:#ff5252; }
       .eb-batt-badge svg { width:18px; height:18px; }
-      /* Opt-in weather overlay (Task 3), full-area on top of the map tiles.
-         z-index:1050 sits below .eb-map-tools/.eb-batt-badge's 1100 so the
-         toolbar and battery badge stay visually on top; pointer-events:none
-         so the map stays interactive underneath. */
-      .eb-wx-overlay { position:absolute; inset:0; z-index:1050; pointer-events:none; overflow:hidden; }
-      .eb-wx-veil { position:absolute; inset:0; background:#3a4552; opacity:0; transition:opacity 1.5s; }
-      .eb-wx-canvas { position:absolute; inset:0; width:100%; height:100%; }
-      .eb-wx-flash { position:absolute; inset:0; background:#fff; opacity:0; }
+      ${WX_OVERLAY_CSS}
       .eb-nav {
         display:flex; align-items:center; gap:8px; padding:8px 12px;
         background:var(--secondary-background-color,#f5f5f5);
@@ -2805,28 +2843,9 @@ class BoschEBikeMapCard extends HTMLElement {
     if (this._currentTrackActivityId !== aid) return; // user navigated away while fetching
     const alt = sunPositionAt(new Date(activity.startTime), startPoint.lat, startPoint.lon).altitude * 180 / Math.PI;
     const layers = weatherLayers(weather.cloud, weather.precip, weather.snow, weather.code, alt);
-    this._applyWeatherLayers(this._$("eb-wx-overlay"), layers);
+    _applyWeatherLayers(this._$("eb-wx-overlay"), layers);
     const fullOverlay = this._$("eb-full-wx-overlay");
-    if (fullOverlay) this._applyWeatherLayers(fullOverlay, layers);
-  }
-
-  // Applies one resolved weatherLayers() result to one overlay's DOM (inline
-  // #eb-wx-overlay or fullscreen #eb-full-wx-overlay). Pure rendering - takes
-  // layers as given, does not fetch or interpolate weather itself.
-  _applyWeatherLayers(overlayEl, layers) {
-    if (!overlayEl) return;
-    const veil = overlayEl.querySelector(".eb-wx-veil");
-    const canvas = overlayEl.querySelector(".eb-wx-canvas");
-    const flash = overlayEl.querySelector(".eb-wx-flash");
-
-    const grey = layers.grey || 0, rain = layers.rain || 0, snow = layers.snow || 0, storm = layers.storm || 0;
-    // An entirely clear day shows nothing at all.
-    overlayEl.style.display = (grey > 0 || rain > 0 || snow > 0 || storm > 0) ? "" : "none";
-
-    if (veil) veil.style.opacity = String(grey * 0.55); // capped max darkening
-
-    if (canvas) _wxStartOrUpdateCanvas(overlayEl, canvas, rain, snow);
-    if (flash) _wxUpdateFlash(flash, storm);
+    if (fullOverlay) _applyWeatherLayers(fullOverlay, layers);
   }
 
   // Hides both weather overlays and stops any running particle/flash loops -
@@ -9705,6 +9724,7 @@ class BoschEBike3DMapCard extends HTMLElement {
         position: absolute; top: 8px; left: 8px; right: 8px;
         display: flex; flex-wrap: wrap; gap: 6px; pointer-events: none;
       }
+      ${WX_OVERLAY_CSS}
       .map3d-chip {
         background: rgba(20,24,32,.78); color: #fff; backdrop-filter: blur(6px);
         padding: 4px 10px; border-radius: 999px; font-size: 12px;
@@ -10737,6 +10757,11 @@ class BoschEBike3DMapCard extends HTMLElement {
           <button class="map3d-close-btn" id="m3d-close-btn" type="button" title="${this._t("btn_close")}" aria-label="${this._t("btn_close")}">
             <ha-icon icon="mdi:close"></ha-icon>
           </button>
+        </div>
+        <div id="m3d-wx-overlay" class="eb-wx-overlay" style="${hide("show_weather")}">
+          <div class="eb-wx-veil"></div>
+          <canvas class="eb-wx-canvas"></canvas>
+          <div class="eb-wx-flash"></div>
         </div>
         <div class="map3d-controls">
           <div class="row1">
