@@ -1005,7 +1005,7 @@ async def ws_set_card_settings(
         "camera_presets", "active_camera_preset_id",
         "show_date", "show_time", "show_sun",
         "show_speed", "show_distance", "show_elevation",
-        "stats_as_chips",
+        "stats_as_chips", "show_weather",
         # Wartungs-Warnschwellen (Dashboard-Card): ab wann ein Item als
         # bald-fällig angezeigt wird. Defaults im Frontend: 500 km / 30 Tage.
         "maint_warn_km", "maint_warn_days",
