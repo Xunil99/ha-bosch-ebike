@@ -10829,8 +10829,20 @@ class BoschEBike3DMapCard extends HTMLElement {
   // this chip mid-playback does not stop the animation or snap the
   // scrubber back to the start of the track.
   _toggleWeatherChip() {
-    const next = !this._showFlag("show_weather");
     const chip = this._root?.querySelector("#m3d-wx-toggle-chip");
+    // Derive `next` from the chip's own current DOM state, not from
+    // _showFlag()/_cardSettingsCache - that cache only reflects a prior
+    // saveCardSetting() call once its WS round-trip resolves and the
+    // "changed" event fires. Two clicks inside that window would
+    // otherwise both read the same pre-click cached value and compute
+    // the same `next`, silently swallowing the second click's
+    // toggle-back intent (both writes persist the same value, and the
+    // classList.toggle below becomes a no-op on the second click). This
+    // is the same toggle-off race already fixed once elsewhere (see
+    // commit 8882176); reading the DOM keeps this path immune to it the
+    // same way _toggleNorthUp() is immune via its synchronous
+    // localStorage-backed persistence.
+    const next = !chip?.classList.contains("active");
     if (chip) chip.classList.toggle("active", next);
     saveCardSetting(this._hass, "show_weather", next ? 1 : 0);
   }
@@ -10886,7 +10898,7 @@ class BoschEBike3DMapCard extends HTMLElement {
           <span class="map3d-chip" id="m3d-sun-chip" style="${hide("show_sun")}">
             <ha-icon icon="mdi:white-balance-sunny" id="m3d-sun-ico"></ha-icon><span id="m3d-sun-text">--</span>
           </span>
-          <span class="map3d-chip map3d-wx-toggle-chip${this._showFlag("show_weather") ? " active" : ""}" id="m3d-wx-toggle-chip" title="${this._t("btn_weather")}" aria-label="${this._t("btn_weather")}">
+          <span class="map3d-chip map3d-wx-toggle-chip${this._showFlag("show_weather") ? " active" : ""}" id="m3d-wx-toggle-chip" title="${this._t("btn_weather")}" aria-label="${this._t("btn_weather")}" role="button" tabindex="0">
             <ha-icon icon="mdi:weather-partly-cloudy"></ha-icon><span>${this._t("btn_weather")}</span>
           </span>
           ${statsAsChips ? `
@@ -11011,6 +11023,12 @@ class BoschEBike3DMapCard extends HTMLElement {
     const wxToggleChip = this._root.querySelector("#m3d-wx-toggle-chip");
     if (wxToggleChip) {
       wxToggleChip.addEventListener("click", () => this._toggleWeatherChip());
+      wxToggleChip.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          this._toggleWeatherChip();
+        }
+      });
     }
 
     const switchEl = this._root.querySelector("#m3d-mode-switch");
