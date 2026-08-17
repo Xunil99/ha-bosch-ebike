@@ -10821,7 +10821,13 @@ class BoschEBike3DMapCard extends HTMLElement {
   // _renderDetail() (via _cardSettingsHandler/_renderRoot) that rebuilds
   // this chip's class inline from _showFlag() again anyway - so the
   // optimistic update here only needs to bridge the gap until that
-  // round trip resolves.
+  // round trip resolves. That rebuild tears down and recreates the
+  // MapLibre instance (see _renderDetail()'s "Tear down any previous
+  // MapLibre instance" comment just below) - _renderDetail() and
+  // _initMap() capture and restore the chase-cam's scrub position and
+  // play/pause state across it (resumeFrac/resumePlaying), so clicking
+  // this chip mid-playback does not stop the animation or snap the
+  // scrubber back to the start of the track.
   _toggleWeatherChip() {
     const next = !this._showFlag("show_weather");
     const chip = this._root?.querySelector("#m3d-wx-toggle-chip");
@@ -10832,6 +10838,25 @@ class BoschEBike3DMapCard extends HTMLElement {
   _renderDetail() {
     const a = this._currentActivity;
     if (!a) return;
+    // Snapshot playback state BEFORE _destroyMap() below wipes it
+    // (_destroyMap -> _stopAnim() sets _isPlaying=false; _initMap()
+    // unconditionally re-applies index 0). _renderDetail() is not only
+    // called once when a tour is opened - it is also re-invoked on every
+    // _cardSettingsBus "changed" event (_cardSettingsHandler/_renderRoot),
+    // i.e. whenever ANY open card - this one or another instance on a
+    // different dashboard - changes a shared setting (show_date,
+    // show_time, show_sun, stats_as_chips, the show_weather editor field,
+    // or the weather-toggle chip added alongside this comment). Without
+    // preserving state here, a mid-playback settings change from
+    // elsewhere would silently snap this card's chase-cam back to frame 0
+    // and stop the animation - the exact "jarring interruption" outcome
+    // that must not happen. `this._map` is only truthy if a PREVIOUS
+    // _renderDetail() call already built one for this same tour - the
+    // first render after _openTour() has none yet, so both stay
+    // undefined/false there and _initMap() falls back to its normal
+    // start-at-0-paused behaviour.
+    const resumeFrac = this._map ? this._currentFracIndex : undefined;
+    const resumePlaying = this._map ? this._isPlaying : false;
     // Tear down any previous MapLibre instance + markers before we
     // wipe the DOM with innerHTML. Without this, a re-render leaves
     // an orphaned map object whose markers are gone from the DOM,
@@ -11006,10 +11031,15 @@ class BoschEBike3DMapCard extends HTMLElement {
 
     this._setupIdleFade(this._root.querySelector(".map3d-detail"));
 
-    this._initMap();
+    this._initMap(resumeFrac, resumePlaying);
   }
 
-  async _initMap() {
+  // resumeFrac/resumePlaying: scrub position + play state captured by
+  // _renderDetail() just before it tore down the previous map (undefined/
+  // false on a freshly opened tour - see the comment there). Used below to
+  // put the chase-cam back where it was instead of always starting at
+  // frame 0, so a settings-change re-render does not interrupt playback.
+  async _initMap(resumeFrac, resumePlaying) {
     // Epoch token: if _initMap is called again before this one finishes
     // (async race during ensureMapLibre), the older call bails out so
     // only the newest init creates a Map and adds markers.
@@ -11094,12 +11124,19 @@ class BoschEBike3DMapCard extends HTMLElement {
     // breaking existing user setups; 30 still works as a good default.
     const lookAheadPx = Math.max(0, Math.min(200, Number(readCardSetting(this._config, "chase_lookahead", undefined)) || 30));
     this._chaseLookAhead = lookAheadPx;
-    this._currentIndex = 0;
+    // Resume position (see the resumeFrac/resumePlaying comment on the
+    // caller side, _renderDetail()): defaults to the very start of the
+    // track when there is nothing to resume. Seeded here already (ahead
+    // of the map's 'load' event further below) purely so a stray
+    // _updateShadows() call during camera setup has a plausible
+    // integer-anchored index instead of always claiming frame 0.
+    const startFrac = (resumeFrac != null && Number.isFinite(resumeFrac)) ? resumeFrac : 0;
+    this._currentIndex = Math.floor(startFrac);
     // Local capture: 'myMap' is THIS init's map. Use it instead of
     // this._map inside async callbacks, so a later re-init that
     // overwrites this._map cannot pollute or hijack the wrong map.
     // Initial centre is the bike's start position; the pixel offset
-    // is applied via the first _applyIndex(0, true) easeTo, which
+    // is applied via the first _applyIndex(startFrac, true) easeTo, which
     // animates from no-offset to offset over 900 ms.
     const myMap = new mlib.Map({
       container: canvas,
@@ -11230,12 +11267,23 @@ class BoschEBike3DMapCard extends HTMLElement {
       // removing it.
 
       // Resize once after layers are added, then apply the chase-cam at
-      // index 0. _applyIndex jumps the camera to the bike's position,
-      // bearing-aligned with the direction of travel.
+      // startFrac (0 for a freshly opened tour, or the preserved scrub
+      // position when this init is resuming after a settings-driven
+      // rebuild - see the resumeFrac/resumePlaying comments above).
+      // _applyIndex jumps the camera to the bike's position, bearing-
+      // aligned with the direction of travel.
       try { this._map.resize(); } catch (_) {}
 
-      this._applyIndex(0, true);
-      this._updateTimeChips(0, startTime, altDeg, mood);
+      this._applyIndex(startFrac, true);
+      // _applyIndex() above already called _updateTimeChips() with the
+      // date/time/sun correctly interpolated for startFrac. This second
+      // call only adds value for the true tour-start case (startFrac===0,
+      // where the two happen to agree) - for a resumed position it would
+      // wrongly stomp the just-set chips back to the tour's absolute
+      // start time, so it is skipped there.
+      if (startFrac === 0) {
+        this._updateTimeChips(0, startTime, altDeg, mood);
+      }
       this._updateRangeLabels();
 
       // Restore persisted map mode (vector / terrain / satellite). Done
@@ -11248,6 +11296,15 @@ class BoschEBike3DMapCard extends HTMLElement {
         this._setMapMode(wantMode, { silent: true }).catch((e) => {
           console.warn("[Bosch eBike 3D] mode auto-restore failed", e);
         });
+      }
+
+      // Resume playback (see _renderDetail()'s resumeFrac/resumePlaying
+      // comment): only reached when a settings-change re-render tore
+      // down and rebuilt the map WHILE the chase-cam was mid-animation.
+      // _startAnim() reads the slider's current value for its start
+      // point, which _applyIndex() above already set to startFrac.
+      if (resumePlaying) {
+        try { this._startAnim(); } catch (_) {}
       }
     });
   }
