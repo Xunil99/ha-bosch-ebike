@@ -9882,14 +9882,19 @@ class BoschEBike3DMapCard extends HTMLElement {
          show_weather shared setting the editor's number field already
          exposes (not a replacement for it). Sibling of the daylight
          chip; base pill shape/padding/border-radius come from the
-         .map3d-chip rule above, cursor:pointer added here since chips
-         are not clickable by default. Active-state accent mirrors
-         .map3d-nu-btn.active's exact colors, adapted to the pill shape
-         (no border, since the base chip has none). Scoped to this one
-         chip's class rather than a bare .map3d-chip.active so no other
-         chip accidentally inherits this look if it ever gains an
-         "active" class of its own. */
-      .map3d-wx-toggle-chip { cursor: pointer; }
+         .map3d-chip rule above. Rendered as a real <button> (for
+         correct native keyboard activation semantics, matching the
+         other overlay controls) rather than a span, so border:0 resets
+         the browser's default button border - the base .map3d-chip
+         rule doesn't set one - mirroring the same reset .map3d-back-btn
+         already needs for the same reason. cursor:pointer is kept
+         explicit for clarity even though buttons default to it.
+         Active-state accent mirrors .map3d-nu-btn.active's exact
+         colors, adapted to the pill shape (no border, since the base
+         chip has none). Scoped to this one chip's class rather than a
+         bare .map3d-chip.active so no other chip accidentally inherits
+         this look if it ever gains an "active" class of its own. */
+      .map3d-wx-toggle-chip { cursor: pointer; border: 0; }
       .map3d-wx-toggle-chip.active {
         background: #1f6feb;
         box-shadow: 0 1px 6px rgba(31,111,235,.45);
@@ -10837,10 +10842,9 @@ class BoschEBike3DMapCard extends HTMLElement {
     // otherwise both read the same pre-click cached value and compute
     // the same `next`, silently swallowing the second click's
     // toggle-back intent (both writes persist the same value, and the
-    // classList.toggle below becomes a no-op on the second click). This
-    // is the same toggle-off race already fixed once elsewhere (see
-    // commit 8882176); reading the DOM keeps this path immune to it the
-    // same way _toggleNorthUp() is immune via its synchronous
+    // classList.toggle below becomes a no-op on the second click).
+    // Reading the DOM keeps this path immune to that race, the same
+    // way _toggleNorthUp() is immune via its synchronous
     // localStorage-backed persistence.
     const next = !chip?.classList.contains("active");
     if (chip) chip.classList.toggle("active", next);
@@ -10898,9 +10902,9 @@ class BoschEBike3DMapCard extends HTMLElement {
           <span class="map3d-chip" id="m3d-sun-chip" style="${hide("show_sun")}">
             <ha-icon icon="mdi:white-balance-sunny" id="m3d-sun-ico"></ha-icon><span id="m3d-sun-text">--</span>
           </span>
-          <span class="map3d-chip map3d-wx-toggle-chip${this._showFlag("show_weather") ? " active" : ""}" id="m3d-wx-toggle-chip" title="${this._t("btn_weather")}" aria-label="${this._t("btn_weather")}" role="button" tabindex="0">
+          <button class="map3d-chip map3d-wx-toggle-chip${this._showFlag("show_weather") ? " active" : ""}" id="m3d-wx-toggle-chip" type="button" title="${this._t("btn_weather")}" aria-label="${this._t("btn_weather")}">
             <ha-icon icon="mdi:weather-partly-cloudy"></ha-icon><span>${this._t("btn_weather")}</span>
-          </span>
+          </button>
           ${statsAsChips ? `
           <span class="map3d-chip" id="m3d-dist-chip" style="${hide("show_distance")}">
             <ha-icon icon="mdi:map-marker-distance"></ha-icon><span id="m3d-stat-dist">–</span>
@@ -11022,13 +11026,11 @@ class BoschEBike3DMapCard extends HTMLElement {
 
     const wxToggleChip = this._root.querySelector("#m3d-wx-toggle-chip");
     if (wxToggleChip) {
+      // Real <button> (see markup above): click already fires correctly
+      // for both mouse and keyboard activation (Enter/Space), including
+      // native single-fire-per-press key-repeat handling, so no manual
+      // keydown listener is needed here.
       wxToggleChip.addEventListener("click", () => this._toggleWeatherChip());
-      wxToggleChip.addEventListener("keydown", (e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          this._toggleWeatherChip();
-        }
-      });
     }
 
     const switchEl = this._root.querySelector("#m3d-mode-switch");
