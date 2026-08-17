@@ -9878,6 +9878,22 @@ class BoschEBike3DMapCard extends HTMLElement {
         box-shadow: 0 1px 6px rgba(31,111,235,.45);
       }
       .map3d-nu-btn ha-icon { --mdc-icon-size: 16px; }
+      /* Weather-toggle chip: additional on-card control for the same
+         show_weather shared setting the editor's number field already
+         exposes (not a replacement for it). Sibling of the daylight
+         chip; base pill shape/padding/border-radius come from the
+         .map3d-chip rule above, cursor:pointer added here since chips
+         are not clickable by default. Active-state accent mirrors
+         .map3d-nu-btn.active's exact colors, adapted to the pill shape
+         (no border, since the base chip has none). Scoped to this one
+         chip's class rather than a bare .map3d-chip.active so no other
+         chip accidentally inherits this look if it ever gains an
+         "active" class of its own. */
+      .map3d-wx-toggle-chip { cursor: pointer; }
+      .map3d-wx-toggle-chip.active {
+        background: #1f6feb;
+        box-shadow: 0 1px 6px rgba(31,111,235,.45);
+      }
       /* Close button: bigger hit area so it works well on tablets,
          which have no ESC key to exit fullscreen / chase-cam mode.
          Slight red tint so it stands out from the neutral chip row. */
@@ -10788,6 +10804,31 @@ class BoschEBike3DMapCard extends HTMLElement {
     return !(v === 0 || v === "0" || v === false || v === "false" || v === "off");
   }
 
+  // Weather-toggle chip (chase-cam overlay, sibling of the daylight
+  // chip): a more discoverable ADDITIONAL control for the same
+  // show_weather shared setting the editor's number field already
+  // exposes - single source of truth, no localStorage override layer
+  // like north-up's. Reads the current value via the same _showFlag()
+  // accessor _applyIndex() already uses to gate the weather overlay
+  // itself, so this stays consistent with the rest of the class. The
+  // chip's own class is updated optimistically right away so the click
+  // feels responsive (mirroring _toggleNorthUp -> _updateNorthUpButton),
+  // then the value is persisted via saveCardSetting() fire-and-forget -
+  // same async-write-no-block, fail-soft-on-error convention every
+  // other shared-setting write in this file already follows (e.g.
+  // mkWarnInput's number inputs). On success, saveCardSetting() dispatches
+  // _cardSettingsBus's "changed" event, which triggers a full
+  // _renderDetail() (via _cardSettingsHandler/_renderRoot) that rebuilds
+  // this chip's class inline from _showFlag() again anyway - so the
+  // optimistic update here only needs to bridge the gap until that
+  // round trip resolves.
+  _toggleWeatherChip() {
+    const next = !this._showFlag("show_weather");
+    const chip = this._root?.querySelector("#m3d-wx-toggle-chip");
+    if (chip) chip.classList.toggle("active", next);
+    saveCardSetting(this._hass, "show_weather", next ? 1 : 0);
+  }
+
   _renderDetail() {
     const a = this._currentActivity;
     if (!a) return;
@@ -10819,6 +10860,9 @@ class BoschEBike3DMapCard extends HTMLElement {
           </span>
           <span class="map3d-chip" id="m3d-sun-chip" style="${hide("show_sun")}">
             <ha-icon icon="mdi:white-balance-sunny" id="m3d-sun-ico"></ha-icon><span id="m3d-sun-text">--</span>
+          </span>
+          <span class="map3d-chip map3d-wx-toggle-chip${this._showFlag("show_weather") ? " active" : ""}" id="m3d-wx-toggle-chip" title="${this._t("btn_weather")}" aria-label="${this._t("btn_weather")}">
+            <ha-icon icon="mdi:weather-partly-cloudy"></ha-icon><span>${this._t("btn_weather")}</span>
           </span>
           ${statsAsChips ? `
           <span class="map3d-chip" id="m3d-dist-chip" style="${hide("show_distance")}">
@@ -10938,6 +10982,11 @@ class BoschEBike3DMapCard extends HTMLElement {
       nuBtn.addEventListener("click", () => this._toggleNorthUp());
     }
     this._updateNorthUpButton();
+
+    const wxToggleChip = this._root.querySelector("#m3d-wx-toggle-chip");
+    if (wxToggleChip) {
+      wxToggleChip.addEventListener("click", () => this._toggleWeatherChip());
+    }
 
     const switchEl = this._root.querySelector("#m3d-mode-switch");
     if (switchEl) {
