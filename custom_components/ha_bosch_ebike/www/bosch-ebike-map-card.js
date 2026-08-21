@@ -1913,7 +1913,7 @@ class BoschEBikeMapCard extends HTMLElement {
     if (this._lockedAccount) {
       if (accountWrap) accountWrap.style.display = "none";
     } else if (this._instances.length > 1) {
-      const opts = ['<option value="all">Alle Konten</option>'];
+      const opts = [`<option value="all">${this._t("all_accounts")}</option>`];
       for (const inst of this._instances) {
         opts.push(`<option value="${inst.config_entry_id}">${this._escapeHtml(inst.label)}</option>`);
       }
@@ -3779,7 +3779,7 @@ ${trackPoints}
 
     const closeBtn = document.createElement("button");
     closeBtn.type = "button";
-    closeBtn.setAttribute("aria-label", "Close");
+    closeBtn.setAttribute("aria-label", this._t("btn_close"));
     closeBtn.style.cssText =
       "position:absolute;top:calc(env(safe-area-inset-top,0px) + 8px);" +
       "right:8px;z-index:10001;width:36px;height:36px;border:0;border-radius:50%;" +
@@ -4190,7 +4190,7 @@ class BoschEBikeHeatmapCard extends HTMLElement {
     } catch (err) {
       console.error("[Bosch eBike Heatmap] boot error", err);
       const msg = this.querySelector("#heat-msg");
-      if (msg) msg.textContent = "Fehler: " + (err?.message || err);
+      if (msg) msg.textContent = ebT(this._hass, "msg_error_prefix") + (err?.message || err);
     } finally {
       this._booting = false;
     }
@@ -4498,7 +4498,7 @@ class BoschEBikeHeatmapCard extends HTMLElement {
       if (accountSel) accountSel.style.display = "none";
       if (accLbl) accLbl.style.display = "none";
     } else if (this._instances.length > 1) {
-      const opts = ['<option value="all">Alle Konten</option>'];
+      const opts = [`<option value="all">${ebT(this._hass, "all_accounts")}</option>`];
       for (const inst of this._instances) {
         opts.push(`<option value="${inst.config_entry_id}">${this._escapeHtml(inst.label)}</option>`);
       }
@@ -4527,7 +4527,7 @@ class BoschEBikeHeatmapCard extends HTMLElement {
       }
     }
     if (bikes.length > 1) {
-      const opts = ['<option value="all">Alle Bikes</option>'];
+      const opts = [`<option value="all">${ebT(this._hass, "all_bikes")}</option>`];
       for (const b of bikes) {
         opts.push(`<option value="${b.id}">${this._escapeHtml(b.label)}</option>`);
       }
@@ -5322,7 +5322,7 @@ class BoschEBikeCalendarCard extends HTMLElement {
     } catch (err) {
       console.error("[Bosch eBike Calendar] boot error", err);
       const msg = this.querySelector("#cal-msg");
-      if (msg) msg.textContent = "Fehler: " + (err?.message || err);
+      if (msg) msg.textContent = ebT(this._hass, "msg_error_prefix") + (err?.message || err);
     } finally {
       this._booting = false;
     }
@@ -5954,7 +5954,7 @@ class BoschEBikeStatsCard extends HTMLElement {
     } catch (err) {
       console.error("[Bosch eBike Stats] boot error", err);
       const msg = this.querySelector("#stats-msg");
-      if (msg) msg.textContent = "Error: " + (err?.message || err);
+      if (msg) msg.textContent = ebT(this._hass, "msg_error_prefix") + (err?.message || err);
     } finally {
       this._booting = false;
     }
@@ -6692,7 +6692,7 @@ class BoschEBikeTrickListCard extends HTMLElement {
     } catch (err) {
       console.error("[Bosch eBike Trick List] boot error", err);
       const msg = this.querySelector("#trklist-msg");
-      if (msg) msg.textContent = "Error: " + (err?.message || err);
+      if (msg) msg.textContent = ebT(this._hass, "msg_error_prefix") + (err?.message || err);
     } finally {
       this._booting = false;
     }
@@ -9661,7 +9661,7 @@ class BoschEBike3DMapCard extends HTMLElement {
       }
     } catch (err) {
       console.error("[Bosch eBike 3D] boot error", err);
-      this._showMessage("Fehler: " + (err?.message || err));
+      this._showMessage(this._t("msg_error_prefix") + (err?.message || err));
     } finally {
       this._booting = false;
     }
@@ -10152,7 +10152,7 @@ class BoschEBike3DMapCard extends HTMLElement {
       this._renderDetail();
     } catch (err) {
       console.error("[Bosch eBike 3D] track load failed", err);
-      this._showMessage("Fehler: " + (err?.message || err));
+      this._showMessage(this._t("msg_error_prefix") + (err?.message || err));
     }
   }
 
