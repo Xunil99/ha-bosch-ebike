@@ -120,6 +120,23 @@ const LEAFLET_INLINE_CSS = `
 .leaflet-tooltip { position: absolute; padding: 4px 8px; background-color: #fff; border: 1px solid #fff; border-radius: 3px; color: #222; white-space: nowrap; pointer-events: none; box-shadow: 0 1px 3px rgba(0,0,0,0.4); }
 `;
 
+// ensureLeaflet() runs at module level with no `hass` in scope, so its
+// rejections carry a stable, untranslated error CODE rather than natural-
+// language text - callers (which always have `this._hass`) translate the
+// code via describeBootError() below, right where they already build their
+// user-facing error message.
+const ERR_LEAFLET_UNAVAILABLE = "leaflet_unavailable";
+const ERR_LEAFLET_LOAD_FAILED = "leaflet_load_failed";
+
+// Translates the stable codes ensureLeaflet() rejects with into a
+// user-facing message in the current hass locale; any other error's plain
+// .message is used as-is (already human-readable, e.g. from a WS call).
+function describeBootError(hass, err) {
+  if (err?.message === ERR_LEAFLET_UNAVAILABLE) return ebT(hass, "err_leaflet_unavailable");
+  if (err?.message === ERR_LEAFLET_LOAD_FAILED) return ebT(hass, "err_leaflet_load");
+  return err?.message || String(err);
+}
+
 function ensureLeaflet() {
   ensureLeafletCss();
   if (window.L && typeof window.L.map === "function") return Promise.resolve(window.L);
@@ -134,7 +151,7 @@ function ensureLeaflet() {
           // Tag auch hier entfernen: load/error feuern nie wieder,
           // ein Retry an diesem Tag würde sonst ewig hängen.
           existing.remove();
-          reject(new Error("Leaflet wurde geladen, ist aber nicht verfügbar"));
+          reject(new Error(ERR_LEAFLET_UNAVAILABLE));
         }
       };
       existing.addEventListener("load", finish, { once: true });
@@ -143,7 +160,7 @@ function ensureLeaflet() {
         // frisches injiziert (sonst hinge er ewig an einem Tag, dessen
         // load/error-Events längst gefeuert haben).
         existing.remove();
-        reject(new Error("Leaflet konnte nicht geladen werden"));
+        reject(new Error(ERR_LEAFLET_LOAD_FAILED));
       }, { once: true });
       if (window.L && typeof window.L.map === "function") finish();
       return;
@@ -156,12 +173,12 @@ function ensureLeaflet() {
       if (window.L && typeof window.L.map === "function") resolve(window.L);
       else {
         script.remove();
-        reject(new Error("Leaflet wurde geladen, ist aber nicht verfügbar"));
+        reject(new Error(ERR_LEAFLET_UNAVAILABLE));
       }
     };
     script.onerror = () => {
       script.remove();
-      reject(new Error("Leaflet konnte nicht geladen werden"));
+      reject(new Error(ERR_LEAFLET_LOAD_FAILED));
     };
     document.head.appendChild(script);
   }).catch((err) => {
@@ -1263,7 +1280,7 @@ class BoschEBikeMapCard extends HTMLElement {
       this._scheduleActivation("boot finished");
     } catch (error) {
       console.error("[Bosch eBike Map] boot error", error);
-      this._msg(this._t("msg_error_prefix") + (error?.message || error));
+      this._msg(this._t("msg_error_prefix") + describeBootError(this._hass, error));
     } finally {
       this._booting = false;
     }
@@ -3143,7 +3160,7 @@ class BoschEBikeMapCard extends HTMLElement {
     }
     if (poi.tags.website) {
       const url = poi.tags.website.startsWith("http") ? poi.tags.website : "https://" + poi.tags.website;
-      extra += `<div>🌐 <a href="${this._escapeHtml(url)}" target="_blank" rel="noopener">Website</a></div>`;
+      extra += `<div>🌐 <a href="${this._escapeHtml(url)}" target="_blank" rel="noopener">${this._t("poi_website_link")}</a></div>`;
     }
     return `<div class="eb-poi-popup">
       <div class="eb-poi-title">${poi.catIcon} ${safeName}</div>
@@ -3714,7 +3731,7 @@ ${trackPoints}
   _downloadCurrentGpx() {
     const gpx = this._buildCurrentGpx();
     if (!gpx) {
-      this._msg("Kein GPX für diese Route verfügbar");
+      this._msg(this._t("msg_gpx_unavailable"));
       this._setTimer(() => this._msg(""), 2200);
       return;
     }
@@ -3732,7 +3749,7 @@ ${trackPoints}
       this._setTimer(() => URL.revokeObjectURL(url), 2000);
     } catch (error) {
       console.error("[Bosch eBike Map] GPX download error", error);
-      this._msg("GPX-Download fehlgeschlagen");
+      this._msg(this._t("msg_gpx_download_failed"));
       this._setTimer(() => this._msg(""), 2200);
     }
   }
@@ -4190,7 +4207,7 @@ class BoschEBikeHeatmapCard extends HTMLElement {
     } catch (err) {
       console.error("[Bosch eBike Heatmap] boot error", err);
       const msg = this.querySelector("#heat-msg");
-      if (msg) msg.textContent = ebT(this._hass, "msg_error_prefix") + (err?.message || err);
+      if (msg) msg.textContent = ebT(this._hass, "msg_error_prefix") + describeBootError(this._hass, err);
     } finally {
       this._booting = false;
     }
@@ -8056,7 +8073,7 @@ class BoschEBikeDashboardCard extends HTMLElement {
     const bikeId = item.bike_id || this._config.bike_id
       || (this._maintLoadedFor !== "__auto__" ? this._maintLoadedFor : null);
     if (!bikeId) {
-      alert("Keine Bike-ID gefunden. Bitte ein Bike in den Card-Einstellungen wählen.");
+      alert(this._t("msg_no_bike_selected"));
       return;
     }
     if (!this._hass) return;
@@ -8080,7 +8097,7 @@ class BoschEBikeDashboardCard extends HTMLElement {
       this._loadMaintenance(this._config.bike_id || null);
     } catch (err) {
       console.warn("[Bosch eBike Dashboard] complete_maintenance failed:", err?.message || err);
-      alert("Wartung konnte nicht als erledigt markiert werden: " + (err?.message || err));
+      alert(this._t("err_complete_maintenance_failed", err?.message || err));
     }
   }
 
@@ -9319,9 +9336,7 @@ class BoschEBikeDashboardCardEditor extends HTMLElement {
       _cardSettingsBus.dispatchEvent(new Event("changed"));
     } catch (err) {
       console.warn("[Bosch eBike Dashboard-Editor] add_maintenance failed:", err?.message || err);
-      alert("add_maintenance failed: " + (err?.message || err)
-        + "\n\nTipp: Wenn du die Integration gerade aktualisiert hast,"
-        + " starte Home Assistant einmal neu.");
+      alert(ebT(this._hass, "err_add_maintenance_failed", err?.message || err));
     }
   }
 
@@ -9339,7 +9354,7 @@ class BoschEBikeDashboardCardEditor extends HTMLElement {
       _cardSettingsBus.dispatchEvent(new Event("changed"));
     } catch (err) {
       console.warn("[Bosch eBike Dashboard-Editor] remove_maintenance failed:", err?.message || err);
-      alert("remove_maintenance failed: " + (err?.message || err));
+      alert(ebT(this._hass, "err_remove_maintenance_failed", err?.message || err));
     }
   }
 
@@ -9372,7 +9387,7 @@ class BoschEBikeDashboardCardEditor extends HTMLElement {
       _cardSettingsBus.dispatchEvent(new Event("changed"));
     } catch (err) {
       console.warn("[Bosch eBike Dashboard-Editor] complete_maintenance failed:", err?.message || err);
-      alert("complete_maintenance failed: " + (err?.message || err));
+      alert(ebT(this._hass, "err_complete_maintenance_failed", err?.message || err));
     }
   }
 
@@ -9411,9 +9426,7 @@ class BoschEBikeDashboardCardEditor extends HTMLElement {
       _cardSettingsBus.dispatchEvent(new Event("changed"));
     } catch (err) {
       console.warn("[Bosch eBike Dashboard-Editor] update_maintenance failed:", err?.message || err);
-      alert("update_maintenance failed: " + (err?.message || err)
-        + "\n\nTipp: Wenn du die Integration gerade aktualisiert hast,"
-        + " starte Home Assistant einmal neu.");
+      alert(ebT(this._hass, "err_update_maintenance_failed", err?.message || err));
     }
   }
 
@@ -12735,7 +12748,7 @@ class BoschEBikeRoutePlannerCard extends HTMLElement {
       if (!this._bootErrorShown) {
         this._bootErrorShown = true;
         console.error("[Bosch eBike Routeplanner] boot error", err);
-        this._setStatus(this._t("msg_error_prefix") + (err?.message || err), "");
+        this._setStatus(this._t("msg_error_prefix") + describeBootError(this._hass, err), "");
       }
     } finally {
       this._booting = false;
@@ -13846,7 +13859,7 @@ class BoschEBikeRoutePlannerCard extends HTMLElement {
     }
     if (poi.tags.website) {
       const url = poi.tags.website.startsWith("http") ? poi.tags.website : "https://" + poi.tags.website;
-      extra += `<div>🌐 <a href="${this._escapeHtml(url)}" target="_blank" rel="noopener">Website</a></div>`;
+      extra += `<div>🌐 <a href="${this._escapeHtml(url)}" target="_blank" rel="noopener">${this._t("poi_website_link")}</a></div>`;
     }
     return `<div class="eb-poi-popup">
       <div class="eb-poi-title">${poi.catIcon} ${safeName}</div>
@@ -14082,12 +14095,20 @@ if (!customElements.get("bosch-ebike-trick-list-card-editor")) {
   customElements.define("bosch-ebike-trick-list-card-editor", BoschEBikeTrickListCardEditor);
 }
 
+// window.customCards descriptions run at module load time, before any card
+// instance (and its hass) exists - ebT() falls back to English when passed
+// a falsy hass, so proxy the browser's language here instead (the closest
+// approximation of the user's HA language available this early).
+function ebTStatic(key) {
+  return ebT({ locale: { language: navigator.language } }, key);
+}
+
 window.customCards = window.customCards || [];
 if (!window.customCards.find((c) => c.type === "bosch-ebike-map-card")) {
   window.customCards.push({
     type: "bosch-ebike-map-card",
     name: "Bosch eBike Map",
-    description: "Interaktive Karte mit GPS-Tracks deiner Bosch eBike-Fahrten",
+    description: ebTStatic("map_card_desc"),
     preview: true,
   });
 }
@@ -14095,7 +14116,7 @@ if (!window.customCards.find((c) => c.type === "bosch-ebike-heatmap-card")) {
   window.customCards.push({
     type: "bosch-ebike-heatmap-card",
     name: "Bosch eBike Heatmap",
-    description: "Alle Touren einer Auswahl auf einer Karte überlagert",
+    description: ebTStatic("heatmap_card_desc"),
     preview: false,
   });
 }
@@ -14103,7 +14124,7 @@ if (!window.customCards.find((c) => c.type === "bosch-ebike-calendar-card")) {
   window.customCards.push({
     type: "bosch-ebike-calendar-card",
     name: "Bosch eBike Calendar",
-    description: "Kalender-Heatmap der Fahrtage (GitHub-Contributions-Stil)",
+    description: ebTStatic("calendar_card_desc"),
     preview: false,
   });
 }
@@ -14111,7 +14132,7 @@ if (!window.customCards.find((c) => c.type === "bosch-ebike-dashboard-card")) {
   window.customCards.push({
     type: "bosch-ebike-dashboard-card",
     name: "Bosch eBike Dashboard",
-    description: "Bike-Bild, Live-Daten und optional Ladesteuerung (für ESPHome-Bridge + Smart-Plug)",
+    description: ebTStatic("dashboard_card_desc"),
     preview: false,
   });
 }
@@ -14119,7 +14140,7 @@ if (!window.customCards.find((c) => c.type === "bosch-ebike-3d-map-card")) {
   window.customCards.push({
     type: "bosch-ebike-3d-map-card",
     name: "Bosch eBike 3D-Karte",
-    description: "Tour-Detailansicht in 3D mit Gebäude-Extrusionen, Zeit-Slider und Sonnenstand-Lichteffekt (MapLibre + OpenFreeMap)",
+    description: ebTStatic("map3d_card_desc"),
     preview: false,
   });
 }
@@ -14127,7 +14148,7 @@ if (!window.customCards.find((c) => c.type === "bosch-ebike-routeplanner-card"))
   window.customCards.push({
     type: "bosch-ebike-routeplanner-card",
     name: "Bosch eBike Route Planner",
-    description: "Plan bike routes with BRouter: consumption estimate, battery check and GPX export",
+    description: ebTStatic("rp_card_desc"),
     preview: false,
   });
 }
@@ -14135,7 +14156,7 @@ if (!window.customCards.find((c) => c.type === "bosch-ebike-stats-card")) {
   window.customCards.push({
     type: "bosch-ebike-stats-card",
     name: "Bosch eBike Statistics",
-    description: "Balkendiagramme für Distanz, Höhenmeter, Ø-Geschwindigkeit und Touren-Anzahl über die letzten 12 Wochen/Monate",
+    description: ebTStatic("stats_card_desc"),
     preview: false,
   });
 }
@@ -14143,7 +14164,7 @@ if (!window.customCards.find((c) => c.type === "bosch-ebike-trick-list-card")) {
   window.customCards.push({
     type: "bosch-ebike-trick-list-card",
     name: "Bosch eBike Trick List",
-    description: "Sortierbare Liste aller erkannten Jumps/Manuals/Stoppies/Wheelies mit allen Details",
+    description: ebTStatic("tricklist_card_desc"),
     preview: false,
   });
 }
