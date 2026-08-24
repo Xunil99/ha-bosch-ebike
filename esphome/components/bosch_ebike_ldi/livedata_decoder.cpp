@@ -69,10 +69,10 @@ void log_unknown_field(uint32_t field_no, uint32_t wire_type, uint64_t value) {
   if (!seen.insert(key).second) return;  // already reported this combination
   if (wire_type == 0) {
     ESP_LOGI(TAG, "LDI: undocumented field %u (varint) = %llu - please report",
-             field_no, (unsigned long long) value);
+             (unsigned) field_no, (unsigned long long) value);
   } else {
     ESP_LOGI(TAG, "LDI: undocumented field %u (wire type %u) - please report",
-             field_no, wire_type);
+             (unsigned) field_no, (unsigned) wire_type);
   }
 }
 
