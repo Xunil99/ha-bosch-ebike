@@ -209,6 +209,12 @@ def test_assist_mode_display_name_rudi159_code():
     assert assist_mode_display_name("A100M30030") == "TOUR"
 
 
+def test_assist_mode_display_name_weirdojules_code():
+    # Same M40 drive unit family as A100M40010/A100M40040, reported by
+    # @WeirdoJules in issue #37.
+    assert assist_mode_display_name("A100M40020") == "SPORT"
+
+
 def test_reachable_ranges_unknown_code_kept_raw():
     assert reachable_ranges({"driveUnit": {"activeAssistModes": [
         {"name": "A100M99999", "reachableRange": 42}]}}) == [
