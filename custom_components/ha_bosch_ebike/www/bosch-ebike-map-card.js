@@ -45,8 +45,14 @@ const MAP_STYLES = {
   osm: {
     label: "OSM",
     nameKey: "style_standard",
-    url: "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
-    options: { maxZoom: 19, updateWhenIdle: true, keepBuffer: 2, attribution: '&copy; OpenStreetMap contributors &copy; CARTO' }
+    // Switched from CARTO's basemaps.cartocdn.com (Voyager) to the official
+    // OSM tile server: CARTO started watermarking unauthenticated tile
+    // requests with "API KEY REQUIRED" (no HTTP error, just baked into the
+    // returned PNG), reported by a user as the map suddenly showing that
+    // text everywhere. No {r} placeholder here - the official OSM tile
+    // server only serves standard-density tiles, no @2x retina variant.
+    url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+    options: { maxZoom: 19, updateWhenIdle: true, keepBuffer: 2, attribution: '&copy; OpenStreetMap contributors' }
   },
   topo: {
     label: "Topo",
