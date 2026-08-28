@@ -215,6 +215,13 @@ def test_assist_mode_display_name_weirdojules_code():
     assert assist_mode_display_name("A100M40020") == "SPORT"
 
 
+def test_assist_mode_display_name_weirdojules_emtb_code():
+    # E3-series drive unit, reported by @WeirdoJules in issue #37 as
+    # "A100E3AABO" (trailing "O" corrected to digit "0", matching the
+    # A100M3AAB0 eMTB pattern already in the table).
+    assert assist_mode_display_name("A100E3AAB0") == "eMTB"
+
+
 def test_reachable_ranges_unknown_code_kept_raw():
     assert reachable_ranges({"driveUnit": {"activeAssistModes": [
         {"name": "A100M99999", "reachableRange": 42}]}}) == [

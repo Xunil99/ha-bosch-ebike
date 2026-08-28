@@ -73,6 +73,12 @@ ASSIST_MODE_NAMES: dict[str, str] = {
     # Bosch Performance Line, drive unit BDU3360 (reported by @rudi159,
     # issue #37).
     "A100M30030": "TOUR",
+    # E3-series drive unit, same "...AAB0" eMTB slot as A100M3AAB0 above
+    # (reported by @WeirdoJules, issue #37, as "A100E3AABO"; the trailing
+    # "O" is a typo for digit "0" - no other code in this table ends in a
+    # literal letter "O", and the corrected code fits the established
+    # AAB0-for-eMTB pattern exactly).
+    "A100E3AAB0": "eMTB",
 }
 
 
