@@ -86,22 +86,42 @@ CONSUMPTION_TOPUP_ODOMETER_TOLERANCE_M = 300.0
 # it - months to years of silence, not one extra poll).
 MAX_PROTECTED_DELIVERED_WH_DIP = 50.0
 
-# How old an activity's end (or start) time may be and still receive a share
-# of a bike's deliveredWhOverLifetime delta in _track_battery_consumption
-# (issue #78). "Newly discovered this poll" is only a valid proxy for "the
-# ride that generated this poll's counter growth" when the discovery is
-# genuinely prompt. On a fresh install (or after a long HA downtime) a whole
-# backlog of real, already-completed historical rides can surface together
-# in one poll, while the counter itself barely moved in the short real-world
-# gap since the previous poll - splitting that tiny delta across the whole
-# backlog by distance produced a wh_per_km around 100-1000x too low (0.01
-# instead of ~10-15, a reported 75000 km "range"). An activity older than
-# this cutoff gets no consumption entry at all rather than a fabricated one
+# The floor below which a poll's implied wh_per_km (deliveredWhOverLifetime
+# delta divided by the distance of the activities it is about to be split
+# across) is treated as physically implausible in _track_battery_consumption
+# (issue #78) - no real e-bike ride uses this little energy for this much
+# distance. "Newly discovered this poll" is only a valid proxy for "the
+# ride(s) that generated this poll's counter growth" when the batch's own
+# distance genuinely explains the delta; that stays true even across a long
+# gap as long as real riding happened throughout it (several real rides
+# during an extended HA downtime, still correctly split proportionally
+# across all of them - unmodified). It stops being true when a whole backlog
+# of already-completed historical rides surfaces together in one poll (fresh
+# install, or a downtime with NO real riding in the gap) while the counter
+# barely moved - splitting that tiny delta across the backlog's real
+# distance produced a wh_per_km around 100-1000x too low (0.01 instead of
+# ~10-15, a reported 75000 km "range"). Only once the implied wh_per_km
+# fails this floor does a batch get narrowed to just its
+# CONSUMPTION_BACKLOG_CUTOFF-recent activities (and only if THAT narrower
+# split is itself plausible - seeing below).
+MIN_PLAUSIBLE_WH_PER_KM = 1.0
+
+# How old an activity's end (or start) time may be to still count as part of
+# the "recent" subset _track_battery_consumption falls back to once a whole
+# batch's implied wh_per_km has already failed MIN_PLAUSIBLE_WH_PER_KM above
+# - NOT a blanket age filter on its own (an unconditional one wrongly
+# reassigns real energy away from equally-legitimate older rides in a
+# downtime-with-real-riding batch, since that batch's whole-distance split
+# was already correct and never reaches this fallback at all). An activity
+# excluded here still gets no consumption entry rather than a fabricated one
 # - already handled gracefully everywhere consumed_wh is read
 # (compute_range_estimate skips activities with no entry, same as an
 # unattributed one). Matches the 48 h precedent already used for a related
 # "how stale can Bosch's cloud data be before we stop chasing it" judgement
-# call in _recheck_recent_activity_distances (issue #31).
+# call in _recheck_recent_activity_distances (issue #31) - though that
+# function fails CLOSED on a missing timestamp (nothing to fetch a GPS
+# correction against) where this one fails OPEN (nothing to judge staleness
+# against, so it stays eligible rather than silently losing real data).
 CONSUMPTION_BACKLOG_CUTOFF = timedelta(hours=48)
 
 STORAGE_VERSION = 1
@@ -605,7 +625,6 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             # leave it unattributed rather than guess which of several bikes
             # it belongs to.
             single_bike_id = bikes[0].get("id") if len(bikes) == 1 else None
-            backlog_cutoff = dt_util.utcnow() - CONSUMPTION_BACKLOG_CUTOFF
 
             for activity in new_activities:
                 aid = activity.get("id")
@@ -615,24 +634,9 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 if not bike_id:
                     unresolved_ids.add(aid)
                     continue
-                # Issue #78: too old to plausibly be the ride behind this
-                # poll's counter growth - leave it out of the distance pool
-                # entirely rather than let it dilute a genuinely fresh
-                # activity's share, or receive a fabricated share of its
-                # own. Deliberately NOT added to unresolved_ids: a missing
-                # end/start time fails open (still eligible) since there is
-                # nothing here to judge staleness against, and an activity
-                # this old will never stop being old, so retrying it every
-                # poll forever would just waste cycles for no possible
-                # future resolution - it is meant to be treated as settled
-                # (no consumption data) once, not revisited (see
-                # CONSUMPTION_BACKLOG_CUTOFF).
-                end_time = parse_iso_utc(activity.get("endTime")) or parse_iso_utc(
-                    activity.get("startTime")
-                )
-                if end_time is not None and end_time < backlog_cutoff:
-                    continue
                 by_bike.setdefault(bike_id, []).append(activity)
+
+            backlog_cutoff = dt_util.utcnow() - CONSUMPTION_BACKLOG_CUTOFF
 
             for bike_id, bike_activities in by_bike.items():
                 current_wh = current_wh_by_bike.get(bike_id)
@@ -651,6 +655,76 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 total_distance = sum(
                     a.get("distance", 0) or 0 for a in bike_activities
                 )
+
+                # Issue #78: a whole backlog of already-completed historical
+                # activities can surface together in one poll (fresh install,
+                # long HA downtime) while delta_wh reflects only the short
+                # real-world gap since the previous poll. Splitting that
+                # (possibly tiny) delta across the batch's FULL distance is
+                # only correct when the batch's own distance genuinely
+                # explains the delta - e.g. several real rides spread across
+                # a long downtime, where the whole batch's implied
+                # consumption is still a plausible wh_per_km, and the
+                # original per-bike proportional split below is exactly
+                # right, unmodified. It stops being correct once the
+                # implied wh_per_km is physically implausible - no real ride
+                # uses this little energy for this much distance - which is
+                # exactly the fresh-install-with-old-history case. Only THEN
+                # is a batch narrowed to just its recent-enough activities
+                # (CONSUMPTION_BACKLOG_CUTOFF), and only if that narrower
+                # split is itself plausible - unconditionally excluding
+                # older activities regardless of whether they were the
+                # genuine source of the delta would wrongly reassign their
+                # real energy onto whichever activities happen to be recent
+                # (caught in review before release: a 4-day-downtime-with-
+                # real-riding case would have had its 2 oldest rides
+                # silently zeroed and its 2 newest doubled). Neither
+                # narrowing nor giving up adds anything to unresolved_ids:
+                # _prev_delivered_wh advances unconditionally below
+                # regardless of what happens here, so a later poll would
+                # only ever see the same distance against a fresh, likely-
+                # still-small delta - retrying is not a "not yet" that could
+                # resolve, so these settle once (no consumption entry) the
+                # same way a successfully-attributed activity does, rather
+                # than being pointlessly re-evaluated every poll forever.
+                if (
+                    total_distance > 0
+                    and (delta_wh / (total_distance / 1000.0)) < MIN_PLAUSIBLE_WH_PER_KM
+                ):
+                    fresh_activities = []
+                    for a in bike_activities:
+                        end_time = parse_iso_utc(a.get("endTime")) or parse_iso_utc(
+                            a.get("startTime")
+                        )
+                        # A missing end/start time fails open (stays
+                        # eligible) - nothing here to judge staleness
+                        # against.
+                        if end_time is None or end_time >= backlog_cutoff:
+                            fresh_activities.append(a)
+                    fresh_distance = sum(
+                        a.get("distance", 0) or 0 for a in fresh_activities
+                    )
+                    fresh_plausible = (
+                        fresh_distance > 0
+                        and (delta_wh / (fresh_distance / 1000.0))
+                        >= MIN_PLAUSIBLE_WH_PER_KM
+                    )
+                    if not fresh_plausible:
+                        _LOGGER.info(
+                            "Battery consumption for bike %s: %.1f Wh over "
+                            "%.0f m (%.2f Wh/km) is implausible even "
+                            "restricted to recent activities - leaving this "
+                            "poll's %d activity/activities without a "
+                            "consumption entry rather than a fabricated one",
+                            bike_id, delta_wh, total_distance,
+                            (delta_wh / (total_distance / 1000.0))
+                            if total_distance > 0 else 0,
+                            len(bike_activities),
+                        )
+                        continue
+                    bike_activities = fresh_activities
+                    total_distance = fresh_distance
+
                 capacity_wh = self.battery_capacity_wh(bike_id)
 
                 for activity in bike_activities:

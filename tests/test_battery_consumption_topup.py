@@ -67,6 +67,7 @@ _window_node = _module_const("CONSUMPTION_TOPUP_WINDOW")
 _tolerance_node = _module_const("CONSUMPTION_TOPUP_ODOMETER_TOLERANCE_M")
 _max_dip_node = _module_const("MAX_PROTECTED_DELIVERED_WH_DIP")
 _backlog_cutoff_node = _module_const("CONSUMPTION_BACKLOG_CUTOFF")
+_min_plausible_node = _module_const("MIN_PLAUSIBLE_WH_PER_KM")
 
 # parse_iso_utc lives in live_enrichment.py, which (like coordinator.py)
 # imports Home Assistant and so cannot be imported directly here either -
@@ -131,7 +132,7 @@ exec(  # noqa: S102
 # _fake_dt_util.now is visible on every subsequent call.
 exec(  # noqa: S102 - executing our own source, see the module docstring
     compile(
-        ast.Module(body=[_window_node, _tolerance_node, _max_dip_node, _backlog_cutoff_node], type_ignores=[]),
+        ast.Module(body=[_window_node, _tolerance_node, _max_dip_node, _backlog_cutoff_node, _min_plausible_node], type_ignores=[]),
         str(_COORD), "exec",
     ),
     _ns,
@@ -143,6 +144,7 @@ CONSUMPTION_TOPUP_WINDOW = _ns["CONSUMPTION_TOPUP_WINDOW"]
 MAX_PROTECTED_DELIVERED_WH_DIP = _ns["MAX_PROTECTED_DELIVERED_WH_DIP"]
 CONSUMPTION_TOPUP_ODOMETER_TOLERANCE_M = _ns["CONSUMPTION_TOPUP_ODOMETER_TOLERANCE_M"]
 CONSUMPTION_BACKLOG_CUTOFF = _ns["CONSUMPTION_BACKLOG_CUTOFF"]
+MIN_PLAUSIBLE_WH_PER_KM = _ns["MIN_PLAUSIBLE_WH_PER_KM"]
 _parse_iso_utc = _ns["parse_iso_utc"]
 _battery_capacity_wh = _ns["battery_capacity_wh"]
 _track_battery_consumption = _ns["_track_battery_consumption"]
@@ -885,31 +887,67 @@ def test_stale_historical_batch_gets_no_consumption_entry() -> None:
     assert coord._activity_consumption == {}
 
 
-def test_fresh_activity_in_same_poll_as_stale_batch_still_gets_credited() -> None:
-    """A genuinely fresh ride sharing a poll with old backlog activities
-    must get its own full, undiluted share - the stale ones must not eat
-    into its distance pool."""
+def test_downtime_with_real_riding_still_splits_across_whole_batch() -> None:
+    """Regression guard (found in review before release, issue #78): a long
+    downtime with REAL riding throughout it must still split the delta
+    across the WHOLE batch by distance, old activities included - a
+    plausible whole-batch wh_per_km must never trigger narrowing. Doing so
+    unconditionally by age would zero out the older, equally real rides and
+    inflate the computed consumption of the recent ones (caught here: 4
+    real ~50 km rides sharing 2000 Wh must each get 500 Wh / 10 Wh per km,
+    not have the 2 oldest zeroed and the 2 newest doubled to 20 Wh/km)."""
+    coord = _FakeCoordinator()
+    t0 = datetime(2026, 8, 5, 10, 0, tzinfo=timezone.utc)
+    _fake_dt_util.now = t0
+    coord._prev_delivered_wh = {"bike-1": 1000.0}
+
+    coord._all_activities = [
+        _activity("day1", "2026-08-01T09:00:00Z", "2026-08-01T10:00:00Z", distance=50000),
+        _activity("day2", "2026-08-02T09:00:00Z", "2026-08-02T10:00:00Z", distance=50000),
+        _activity("day3", "2026-08-03T09:00:00Z", "2026-08-03T10:00:00Z", distance=50000),
+        _activity("day4", "2026-08-04T09:00:00Z", "2026-08-04T10:00:00Z", distance=50000),
+    ]
+    coord._activity_bike = {a["id"]: "bike-1" for a in coord._all_activities}
+
+    # delta = 2000 Wh over 200 km = 10 Wh/km - well above MIN_PLAUSIBLE_WH_PER_KM,
+    # so the whole batch is used as-is, exactly like before issue #78's fix.
+    _track(coord, [_bike("bike-1", 3000.0)])
+
+    for aid in ("day1", "day2", "day3", "day4"):
+        entry = coord._activity_consumption[aid]
+        assert entry["consumed_wh"] == 500.0
+        assert entry["is_exact"] is False
+
+
+def test_fresh_activity_in_same_poll_as_implausible_stale_batch_still_gets_credited() -> None:
+    """When the WHOLE batch's implied wh_per_km is implausible, narrowing to
+    just the recent activity(ies) must give it its own full, undiluted
+    share - the excluded stale one must not eat into its distance pool."""
     coord = _FakeCoordinator()
     t0 = datetime(2026, 8, 1, 10, 0, tzinfo=timezone.utc)
     _fake_dt_util.now = t0
     coord._prev_delivered_wh = {"bike-1": 1000.0}
 
     coord._all_activities = [
-        _activity("old-1", "2026-07-01T09:00:00Z", "2026-07-01T10:00:00Z", distance=20000),
+        _activity("old-1", "2026-07-01T09:00:00Z", "2026-07-01T10:00:00Z", distance=200000),
         _activity("fresh-1", "2026-08-01T08:00:00Z", "2026-08-01T09:30:00Z", distance=10000),
     ]
     coord._activity_bike = {"old-1": "bike-1", "fresh-1": "bike-1"}
 
-    _track(coord, [_bike("bike-1", 1200.0)])  # delta = 200
+    # Whole batch: 15 Wh / 210 km =~ 0.07 Wh/km - implausible, triggers
+    # narrowing. Fresh-only: 15 Wh / 10 km = 1.5 Wh/km - plausible.
+    _track(coord, [_bike("bike-1", 1015.0)])
 
     assert "old-1" not in coord._activity_consumption
-    assert coord._activity_consumption["fresh-1"]["consumed_wh"] == 200.0
+    assert coord._activity_consumption["fresh-1"]["consumed_wh"] == 15.0
     assert coord._activity_consumption["fresh-1"]["is_exact"] is True
 
 
 def test_activity_backlog_cutoff_boundary() -> None:
-    """< not <=: an activity exactly at the cutoff age is still eligible,
-    one second older is not."""
+    """< not <=: within the narrowing fallback, an activity exactly at the
+    cutoff age is still eligible, one second older is not. The batch is
+    sized so the whole-batch wh_per_km is implausible (forcing narrowing)
+    but the narrowed (non-stale) subset is plausible."""
     coord = _FakeCoordinator()
     t0 = datetime(2026, 8, 1, 10, 0, tzinfo=timezone.utc)
     _fake_dt_util.now = t0
@@ -923,13 +961,15 @@ def test_activity_backlog_cutoff_boundary() -> None:
     just_inside = _iso(t0 - CONSUMPTION_BACKLOG_CUTOFF + timedelta(seconds=1))
 
     coord._all_activities = [
-        _activity("too-old", just_outside, just_outside, distance=5000),
+        _activity("too-old", just_outside, just_outside, distance=500000),
         _activity("at-cutoff", at_cutoff, at_cutoff, distance=5000),
         _activity("just-inside", just_inside, just_inside, distance=5000),
     ]
     coord._activity_bike = {a["id"]: "bike-1" for a in coord._all_activities}
 
-    _track(coord, [_bike("bike-1", 1300.0)])
+    # Whole batch: 15 Wh / 510 km =~ 0.03 Wh/km - implausible. Narrowed
+    # (at-cutoff + just-inside only): 15 Wh / 10 km = 1.5 Wh/km - plausible.
+    _track(coord, [_bike("bike-1", 1015.0)])
 
     assert "too-old" not in coord._activity_consumption
     assert "at-cutoff" in coord._activity_consumption
@@ -937,21 +977,54 @@ def test_activity_backlog_cutoff_boundary() -> None:
 
 
 def test_stale_activity_missing_timestamps_fails_open() -> None:
-    """No endTime/startTime at all - nothing to judge staleness against, so
-    it stays eligible for delta-tracking rather than silently losing data
-    for an activity shape we cannot classify (same fail-open direction as
-    every other None-safe check in this file)."""
+    """Within the narrowing fallback, no endTime/startTime at all means
+    nothing to judge staleness against, so it stays eligible rather than
+    silently losing data for an activity shape we cannot classify (same
+    fail-open direction as every other None-safe check in this file)."""
     coord = _FakeCoordinator()
     t0 = datetime(2026, 8, 1, 10, 0, tzinfo=timezone.utc)
     _fake_dt_util.now = t0
     coord._prev_delivered_wh = {"bike-1": 1000.0}
 
-    coord._all_activities = [{"id": "no-time", "distance": 5000}]
-    coord._activity_bike = {"no-time": "bike-1"}
+    coord._all_activities = [
+        _activity("big-old", "2026-06-01T09:00:00Z", "2026-06-01T10:00:00Z", distance=500000),
+        {"id": "no-time", "distance": 5000},
+    ]
+    coord._activity_bike = {"big-old": "bike-1", "no-time": "bike-1"}
 
-    _track(coord, [_bike("bike-1", 1200.0)])
+    # Whole batch: 15 Wh / 505 km =~ 0.03 Wh/km - implausible. Narrowed
+    # (no-time only, since it fails open and big-old is genuinely stale):
+    # 15 Wh / 5 km = 3.0 Wh/km - plausible.
+    _track(coord, [_bike("bike-1", 1015.0)])
 
-    assert coord._activity_consumption["no-time"]["consumed_wh"] == 200.0
+    assert "big-old" not in coord._activity_consumption
+    assert coord._activity_consumption["no-time"]["consumed_wh"] == 15.0
+
+
+def test_fresh_subset_still_implausible_gives_up_entirely() -> None:
+    """If narrowing to just the recent activities STILL doesn't produce a
+    plausible wh_per_km (e.g. the cloud counter itself hasn't caught up
+    yet), give up on the whole poll's batch rather than attribute a still-
+    wrong number to whichever activities happen to be recent."""
+    coord = _FakeCoordinator()
+    t0 = datetime(2026, 8, 1, 10, 0, tzinfo=timezone.utc)
+    _fake_dt_util.now = t0
+    coord._prev_delivered_wh = {"bike-1": 1000.0}
+
+    coord._all_activities = [
+        _activity("old", "2026-06-01T09:00:00Z", "2026-06-01T10:00:00Z", distance=200000),
+        _activity(
+            "fresh-but-tiny-delta", "2026-08-01T08:00:00Z", "2026-08-01T09:30:00Z",
+            distance=50000,
+        ),
+    ]
+    coord._activity_bike = {a["id"]: "bike-1" for a in coord._all_activities}
+
+    # delta = 2 Wh; even restricted to just the fresh 50 km ride, that is
+    # 0.04 Wh/km - still implausible.
+    _track(coord, [_bike("bike-1", 1002.0)])
+
+    assert coord._activity_consumption == {}
 
 
 def test_stale_batch_is_marked_seen_and_not_retried() -> None:
