@@ -51,8 +51,24 @@ const MAP_STYLES = {
     // returned PNG), reported by a user as the map suddenly showing that
     // text everywhere. No {r} placeholder here - the official OSM tile
     // server only serves standard-density tiles, no @2x retina variant.
+    //
+    // referrerPolicy (issue #76): Leaflet loads tiles as plain <img> tags,
+    // which inherit the embedding page's Referrer-Policy - Home Assistant's
+    // own varies by deployment (reverse proxy, Nabu Casa remote, browser
+    // privacy settings), and can end up sending no referer at all. The OSM
+    // Foundation recently started rejecting exactly that with a 403r
+    // "Referer is required" tile (valid PNG, HTTP 200, so it doesn't even
+    // look like an error) - Home Assistant's own core team hit the same
+    // thing in their native map card the day before this was reported
+    // (home-assistant/frontend#53816). "origin" overrides the page policy
+    // for this one layer so it always sends at least the HA instance's
+    // origin, matching Leaflet's own recommended fix for this exact
+    // problem (Leaflet/Leaflet#9883).
     url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
-    options: { maxZoom: 19, updateWhenIdle: true, keepBuffer: 2, attribution: '&copy; OpenStreetMap contributors' }
+    options: {
+      maxZoom: 19, updateWhenIdle: true, keepBuffer: 2,
+      attribution: '&copy; OpenStreetMap contributors', referrerPolicy: "origin"
+    }
   },
   topo: {
     label: "Topo",
