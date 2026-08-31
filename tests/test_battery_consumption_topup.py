@@ -29,10 +29,20 @@ poll, while deliveredWhOverLifetime itself barely moved in the short
 real-world gap since the previous poll - splitting that tiny delta across
 the backlog by distance produced a wh_per_km around 100-1000x too low (a
 reported 0.01 Wh/km -> 75000 km "range" instead of ~10-15 Wh/km -> ~50-75
-km). CONSUMPTION_BACKLOG_CUTOFF excludes activities too old to plausibly be
-the ride behind this poll's counter growth from the distance pool entirely,
-leaving them with no consumption entry rather than a fabricated one -
-already handled gracefully everywhere consumed_wh is read.
+km). The fix is plausibility-gated, not a blanket age filter: a poll's
+whole new-activity batch is still split proportionally across everything
+(old activities included) as long as the implied wh_per_km is physically
+plausible (MIN_PLAUSIBLE_WH_PER_KM) - correct even across a long gap when
+real riding happened throughout it. Only once the whole batch's implied
+wh_per_km is implausible does it get narrowed to just the
+CONSUMPTION_BACKLOG_CUTOFF-recent activities, and only if THAT narrower
+split is itself plausible; otherwise the whole batch is left with no
+consumption entries at all rather than a still-wrong number - already
+handled gracefully everywhere consumed_wh is read. An earlier, unconditional
+age-only version of this fix was caught in review before release: it wrongly
+zeroed older, equally real rides and inflated recent ones whenever a long
+downtime had genuine riding throughout it (see
+test_downtime_with_real_riding_still_splits_across_whole_batch).
 """
 import ast
 import types

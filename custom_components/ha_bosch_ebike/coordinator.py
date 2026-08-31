@@ -103,7 +103,7 @@ MAX_PROTECTED_DELIVERED_WH_DIP = 50.0
 # ~10-15, a reported 75000 km "range"). Only once the implied wh_per_km
 # fails this floor does a batch get narrowed to just its
 # CONSUMPTION_BACKLOG_CUTOFF-recent activities (and only if THAT narrower
-# split is itself plausible - seeing below).
+# split is itself plausible - see below).
 MIN_PLAUSIBLE_WH_PER_KM = 1.0
 
 # How old an activity's end (or start) time may be to still count as part of
@@ -691,7 +691,7 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     total_distance > 0
                     and (delta_wh / (total_distance / 1000.0)) < MIN_PLAUSIBLE_WH_PER_KM
                 ):
-                    fresh_activities = []
+                    recent_activities: list[dict[str, Any]] = []
                     for a in bike_activities:
                         end_time = parse_iso_utc(a.get("endTime")) or parse_iso_utc(
                             a.get("startTime")
@@ -700,30 +700,33 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                         # eligible) - nothing here to judge staleness
                         # against.
                         if end_time is None or end_time >= backlog_cutoff:
-                            fresh_activities.append(a)
-                    fresh_distance = sum(
-                        a.get("distance", 0) or 0 for a in fresh_activities
+                            recent_activities.append(a)
+                    recent_distance = sum(
+                        a.get("distance", 0) or 0 for a in recent_activities
                     )
-                    fresh_plausible = (
-                        fresh_distance > 0
-                        and (delta_wh / (fresh_distance / 1000.0))
+                    recent_plausible = (
+                        recent_distance > 0
+                        and (delta_wh / (recent_distance / 1000.0))
                         >= MIN_PLAUSIBLE_WH_PER_KM
                     )
-                    if not fresh_plausible:
+                    if not recent_plausible:
                         _LOGGER.info(
                             "Battery consumption for bike %s: %.1f Wh over "
-                            "%.0f m (%.2f Wh/km) is implausible even "
-                            "restricted to recent activities - leaving this "
+                            "%.0f m (%.2f Wh/km) for the whole batch, still "
+                            "%.2f Wh/km restricted to recent activities "
+                            "(%.0f m) - both implausible, leaving this "
                             "poll's %d activity/activities without a "
                             "consumption entry rather than a fabricated one",
                             bike_id, delta_wh, total_distance,
-                            (delta_wh / (total_distance / 1000.0))
-                            if total_distance > 0 else 0,
+                            delta_wh / (total_distance / 1000.0),
+                            (delta_wh / (recent_distance / 1000.0))
+                            if recent_distance > 0 else 0,
+                            recent_distance,
                             len(bike_activities),
                         )
                         continue
-                    bike_activities = fresh_activities
-                    total_distance = fresh_distance
+                    bike_activities = recent_activities
+                    total_distance = recent_distance
 
                 capacity_wh = self.battery_capacity_wh(bike_id)
 
