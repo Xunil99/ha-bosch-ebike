@@ -22,6 +22,17 @@ counter increase that actually belongs to a second, not-yet-synced ride
 does not get transplanted onto the wrong one, and measured against a
 monotonic high-water mark so a counter dip that later recovers is never
 credited twice.
+
+Also covers issue #78: a fresh install (or a long HA downtime) can surface
+a whole backlog of already-completed historical activities together in one
+poll, while deliveredWhOverLifetime itself barely moved in the short
+real-world gap since the previous poll - splitting that tiny delta across
+the backlog by distance produced a wh_per_km around 100-1000x too low (a
+reported 0.01 Wh/km -> 75000 km "range" instead of ~10-15 Wh/km -> ~50-75
+km). CONSUMPTION_BACKLOG_CUTOFF excludes activities too old to plausibly be
+the ride behind this poll's counter growth from the distance pool entirely,
+leaving them with no consumption entry rather than a fabricated one -
+already handled gracefully everywhere consumed_wh is read.
 """
 import ast
 import types
@@ -55,6 +66,17 @@ def _module_const(name: str) -> ast.Assign:
 _window_node = _module_const("CONSUMPTION_TOPUP_WINDOW")
 _tolerance_node = _module_const("CONSUMPTION_TOPUP_ODOMETER_TOLERANCE_M")
 _max_dip_node = _module_const("MAX_PROTECTED_DELIVERED_WH_DIP")
+_backlog_cutoff_node = _module_const("CONSUMPTION_BACKLOG_CUTOFF")
+
+# parse_iso_utc lives in live_enrichment.py, which (like coordinator.py)
+# imports Home Assistant and so cannot be imported directly here either -
+# extracted the same AST way, from its own source file.
+_LIVE_ENRICHMENT = _ROOT / "custom_components" / "ha_bosch_ebike" / "live_enrichment.py"
+_LIVE_ENRICHMENT_TREE = ast.parse(_LIVE_ENRICHMENT.read_text(encoding="utf-8"))
+_parse_iso_utc_node = next(
+    n for n in _LIVE_ENRICHMENT_TREE.body
+    if isinstance(n, ast.FunctionDef) and n.name == "parse_iso_utc"
+)
 
 _class_node = next(
     n for n in _TREE.body
@@ -90,17 +112,26 @@ _fake_dt_util = _FakeDtUtil(datetime(2026, 8, 1, 10, 0, tzinfo=timezone.utc))
 
 _ns: dict = {
     "Any": __import__("typing").Any,
+    "datetime": datetime,  # parse_iso_utc's body needs this (imported at
+    # live_enrichment.py's module level, outside the extracted function node)
     "timedelta": timedelta,
     "dt_util": _fake_dt_util,
     "_LOGGER": __import__("logging").getLogger("test_battery_consumption_topup"),
     "DEFAULT_BATTERY_CAPACITY_WH": 750,
 }
+# parse_iso_utc first (the constants/methods below don't need it, but
+# _track_battery_consumption's body calls it directly by name, so it must
+# already be in _ns as a global before that method execs).
+exec(  # noqa: S102
+    compile(ast.Module(body=[_parse_iso_utc_node], type_ignores=[]), str(_LIVE_ENRICHMENT), "exec"),
+    _ns,
+)
 # Constants first (the method bodies read them as globals), then the
 # methods, all sharing _ns as their __globals__ so later mutating
 # _fake_dt_util.now is visible on every subsequent call.
 exec(  # noqa: S102 - executing our own source, see the module docstring
     compile(
-        ast.Module(body=[_window_node, _tolerance_node, _max_dip_node], type_ignores=[]),
+        ast.Module(body=[_window_node, _tolerance_node, _max_dip_node, _backlog_cutoff_node], type_ignores=[]),
         str(_COORD), "exec",
     ),
     _ns,
@@ -111,6 +142,8 @@ exec(  # noqa: S102
 CONSUMPTION_TOPUP_WINDOW = _ns["CONSUMPTION_TOPUP_WINDOW"]
 MAX_PROTECTED_DELIVERED_WH_DIP = _ns["MAX_PROTECTED_DELIVERED_WH_DIP"]
 CONSUMPTION_TOPUP_ODOMETER_TOLERANCE_M = _ns["CONSUMPTION_TOPUP_ODOMETER_TOLERANCE_M"]
+CONSUMPTION_BACKLOG_CUTOFF = _ns["CONSUMPTION_BACKLOG_CUTOFF"]
+_parse_iso_utc = _ns["parse_iso_utc"]
 _battery_capacity_wh = _ns["battery_capacity_wh"]
 _track_battery_consumption = _ns["_track_battery_consumption"]
 _activity_sort_key = _ns["_activity_sort_key"]
@@ -826,6 +859,125 @@ def test_topup_missing_entry_is_a_noop() -> None:
     assert "a1" not in coord._activity_consumption
     assert changed is True
     assert coord._prev_delivered_wh["bike-1"] == 1230.0
+
+
+def test_stale_historical_batch_gets_no_consumption_entry() -> None:
+    """Issue #78: a backlog of historical activities discovered together in
+    one poll must not receive a fabricated wh_per_km from a tiny
+    since-last-poll delta that has nothing to do with when they actually
+    happened."""
+    coord = _FakeCoordinator()
+    t0 = datetime(2026, 8, 1, 10, 0, tzinfo=timezone.utc)
+    _fake_dt_util.now = t0
+
+    coord._prev_delivered_wh = {"bike-1": 50000.0}  # baseline already established
+    coord._all_activities = [
+        _activity("old-1", "2026-07-01T09:00:00Z", "2026-07-01T10:00:00Z", distance=20000),
+        _activity("old-2", "2026-07-05T09:00:00Z", "2026-07-05T10:00:00Z", distance=15000),
+        _activity("old-3", "2026-07-10T09:00:00Z", "2026-07-10T10:00:00Z", distance=25000),
+    ]
+    coord._activity_bike = {"old-1": "bike-1", "old-2": "bike-1", "old-3": "bike-1"}
+
+    # Counter barely moved since the previous poll - no real riding happened
+    # in that short real-world gap, exactly the issue #78 scenario.
+    _track(coord, [_bike("bike-1", 50003.0)])
+
+    assert coord._activity_consumption == {}
+
+
+def test_fresh_activity_in_same_poll_as_stale_batch_still_gets_credited() -> None:
+    """A genuinely fresh ride sharing a poll with old backlog activities
+    must get its own full, undiluted share - the stale ones must not eat
+    into its distance pool."""
+    coord = _FakeCoordinator()
+    t0 = datetime(2026, 8, 1, 10, 0, tzinfo=timezone.utc)
+    _fake_dt_util.now = t0
+    coord._prev_delivered_wh = {"bike-1": 1000.0}
+
+    coord._all_activities = [
+        _activity("old-1", "2026-07-01T09:00:00Z", "2026-07-01T10:00:00Z", distance=20000),
+        _activity("fresh-1", "2026-08-01T08:00:00Z", "2026-08-01T09:30:00Z", distance=10000),
+    ]
+    coord._activity_bike = {"old-1": "bike-1", "fresh-1": "bike-1"}
+
+    _track(coord, [_bike("bike-1", 1200.0)])  # delta = 200
+
+    assert "old-1" not in coord._activity_consumption
+    assert coord._activity_consumption["fresh-1"]["consumed_wh"] == 200.0
+    assert coord._activity_consumption["fresh-1"]["is_exact"] is True
+
+
+def test_activity_backlog_cutoff_boundary() -> None:
+    """< not <=: an activity exactly at the cutoff age is still eligible,
+    one second older is not."""
+    coord = _FakeCoordinator()
+    t0 = datetime(2026, 8, 1, 10, 0, tzinfo=timezone.utc)
+    _fake_dt_util.now = t0
+    coord._prev_delivered_wh = {"bike-1": 1000.0}
+
+    def _iso(dt: datetime) -> str:
+        return dt.isoformat().replace("+00:00", "Z")
+
+    just_outside = _iso(t0 - CONSUMPTION_BACKLOG_CUTOFF - timedelta(seconds=1))
+    at_cutoff = _iso(t0 - CONSUMPTION_BACKLOG_CUTOFF)
+    just_inside = _iso(t0 - CONSUMPTION_BACKLOG_CUTOFF + timedelta(seconds=1))
+
+    coord._all_activities = [
+        _activity("too-old", just_outside, just_outside, distance=5000),
+        _activity("at-cutoff", at_cutoff, at_cutoff, distance=5000),
+        _activity("just-inside", just_inside, just_inside, distance=5000),
+    ]
+    coord._activity_bike = {a["id"]: "bike-1" for a in coord._all_activities}
+
+    _track(coord, [_bike("bike-1", 1300.0)])
+
+    assert "too-old" not in coord._activity_consumption
+    assert "at-cutoff" in coord._activity_consumption
+    assert "just-inside" in coord._activity_consumption
+
+
+def test_stale_activity_missing_timestamps_fails_open() -> None:
+    """No endTime/startTime at all - nothing to judge staleness against, so
+    it stays eligible for delta-tracking rather than silently losing data
+    for an activity shape we cannot classify (same fail-open direction as
+    every other None-safe check in this file)."""
+    coord = _FakeCoordinator()
+    t0 = datetime(2026, 8, 1, 10, 0, tzinfo=timezone.utc)
+    _fake_dt_util.now = t0
+    coord._prev_delivered_wh = {"bike-1": 1000.0}
+
+    coord._all_activities = [{"id": "no-time", "distance": 5000}]
+    coord._activity_bike = {"no-time": "bike-1"}
+
+    _track(coord, [_bike("bike-1", 1200.0)])
+
+    assert coord._activity_consumption["no-time"]["consumed_wh"] == 200.0
+
+
+def test_stale_batch_is_marked_seen_and_not_retried() -> None:
+    """A backlog activity is settled (no data) once, not re-evaluated every
+    poll forever - it goes into _prev_activity_ids like any other id whose
+    delta was successfully resolved this poll, even though "resolved" here
+    means "deliberately given no consumption entry"."""
+    coord = _FakeCoordinator()
+    t0 = datetime(2026, 8, 1, 10, 0, tzinfo=timezone.utc)
+    _fake_dt_util.now = t0
+    coord._prev_delivered_wh = {"bike-1": 1000.0}
+
+    coord._all_activities = [
+        _activity("old-1", "2026-07-01T09:00:00Z", "2026-07-01T10:00:00Z", distance=20000),
+    ]
+    coord._activity_bike = {"old-1": "bike-1"}
+
+    _track(coord, [_bike("bike-1", 1003.0)])
+    assert "old-1" not in coord._activity_consumption
+    assert "old-1" in coord._prev_activity_ids
+
+    # A later poll with the same activity list must not reprocess it into a
+    # (still wrong) consumption entry.
+    _fake_dt_util.now = t0 + timedelta(hours=1)
+    _track(coord, [_bike("bike-1", 1050.0)])
+    assert "old-1" not in coord._activity_consumption
 
 
 if __name__ == "__main__":

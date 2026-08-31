@@ -86,6 +86,24 @@ CONSUMPTION_TOPUP_ODOMETER_TOLERANCE_M = 300.0
 # it - months to years of silence, not one extra poll).
 MAX_PROTECTED_DELIVERED_WH_DIP = 50.0
 
+# How old an activity's end (or start) time may be and still receive a share
+# of a bike's deliveredWhOverLifetime delta in _track_battery_consumption
+# (issue #78). "Newly discovered this poll" is only a valid proxy for "the
+# ride that generated this poll's counter growth" when the discovery is
+# genuinely prompt. On a fresh install (or after a long HA downtime) a whole
+# backlog of real, already-completed historical rides can surface together
+# in one poll, while the counter itself barely moved in the short real-world
+# gap since the previous poll - splitting that tiny delta across the whole
+# backlog by distance produced a wh_per_km around 100-1000x too low (0.01
+# instead of ~10-15, a reported 75000 km "range"). An activity older than
+# this cutoff gets no consumption entry at all rather than a fabricated one
+# - already handled gracefully everywhere consumed_wh is read
+# (compute_range_estimate skips activities with no entry, same as an
+# unattributed one). Matches the 48 h precedent already used for a related
+# "how stale can Bosch's cloud data be before we stop chasing it" judgement
+# call in _recheck_recent_activity_distances (issue #31).
+CONSUMPTION_BACKLOG_CUTOFF = timedelta(hours=48)
+
 STORAGE_VERSION = 1
 STORAGE_KEY_SUFFIX = "consumption_state"
 
@@ -587,6 +605,7 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             # leave it unattributed rather than guess which of several bikes
             # it belongs to.
             single_bike_id = bikes[0].get("id") if len(bikes) == 1 else None
+            backlog_cutoff = dt_util.utcnow() - CONSUMPTION_BACKLOG_CUTOFF
 
             for activity in new_activities:
                 aid = activity.get("id")
@@ -595,6 +614,23 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 bike_id = self._activity_bike.get(aid) or single_bike_id
                 if not bike_id:
                     unresolved_ids.add(aid)
+                    continue
+                # Issue #78: too old to plausibly be the ride behind this
+                # poll's counter growth - leave it out of the distance pool
+                # entirely rather than let it dilute a genuinely fresh
+                # activity's share, or receive a fabricated share of its
+                # own. Deliberately NOT added to unresolved_ids: a missing
+                # end/start time fails open (still eligible) since there is
+                # nothing here to judge staleness against, and an activity
+                # this old will never stop being old, so retrying it every
+                # poll forever would just waste cycles for no possible
+                # future resolution - it is meant to be treated as settled
+                # (no consumption data) once, not revisited (see
+                # CONSUMPTION_BACKLOG_CUTOFF).
+                end_time = parse_iso_utc(activity.get("endTime")) or parse_iso_utc(
+                    activity.get("startTime")
+                )
+                if end_time is not None and end_time < backlog_cutoff:
                     continue
                 by_bike.setdefault(bike_id, []).append(activity)
 
