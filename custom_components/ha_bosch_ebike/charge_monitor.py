@@ -122,6 +122,8 @@ class ChargeSessionMonitor:
             when,
             self.coordinator.battery_capacity_wh(self.bike_id),
         )
+        if changed and self.tracker.summary:
+            self.coordinator.record_charge_session(self.bike_id, self.tracker.summary)
 
         # Rearm regardless of whether this sample moved anything: a charge
         # normally ends by the SoC simply stopping, with no final sample to
@@ -142,12 +144,13 @@ class ChargeSessionMonitor:
     def _on_idle_timeout(self, _now: Any) -> None:
         self._cancel_idle = None
         was_charging = self.tracker.in_progress
+        closed = self.tracker.check_timeout(self._now())
+        if closed and self.tracker.summary:
+            self.coordinator.record_charge_session(self.bike_id, self.tracker.summary)
         # The second case is a session that timed out without producing a
         # summary (too small to publish): nothing about the state changed, but
         # "in progress" went false and has to be shown.
-        if self.tracker.check_timeout(self._now()) or (
-            self.tracker.in_progress != was_charging
-        ):
+        if closed or self.tracker.in_progress != was_charging:
             self._notify()
 
     @callback
@@ -167,5 +170,7 @@ class ChargeSessionMonitor:
                 "safety net; the idle timer had not fired",
                 self.bike_id,
             )
+            if self.tracker.summary:
+                self.coordinator.record_charge_session(self.bike_id, self.tracker.summary)
         if closed or self.tracker.in_progress != was_charging:
             self._notify()

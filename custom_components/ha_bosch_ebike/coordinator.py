@@ -86,6 +86,15 @@ CONSUMPTION_TOPUP_ODOMETER_TOLERANCE_M = 300.0
 # it - months to years of silence, not one extra poll).
 MAX_PROTECTED_DELIVERED_WH_DIP = 50.0
 
+# How many completed charge sessions to keep per bike for
+# charge_rate_estimate.py's two-phase rate learning. A rolling count-based
+# cap rather than a time window: self-limiting regardless of how often the
+# bike is charged, and simpler than date-based pruning. Large enough that a
+# single unusual session cannot dominate the average, small enough that
+# genuinely outdated charging behaviour (a different charger, a battery
+# swap) ages out within a reasonable number of real charges.
+CHARGE_HISTORY_MAX_SESSIONS = 20
+
 # The floor below which a poll's implied wh_per_km (deliveredWhOverLifetime
 # delta divided by the distance of the activities it is about to be split
 # across) is treated as physically implausible in _track_battery_consumption
@@ -282,6 +291,10 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # attempts (no recorder data fresh enough) are NOT cached so they
         # retry on the next poll — useful when the recorder catches up.
         self._live_enrichment_cache: dict[str, dict[str, bool]] = {}
+        # Rolling charge-session history per bike, for charge_rate_estimate.py
+        # (issue: see design doc). bike_id -> list of {start_soc, end_soc,
+        # duration_min} dicts, newest last, capped at CHARGE_HISTORY_MAX_SESSIONS.
+        self._charge_history: dict[str, list[dict[str, Any]]] = {}
 
     @property
     def is_bes2(self) -> bool:
@@ -363,6 +376,19 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     bid: float(v) for bid, v in odo_floor.items()
                     if isinstance(bid, str) and isinstance(v, (int, float)) and v >= 0
                 }
+            charge_history = data.get("charge_history")
+            if isinstance(charge_history, dict):
+                self._charge_history = {
+                    bid: [
+                        e for e in entries
+                        if isinstance(e, dict)
+                        and isinstance(e.get("start_soc"), (int, float))
+                        and isinstance(e.get("end_soc"), (int, float))
+                        and isinstance(e.get("duration_min"), (int, float))
+                    ][-CHARGE_HISTORY_MAX_SESSIONS:]
+                    for bid, entries in charge_history.items()
+                    if isinstance(bid, str) and isinstance(entries, list)
+                }
             _LOGGER.debug(
                 "Loaded persisted consumption state: prev_wh=%s, activities=%d",
                 self._prev_delivered_wh,
@@ -383,6 +409,7 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 "service_overrides": self._service_overrides,
                 "battery_capacity_wh": dict(self._battery_capacity_wh),
                 "odometer_floor_km": dict(self._odometer_floor_km),
+                "charge_history": self._charge_history,
             }
         )
 
@@ -549,6 +576,28 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             new_data["activity_consumption"] = self._activity_consumption
             new_data["battery_capacity_wh"] = dict(self._battery_capacity_wh)
             self.async_set_updated_data(new_data)
+
+    def record_charge_session(self, bike_id: str, summary: dict[str, Any]) -> None:
+        """Append a just-completed charge session to this bike's rolling history.
+
+        Called by ChargeSessionMonitor whenever ChargeSessionTracker
+        publishes a new summary (a session actually completed and was worth
+        reporting - see MIN_SESSION_PCT in charge_session.py). Only the
+        fields charge_rate_estimate.py needs are kept.
+        """
+        entry = {
+            "start_soc": summary.get("start_soc"),
+            "end_soc": summary.get("end_soc"),
+            "duration_min": summary.get("duration_min"),
+        }
+        history = self._charge_history.setdefault(bike_id, [])
+        history.append(entry)
+        del history[:-CHARGE_HISTORY_MAX_SESSIONS]
+        self.hass.async_create_task(self._async_save_state())
+
+    def charge_history(self, bike_id: str) -> list[dict[str, Any]]:
+        """This bike's rolling charge-session history, oldest first."""
+        return list(self._charge_history.get(bike_id, []))
 
     def _track_battery_consumption(self, bikes: list[dict[str, Any]]) -> bool:
         """Track each bike's own deliveredWhOverLifetime and allocate to activities.
