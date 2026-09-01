@@ -23,6 +23,20 @@ PHASE_BOUNDARY_PCT = 80.0
 # yet" rather than a number built on one or two samples.
 MIN_SESSIONS_PER_PHASE = 3
 
+# A phase's rate is also only trusted once its sessions have jointly covered
+# at least this many percentage points - mirrors MIN_KM in range_estimate.py,
+# which gates wh_per_km on total distance as well as tour count, precisely so
+# a handful of barely-there tours cannot pass the count gate alone. Without
+# this, e.g. three sessions that each nudge 1 point across the 80% line would
+# satisfy MIN_SESSIONS_PER_PHASE and be reported "trusted" off of essentially
+# no real above-80 data. The above-80 phase only spans 20 points (80-100%),
+# so 10.0 sets the floor at roughly half of that narrower phase's total
+# width - enough that the sessions backing an "above 80" rate must have
+# covered real ground in the phase that most needs it. For the below-80
+# phase (80 points wide) this is a proportionally lower bar, but it still
+# rules out the same degenerate case of several tiny near-boundary sessions.
+MIN_PCT_POINTS_PER_PHASE = 10.0
+
 
 def compute_two_phase_rates(sessions: list[dict[str, Any]]) -> dict[str, Any]:
     """Aggregate minutes-per-percent rates below and above PHASE_BOUNDARY_PCT.
@@ -41,9 +55,11 @@ def compute_two_phase_rates(sessions: list[dict[str, Any]]) -> dict[str, Any]:
     per-session rates - the same style as wh_per_km in range_estimate.py.
 
     Returns a dict with rate_below_80/rate_above_80 (minutes per percentage
-    point, or None if no session ever contributed to that phase) and
+    point, or None if no session ever contributed to that phase),
     below_80_sessions/above_80_sessions (contributing-session counts, for
-    the MIN_SESSIONS_PER_PHASE gate in estimate_time_to_target).
+    the MIN_SESSIONS_PER_PHASE gate in estimate_time_to_target), and
+    below_80_pct_points/above_80_pct_points (cumulative percentage points
+    contributed to that phase, for the MIN_PCT_POINTS_PER_PHASE gate).
     """
     below_minutes = 0.0
     below_pct = 0.0
@@ -80,6 +96,8 @@ def compute_two_phase_rates(sessions: list[dict[str, Any]]) -> dict[str, Any]:
         "rate_above_80": (above_minutes / above_pct) if above_pct > 0 else None,
         "below_80_sessions": below_sessions,
         "above_80_sessions": above_sessions,
+        "below_80_pct_points": below_pct,
+        "above_80_pct_points": above_pct,
     }
 
 
@@ -90,8 +108,10 @@ def estimate_time_to_target(
 
     None when: the target is already strictly behind current_soc (nothing
     left to estimate - e.g. asking for time-to-80 at 85%), or a required
-    phase's rate does not meet MIN_SESSIONS_PER_PHASE yet (not enough
-    history to trust it). Reaching from below 80 to 100 needs BOTH phases'
+    phase's rate does not meet BOTH MIN_SESSIONS_PER_PHASE AND
+    MIN_PCT_POINTS_PER_PHASE yet (not enough history, by count or by real
+    coverage, to trust it - mirrors range_estimate.py requiring both
+    MIN_TOURS and MIN_KM). Reaching from below 80 to 100 needs BOTH phases'
     minimums met, since the projection sums both rates. current_soc at or
     past target_soc returns 0.0 exactly when they are equal (including
     100-at-100); strictly past returns None.
@@ -101,8 +121,14 @@ def estimate_time_to_target(
     if current_soc == target_soc:
         return 0.0
 
-    below_ok = rates.get("below_80_sessions", 0) >= MIN_SESSIONS_PER_PHASE
-    above_ok = rates.get("above_80_sessions", 0) >= MIN_SESSIONS_PER_PHASE
+    below_ok = (
+        rates.get("below_80_sessions", 0) >= MIN_SESSIONS_PER_PHASE
+        and rates.get("below_80_pct_points", 0.0) >= MIN_PCT_POINTS_PER_PHASE
+    )
+    above_ok = (
+        rates.get("above_80_sessions", 0) >= MIN_SESSIONS_PER_PHASE
+        and rates.get("above_80_pct_points", 0.0) >= MIN_PCT_POINTS_PER_PHASE
+    )
     rate_below = rates.get("rate_below_80")
     rate_above = rates.get("rate_above_80")
 

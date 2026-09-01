@@ -9,16 +9,23 @@ This module learns two separate rates - below 80% and above it - from a
 bike's own charge history, and projects a remaining-time / ready-time
 estimate for each of the two milestones users actually care about.
 """
-import sys
+import importlib.util
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "custom_components" / "ha_bosch_ebike"))
-from charge_rate_estimate import (  # noqa: E402
-    MIN_SESSIONS_PER_PHASE,
-    PHASE_BOUNDARY_PCT,
-    compute_two_phase_rates,
-    estimate_time_to_target,
+# Load the module file directly: importing the package would pull in
+# custom_components/ha_bosch_ebike/__init__.py, which needs Home Assistant.
+_MODULE_PATH = (
+    Path(__file__).resolve().parent.parent
+    / "custom_components" / "ha_bosch_ebike" / "charge_rate_estimate.py"
 )
+_spec = importlib.util.spec_from_file_location("charge_rate_estimate", _MODULE_PATH)
+_mod = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_mod)
+MIN_SESSIONS_PER_PHASE = _mod.MIN_SESSIONS_PER_PHASE
+MIN_PCT_POINTS_PER_PHASE = _mod.MIN_PCT_POINTS_PER_PHASE
+PHASE_BOUNDARY_PCT = _mod.PHASE_BOUNDARY_PCT
+compute_two_phase_rates = _mod.compute_two_phase_rates
+estimate_time_to_target = _mod.estimate_time_to_target
 
 
 def _session(start_soc, end_soc, duration_min):
@@ -95,42 +102,76 @@ def test_empty_history_returns_none_rates():
 
 def test_estimate_below_target_80_uses_below_rate_only():
     rates = {"rate_below_80": 2.0, "rate_above_80": 5.0,
-             "below_80_sessions": MIN_SESSIONS_PER_PHASE, "above_80_sessions": MIN_SESSIONS_PER_PHASE}
-    result = estimate_time_to_target(current_soc=50, target_soc=80, rates=rates)
+             "below_80_sessions": MIN_SESSIONS_PER_PHASE, "above_80_sessions": MIN_SESSIONS_PER_PHASE,
+             "below_80_pct_points": 2 * MIN_PCT_POINTS_PER_PHASE,
+             "above_80_pct_points": 2 * MIN_PCT_POINTS_PER_PHASE}
+    result = estimate_time_to_target(current_soc=50, target_soc=PHASE_BOUNDARY_PCT, rates=rates)
     assert result == 60.0  # (80-50) * 2.0
 
 
 def test_estimate_to_100_from_below_80_combines_both_rates():
     rates = {"rate_below_80": 2.0, "rate_above_80": 5.0,
-             "below_80_sessions": MIN_SESSIONS_PER_PHASE, "above_80_sessions": MIN_SESSIONS_PER_PHASE}
+             "below_80_sessions": MIN_SESSIONS_PER_PHASE, "above_80_sessions": MIN_SESSIONS_PER_PHASE,
+             "below_80_pct_points": 2 * MIN_PCT_POINTS_PER_PHASE,
+             "above_80_pct_points": 2 * MIN_PCT_POINTS_PER_PHASE}
     result = estimate_time_to_target(current_soc=50, target_soc=100, rates=rates)
-    assert result == (80 - 50) * 2.0 + (100 - 80) * 5.0
+    assert result == (PHASE_BOUNDARY_PCT - 50) * 2.0 + (100 - PHASE_BOUNDARY_PCT) * 5.0
 
 
 def test_estimate_to_100_from_above_80_uses_above_rate_only():
     rates = {"rate_below_80": 2.0, "rate_above_80": 5.0,
-             "below_80_sessions": MIN_SESSIONS_PER_PHASE, "above_80_sessions": MIN_SESSIONS_PER_PHASE}
+             "below_80_sessions": MIN_SESSIONS_PER_PHASE, "above_80_sessions": MIN_SESSIONS_PER_PHASE,
+             "below_80_pct_points": 2 * MIN_PCT_POINTS_PER_PHASE,
+             "above_80_pct_points": 2 * MIN_PCT_POINTS_PER_PHASE}
     result = estimate_time_to_target(current_soc=90, target_soc=100, rates=rates)
     assert result == (100 - 90) * 5.0
 
 
 def test_estimate_to_80_when_already_past_80_returns_none():
     rates = {"rate_below_80": 2.0, "rate_above_80": 5.0,
-             "below_80_sessions": MIN_SESSIONS_PER_PHASE, "above_80_sessions": MIN_SESSIONS_PER_PHASE}
-    assert estimate_time_to_target(current_soc=85, target_soc=80, rates=rates) is None
+             "below_80_sessions": MIN_SESSIONS_PER_PHASE, "above_80_sessions": MIN_SESSIONS_PER_PHASE,
+             "below_80_pct_points": 2 * MIN_PCT_POINTS_PER_PHASE,
+             "above_80_pct_points": 2 * MIN_PCT_POINTS_PER_PHASE}
+    assert estimate_time_to_target(current_soc=85, target_soc=PHASE_BOUNDARY_PCT, rates=rates) is None
 
 
 def test_estimate_returns_none_below_min_sessions_threshold():
+    # Percentage-point coverage is comfortably above MIN_PCT_POINTS_PER_PHASE
+    # for both phases here - this test is only about the session-COUNT gate,
+    # not the magnitude gate (see test_estimate_returns_none_below_min_pct_points_threshold).
     rates = {"rate_below_80": 2.0, "rate_above_80": 5.0,
-             "below_80_sessions": MIN_SESSIONS_PER_PHASE - 1, "above_80_sessions": MIN_SESSIONS_PER_PHASE}
-    assert estimate_time_to_target(current_soc=50, target_soc=80, rates=rates) is None
+             "below_80_sessions": MIN_SESSIONS_PER_PHASE - 1, "above_80_sessions": MIN_SESSIONS_PER_PHASE,
+             "below_80_pct_points": 2 * MIN_PCT_POINTS_PER_PHASE,
+             "above_80_pct_points": 2 * MIN_PCT_POINTS_PER_PHASE}
+    assert estimate_time_to_target(current_soc=50, target_soc=PHASE_BOUNDARY_PCT, rates=rates) is None
     # to 100 from below 80% needs BOTH phases' minimums met
     assert estimate_time_to_target(current_soc=50, target_soc=100, rates=rates) is None
 
 
+def test_estimate_returns_none_below_min_pct_points_threshold():
+    # Mirrors test_estimate_returns_none_below_min_sessions_threshold, but the
+    # OTHER way round: the session COUNT gate is satisfied, while the total
+    # percentage-point coverage for the below-80 phase falls short of
+    # MIN_PCT_POINTS_PER_PHASE (e.g. several sessions that each barely nudge
+    # across a boundary). Proves the magnitude gate is a real, independent
+    # check - not just always-satisfied alongside the count gate.
+    rates = {"rate_below_80": 2.0, "rate_above_80": 5.0,
+             "below_80_sessions": MIN_SESSIONS_PER_PHASE, "above_80_sessions": MIN_SESSIONS_PER_PHASE,
+             "below_80_pct_points": MIN_PCT_POINTS_PER_PHASE - 1,
+             "above_80_pct_points": 2 * MIN_PCT_POINTS_PER_PHASE}
+    assert estimate_time_to_target(current_soc=50, target_soc=PHASE_BOUNDARY_PCT, rates=rates) is None
+    # to 100 from below 80% needs BOTH phases' minimums met, so the thin
+    # below-80 coverage still blocks it even though above-80 is well trusted.
+    assert estimate_time_to_target(current_soc=50, target_soc=100, rates=rates) is None
+    # but a target fully within the well-trusted above-80 phase still works.
+    assert estimate_time_to_target(current_soc=90, target_soc=100, rates=rates) == 50.0  # (100-90) * 5.0
+
+
 def test_estimate_at_or_above_100_returns_zero():
     rates = {"rate_below_80": 2.0, "rate_above_80": 5.0,
-             "below_80_sessions": MIN_SESSIONS_PER_PHASE, "above_80_sessions": MIN_SESSIONS_PER_PHASE}
+             "below_80_sessions": MIN_SESSIONS_PER_PHASE, "above_80_sessions": MIN_SESSIONS_PER_PHASE,
+             "below_80_pct_points": 2 * MIN_PCT_POINTS_PER_PHASE,
+             "above_80_pct_points": 2 * MIN_PCT_POINTS_PER_PHASE}
     assert estimate_time_to_target(current_soc=100, target_soc=100, rates=rates) == 0.0
 
 
