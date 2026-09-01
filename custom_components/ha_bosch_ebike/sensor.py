@@ -2174,12 +2174,14 @@ class _BoschChargeTimeSensorBase(SensorEntity):
         drive_name: str,
         monitor: ChargeSessionMonitor,
         coordinator: BoschEBikeCoordinator,
-        key: str,
     ) -> None:
         self._bike_id = bike_id
         self._monitor = monitor
         self._coordinator = coordinator
-        self._attr_unique_id = f"{bike_id}_{key}"
+        # Each leaf subclass sets _attr_translation_key as a class
+        # attribute, so it is already there to read at construction time -
+        # reusing it here means the id can't drift from the translation key.
+        self._attr_unique_id = f"{bike_id}_{self._attr_translation_key}"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, bike_id)},
             name=drive_name,
@@ -2254,15 +2256,6 @@ class BoschTimeRemaining80Sensor(_BoschChargeTimeSensorBase):
     _attr_icon = "mdi:battery-clock"
     _target_soc = PHASE_BOUNDARY_PCT
 
-    def __init__(
-        self,
-        bike_id: str,
-        drive_name: str,
-        monitor: ChargeSessionMonitor,
-        coordinator: BoschEBikeCoordinator,
-    ) -> None:
-        super().__init__(bike_id, drive_name, monitor, coordinator, "time_remaining_80")
-
     @property
     def native_value(self) -> int | None:
         minutes = self._minutes_remaining()
@@ -2285,15 +2278,6 @@ class BoschTimeRemaining100Sensor(_BoschChargeTimeSensorBase):
     _attr_icon = "mdi:battery-clock"
     _target_soc = 100.0
 
-    def __init__(
-        self,
-        bike_id: str,
-        drive_name: str,
-        monitor: ChargeSessionMonitor,
-        coordinator: BoschEBikeCoordinator,
-    ) -> None:
-        super().__init__(bike_id, drive_name, monitor, coordinator, "time_remaining_100")
-
     @property
     def native_value(self) -> int | None:
         minutes = self._minutes_remaining()
@@ -2312,15 +2296,6 @@ class BoschEstimatedReady80Sensor(_BoschChargeTimeSensorBase):
     _attr_device_class = SensorDeviceClass.TIMESTAMP
     _attr_icon = "mdi:battery-clock-outline"
     _target_soc = PHASE_BOUNDARY_PCT
-
-    def __init__(
-        self,
-        bike_id: str,
-        drive_name: str,
-        monitor: ChargeSessionMonitor,
-        coordinator: BoschEBikeCoordinator,
-    ) -> None:
-        super().__init__(bike_id, drive_name, monitor, coordinator, "estimated_ready_80")
 
     @property
     def native_value(self) -> datetime | None:
@@ -2341,15 +2316,6 @@ class BoschEstimatedReady100Sensor(_BoschChargeTimeSensorBase):
     _attr_device_class = SensorDeviceClass.TIMESTAMP
     _attr_icon = "mdi:battery-clock-outline"
     _target_soc = 100.0
-
-    def __init__(
-        self,
-        bike_id: str,
-        drive_name: str,
-        monitor: ChargeSessionMonitor,
-        coordinator: BoschEBikeCoordinator,
-    ) -> None:
-        super().__init__(bike_id, drive_name, monitor, coordinator, "estimated_ready_100")
 
     @property
     def native_value(self) -> datetime | None:
