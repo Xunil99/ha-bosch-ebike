@@ -369,6 +369,19 @@ Zusätzlich entsteht der Sensor **`Total Charged Energy`**, ein fortlaufend stei
 
 Der vorhandene Sensor `Wh Lifetime` eignet sich dafür übrigens nicht, obwohl Home Assistant ihn anbietet: er zählt die vom Akku **abgegebene** Energie, also die Fahrleistung, nicht das Laden.
 
+#### 🆕 Restzeit- und Fertig-Zeitpunkt-Schätzung
+
+Mit demselben Live-SoC-Sensor stehen zusätzlich vier weitere Sensoren zur Verfügung, die abschätzen, wie lange der laufende Ladevorgang noch dauert:
+
+- **`Restzeit bis 80%`** / **`Restzeit bis 100%`** — verbleibende Ladezeit in Minuten bis zum jeweiligen Ladestand
+- **`Voraussichtlich fertig bei 80%`** / **`Voraussichtlich fertig bei 100%`** — der voraussichtliche Uhrzeit-Zeitpunkt (Zeitstempel), zu dem dieser Ladestand erreicht wird
+
+Alle vier stehen auf „nicht verfügbar", solange gerade nicht geladen wird oder der Live-Ladestand nicht gelesen werden kann — genau wie bei `Letzte Ladung: Energie` weiter oben.
+
+Li-Ionen-Akkus laden nicht linear: unterhalb von 80 % geht es zügig voran, danach (Konstantspannungsphase) spürbar langsamer. Die Schätzung lernt deshalb zwei getrennte Laderaten aus der eigenen Ladehistorie des Rads — eine für 0–80 %, eine für 80–100 % — statt eine einzige Rate über den gesamten Bereich anzunehmen.
+
+**Das braucht etwas Ladehistorie:** Eine Phasen-Rate gilt erst als vertrauenswürdig, wenn dazu mindestens 3 abgeschlossene Ladevorgänge beigetragen haben *und* diese zusammen mindestens 10 Prozentpunkte Ladestand-Zuwachs in dieser Phase abgedeckt haben. Bis dahin bleiben die betroffenen Sensoren „nicht verfügbar" — bei einem neuen Rad oder kurz nachdem ein Live-SoC-Sensor erstmals eingerichtet wurde, ist das der Normalfall, kein Fehler. Nach ein paar vollständigen Ladungen füllt sich die Historie automatisch und die Werte erscheinen von selbst. Eine Schätzung bis 100 % ausgehend von unter 80 % braucht dabei beide Phasen-Raten gleichzeitig.
+
 <a name="de-pois"></a>
 
 ### POIs entlang der Route
@@ -691,6 +704,7 @@ target_soc_entity: input_number.ebike_target_soc
   - Strompreis entweder als **fester Wert** (Default `0,23 €/kWh`) oder als **Verweis auf eine Entität**, die den aktuellen Preis liefert (z. B. ein dynamischer Tarif-Sensor)
   - Jeder der drei Zeiträume (7/30/365 Tage) ist einzeln ein-/ausblendbar
   - Die Zeitfenster sind rollierend (immer „die letzten X Tage", kein Reset zum Kalendermonat)
+- **Restzeit- und Fertig-Kacheln beim Laden** (optional, standardmäßig an): bis zu vier Kacheln mit der Restzeit bis 80 %/100 % und dem voraussichtlichen Fertig-Zeitpunkt, sobald die zugehörigen Sensoren existieren (siehe Abschnitt „Restzeit- und Fertig-Zeitpunkt-Schätzung" weiter oben) — jede einzeln über den Karten-Editor ausblendbar
 
 ![Dashboard-Card mit Bike-Foto, Statuskacheln, Fahrmodus-Reichweiten, Wartungsliste und CO2-Vergleich](docs/img/card-dashboard.png)
 
@@ -767,6 +781,10 @@ Auf der Lovelace-Karte gibt es einen 🌦️-Toggle in den Karten-Steuerelemente
 | Estimated Range (Current) | km | Geschätzte Restreichweite (Live-SoC nötig, Schätzung!) |
 | Last Charge Energy | Wh | Energie des letzten Ladevorgangs (Live-SoC nötig) |
 | Total Charged Energy | Wh | Summe aller Ladungen, für das Energie-Dashboard (Live-SoC nötig) |
+| Time Remaining to 80% | min | Restzeit bis 80 % Ladestand (Live-SoC + Ladehistorie nötig) |
+| Time Remaining to 100% | min | Restzeit bis 100 % Ladestand (Live-SoC + Ladehistorie nötig) |
+| Estimated Ready at 80% | - | Voraussichtlicher Zeitpunkt für 80 % Ladestand (Live-SoC + Ladehistorie nötig) |
+| Estimated Ready at 100% | - | Voraussichtlicher Zeitpunkt für 100 % Ladestand (Live-SoC + Ladehistorie nötig) |
 
 #### Batterie-Sensoren (pro Batterie)
 | Sensor | Einheit | Beschreibung |
@@ -1206,6 +1224,19 @@ A second sensor, **`Total Charged Energy`**, is a monotonically increasing meter
 
 Note that the existing `Wh Lifetime` sensor is not suitable here, even though Home Assistant offers it: it counts the energy the battery **delivered**, i.e. riding, not charging.
 
+#### 🆕 Time remaining and estimated ready time
+
+With the same live SoC sensor, four more sensors become available that estimate how much longer the current charge will take:
+
+- **`Time Remaining to 80%`** / **`Time Remaining to 100%`** — remaining charge time in minutes to that state of charge
+- **`Estimated Ready at 80%`** / **`Estimated Ready at 100%`** — the projected wall-clock timestamp at which that state of charge will be reached
+
+All four read "unavailable" whenever nothing is currently charging or the live state of charge cannot be read - the same as `Last Charge Energy` above.
+
+Li-ion batteries do not charge linearly: charging is fast below 80%, then noticeably slower afterwards (the constant-voltage phase). The estimate therefore learns two separate charge rates from the bike's own charge history - one for 0–80%, one for 80–100% - instead of assuming a single rate across the whole range.
+
+**This needs some charge history to build up first:** a phase's rate is only trusted once at least 3 completed charges have contributed to it *and* those charges jointly cover at least 10 percentage points of state-of-charge gain in that phase. Until then, the affected sensors stay "unavailable" - for a new bike, or shortly after a live SoC sensor is set up for the first time, that is expected, not a bug. After a handful of full charges the history fills in on its own and the values appear. Estimating all the way to 100% starting from below 80% needs both phase rates at once.
+
 <a name="en-pois"></a>
 
 ### POIs along the route
@@ -1529,6 +1560,7 @@ target_soc_entity: input_number.ebike_target_soc
   - Electricity price is either a **fixed value** (default `0.23 €/kWh`) or a **reference to an entity** that provides the current price (e.g. a dynamic-tariff sensor)
   - Each of the three periods (7/30/365 days) can be shown or hidden independently
   - The windows are rolling (always "the last X days", no reset at the calendar month boundary)
+- **Time-remaining and ready-time tiles while charging** (optional, on by default): up to four tiles showing time remaining to 80%/100% and the projected ready time, once the underlying sensors exist (see "Time remaining and estimated ready time" above) - each one can be hidden individually in the card editor
 
 ![Dashboard card with bike photo, status tiles, per-mode range, maintenance list and CO2 comparison](docs/img/card-dashboard.png)
 
@@ -1605,6 +1637,10 @@ The Lovelace card has a 🌦️ toggle in the map controls. When enabled, the ca
 | Estimated Range (Current) | km | Estimated remaining range (live SoC required, estimate!) |
 | Last Charge Energy | Wh | Energy of the last charge session (live SoC required) |
 | Total Charged Energy | Wh | Sum of all charges, for the Energy Dashboard (live SoC required) |
+| Time Remaining to 80% | min | Time left to 80% state of charge (live SoC + charge history required) |
+| Time Remaining to 100% | min | Time left to 100% state of charge (live SoC + charge history required) |
+| Estimated Ready at 80% | - | Projected time to reach 80% state of charge (live SoC + charge history required) |
+| Estimated Ready at 100% | - | Projected time to reach 100% state of charge (live SoC + charge history required) |
 
 #### Battery Sensors (per battery)
 | Sensor | Unit | Description |
