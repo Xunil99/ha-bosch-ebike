@@ -291,9 +291,10 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # attempts (no recorder data fresh enough) are NOT cached so they
         # retry on the next poll — useful when the recorder catches up.
         self._live_enrichment_cache: dict[str, dict[str, bool]] = {}
-        # Rolling charge-session history per bike, for charge_rate_estimate.py
-        # (issue: see design doc). bike_id -> list of {start_soc, end_soc,
-        # duration_min} dicts, newest last, capped at CHARGE_HISTORY_MAX_SESSIONS.
+        # Rolling charge-session history per bike, feeding the two-phase
+        # charge-rate learning in charge_rate_estimate.py. bike_id -> list of
+        # {start_soc, end_soc, duration_min} dicts, newest last, capped at
+        # CHARGE_HISTORY_MAX_SESSIONS.
         self._charge_history: dict[str, list[dict[str, Any]]] = {}
 
     @property
@@ -596,8 +597,12 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.hass.async_create_task(self._async_save_state())
 
     def charge_history(self, bike_id: str) -> list[dict[str, Any]]:
-        """This bike's rolling charge-session history, oldest first."""
-        return list(self._charge_history.get(bike_id, []))
+        """This bike's rolling charge-session history, oldest first.
+
+        A deep-enough copy that a caller mutating the returned list OR its
+        entry dicts cannot corrupt the coordinator's own stored state.
+        """
+        return [dict(entry) for entry in self._charge_history.get(bike_id, [])]
 
     def _track_battery_consumption(self, bikes: list[dict[str, Any]]) -> bool:
         """Track each bike's own deliveredWhOverLifetime and allocate to activities.
