@@ -8826,7 +8826,10 @@ class BoschEBikeDashboardCardEditor extends HTMLElement {
     // hier steuert nur, ob ein gefundener Wert gezeigt wird. Gleiches
     // Immutable-Update-Muster wie mkPeriodToggle unten (show_cost_week/
     // month/year) bzw. show_range_pills oben; bewusst nicht in this._fields,
-    // wie alle anderen show_*-Checkboxen dieses Editors (siehe _sync()).
+    // wie show_range_pills/show_bike_image - eine Checkbox dort neu zu
+    // syncen ist ein No-op (_sync()'s generischer Zweig setzt nur .value,
+    // nicht .checked). show_cost_week/month/year sind zwar registriert,
+    // tragen dieselbe Lücke aber nur mit, statt sie zu vermeiden.
     const mkChargeTimeToggle = (configKey, labelKey) => {
       const toggleWrap = document.createElement("label");
       toggleWrap.style.cssText = "display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;";
