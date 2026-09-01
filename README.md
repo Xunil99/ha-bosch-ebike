@@ -382,6 +382,22 @@ Li-Ionen-Akkus laden nicht linear: unterhalb von 80 % geht es zügig voran, dana
 
 **Das braucht etwas Ladehistorie:** Eine Phasen-Rate gilt erst als vertrauenswürdig, wenn dazu mindestens 3 abgeschlossene Ladevorgänge beigetragen haben *und* diese zusammen mindestens 10 Prozentpunkte Ladestand-Zuwachs in dieser Phase abgedeckt haben. Bis dahin bleiben die betroffenen Sensoren „nicht verfügbar" — bei einem neuen Rad oder kurz nachdem ein Live-SoC-Sensor erstmals eingerichtet wurde, ist das der Normalfall, kein Fehler. Nach ein paar vollständigen Ladungen füllt sich die Historie automatisch und die Werte erscheinen von selbst. Eine Schätzung bis 100 % ausgehend von unter 80 % braucht dabei beide Phasen-Raten gleichzeitig.
 
+#### 🆕 Live Activity beim Laden (optionaler Blueprint)
+
+Wer den Ladefortschritt zusätzlich auf dem Sperrbildschirm sehen möchte, findet dafür einen optionalen Automations-Blueprint, der eine **iOS Live Activity** bzw. ein **Android Live Update** anzeigt: aktueller Ladestand, ein Fortschrittsbalken und ein live mitlaufender Countdown bis 80 % bzw. 100 %. Das läuft vollständig über Home Assistants eigenen `notify.mobile_app_*`-Mechanismus für Live Activities — eine ganz normale, integrationsunabhängige Companion-App-Funktion. Die Integration selbst bringt dafür nichts Eigenes mit, sie liefert nur die Sensoren, die der Blueprint ausliest.
+
+**Das ist optional und wird nicht automatisch mit der Integration installiert.** Der fertige Blueprint liegt unter [`blueprints/automation/ha_bosch_ebike/charge_live_activity.yaml`](blueprints/automation/ha_bosch_ebike/charge_live_activity.yaml) und muss manuell importiert werden:
+
+1. **Einstellungen → Automatisierungen & Szenen → Blueprints → Blueprint importieren**
+2. Als URL einfügen:
+   `https://raw.githubusercontent.com/Xunil99/ha-bosch-ebike/feat/charge-time-estimate/blueprints/automation/ha_bosch_ebike/charge_live_activity.yaml`
+   *(zeigt aktuell auf den Feature-Branch, weil dieser Blueprint neu ist und dort noch entwickelt wird; nach dem Merge in `main` gilt dieselbe `main`-URL wie bei den fünf Blueprints in der Tabelle unten.)*
+3. Import bestätigen, daraus eine neue Automation anlegen und die Eingaben ausfüllen: ein oder mehrere Smartphones, der Ladevorgangs-Sensor (`Letzte Ladung: Energie`), der Live-SoC-Sensor sowie die vier Restzeit-/Fertig-Sensoren von oben.
+
+**Voraussetzungen** (Stand der offiziellen Home-Assistant-Companion-App-Dokumentation, geprüft September 2026): Home Assistant Core **2026.7.0 oder neuer**, auf dem Smartphone **iOS 17.2+** (Live Activities — je nach Companion-App-Version einmalig unter Einstellungen → Live Activities zu aktivieren, solange die Funktion dort noch als Beta geführt wird) oder **Android 16+** (Live Updates; auf Samsung-Geräten ggf. zusätzlich „Live-Benachrichtigungen für alle Apps" in den Entwickleroptionen aktivieren). Die Darstellung unterscheidet sich je Plattform: Unter iOS erscheint die Live Activity auf dem Sperrbildschirm und in der Dynamic Island, unter Android bleibt sie in der Benachrichtigungsleiste, auf dem Sperrbildschirm und im Always-on-Display verankert und zeigt zusätzlich ein Symbol in der Statusleiste.
+
+Genau wie die vier Restzeit-Sensoren selbst startet auch die Live Activity bei einem neuen Rad oder kurz nach dem erstmaligen Einrichten eines Live-SoC-Sensors zunächst ohne Countdown — Ladestand und Fortschrittsbalken werden trotzdem angezeigt, der Countdown erscheint von selbst, sobald genug Ladehistorie vorliegt.
+
 <a name="de-pois"></a>
 
 ### POIs entlang der Route
@@ -450,7 +466,7 @@ Jedes Feld kann `null` sein, wenn Bosch es für die Tour nicht liefert. Wichtig:
 
 #### 🆕 Fertige Blueprints (ab v1.19.31)
 
-Für die gängigsten Benachrichtigungen liegen im Repo unter [`blueprints/automation/ha_bosch_ebike/`](blueprints/automation/ha_bosch_ebike/) fünf fertige Automations-Blueprints. Button klicken öffnet direkt den Import-Dialog in deiner eigenen Home-Assistant-Instanz (setzt eine verknüpfte "My Home Assistant"-Instanz voraus); alternativ die Raw-URL der jeweiligen Datei manuell unter **Einstellungen → Automatisierungen → Blueprints → Blueprint importieren** einfügen.
+Für die gängigsten Benachrichtigungen liegen im Repo unter [`blueprints/automation/ha_bosch_ebike/`](blueprints/automation/ha_bosch_ebike/) sechs fertige Automations-Blueprints. Button klicken öffnet direkt den Import-Dialog in deiner eigenen Home-Assistant-Instanz (setzt eine verknüpfte "My Home Assistant"-Instanz voraus); alternativ die Raw-URL der jeweiligen Datei manuell unter **Einstellungen → Automatisierungen → Blueprints → Blueprint importieren** einfügen.
 
 | Blueprint | Reagiert auf | Import |
 |---|---|---|
@@ -459,8 +475,9 @@ Für die gängigsten Benachrichtigungen liegen im Repo unter [`blueprints/automa
 | `theft_alert.yaml` | `Theft Reported`-Sensor (Zustand „ein") | [![Blueprint importieren](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fraw.githubusercontent.com%2FXunil99%2Fha-bosch-ebike%2Fmain%2Fblueprints%2Fautomation%2Fha_bosch_ebike%2Ftheft_alert.yaml) |
 | `software_update_available.yaml` | `Software Update Available`-Sensor (Zustand „ein") | [![Blueprint importieren](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fraw.githubusercontent.com%2FXunil99%2Fha-bosch-ebike%2Fmain%2Fblueprints%2Fautomation%2Fha_bosch_ebike%2Fsoftware_update_available.yaml) |
 | `new_activity.yaml` | `ha_bosch_ebike_new_activity` | [![Blueprint importieren](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fraw.githubusercontent.com%2FXunil99%2Fha-bosch-ebike%2Fmain%2Fblueprints%2Fautomation%2Fha_bosch_ebike%2Fnew_activity.yaml) |
+| 🆕 `charge_live_activity.yaml` | Live-SoC + Ladevorgangs-Sensor (siehe „🆕 Live Activity beim Laden" weiter oben im Abschnitt [Laden](#de-laden)) | Noch auf dem Feature-Branch, siehe Import-Anleitung oben |
 
-Jeder Blueprint erwartet nur eine Benachrichtigungs-Aktion deiner Wahl (z. B. eine Mobile-App-Push-Nachricht) als Eingabe und liefert bereits einen fertig formulierten Text mit; die beiden zustandsbasierten Blueprints fragen zusätzlich nach dem/den zu überwachenden Sensor(en).
+Jeder der ersten fünf Blueprints erwartet nur eine Benachrichtigungs-Aktion deiner Wahl (z. B. eine Mobile-App-Push-Nachricht) als Eingabe und liefert bereits einen fertig formulierten Text mit; die beiden zustandsbasierten Blueprints fragen zusätzlich nach dem/den zu überwachenden Sensor(en). Der neue Live-Activity-Blueprint braucht mehr Eingaben (Geräte, Ladevorgangs-Sensor, Live-SoC-Sensor, vier Restzeit-/Fertig-Sensoren) - siehe die eigene Beschreibung oben.
 
 <a name="de-reichweite"></a>
 
@@ -1237,6 +1254,22 @@ Li-ion batteries do not charge linearly: charging is fast below 80%, then notice
 
 **This needs some charge history to build up first:** a phase's rate is only trusted once at least 3 completed charges have contributed to it *and* those charges jointly cover at least 10 percentage points of state-of-charge gain in that phase. Until then, the affected sensors stay "unavailable" - for a new bike, or shortly after a live SoC sensor is set up for the first time, that is expected, not a bug. After a handful of full charges the history fills in on its own and the values appear. Estimating all the way to 100% starting from below 80% needs both phase rates at once.
 
+#### 🆕 Charging Live Activity (optional blueprint)
+
+If you would rather follow charge progress on your lock screen, there is an optional automation blueprint that drives an **iOS Live Activity** / **Android Live Update**: current state of charge, a progress bar, and a live countdown to 80% and/or 100%. It runs entirely on Home Assistant's own `notify.mobile_app_*` Live Activity mechanism - an ordinary companion-app feature, nothing integration-specific. The integration itself adds nothing special here; it just supplies the sensors the blueprint reads.
+
+**This is optional and is not installed automatically with the integration.** The blueprint lives at [`blueprints/automation/ha_bosch_ebike/charge_live_activity.yaml`](blueprints/automation/ha_bosch_ebike/charge_live_activity.yaml) and has to be imported by hand:
+
+1. **Settings → Automations & Scenes → Blueprints → Import Blueprint**
+2. Paste this URL:
+   `https://raw.githubusercontent.com/Xunil99/ha-bosch-ebike/feat/charge-time-estimate/blueprints/automation/ha_bosch_ebike/charge_live_activity.yaml`
+   *(points at the feature branch for now, since this blueprint is new and still being developed there; once it merges to `main` it will use the same `main`-branch URL pattern as the five blueprints in the table below.)*
+3. Confirm the import, create a new automation from the blueprint, and fill in its inputs: one or more phones, the charge-session sensor (`Last Charge Energy`), the live SoC sensor, and the four time-remaining/estimated-ready sensors from above.
+
+**Requirements** (per the official Home Assistant companion-app documentation, checked September 2026): Home Assistant Core **2026.7.0 or later**, and on the phone itself **iOS 17.2+** (Live Activities - depending on the companion app version, this may need a one-time toggle under Settings → Live Activities while the feature is still labelled beta there) or **Android 16+** (Live Updates; on Samsung devices you may also need to enable "Live notifications for all apps" under developer options). The look differs by platform: on iOS the Live Activity shows on the Lock Screen and in the Dynamic Island; on Android it stays pinned to the notification shade, Lock Screen and always-on display, plus a status-bar chip.
+
+Just like the four time-remaining sensors themselves, the Live Activity starts out without a countdown for a new bike or shortly after a live SoC sensor is first set up - the charge percentage and progress bar still show, and the countdown appears on its own once enough charge history has built up.
+
 <a name="en-pois"></a>
 
 ### POIs along the route
@@ -1305,7 +1338,7 @@ Any field can be `null` when Bosch does not report it for that ride. Note that B
 
 #### 🆕 Ready-made blueprints (from v1.19.31)
 
-For the most common notifications, the repo ships five ready-made automation blueprints under [`blueprints/automation/ha_bosch_ebike/`](blueprints/automation/ha_bosch_ebike/). Clicking the button opens the import dialog directly in your own Home Assistant instance (requires a linked "My Home Assistant" instance); alternatively, paste the raw URL of the file manually under **Settings → Automations → Blueprints → Import Blueprint**.
+For the most common notifications, the repo ships six ready-made automation blueprints under [`blueprints/automation/ha_bosch_ebike/`](blueprints/automation/ha_bosch_ebike/). Clicking the button opens the import dialog directly in your own Home Assistant instance (requires a linked "My Home Assistant" instance); alternatively, paste the raw URL of the file manually under **Settings → Automations → Blueprints → Import Blueprint**.
 
 | Blueprint | Reacts to | Import |
 |---|---|---|
@@ -1314,8 +1347,9 @@ For the most common notifications, the repo ships five ready-made automation blu
 | `theft_alert.yaml` | `Theft Reported` sensor turning "on" | [![Import Blueprint](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fraw.githubusercontent.com%2FXunil99%2Fha-bosch-ebike%2Fmain%2Fblueprints%2Fautomation%2Fha_bosch_ebike%2Ftheft_alert.yaml) |
 | `software_update_available.yaml` | `Software Update Available` sensor turning "on" | [![Import Blueprint](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fraw.githubusercontent.com%2FXunil99%2Fha-bosch-ebike%2Fmain%2Fblueprints%2Fautomation%2Fha_bosch_ebike%2Fsoftware_update_available.yaml) |
 | `new_activity.yaml` | `ha_bosch_ebike_new_activity` | [![Import Blueprint](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fraw.githubusercontent.com%2FXunil99%2Fha-bosch-ebike%2Fmain%2Fblueprints%2Fautomation%2Fha_bosch_ebike%2Fnew_activity.yaml) |
+| 🆕 `charge_live_activity.yaml` | Live SoC + charge-session sensor (see "🆕 Charging Live Activity" earlier in the [Charging](#en-charging) section) | Still on the feature branch, see the import steps above |
 
-Each blueprint only needs a notification action of your choice as input (e.g. a mobile app push action) and comes with a ready-made message text; the two state-based blueprints additionally ask which sensor(s) to watch.
+Each of the first five blueprints only needs a notification action of your choice as input (e.g. a mobile app push action) and comes with a ready-made message text; the two state-based blueprints additionally ask which sensor(s) to watch. The new Live Activity blueprint needs more inputs (devices, charge-session sensor, live SoC sensor, the four time-remaining/estimated-ready sensors) - see its own description above.
 
 <a name="en-range"></a>
 
