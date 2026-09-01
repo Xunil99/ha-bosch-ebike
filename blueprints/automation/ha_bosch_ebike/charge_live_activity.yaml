@@ -43,7 +43,7 @@ blueprint:
           filter:
             - integration: mobile_app
     charge_session_entity:
-      name: Charge session sensor ("Last Charge: Energy")
+      name: 'Charge session sensor ("Last Charge: Energy")'
       description: >
         This bike's "Last Charge: Energy" sensor. Its in_progress attribute
         is what starts and ends the Live Activity.
