@@ -146,6 +146,18 @@
       "total_charged_energy": {
         "name": "Celková nabitá energie"
       },
+      "time_remaining_80": {
+        "name": "Zbývající čas do 80 %"
+      },
+      "time_remaining_100": {
+        "name": "Zbývající čas do 100 %"
+      },
+      "estimated_ready_80": {
+        "name": "Odhadovaná připravenost při 80 %"
+      },
+      "estimated_ready_100": {
+        "name": "Odhadovaná připravenost při 100 %"
+      },
       "last_ride_elevation_loss": {
         "name": "Poslední jízda: Převýšení ↓"
       },
