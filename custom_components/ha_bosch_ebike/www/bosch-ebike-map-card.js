@@ -7559,6 +7559,41 @@ class BoschEBikeDashboardCard extends HTMLElement {
     if (v == null || !Number.isFinite(v)) return this._t("dash_state_unknown");
     return v.toLocaleString(undefined, { maximumFractionDigits: 0 }) + " %";
   }
+  _formatMin(v) {
+    if (v == null || !Number.isFinite(v)) return this._t("dash_state_unknown");
+    return v.toLocaleString(undefined, { maximumFractionDigits: 0 }) + this._t("dash_unit_min");
+  }
+  // Timestamp-Sensor (estimated_ready_*) -> lesbare Uhrzeit. Kein
+  // bestehender toLocaleTimeString-Helper auf dieser Card (geprüft) - locale
+  // "undefined" passt zu _formatKm/_formatW/_formatPct/_formatMin oben.
+  _formatClock(iso) {
+    const d = iso ? new Date(iso) : null;
+    if (!d || Number.isNaN(d.getTime())) return this._t("dash_state_unknown");
+    return d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+  }
+
+  // Auto-Erkennung eines der vier Ladezeit-Sensoren (Task 3, charge_rate_
+  // estimate.py) per translation_key - wie _estimatedRangeKm() es für
+  // "Estimated Range (Current)" tut, inkl. desselben Cache-Musters (Treffer
+  // merken, aber bei "nicht mehr in states" neu suchen). Anders als
+  // range_entity gibt es hier keinen eigenen Entity-Config-Key; Sichtbarkeit
+  // läuft ausschließlich über die vier show_*-Toggles (siehe _render()).
+  _chargeTimeAutoEntity(cacheProp, translationKey) {
+    const states = this._hass && this._hass.states ? this._hass.states : null;
+    if (!states) return null;
+    if (!this[cacheProp] || !states[this[cacheProp]]) {
+      this[cacheProp] = boschRangeEntityIds(this._hass, translationKey)[0] || null;
+    }
+    return this[cacheProp];
+  }
+
+  // Wie _num(), aber für Timestamp-Sensoren (ISO-String statt Zahl):
+  // "unknown"/"unavailable" bzw. eine fehlende Entity werden zu null.
+  _iso(entityId) {
+    const s = this._state(entityId);
+    if (!s) return null;
+    return (s.state === "unknown" || s.state === "unavailable") ? null : s.state;
+  }
 
   // Geschätzte Restreichweite in km: explizit konfigurierter Sensor
   // (range_entity) oder Auto-Erkennung des Integrations-Sensors
@@ -7689,6 +7724,52 @@ class BoschEBikeDashboardCard extends HTMLElement {
           val: this._formatW(power),
           accent: !!(isCharging && power && power > 0),
         });
+      }
+      // Charge-time-estimate tiles (Task 3/4): four sensors auto-detected by
+      // translation_key, same as rangeKm above - no dedicated entity config,
+      // just an on/off toggle per tile (default on). Each sensor itself is
+      // None while not charging or without enough charge history yet
+      // (see _BoschChargeTimeSensorBase in sensor.py), so - like the range
+      // tile - "no value" means "no tile", not an "n/a" placeholder.
+      if (cfg.show_time_remaining_80 !== false) {
+        const min80 = this._num(this._chargeTimeAutoEntity("_timeRemaining80AutoEntity", "time_remaining_80"));
+        if (min80 != null) {
+          tiles.push({
+            icon: "mdi:battery-clock",
+            label: this._t("dash_label_time_remaining_80"),
+            val: this._formatMin(min80),
+          });
+        }
+      }
+      if (cfg.show_time_remaining_100 !== false) {
+        const min100 = this._num(this._chargeTimeAutoEntity("_timeRemaining100AutoEntity", "time_remaining_100"));
+        if (min100 != null) {
+          tiles.push({
+            icon: "mdi:battery-clock",
+            label: this._t("dash_label_time_remaining_100"),
+            val: this._formatMin(min100),
+          });
+        }
+      }
+      if (cfg.show_ready_at_80 !== false) {
+        const iso80 = this._iso(this._chargeTimeAutoEntity("_readyAt80AutoEntity", "estimated_ready_80"));
+        if (iso80 != null) {
+          tiles.push({
+            icon: "mdi:battery-clock-outline",
+            label: this._t("dash_label_ready_at_80"),
+            val: this._formatClock(iso80),
+          });
+        }
+      }
+      if (cfg.show_ready_at_100 !== false) {
+        const iso100 = this._iso(this._chargeTimeAutoEntity("_readyAt100AutoEntity", "estimated_ready_100"));
+        if (iso100 != null) {
+          tiles.push({
+            icon: "mdi:battery-clock-outline",
+            label: this._t("dash_label_ready_at_100"),
+            val: this._formatClock(iso100),
+          });
+        }
       }
       for (const t of tiles) {
         const el = document.createElement("div");
@@ -8726,6 +8807,47 @@ class BoschEBikeDashboardCardEditor extends HTMLElement {
     this._modeColorsWrap.style.cssText = "display:flex;flex-direction:column;gap:8px;margin-top:4px;";
     wrap.appendChild(this._modeColorsWrap);
     this._renderModeColorRows();
+
+    // --- Ladezeit-Schätzung (Task 3/4: charge_rate_estimate.py) --------------
+    const chargeTimeHead = document.createElement("div");
+    chargeTimeHead.textContent = this._t("dash_editor_section_charge_time");
+    chargeTimeHead.style.cssText =
+      "margin-top:14px;padding-top:10px;border-top:1px solid var(--divider-color);" +
+      "color:var(--secondary-text-color);font-size:12px;line-height:1.4;font-weight:600;";
+    wrap.appendChild(chargeTimeHead);
+
+    const chargeTimeHint = document.createElement("small");
+    chargeTimeHint.textContent = this._t("dash_editor_charge_time_hint");
+    chargeTimeHint.style.cssText = "color:var(--secondary-text-color);font-size:11px;";
+    wrap.appendChild(chargeTimeHint);
+
+    // Vier Toggles, alle Default an. Welcher Sensor per translation_key
+    // gefunden wird, entscheidet _chargeTimeAutoEntity() in der Card selbst -
+    // hier steuert nur, ob ein gefundener Wert gezeigt wird. Gleiches
+    // Immutable-Update-Muster wie mkPeriodToggle unten (show_cost_week/
+    // month/year) bzw. show_range_pills oben; bewusst nicht in this._fields,
+    // wie alle anderen show_*-Checkboxen dieses Editors (siehe _sync()).
+    const mkChargeTimeToggle = (configKey, labelKey) => {
+      const toggleWrap = document.createElement("label");
+      toggleWrap.style.cssText = "display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;";
+      const toggle = document.createElement("input");
+      toggle.type = "checkbox";
+      toggle.checked = this._config[configKey] !== false;
+      toggle.addEventListener("change", () => {
+        this._config = { ...this._config, [configKey]: toggle.checked };
+        this._emit();
+      });
+      toggleWrap.appendChild(toggle);
+      const toggleLbl = document.createElement("span");
+      toggleLbl.textContent = this._t(labelKey);
+      toggleWrap.appendChild(toggleLbl);
+      wrap.appendChild(toggleWrap);
+      return toggle;
+    };
+    mkChargeTimeToggle("show_time_remaining_80", "dash_editor_show_time_remaining_80");
+    mkChargeTimeToggle("show_time_remaining_100", "dash_editor_show_time_remaining_100");
+    mkChargeTimeToggle("show_ready_at_80", "dash_editor_show_ready_at_80");
+    mkChargeTimeToggle("show_ready_at_100", "dash_editor_show_ready_at_100");
 
     // --- CO2 / Fahrzeug-Vergleich --------------------------------------------
     const co2Head = document.createElement("div");
