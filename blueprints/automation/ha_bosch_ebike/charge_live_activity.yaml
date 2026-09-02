@@ -23,10 +23,7 @@ blueprint:
     bike has charged a few times and enough history has been learned - see
     the integration's README.
   domain: automation
-  # Points at the feature branch for now; update to /blob/main/... once
-  # feat/charge-time-estimate merges (see the sibling blueprints in this
-  # folder for the intended long-term pattern).
-  source_url: https://github.com/Xunil99/ha-bosch-ebike/blob/feat/charge-time-estimate/blueprints/automation/ha_bosch_ebike/charge_live_activity.yaml
+  source_url: https://github.com/Xunil99/ha-bosch-ebike/blob/main/blueprints/automation/ha_bosch_ebike/charge_live_activity.yaml
   input:
     notify_devices:
       name: Phone(s) to notify
