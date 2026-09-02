@@ -43,9 +43,9 @@ blueprint:
           filter:
             - integration: mobile_app
     charge_session_entity:
-      name: 'Charge session sensor ("Last Charge: Energy")'
+      name: 'Charge session sensor ("Last Charge Energy")'
       description: >
-        This bike's "Last Charge: Energy" sensor. Its in_progress attribute
+        This bike's "Last Charge Energy" sensor. Its in_progress attribute
         is what starts and ends the Live Activity.
       selector:
         entity:
@@ -123,9 +123,12 @@ variables:
     {{ bike_name_override or device_name(charge_session_entity) or 'eBike' }}
   tag: "bosch_ebike_charge_{{ charge_session_entity.split('.')[1] | slugify }}"
   current_soc: "{{ states(soc_entity) | float(0) }}"
-  # Below 80% the 80%-ready estimate is the relevant one; at/above 80% only
-  # the 100%-ready estimate still means anything.
-  target_soc: "{{ 80 if current_soc < 80 else 100 }}"
+  # Below or AT 80% the 80%-ready estimate is the relevant one - it's the
+  # one that's always valid right at the boundary, since
+  # estimate_time_to_target() returns 0.0 for current_soc == target_soc
+  # before any history-trust gating (charge_rate_estimate.py). Only once
+  # truly past 80% does the 100%-ready estimate take over.
+  target_soc: "{{ 80 if current_soc <= 80 else 100 }}"
   active_ready_entity: >-
     {{ estimated_ready_80_entity if target_soc == 80 else estimated_ready_100_entity }}
   active_remaining_entity: >-
@@ -176,8 +179,12 @@ action:
           - repeat:
               for_each: !input notify_devices
               sequence:
+                # continue_on_error: one device with a stale/deleted
+                # registration (see the notify_devices input above) must not
+                # abort the loop and starve every device after it.
                 - action: >-
                     notify.mobile_app_{{ device_name(repeat.item) | slugify }}
+                  continue_on_error: true
                   data:
                     message: clear_notification
                     data:
@@ -186,8 +193,12 @@ action:
       - repeat:
           for_each: !input notify_devices
           sequence:
+            # continue_on_error: same reasoning as the ending branch above -
+            # this runs on every SoC sample while charging, so one stale
+            # device would otherwise repeatedly starve the others.
             - action: >-
                 notify.mobile_app_{{ device_name(repeat.item) | slugify }}
+              continue_on_error: true
               data:
                 title: "{{ bike_name }} charging"
                 message: "{{ progress_message }}"
