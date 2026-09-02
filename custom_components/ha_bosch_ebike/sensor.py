@@ -6,7 +6,7 @@ import logging
 import math
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from homeassistant.components.sensor import (
@@ -32,8 +32,14 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import async_track_state_change_event
 from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.util import dt as dt_util
 
 from .charge_monitor import ChargeSessionMonitor
+from .charge_rate_estimate import (
+    PHASE_BOUNDARY_PCT,
+    compute_two_phase_rates,
+    estimate_time_to_target,
+)
 from .charge_session import SUMMARY_KEYS as CHARGE_SUMMARY_KEYS, iso_or_none
 from .const import DOMAIN
 from .coordinator import BoschEBikeCoordinator
@@ -908,6 +914,22 @@ async def async_setup_entry(
             )
             entities.append(
                 BoschChargedEnergySensor(bike_id, drive_name, monitor)
+            )
+
+            # Charge-time-remaining estimate, learned from this bike's own
+            # charge history (see charge_rate_estimate.py). Needs the
+            # coordinator too, for charge_history() - unlike the pair above.
+            entities.append(
+                BoschTimeRemaining80Sensor(bike_id, drive_name, monitor, coordinator)
+            )
+            entities.append(
+                BoschTimeRemaining100Sensor(bike_id, drive_name, monitor, coordinator)
+            )
+            entities.append(
+                BoschEstimatedReady80Sensor(bike_id, drive_name, monitor, coordinator)
+            )
+            entities.append(
+                BoschEstimatedReady100Sensor(bike_id, drive_name, monitor, coordinator)
             )
 
         # Estimated range (clearly labelled estimate, derived from history)
@@ -2120,6 +2142,187 @@ class BoschChargedEnergySensor(RestoreSensor):
             # this is the number people will read as their charging cost.
             "measures": "energy into the battery, not from the wall socket",
         }
+
+
+class _BoschChargeTimeSensorBase(SensorEntity):
+    """Shared plumbing for the four charge-time-estimate sensors.
+
+    Same "pure reader" situation as BoschChargeSessionSensor and
+    BoschChargedEnergySensor: nothing here comes from the cloud, so this is
+    deliberately not a CoordinatorEntity. Unlike those two, though, the
+    number shown here changes on every SoC sample, not just when a session
+    completes - so on top of monitor.add_listener() (which is how this
+    learns that a charge stopped: check_timeout() closes a session from an
+    idle timer inside ChargeSessionMonitor, with no new SoC sample to hang a
+    state-changed event off of - see charge_monitor.py) this also tracks the
+    SoC entity directly, the same way BoschCurrentRangeSensor does, so the
+    estimate keeps counting down while a charge is in progress.
+
+    Also unlike those two, this needs the coordinator itself, to read
+    charge_history() and feed it to charge_rate_estimate.py on every read.
+    """
+
+    _attr_has_entity_name = True
+    _attr_should_poll = False
+
+    # Milestone this instance projects to - set by each leaf subclass.
+    _target_soc: float
+
+    def __init__(
+        self,
+        bike_id: str,
+        drive_name: str,
+        monitor: ChargeSessionMonitor,
+        coordinator: BoschEBikeCoordinator,
+    ) -> None:
+        self._bike_id = bike_id
+        self._monitor = monitor
+        self._coordinator = coordinator
+        # Each leaf subclass sets _attr_translation_key as a class
+        # attribute, so it is already there to read at construction time -
+        # reusing it here means the id can't drift from the translation key.
+        self._attr_unique_id = f"{bike_id}_{self._attr_translation_key}"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, bike_id)},
+            name=drive_name,
+            manufacturer="Bosch",
+            model=drive_name,
+        )
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        self.async_on_remove(
+            async_track_state_change_event(
+                self.hass, [self._monitor.soc_entity_id], self._on_soc_change
+            )
+        )
+        self.async_on_remove(self._monitor.add_listener(self.async_write_ha_state))
+
+    @callback
+    def _on_soc_change(self, event: Event) -> None:
+        self.async_write_ha_state()
+
+    def _current_soc(self) -> float | None:
+        state = self.hass.states.get(self._monitor.soc_entity_id)
+        if state is None or state.state in ("unknown", "unavailable"):
+            return None
+        try:
+            soc = float(state.state)
+        except ValueError:
+            return None
+        if not math.isfinite(soc):
+            return None
+        return max(0.0, min(100.0, soc))
+
+    def _minutes_remaining(self) -> float | None:
+        """Minutes from the live current SoC to this sensor's target, or None.
+
+        None while not charging, while the live SoC cannot be read, or
+        (passed through unchanged) whenever estimate_time_to_target()
+        itself returns None - target already behind current_soc, or not
+        enough charge history yet to trust a rate for the phase(s) needed.
+        """
+        if not self._monitor.tracker.in_progress:
+            return None
+        current_soc = self._current_soc()
+        if current_soc is None:
+            return None
+        history = self._coordinator.charge_history(self._bike_id)
+        rates = compute_two_phase_rates(history)
+        return estimate_time_to_target(current_soc, self._target_soc, rates)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        return {
+            "soc_source": self._monitor.soc_entity_id,
+            "current_soc": self._current_soc(),
+            "in_progress": self._monitor.tracker.in_progress,
+        }
+
+
+class BoschTimeRemaining80Sensor(_BoschChargeTimeSensorBase):
+    """Estimated minutes from the live current SoC to PHASE_BOUNDARY_PCT (80%).
+
+    Built from this bike's own charge history via charge_rate_estimate.py -
+    see that module for the two-phase rate model and its "not enough data
+    yet" gates. Unavailable while not charging.
+    """
+
+    _attr_translation_key = "time_remaining_80"
+    _attr_native_unit_of_measurement = UnitOfTime.MINUTES
+    _attr_device_class = SensorDeviceClass.DURATION
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_suggested_display_precision = 0
+    _attr_icon = "mdi:battery-clock"
+    _target_soc = PHASE_BOUNDARY_PCT
+
+    @property
+    def native_value(self) -> int | None:
+        minutes = self._minutes_remaining()
+        return round(minutes) if minutes is not None else None
+
+
+class BoschTimeRemaining100Sensor(_BoschChargeTimeSensorBase):
+    """Estimated minutes from the live current SoC to 100%.
+
+    Spans both charge phases when current SoC is still below
+    PHASE_BOUNDARY_PCT, so it needs history for both to be trusted - see
+    estimate_time_to_target() in charge_rate_estimate.py.
+    """
+
+    _attr_translation_key = "time_remaining_100"
+    _attr_native_unit_of_measurement = UnitOfTime.MINUTES
+    _attr_device_class = SensorDeviceClass.DURATION
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_suggested_display_precision = 0
+    _attr_icon = "mdi:battery-clock"
+    _target_soc = 100.0
+
+    @property
+    def native_value(self) -> int | None:
+        minutes = self._minutes_remaining()
+        return round(minutes) if minutes is not None else None
+
+
+class BoschEstimatedReady80Sensor(_BoschChargeTimeSensorBase):
+    """Wall-clock timestamp this bike is projected to reach PHASE_BOUNDARY_PCT (80%).
+
+    Same underlying estimate as BoschTimeRemaining80Sensor, projected onto
+    "now" instead of shown as a duration - some dashboards read better as a
+    clock time than a countdown.
+    """
+
+    _attr_translation_key = "estimated_ready_80"
+    _attr_device_class = SensorDeviceClass.TIMESTAMP
+    _attr_icon = "mdi:battery-clock-outline"
+    _target_soc = PHASE_BOUNDARY_PCT
+
+    @property
+    def native_value(self) -> datetime | None:
+        minutes = self._minutes_remaining()
+        if minutes is None:
+            return None
+        return dt_util.utcnow() + timedelta(minutes=minutes)
+
+
+class BoschEstimatedReady100Sensor(_BoschChargeTimeSensorBase):
+    """Wall-clock timestamp this bike is projected to reach 100%.
+
+    Same underlying estimate as BoschTimeRemaining100Sensor, projected onto
+    "now" instead of shown as a duration.
+    """
+
+    _attr_translation_key = "estimated_ready_100"
+    _attr_device_class = SensorDeviceClass.TIMESTAMP
+    _attr_icon = "mdi:battery-clock-outline"
+    _target_soc = 100.0
+
+    @property
+    def native_value(self) -> datetime | None:
+        minutes = self._minutes_remaining()
+        if minutes is None:
+            return None
+        return dt_util.utcnow() + timedelta(minutes=minutes)
 
 
 # (window_key, translation_key, unique_id_suffix)

@@ -369,6 +369,35 @@ Zusätzlich entsteht der Sensor **`Total Charged Energy`**, ein fortlaufend stei
 
 Der vorhandene Sensor `Wh Lifetime` eignet sich dafür übrigens nicht, obwohl Home Assistant ihn anbietet: er zählt die vom Akku **abgegebene** Energie, also die Fahrleistung, nicht das Laden.
 
+#### 🆕 Restzeit- und Fertig-Zeitpunkt-Schätzung
+
+Mit demselben Live-SoC-Sensor stehen zusätzlich vier weitere Sensoren zur Verfügung, die abschätzen, wie lange der laufende Ladevorgang noch dauert:
+
+- **`Restzeit bis 80%`** / **`Restzeit bis 100%`** — verbleibende Ladezeit in Minuten bis zum jeweiligen Ladestand
+- **`Voraussichtlich fertig bei 80%`** / **`Voraussichtlich fertig bei 100%`** — der voraussichtliche Uhrzeit-Zeitpunkt (Zeitstempel), zu dem dieser Ladestand erreicht wird
+
+Alle vier stehen auf „nicht verfügbar", solange gerade nicht geladen wird oder der Live-Ladestand nicht gelesen werden kann — genau wie bei `Letzte Ladung: Energie` weiter oben.
+
+Li-Ionen-Akkus laden nicht linear: unterhalb von 80 % geht es zügig voran, danach (Konstantspannungsphase) spürbar langsamer. Die Schätzung lernt deshalb zwei getrennte Laderaten aus der eigenen Ladehistorie des Rads — eine für 0–80 %, eine für 80–100 % — statt eine einzige Rate über den gesamten Bereich anzunehmen.
+
+**Das braucht etwas Ladehistorie:** Eine Phasen-Rate gilt erst als vertrauenswürdig, wenn dazu mindestens 3 abgeschlossene Ladevorgänge beigetragen haben *und* diese zusammen mindestens 10 Prozentpunkte Ladestand-Zuwachs in dieser Phase abgedeckt haben. Bis dahin bleiben die betroffenen Sensoren „nicht verfügbar" — bei einem neuen Rad oder kurz nachdem ein Live-SoC-Sensor erstmals eingerichtet wurde, ist das der Normalfall, kein Fehler. Nach ein paar vollständigen Ladungen füllt sich die Historie automatisch und die Werte erscheinen von selbst. Eine Schätzung bis 100 % ausgehend von unter 80 % braucht dabei beide Phasen-Raten gleichzeitig.
+
+#### 🆕 Live Activity beim Laden (optionaler Blueprint)
+
+Wer den Ladefortschritt zusätzlich auf dem Sperrbildschirm sehen möchte, findet dafür einen optionalen Automations-Blueprint, der eine **iOS Live Activity** bzw. ein **Android Live Update** anzeigt: aktueller Ladestand, ein Fortschrittsbalken und ein live mitlaufender Countdown bis 80 % bzw. 100 %. Das läuft vollständig über Home Assistants eigenen `notify.mobile_app_*`-Mechanismus für Live Activities — eine ganz normale, integrationsunabhängige Companion-App-Funktion. Die Integration selbst bringt dafür nichts Eigenes mit, sie liefert nur die Sensoren, die der Blueprint ausliest.
+
+**Das ist optional und wird nicht automatisch mit der Integration installiert.** Der fertige Blueprint liegt unter [`blueprints/automation/ha_bosch_ebike/charge_live_activity.yaml`](blueprints/automation/ha_bosch_ebike/charge_live_activity.yaml) und muss manuell importiert werden:
+
+1. **Einstellungen → Automatisierungen & Szenen → Blueprints → Blueprint importieren**
+2. Als URL einfügen:
+   `https://raw.githubusercontent.com/Xunil99/ha-bosch-ebike/feat/charge-time-estimate/blueprints/automation/ha_bosch_ebike/charge_live_activity.yaml`
+   *(zeigt aktuell auf den Feature-Branch, weil dieser Blueprint neu ist und dort noch entwickelt wird; nach dem Merge in `main` gilt dieselbe `main`-URL wie bei den fünf Blueprints in der Tabelle unten.)*
+3. Import bestätigen, daraus eine neue Automation anlegen und die Eingaben ausfüllen: ein oder mehrere Smartphones, der Ladevorgangs-Sensor (`Letzte Ladung: Energie`), der Live-SoC-Sensor sowie die vier Restzeit-/Fertig-Sensoren von oben.
+
+**Voraussetzungen** (Stand der offiziellen Home-Assistant-Companion-App-Dokumentation, geprüft September 2026): Home Assistant Core **2026.7.0 oder neuer**, auf dem Smartphone **iOS 17.2+** (Live Activities — je nach Companion-App-Version einmalig unter Einstellungen → Live Activities zu aktivieren, solange die Funktion dort noch als Beta geführt wird) oder **Android 16+** (Live Updates; auf Samsung-Geräten ggf. zusätzlich „Live-Benachrichtigungen für alle Apps" in den Entwickleroptionen aktivieren). Die Darstellung unterscheidet sich je Plattform: Unter iOS erscheint die Live Activity auf dem Sperrbildschirm und in der Dynamic Island, unter Android bleibt sie in der Benachrichtigungsleiste, auf dem Sperrbildschirm und im Always-on-Display verankert und zeigt zusätzlich ein Symbol in der Statusleiste.
+
+Genau wie die vier Restzeit-Sensoren selbst startet auch die Live Activity bei einem neuen Rad oder kurz nach dem erstmaligen Einrichten eines Live-SoC-Sensors zunächst ohne Countdown — Ladestand und Fortschrittsbalken werden trotzdem angezeigt, der Countdown erscheint von selbst, sobald genug Ladehistorie vorliegt.
+
 <a name="de-pois"></a>
 
 ### POIs entlang der Route
@@ -437,7 +466,7 @@ Jedes Feld kann `null` sein, wenn Bosch es für die Tour nicht liefert. Wichtig:
 
 #### 🆕 Fertige Blueprints (ab v1.19.31)
 
-Für die gängigsten Benachrichtigungen liegen im Repo unter [`blueprints/automation/ha_bosch_ebike/`](blueprints/automation/ha_bosch_ebike/) fünf fertige Automations-Blueprints. Button klicken öffnet direkt den Import-Dialog in deiner eigenen Home-Assistant-Instanz (setzt eine verknüpfte "My Home Assistant"-Instanz voraus); alternativ die Raw-URL der jeweiligen Datei manuell unter **Einstellungen → Automatisierungen → Blueprints → Blueprint importieren** einfügen.
+Für die gängigsten Benachrichtigungen liegen im Repo unter [`blueprints/automation/ha_bosch_ebike/`](blueprints/automation/ha_bosch_ebike/) sechs fertige Automations-Blueprints. Button klicken öffnet direkt den Import-Dialog in deiner eigenen Home-Assistant-Instanz (setzt eine verknüpfte "My Home Assistant"-Instanz voraus); alternativ die Raw-URL der jeweiligen Datei manuell unter **Einstellungen → Automatisierungen → Blueprints → Blueprint importieren** einfügen.
 
 | Blueprint | Reagiert auf | Import |
 |---|---|---|
@@ -446,8 +475,9 @@ Für die gängigsten Benachrichtigungen liegen im Repo unter [`blueprints/automa
 | `theft_alert.yaml` | `Theft Reported`-Sensor (Zustand „ein") | [![Blueprint importieren](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fraw.githubusercontent.com%2FXunil99%2Fha-bosch-ebike%2Fmain%2Fblueprints%2Fautomation%2Fha_bosch_ebike%2Ftheft_alert.yaml) |
 | `software_update_available.yaml` | `Software Update Available`-Sensor (Zustand „ein") | [![Blueprint importieren](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fraw.githubusercontent.com%2FXunil99%2Fha-bosch-ebike%2Fmain%2Fblueprints%2Fautomation%2Fha_bosch_ebike%2Fsoftware_update_available.yaml) |
 | `new_activity.yaml` | `ha_bosch_ebike_new_activity` | [![Blueprint importieren](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fraw.githubusercontent.com%2FXunil99%2Fha-bosch-ebike%2Fmain%2Fblueprints%2Fautomation%2Fha_bosch_ebike%2Fnew_activity.yaml) |
+| 🆕 `charge_live_activity.yaml` | Live-SoC + Ladevorgangs-Sensor (siehe „🆕 Live Activity beim Laden" weiter oben im Abschnitt [Laden](#de-laden)) | Noch auf dem Feature-Branch, siehe Import-Anleitung oben |
 
-Jeder Blueprint erwartet nur eine Benachrichtigungs-Aktion deiner Wahl (z. B. eine Mobile-App-Push-Nachricht) als Eingabe und liefert bereits einen fertig formulierten Text mit; die beiden zustandsbasierten Blueprints fragen zusätzlich nach dem/den zu überwachenden Sensor(en).
+Jeder der ersten fünf Blueprints erwartet nur eine Benachrichtigungs-Aktion deiner Wahl (z. B. eine Mobile-App-Push-Nachricht) als Eingabe und liefert bereits einen fertig formulierten Text mit; die beiden zustandsbasierten Blueprints fragen zusätzlich nach dem/den zu überwachenden Sensor(en). Der neue Live-Activity-Blueprint braucht mehr Eingaben (Geräte, Ladevorgangs-Sensor, Live-SoC-Sensor, vier Restzeit-/Fertig-Sensoren) - siehe die eigene Beschreibung oben.
 
 <a name="de-reichweite"></a>
 
@@ -691,6 +721,7 @@ target_soc_entity: input_number.ebike_target_soc
   - Strompreis entweder als **fester Wert** (Default `0,23 €/kWh`) oder als **Verweis auf eine Entität**, die den aktuellen Preis liefert (z. B. ein dynamischer Tarif-Sensor)
   - Jeder der drei Zeiträume (7/30/365 Tage) ist einzeln ein-/ausblendbar
   - Die Zeitfenster sind rollierend (immer „die letzten X Tage", kein Reset zum Kalendermonat)
+- **Restzeit- und Fertig-Kacheln beim Laden** (optional, standardmäßig an): bis zu vier Kacheln mit der Restzeit bis 80 %/100 % und dem voraussichtlichen Fertig-Zeitpunkt, sobald die zugehörigen Sensoren existieren (siehe Abschnitt „Restzeit- und Fertig-Zeitpunkt-Schätzung" weiter oben) — jede einzeln über den Karten-Editor ausblendbar
 
 ![Dashboard-Card mit Bike-Foto, Statuskacheln, Fahrmodus-Reichweiten, Wartungsliste und CO2-Vergleich](docs/img/card-dashboard.png)
 
@@ -767,6 +798,10 @@ Auf der Lovelace-Karte gibt es einen 🌦️-Toggle in den Karten-Steuerelemente
 | Estimated Range (Current) | km | Geschätzte Restreichweite (Live-SoC nötig, Schätzung!) |
 | Last Charge Energy | Wh | Energie des letzten Ladevorgangs (Live-SoC nötig) |
 | Total Charged Energy | Wh | Summe aller Ladungen, für das Energie-Dashboard (Live-SoC nötig) |
+| Time Remaining to 80% | min | Restzeit bis 80 % Ladestand (Live-SoC + Ladehistorie nötig) |
+| Time Remaining to 100% | min | Restzeit bis 100 % Ladestand (Live-SoC + Ladehistorie nötig) |
+| Estimated Ready at 80% | - | Voraussichtlicher Zeitpunkt für 80 % Ladestand (Live-SoC + Ladehistorie nötig) |
+| Estimated Ready at 100% | - | Voraussichtlicher Zeitpunkt für 100 % Ladestand (Live-SoC + Ladehistorie nötig) |
 
 #### Batterie-Sensoren (pro Batterie)
 | Sensor | Einheit | Beschreibung |
@@ -1206,6 +1241,35 @@ A second sensor, **`Total Charged Energy`**, is a monotonically increasing meter
 
 Note that the existing `Wh Lifetime` sensor is not suitable here, even though Home Assistant offers it: it counts the energy the battery **delivered**, i.e. riding, not charging.
 
+#### 🆕 Time remaining and estimated ready time
+
+With the same live SoC sensor, four more sensors become available that estimate how much longer the current charge will take:
+
+- **`Time Remaining to 80%`** / **`Time Remaining to 100%`** — remaining charge time in minutes to that state of charge
+- **`Estimated Ready at 80%`** / **`Estimated Ready at 100%`** — the projected wall-clock timestamp at which that state of charge will be reached
+
+All four read "unavailable" whenever nothing is currently charging or the live state of charge cannot be read - the same as `Last Charge Energy` above.
+
+Li-ion batteries do not charge linearly: charging is fast below 80%, then noticeably slower afterwards (the constant-voltage phase). The estimate therefore learns two separate charge rates from the bike's own charge history - one for 0–80%, one for 80–100% - instead of assuming a single rate across the whole range.
+
+**This needs some charge history to build up first:** a phase's rate is only trusted once at least 3 completed charges have contributed to it *and* those charges jointly cover at least 10 percentage points of state-of-charge gain in that phase. Until then, the affected sensors stay "unavailable" - for a new bike, or shortly after a live SoC sensor is set up for the first time, that is expected, not a bug. After a handful of full charges the history fills in on its own and the values appear. Estimating all the way to 100% starting from below 80% needs both phase rates at once.
+
+#### 🆕 Charging Live Activity (optional blueprint)
+
+If you would rather follow charge progress on your lock screen, there is an optional automation blueprint that drives an **iOS Live Activity** / **Android Live Update**: current state of charge, a progress bar, and a live countdown to 80% and/or 100%. It runs entirely on Home Assistant's own `notify.mobile_app_*` Live Activity mechanism - an ordinary companion-app feature, nothing integration-specific. The integration itself adds nothing special here; it just supplies the sensors the blueprint reads.
+
+**This is optional and is not installed automatically with the integration.** The blueprint lives at [`blueprints/automation/ha_bosch_ebike/charge_live_activity.yaml`](blueprints/automation/ha_bosch_ebike/charge_live_activity.yaml) and has to be imported by hand:
+
+1. **Settings → Automations & Scenes → Blueprints → Import Blueprint**
+2. Paste this URL:
+   `https://raw.githubusercontent.com/Xunil99/ha-bosch-ebike/feat/charge-time-estimate/blueprints/automation/ha_bosch_ebike/charge_live_activity.yaml`
+   *(points at the feature branch for now, since this blueprint is new and still being developed there; once it merges to `main` it will use the same `main`-branch URL pattern as the five blueprints in the table below.)*
+3. Confirm the import, create a new automation from the blueprint, and fill in its inputs: one or more phones, the charge-session sensor (`Last Charge Energy`), the live SoC sensor, and the four time-remaining/estimated-ready sensors from above.
+
+**Requirements** (per the official Home Assistant companion-app documentation, checked September 2026): Home Assistant Core **2026.7.0 or later**, and on the phone itself **iOS 17.2+** (Live Activities - depending on the companion app version, this may need a one-time toggle under Settings → Live Activities while the feature is still labelled beta there) or **Android 16+** (Live Updates; on Samsung devices you may also need to enable "Live notifications for all apps" under developer options). The look differs by platform: on iOS the Live Activity shows on the Lock Screen and in the Dynamic Island; on Android it stays pinned to the notification shade, Lock Screen and always-on display, plus a status-bar chip.
+
+Just like the four time-remaining sensors themselves, the Live Activity starts out without a countdown for a new bike or shortly after a live SoC sensor is first set up - the charge percentage and progress bar still show, and the countdown appears on its own once enough charge history has built up.
+
 <a name="en-pois"></a>
 
 ### POIs along the route
@@ -1274,7 +1338,7 @@ Any field can be `null` when Bosch does not report it for that ride. Note that B
 
 #### 🆕 Ready-made blueprints (from v1.19.31)
 
-For the most common notifications, the repo ships five ready-made automation blueprints under [`blueprints/automation/ha_bosch_ebike/`](blueprints/automation/ha_bosch_ebike/). Clicking the button opens the import dialog directly in your own Home Assistant instance (requires a linked "My Home Assistant" instance); alternatively, paste the raw URL of the file manually under **Settings → Automations → Blueprints → Import Blueprint**.
+For the most common notifications, the repo ships six ready-made automation blueprints under [`blueprints/automation/ha_bosch_ebike/`](blueprints/automation/ha_bosch_ebike/). Clicking the button opens the import dialog directly in your own Home Assistant instance (requires a linked "My Home Assistant" instance); alternatively, paste the raw URL of the file manually under **Settings → Automations → Blueprints → Import Blueprint**.
 
 | Blueprint | Reacts to | Import |
 |---|---|---|
@@ -1283,8 +1347,9 @@ For the most common notifications, the repo ships five ready-made automation blu
 | `theft_alert.yaml` | `Theft Reported` sensor turning "on" | [![Import Blueprint](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fraw.githubusercontent.com%2FXunil99%2Fha-bosch-ebike%2Fmain%2Fblueprints%2Fautomation%2Fha_bosch_ebike%2Ftheft_alert.yaml) |
 | `software_update_available.yaml` | `Software Update Available` sensor turning "on" | [![Import Blueprint](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fraw.githubusercontent.com%2FXunil99%2Fha-bosch-ebike%2Fmain%2Fblueprints%2Fautomation%2Fha_bosch_ebike%2Fsoftware_update_available.yaml) |
 | `new_activity.yaml` | `ha_bosch_ebike_new_activity` | [![Import Blueprint](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fraw.githubusercontent.com%2FXunil99%2Fha-bosch-ebike%2Fmain%2Fblueprints%2Fautomation%2Fha_bosch_ebike%2Fnew_activity.yaml) |
+| 🆕 `charge_live_activity.yaml` | Live SoC + charge-session sensor (see "🆕 Charging Live Activity" earlier in the [Charging](#en-charging) section) | Still on the feature branch, see the import steps above |
 
-Each blueprint only needs a notification action of your choice as input (e.g. a mobile app push action) and comes with a ready-made message text; the two state-based blueprints additionally ask which sensor(s) to watch.
+Each of the first five blueprints only needs a notification action of your choice as input (e.g. a mobile app push action) and comes with a ready-made message text; the two state-based blueprints additionally ask which sensor(s) to watch. The new Live Activity blueprint needs more inputs (devices, charge-session sensor, live SoC sensor, the four time-remaining/estimated-ready sensors) - see its own description above.
 
 <a name="en-range"></a>
 
@@ -1529,6 +1594,7 @@ target_soc_entity: input_number.ebike_target_soc
   - Electricity price is either a **fixed value** (default `0.23 €/kWh`) or a **reference to an entity** that provides the current price (e.g. a dynamic-tariff sensor)
   - Each of the three periods (7/30/365 days) can be shown or hidden independently
   - The windows are rolling (always "the last X days", no reset at the calendar month boundary)
+- **Time-remaining and ready-time tiles while charging** (optional, on by default): up to four tiles showing time remaining to 80%/100% and the projected ready time, once the underlying sensors exist (see "Time remaining and estimated ready time" above) - each one can be hidden individually in the card editor
 
 ![Dashboard card with bike photo, status tiles, per-mode range, maintenance list and CO2 comparison](docs/img/card-dashboard.png)
 
@@ -1605,6 +1671,10 @@ The Lovelace card has a 🌦️ toggle in the map controls. When enabled, the ca
 | Estimated Range (Current) | km | Estimated remaining range (live SoC required, estimate!) |
 | Last Charge Energy | Wh | Energy of the last charge session (live SoC required) |
 | Total Charged Energy | Wh | Sum of all charges, for the Energy Dashboard (live SoC required) |
+| Time Remaining to 80% | min | Time left to 80% state of charge (live SoC + charge history required) |
+| Time Remaining to 100% | min | Time left to 100% state of charge (live SoC + charge history required) |
+| Estimated Ready at 80% | - | Projected time to reach 80% state of charge (live SoC + charge history required) |
+| Estimated Ready at 100% | - | Projected time to reach 100% state of charge (live SoC + charge history required) |
 
 #### Battery Sensors (per battery)
 | Sensor | Unit | Description |

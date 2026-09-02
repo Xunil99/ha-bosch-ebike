@@ -1,0 +1,218 @@
+blueprint:
+  name: Bosch eBike - Charging Live Activity
+  description: >
+    Shows a live iOS Live Activity / Android Live Update on your phone's
+    lock screen while a bike is charging: current battery percentage, a
+    progress bar and a live countdown to 80% and/or 100%. Updates in place
+    as the charge progresses and clears itself once the bike stops
+    charging.
+
+    Uses Home Assistant's own notify.mobile_app_* Live Activity mechanism
+    (not anything this integration adds) - see companion.home-assistant.io
+    for background. Requires Home Assistant Core 2026.7.0 or later, and on
+    the phone itself iOS 17.2+ (Live Activities, may need enabling once
+    under Settings -> Live Activities in the companion app while the
+    feature is in beta there) or Android 16+ (Live Updates; on Samsung you
+    may also need to enable "Live notifications for all apps" in developer
+    options).
+
+    Only works for a bike that has a live state-of-charge entity configured
+    (e.g. via the ESPHome LDI bridge) - that is what feeds the four
+    charge-time-estimate sensors this blueprint reads from. Those sensors
+    stay unavailable, and this blueprint quietly does nothing, until the
+    bike has charged a few times and enough history has been learned - see
+    the integration's README.
+  domain: automation
+  # Points at the feature branch for now; update to /blob/main/... once
+  # feat/charge-time-estimate merges (see the sibling blueprints in this
+  # folder for the intended long-term pattern).
+  source_url: https://github.com/Xunil99/ha-bosch-ebike/blob/feat/charge-time-estimate/blueprints/automation/ha_bosch_ebike/charge_live_activity.yaml
+  input:
+    notify_devices:
+      name: Phone(s) to notify
+      description: >
+        One or more companion-app devices to show the Live Activity / Live
+        Update on. Built from each device's registered name via
+        device_name() - if you renamed the device under Settings -> Devices
+        after setting up the companion app and notifications stop arriving,
+        check Developer Tools -> Actions for that device's actual
+        notify.mobile_app_* service name.
+      selector:
+        device:
+          multiple: true
+          filter:
+            - integration: mobile_app
+    charge_session_entity:
+      name: 'Charge session sensor ("Last Charge Energy")'
+      description: >
+        This bike's "Last Charge Energy" sensor. Its in_progress attribute
+        is what starts and ends the Live Activity.
+      selector:
+        entity:
+          filter:
+            - integration: ha_bosch_ebike
+              domain: sensor
+    soc_entity:
+      name: Live state-of-charge sensor
+      description: >
+        The same live SoC sensor configured for this bike in the
+        integration's own options (e.g. the ESPHome LDI bridge sensor).
+      selector:
+        entity:
+          filter:
+            - domain: sensor
+    time_remaining_80_entity:
+      name: "Time remaining sensor: to 80%"
+      description: The bike's "Restzeit bis 80%" / "Time Remaining to 80%" sensor.
+      selector:
+        entity:
+          filter:
+            - integration: ha_bosch_ebike
+              domain: sensor
+              device_class: duration
+    time_remaining_100_entity:
+      name: "Time remaining sensor: to 100%"
+      description: The bike's "Restzeit bis 100%" / "Time Remaining to 100%" sensor.
+      selector:
+        entity:
+          filter:
+            - integration: ha_bosch_ebike
+              domain: sensor
+              device_class: duration
+    estimated_ready_80_entity:
+      name: "Estimated ready sensor: 80%"
+      description: >
+        The bike's "Voraussichtlich fertig bei 80%" / "Estimated Ready at
+        80%" sensor.
+      selector:
+        entity:
+          filter:
+            - integration: ha_bosch_ebike
+              domain: sensor
+              device_class: timestamp
+    estimated_ready_100_entity:
+      name: "Estimated ready sensor: 100%"
+      description: >
+        The bike's "Voraussichtlich fertig bei 100%" / "Estimated Ready at
+        100%" sensor.
+      selector:
+        entity:
+          filter:
+            - integration: ha_bosch_ebike
+              domain: sensor
+              device_class: timestamp
+    bike_name_override:
+      name: Bike name override (optional)
+      description: >
+        Text to use for this bike in the notification instead of its
+        device name - handy for a shorter nickname. Leave blank to use the
+        device name of the charge session sensor above.
+      default: ""
+      selector:
+        text: {}
+
+variables:
+  charge_session_entity: !input charge_session_entity
+  soc_entity: !input soc_entity
+  time_remaining_80_entity: !input time_remaining_80_entity
+  time_remaining_100_entity: !input time_remaining_100_entity
+  estimated_ready_80_entity: !input estimated_ready_80_entity
+  estimated_ready_100_entity: !input estimated_ready_100_entity
+  bike_name_override: !input bike_name_override
+  bike_name: >-
+    {{ bike_name_override or device_name(charge_session_entity) or 'eBike' }}
+  tag: "bosch_ebike_charge_{{ charge_session_entity.split('.')[1] | slugify }}"
+  current_soc: "{{ states(soc_entity) | float(0) }}"
+  # Below or AT 80% the 80%-ready estimate is the relevant one - it's the
+  # one that's always valid right at the boundary, since
+  # estimate_time_to_target() returns 0.0 for current_soc == target_soc
+  # before any history-trust gating (charge_rate_estimate.py). Only once
+  # truly past 80% does the 100%-ready estimate take over.
+  target_soc: "{{ 80 if current_soc <= 80 else 100 }}"
+  active_ready_entity: >-
+    {{ estimated_ready_80_entity if target_soc == 80 else estimated_ready_100_entity }}
+  active_remaining_entity: >-
+    {{ time_remaining_80_entity if target_soc == 80 else time_remaining_100_entity }}
+  remaining_minutes: "{{ states(active_remaining_entity) | int(none) }}"
+  # None while not charging, or while there isn't enough charge history yet
+  # for this phase - see charge_rate_estimate.py / the README. as_timestamp's
+  # default covers "unknown"/"unavailable" gracefully.
+  when_ts: "{{ as_timestamp(states(active_ready_entity), none) }}"
+  progress_message: >-
+    {{ bike_name }}: {{ current_soc | round(0) | int }}% charged.
+    {%- if remaining_minutes is not none %}
+     About {{ remaining_minutes }} min to {{ target_soc | int }}%.
+    {%- else %}
+     Estimating charge time - not enough charge history yet.
+    {%- endif %}
+
+trigger:
+  # Charge just started.
+  - platform: state
+    entity_id: !input charge_session_entity
+    attribute: in_progress
+    to: true
+    id: charge_update
+  # Live SoC ticked while (potentially) charging - see the condition below.
+  - platform: state
+    entity_id: !input soc_entity
+    id: charge_update
+  # Charge just ended (finished, or the idle timeout closed it).
+  - platform: state
+    entity_id: !input charge_session_entity
+    attribute: in_progress
+    to: false
+    id: charge_end
+
+condition:
+  # Always run for the end trigger; for the start/SoC triggers, only while
+  # actually charging (a SoC sample can arrive for other reasons too).
+  - condition: template
+    value_template: >-
+      {{ trigger.id == 'charge_end' or
+         state_attr(charge_session_entity, 'in_progress') | bool(false) }}
+
+action:
+  - choose:
+      - conditions: "{{ trigger.id == 'charge_end' }}"
+        sequence:
+          - repeat:
+              for_each: !input notify_devices
+              sequence:
+                # continue_on_error: one device with a stale/deleted
+                # registration (see the notify_devices input above) must not
+                # abort the loop and starve every device after it.
+                - action: >-
+                    notify.mobile_app_{{ device_name(repeat.item) | slugify }}
+                  continue_on_error: true
+                  data:
+                    message: clear_notification
+                    data:
+                      tag: "{{ tag }}"
+    default:
+      - repeat:
+          for_each: !input notify_devices
+          sequence:
+            # continue_on_error: same reasoning as the ending branch above -
+            # this runs on every SoC sample while charging, so one stale
+            # device would otherwise repeatedly starve the others.
+            - action: >-
+                notify.mobile_app_{{ device_name(repeat.item) | slugify }}
+              continue_on_error: true
+              data:
+                title: "{{ bike_name }} charging"
+                message: "{{ progress_message }}"
+                data:
+                  tag: "{{ tag }}"
+                  live_update: true
+                  alert_once: true
+                  silent: true
+                  progress: "{{ current_soc | round(0) | int }}"
+                  progress_max: "{{ target_soc | int }}"
+                  chronometer: "{{ true if when_ts is not none else omit }}"
+                  when: "{{ when_ts if when_ts is not none else omit }}"
+
+# restart rather than the queued/max:10 the sibling blueprints use: this one
+# fires on every live SoC sample while charging, so only the newest update
+# matters and a backlog of stale ones should never pile up.
+mode: restart

@@ -146,6 +146,18 @@
       "total_charged_energy": {
         "name": "Geladene Energie gesamt"
       },
+      "time_remaining_80": {
+        "name": "Restzeit bis 80%"
+      },
+      "time_remaining_100": {
+        "name": "Restzeit bis 100%"
+      },
+      "estimated_ready_80": {
+        "name": "Voraussichtlich fertig bei 80%"
+      },
+      "estimated_ready_100": {
+        "name": "Voraussichtlich fertig bei 100%"
+      },
       "last_ride_elevation_loss": {
         "name": "Letzte Fahrt: Höhenmeter ↓"
       },
