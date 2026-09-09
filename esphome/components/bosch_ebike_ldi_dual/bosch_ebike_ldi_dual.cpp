@@ -252,67 +252,30 @@ static int start_advertising() {
   return rc;
 }
 
-// How long to ask the peer for on a freshly formed connection's supervision
-// timeout (issue #79, round 4). Real two-bike logs across four separate
-// tester runs (see the long ConnectionContext comment in the header) showed
-// a consistent signature: a SECOND connection forming while another is
-// already active stalls at characteristic discovery and gets torn down by
-// the link layer's own supervision timeout, always 4-5s after ITS OWN
-// connect - and a clean retest with round 3's fixes in place ruled out "the
-// first connection is still young" as the deciding factor: the second
-// connection died the same way even when the first had been settled and
-// streaming for a full 2s already. Rounds 2/3 tried to prevent the
-// collision; this tries something different - give the connection itself
-// more slack to survive whatever radio contention is actually happening,
-// rather than trying to avoid it. Genuinely experimental: whether the bike
-// (the real Link Layer Central here, this bridge only ever advertises) even
-// honours a peripheral-initiated parameter update request at all is not
-// known yet - BLE_GAP_EVENT_CONN_UPDATE is logged explicitly (see
-// gap_event_handler) so a tester's next log will show the real outcome
-// either way, not just this request having been sent.
-static constexpr uint16_t SUPERVISION_TIMEOUT_10MS = 1000;  // 10 s
-
-// Ask the peer to widen the supervision timeout on conn_handle, keeping its
-// own already-negotiated interval and latency unchanged - the least
-// invasive way to change only the one parameter this is actually about.
-// Best-effort and silent on failure beyond a log line: this is one link
-// parameter among several the Central is free to reject or renegotiate
-// differently, not something this bridge can require.
-static void request_longer_supervision_timeout(uint16_t conn_handle) {
+// round 4 (issue #79) tried requesting a longer supervision timeout right
+// after connecting, on the theory that giving a young connection more slack
+// would help it survive whatever radio contention was killing it 4-5s in.
+// A tester's log conclusively closed that off: the bike (the real Link
+// Layer Central here - this bridge only ever advertises) rejects it outright
+// every time with HCI 0x3B "Unacceptable Connection Parameters", not a
+// timing fluke. The same log did reveal something more useful though: the
+// bike negotiates a supervision_timeout of exactly 400 (4.0s) by default -
+// which is exactly the 4-5s window every drop across every run has died
+// in - and offered a theory worth checking: two Bosch centrals each pick
+// their own connection interval/anchor point, and when a young link's
+// anchor collides with the other's on the single radio, the controller
+// drops it once that 4.0s runs out with no served event. If true, the
+// negotiated intervals on both links should match. So: log what actually
+// gets negotiated on every connect, rather than trying to change it -
+// round 5's diagnostic, not another fix attempt.
+static void log_negotiated_conn_params(uint16_t conn_handle) {
   struct ble_gap_conn_desc desc;
   if (ble_gap_conn_find(conn_handle, &desc) != 0) {
-    ESP_LOGW(TAG, "conn_find failed for supervision-timeout update (handle=%u)", conn_handle);
+    ESP_LOGW(TAG, "conn_find failed for param log (handle=%u)", conn_handle);
     return;
   }
-  if (desc.supervision_timeout >= SUPERVISION_TIMEOUT_10MS) {
-    // Already at least as generous (e.g. a prior update on this same
-    // connection already took effect) - nothing to ask for.
-    return;
-  }
-  struct ble_gap_upd_params params = {};
-  params.itvl_min = desc.conn_itvl;
-  params.itvl_max = desc.conn_itvl;
-  params.latency = desc.conn_latency;
-  // Core spec requires supervision_timeout_ms > 2 * (1 + latency) *
-  // interval_ms. interval is in 1.25ms units, supervision_timeout in 10ms
-  // units, so the minimum valid field value is
-  // (1 + latency) * conn_itvl * 1.25 / 10 = (1 + latency) * conn_itvl / 8.
-  // Only relevant for an unusually large already-negotiated interval; the
-  // target above easily clears it for any interval this project has ever
-  // observed, this is just a defensive floor, not an expected code path.
-  uint32_t min_valid = ((uint32_t) (1 + desc.conn_latency) * desc.conn_itvl) / 8 + 10;
-  params.supervision_timeout =
-      (uint16_t) (SUPERVISION_TIMEOUT_10MS > min_valid ? SUPERVISION_TIMEOUT_10MS : min_valid);
-  params.min_ce_len = 0;
-  params.max_ce_len = 0;
-  int rc = ble_gap_update_params(conn_handle, &params);
-  if (rc != 0) {
-    ESP_LOGW(TAG, "Supervision-timeout update request failed: %d (handle=%u, currently %u)",
-             rc, conn_handle, desc.supervision_timeout);
-  } else {
-    ESP_LOGI(TAG, "Requested supervision_timeout=%u (was %u) for handle=%u",
-             params.supervision_timeout, desc.supervision_timeout, conn_handle);
-  }
+  ESP_LOGI(TAG, "Negotiated params handle=%u itvl=%u latency=%u supervision_timeout=%u",
+           conn_handle, desc.conn_itvl, desc.conn_latency, desc.supervision_timeout);
 }
 
 // Definition of the cache declared above.
@@ -422,9 +385,9 @@ static int gap_event_handler(struct ble_gap_event *event, void *arg) {
         // Workaround for LDI-001: bike doesn't initiate DLE. We do.
         ble_gap_set_data_len(handle, 251, 2120);
 
-        // Experimental (issue #79, round 4) - see request_longer_
-        // supervision_timeout()'s own doc comment for the full reasoning.
-        request_longer_supervision_timeout(handle);
+        // Diagnostic (issue #79, round 5) - see log_negotiated_conn_params()'s
+        // own doc comment for what this is checking.
+        log_negotiated_conn_params(handle);
       } else {
         // Connection failed – resume advertising.
         start_advertising();
@@ -515,6 +478,18 @@ static int gap_event_handler(struct ble_gap_event *event, void *arg) {
         g_instance_dual->try_start_discovery(slot);
       } else if (event->enc_change.status != 0) {
         ESP_LOGE(TAG, "Pairing failed; consider clearing bonding on both sides.");
+        // Proactively end this connection now rather than leaving it for
+        // whatever passive cleanup otherwise follows (issue #79, round 5:
+        // a tester's log showed roughly 10s between this event and the
+        // eventual GAP DISCONNECT/failed reconnect that frees the slot).
+        // The encryption procedure has already definitively failed -
+        // NimBLE's own hardcoded 30s pairing timeout (BLE_SM_TIMEOUT_MS,
+        // not something this bridge can shorten - it is what produced this
+        // very event) already spent that long waiting, so there is nothing
+        // left worth keeping the link open for. event->enc_change.
+        // conn_handle is populated on failure the same as on success, no
+        // slot routing needed for this.
+        ble_gap_terminate(event->enc_change.conn_handle, BLE_ERR_REM_USER_CONN_TERM);
       }
       return 0;
     }
@@ -580,12 +555,11 @@ static int gap_event_handler(struct ble_gap_event *event, void *arg) {
       return 0;
     }
     case BLE_GAP_EVENT_CONN_UPDATE: {
-      // Fires whether the peer (Central) accepted this bridge's own
-      // request_longer_supervision_timeout() below, proposed different
-      // values instead, or something else entirely changed the link's
-      // parameters. Logged explicitly (issue #79, round 4) so a tester's
-      // log makes plain whether that request actually took effect and, if
-      // so, what the link ended up running at.
+      // Fires whenever the link's parameters change after the initial
+      // negotiation logged by log_negotiated_conn_params() - whether from
+      // the peer's (Central's) own initiative or a future update request
+      // from this side. Logged explicitly (issue #79) so a tester's log
+      // shows it either way, not just the connection's starting values.
       struct ble_gap_conn_desc desc;
       if (event->conn_update.status == 0 &&
           ble_gap_conn_find(event->conn_update.conn_handle, &desc) == 0) {
