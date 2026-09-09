@@ -68,18 +68,27 @@ struct ConnectionContext {
   // discovery_deadline_ms: armed (millis() + DISCOVERY_TIMEOUT_MS) the
   // moment this slot connects, covering the whole connect -> encrypt ->
   // discovery -> live-data chain including any time spent deferred waiting
-  // for the other slot. Cleared (0) once real live data arrives for this
-  // slot. loop() force-disconnects the slot if this elapses first - the
+  // for the other slot. Cleared (0) only by on_discovery_complete() - NOT
+  // by an ordinary notify, see settle_hold below for why that distinction
+  // matters. loop() force-disconnects the slot if this elapses first - the
   // DISCONNECT handler's own re-advertising then gives it a clean, retried
   // attempt. 0 means "not armed". Also doubles as the upper bound on how
   // long settle_hold below may withhold advertising for.
   uint32_t discovery_deadline_ms{0};
   // True while this slot is the only one connected and has not yet reached
   // live data: re-advertising for a second, not-yet-connected bike is
-  // withheld until this clears (on_live_data_notify(), once this slot
-  // settles) or the slot disconnects (organically via the link layer, or
-  // forced by the discovery_deadline_ms watchdog) - either path's own
-  // handler resumes advertising. See on_connect_state_change().
+  // withheld until this clears or the slot disconnects (organically via
+  // the link layer, or forced by the discovery_deadline_ms watchdog) -
+  // either path's own handler resumes advertising. See
+  // on_connect_state_change().
+  //
+  // Cleared ONLY from on_discovery_complete() - the initial-read callback,
+  // NOT on_live_data_notify() (an ordinary NOTIFY_RX). A round 2 tester log
+  // (issue #79) caught this clearing 0.8s early on a bonded bike's very
+  // first notification, which per the BLE spec a server may send from a
+  // retained CCC descriptor value the moment it is connected and
+  // encrypted, before this bridge has even written its OWN CCCD - so an
+  // early notify is not proof this slot's setup chain is actually done.
   bool settle_hold{false};
 };
 
@@ -134,6 +143,12 @@ class BoschEbikeLdiDual : public Component {
   // applied to peer_[slot] / latest_[slot] only.
   void on_connect_state_change(int slot, bool connected);
   void on_live_data_notify(int slot, const uint8_t *data, size_t len);
+
+  // Called ONLY from the initial-read callback (on_chr_read), never from an
+  // ordinary NOTIFY_RX - see the long comment on settle_hold below for why
+  // that distinction matters (issue #79, round 3). This is the one true
+  // signal that this slot's whole setup chain genuinely finished.
+  void on_discovery_complete(int slot);
 
   // Kick off this slot's MTU/discovery chain (exchange_mtu(), which the rest
   // of the chain follows on from its own callback), unless it has already

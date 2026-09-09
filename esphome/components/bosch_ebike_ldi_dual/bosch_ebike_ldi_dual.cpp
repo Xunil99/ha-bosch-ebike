@@ -164,6 +164,18 @@ static bool g_ble_synced_dual = false;
 // under a second), so a merely slow but working exchange is never killed.
 static constexpr uint32_t DISCOVERY_TIMEOUT_MS = 8000;  // 8 s
 
+// How often loop() retries start_advertising() as a self-healing safety net
+// while a slot is free (issue #79, round 3). A round 2 tester log showed
+// ble_gap_adv_start can fail (observed: BLE_HS_ENOMEM) right after a failed
+// reconnect attempt, and nothing was ever asking NimBLE to try again - the
+// bridge then stayed silently unreachable on that slot until the OTHER bike
+// happened to disconnect and trigger a DISCONNECT-handler re-advertise, up
+// to an hour in the original report. Calling start_advertising() again
+// while already advertising just fails harmlessly with BLE_HS_EALREADY, so
+// retrying unconditionally on a plain interval needs no "are we already
+// advertising" state of our own to stay correct.
+static constexpr uint32_t ADV_RETRY_INTERVAL_MS = 5000;  // 5 s
+
 static bool pairing_window_open() {
   return g_pairing_until_ms_dual != 0 && (int32_t) (g_pairing_until_ms_dual - millis()) > 0;
 }
@@ -663,6 +675,11 @@ static int on_chr_read(uint16_t conn_handle, const struct ble_gatt_error *error,
   if (g_instance_dual) {
     int slot = g_instance_dual->slot_for_conn(conn_handle);
     if (slot >= 0) {
+      // The initial read transaction succeeding is the one true "this
+      // slot's setup chain is done" signal - see on_discovery_complete()'s
+      // own doc comment for why this must NOT be inferred from an ordinary
+      // notify instead (issue #79, round 3).
+      g_instance_dual->on_discovery_complete(slot);
       g_instance_dual->on_live_data_notify(slot, buf, copy_len);
     } else {
       ESP_LOGW(TAG, "Initial read for unknown conn_handle=%u – dropping", conn_handle);
@@ -757,6 +774,24 @@ void BoschEbikeLdiDual::loop() {
                s, s + 1, (unsigned) DISCOVERY_TIMEOUT_MS);
       peer.discovery_deadline_ms = 0;  // don't refire while terminate() is pending
       ble_gap_terminate(peer.conn_handle, BLE_ERR_REM_USER_CONN_TERM);
+    }
+  }
+
+  // Self-healing periodic re-advertise (issue #79, round 3) - see
+  // ADV_RETRY_INTERVAL_MS. g_ble_synced_dual guard: loop() runs from boot,
+  // before on_stack_sync() every GAP/bond-store call is unsafe (Issue #41).
+  if (g_ble_synced_dual) {
+    bool free_slot = false;
+    for (int s = 0; s < NUM_SLOTS; s++) {
+      if (this->peer_[s].conn_handle == CONN_HANDLE_NONE) {
+        free_slot = true;
+        break;
+      }
+    }
+    static uint32_t last_adv_retry_ms = 0;
+    if (free_slot && (int32_t) (millis() - last_adv_retry_ms) >= (int32_t) ADV_RETRY_INTERVAL_MS) {
+      last_adv_retry_ms = millis();
+      start_advertising();
     }
   }
 
@@ -904,25 +939,32 @@ void BoschEbikeLdiDual::try_start_discovery(int slot) {
   }
 }
 
+void BoschEbikeLdiDual::on_discovery_complete(int slot) {
+  // The initial read transaction itself succeeding - regardless of whether
+  // its payload later decodes cleanly in on_live_data_notify() - is what
+  // "this slot's setup chain is genuinely done" actually means. Issue #79's
+  // round 2 tester log caught the previous version inferring this from an
+  // ordinary notify instead: a bonded bike may send one from its own
+  // retained CCC descriptor state the moment it is connected and
+  // encrypted, before this bridge has even written its own CCCD - up to
+  // 0.8s before the chain this bridge itself ran was actually finished.
+  ConnectionContext &peer = this->peer_[slot];
+  peer.discovery_deadline_ms = 0;  // disarm the watchdog (see loop())
+  if (peer.settle_hold) {
+    // This slot just genuinely settled: safe to let a second, not-yet-
+    // connected bike be found now (see on_connect_state_change()). No-op if
+    // settle_hold was never set for this slot (e.g. it was the second bike
+    // to connect).
+    peer.settle_hold = false;
+    start_advertising();
+  }
+}
+
 void BoschEbikeLdiDual::on_live_data_notify(int slot, const uint8_t *data, size_t len) {
   LiveData snapshot;
   if (!decode_live_data(data, len, snapshot)) {
     ESP_LOGW(TAG, "Protobuf decode failed (slot %d, len=%u)", slot, (unsigned) len);
     return;
-  }
-
-  // Real live data decoded successfully: this slot's setup chain is
-  // genuinely done, not just "connected". Disarm the discovery watchdog
-  // (see loop()) so it never force-disconnects a slot that is actually
-  // working fine.
-  ConnectionContext &peer = this->peer_[slot];
-  peer.discovery_deadline_ms = 0;
-  if (peer.settle_hold) {
-    // This slot just settled: safe to let a second, not-yet-connected bike
-    // be found now (see on_connect_state_change()). No-op if settle_hold
-    // was never set for this slot (e.g. it was the second bike to connect).
-    peer.settle_hold = false;
-    start_advertising();
   }
 
   LiveData &latest = this->latest_[slot];
