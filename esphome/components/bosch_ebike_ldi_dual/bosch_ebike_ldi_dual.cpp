@@ -252,6 +252,69 @@ static int start_advertising() {
   return rc;
 }
 
+// How long to ask the peer for on a freshly formed connection's supervision
+// timeout (issue #79, round 4). Real two-bike logs across four separate
+// tester runs (see the long ConnectionContext comment in the header) showed
+// a consistent signature: a SECOND connection forming while another is
+// already active stalls at characteristic discovery and gets torn down by
+// the link layer's own supervision timeout, always 4-5s after ITS OWN
+// connect - and a clean retest with round 3's fixes in place ruled out "the
+// first connection is still young" as the deciding factor: the second
+// connection died the same way even when the first had been settled and
+// streaming for a full 2s already. Rounds 2/3 tried to prevent the
+// collision; this tries something different - give the connection itself
+// more slack to survive whatever radio contention is actually happening,
+// rather than trying to avoid it. Genuinely experimental: whether the bike
+// (the real Link Layer Central here, this bridge only ever advertises) even
+// honours a peripheral-initiated parameter update request at all is not
+// known yet - BLE_GAP_EVENT_CONN_UPDATE is logged explicitly (see
+// gap_event_handler) so a tester's next log will show the real outcome
+// either way, not just this request having been sent.
+static constexpr uint16_t SUPERVISION_TIMEOUT_10MS = 1000;  // 10 s
+
+// Ask the peer to widen the supervision timeout on conn_handle, keeping its
+// own already-negotiated interval and latency unchanged - the least
+// invasive way to change only the one parameter this is actually about.
+// Best-effort and silent on failure beyond a log line: this is one link
+// parameter among several the Central is free to reject or renegotiate
+// differently, not something this bridge can require.
+static void request_longer_supervision_timeout(uint16_t conn_handle) {
+  struct ble_gap_conn_desc desc;
+  if (ble_gap_conn_find(conn_handle, &desc) != 0) {
+    ESP_LOGW(TAG, "conn_find failed for supervision-timeout update (handle=%u)", conn_handle);
+    return;
+  }
+  if (desc.supervision_timeout >= SUPERVISION_TIMEOUT_10MS) {
+    // Already at least as generous (e.g. a prior update on this same
+    // connection already took effect) - nothing to ask for.
+    return;
+  }
+  struct ble_gap_upd_params params = {};
+  params.itvl_min = desc.conn_itvl;
+  params.itvl_max = desc.conn_itvl;
+  params.latency = desc.conn_latency;
+  // Core spec requires supervision_timeout_ms > 2 * (1 + latency) *
+  // interval_ms. interval is in 1.25ms units, supervision_timeout in 10ms
+  // units, so the minimum valid field value is
+  // (1 + latency) * conn_itvl * 1.25 / 10 = (1 + latency) * conn_itvl / 8.
+  // Only relevant for an unusually large already-negotiated interval; the
+  // target above easily clears it for any interval this project has ever
+  // observed, this is just a defensive floor, not an expected code path.
+  uint32_t min_valid = ((uint32_t) (1 + desc.conn_latency) * desc.conn_itvl) / 8 + 10;
+  params.supervision_timeout =
+      (uint16_t) (SUPERVISION_TIMEOUT_10MS > min_valid ? SUPERVISION_TIMEOUT_10MS : min_valid);
+  params.min_ce_len = 0;
+  params.max_ce_len = 0;
+  int rc = ble_gap_update_params(conn_handle, &params);
+  if (rc != 0) {
+    ESP_LOGW(TAG, "Supervision-timeout update request failed: %d (handle=%u, currently %u)",
+             rc, conn_handle, desc.supervision_timeout);
+  } else {
+    ESP_LOGI(TAG, "Requested supervision_timeout=%u (was %u) for handle=%u",
+             params.supervision_timeout, desc.supervision_timeout, conn_handle);
+  }
+}
+
 // Definition of the cache declared above.
 std::string g_device_name_cache_dual;
 
@@ -358,6 +421,10 @@ static int gap_event_handler(struct ble_gap_event *event, void *arg) {
 
         // Workaround for LDI-001: bike doesn't initiate DLE. We do.
         ble_gap_set_data_len(handle, 251, 2120);
+
+        // Experimental (issue #79, round 4) - see request_longer_
+        // supervision_timeout()'s own doc comment for the full reasoning.
+        request_longer_supervision_timeout(handle);
       } else {
         // Connection failed – resume advertising.
         start_advertising();
@@ -466,7 +533,10 @@ static int gap_event_handler(struct ble_gap_event *event, void *arg) {
       uint16_t copy_len = len < sizeof(buf) ? len : sizeof(buf);
       os_mbuf_copydata(event->notify_rx.om, 0, copy_len, buf);
       log_hex("NOTIFY_RX raw", buf, copy_len);
-      ESP_LOGI(TAG, "NOTIFY conn_handle=%u attr=0x%04x len=%u indication=%d",
+      // DEBUG, not INFO: with two bikes connected this fires roughly twice a
+      // second and drowned out the connect/discovery messages that actually
+      // matter for diagnosing issue #79 in a tester's INFO-level log.
+      ESP_LOGD(TAG, "NOTIFY conn_handle=%u attr=0x%04x len=%u indication=%d",
                event->notify_rx.conn_handle, handle, len, event->notify_rx.indication);
       if (g_instance_dual) {
         int slot = g_instance_dual->slot_for_conn(event->notify_rx.conn_handle);
@@ -507,6 +577,25 @@ static int gap_event_handler(struct ble_gap_event *event, void *arg) {
       ESP_LOGI(TAG, "DLE updated tx_max=%u rx_max=%u",
                event->data_len_chg.max_tx_octets,
                event->data_len_chg.max_rx_octets);
+      return 0;
+    }
+    case BLE_GAP_EVENT_CONN_UPDATE: {
+      // Fires whether the peer (Central) accepted this bridge's own
+      // request_longer_supervision_timeout() below, proposed different
+      // values instead, or something else entirely changed the link's
+      // parameters. Logged explicitly (issue #79, round 4) so a tester's
+      // log makes plain whether that request actually took effect and, if
+      // so, what the link ended up running at.
+      struct ble_gap_conn_desc desc;
+      if (event->conn_update.status == 0 &&
+          ble_gap_conn_find(event->conn_update.conn_handle, &desc) == 0) {
+        ESP_LOGI(TAG, "Connection params updated conn_handle=%u itvl=%u latency=%u supervision_timeout=%u",
+                 event->conn_update.conn_handle, desc.conn_itvl, desc.conn_latency,
+                 desc.supervision_timeout);
+      } else {
+        ESP_LOGW(TAG, "Connection param update failed status=%d conn_handle=%u",
+                 event->conn_update.status, event->conn_update.conn_handle);
+      }
       return 0;
     }
     default:
@@ -780,16 +869,26 @@ void BoschEbikeLdiDual::loop() {
   // Self-healing periodic re-advertise (issue #79, round 3) - see
   // ADV_RETRY_INTERVAL_MS. g_ble_synced_dual guard: loop() runs from boot,
   // before on_stack_sync() every GAP/bond-store call is unsafe (Issue #41).
+  //
+  // Two bugs a round 4 tester log caught in the first version of this:
+  // (a) it never checked settle_hold, so it happily re-armed advertising
+  // for a second bike while a slot was still deliberately withholding it
+  // (see on_connect_state_change()) - undoing that mechanism's whole point
+  // on a 5s cycle; (b) it never checked whether advertising was already
+  // running, so on an idle bridge with a free slot it logged a harmless but
+  // noisy ble_gap_adv_start failure (BLE_HS_EALREADY) every single tick.
+  // ble_gap_adv_active() asks NimBLE directly rather than this bridge
+  // tracking its own possibly-stale copy of that state.
   if (g_ble_synced_dual) {
     bool free_slot = false;
+    bool holding = false;
     for (int s = 0; s < NUM_SLOTS; s++) {
-      if (this->peer_[s].conn_handle == CONN_HANDLE_NONE) {
-        free_slot = true;
-        break;
-      }
+      if (this->peer_[s].conn_handle == CONN_HANDLE_NONE) free_slot = true;
+      if (this->peer_[s].settle_hold) holding = true;
     }
     static uint32_t last_adv_retry_ms = 0;
-    if (free_slot && (int32_t) (millis() - last_adv_retry_ms) >= (int32_t) ADV_RETRY_INTERVAL_MS) {
+    if (free_slot && !holding && !ble_gap_adv_active() &&
+        (int32_t) (millis() - last_adv_retry_ms) >= (int32_t) ADV_RETRY_INTERVAL_MS) {
       last_adv_retry_ms = millis();
       start_advertising();
     }
