@@ -41,11 +41,24 @@ struct ConnectionContext {
   bool encrypted{false};
   // Discovery-sequence tracking (issue #61 / #79). The post-encryption setup
   // chain (MTU exchange, service/characteristic discovery, enabling
-  // notifications, initial read) has no timeout or retry of its own, so on
-  // the classic ESP32's single radio a stall - most likely from both bikes'
-  // setup racing for radio time at once - would otherwise sit "connected"
-  // forever with no live data, or only get noticed once NimBLE's own, much
-  // coarser link layer supervision timeout eventually tears it down.
+  // notifications, initial read) has no timeout or retry of its own, so a
+  // stall would otherwise sit "connected" forever with no live data.
+  //
+  // Real two-bike logs (issue #79, round 2 - a tester's precisely timed
+  // capture with the round 1 fix already in place) showed the failure is
+  // NOT GATT contention: an idle connection that had done zero GATT work,
+  // held back by discovery_started deferring below, still got torn down by
+  // the link layer's own supervision timeout (reason 0x08) 4-5s after ITS
+  // OWN connect - well before this struct's discovery_deadline_ms (8s) can
+  // fire, and the SAME failure a single, uncontended link never sees. The
+  // real cause is the classic ESP32's single radio not reliably servicing
+  // TWO connections' periodic connection events while both are still
+  // "young", regardless of what either is doing at the GATT level.
+  // BoschEbikeLdiDual::on_connect_state_change() now withholds re-
+  // advertising for a second bike until this slot settles (see
+  // settle_hold below), which is the layer that actually needed fixing;
+  // discovery_started staggering is kept as a harmless second layer of
+  // defence, not the primary fix.
   //
   // discovery_started: true once exchange_mtu() has actually been called for
   // this connection (try_start_discovery() may defer it while the OTHER slot
@@ -58,8 +71,16 @@ struct ConnectionContext {
   // for the other slot. Cleared (0) once real live data arrives for this
   // slot. loop() force-disconnects the slot if this elapses first - the
   // DISCONNECT handler's own re-advertising then gives it a clean, retried
-  // attempt. 0 means "not armed".
+  // attempt. 0 means "not armed". Also doubles as the upper bound on how
+  // long settle_hold below may withhold advertising for.
   uint32_t discovery_deadline_ms{0};
+  // True while this slot is the only one connected and has not yet reached
+  // live data: re-advertising for a second, not-yet-connected bike is
+  // withheld until this clears (on_live_data_notify(), once this slot
+  // settles) or the slot disconnects (organically via the link layer, or
+  // forced by the discovery_deadline_ms watchdog) - either path's own
+  // handler resumes advertising. See on_connect_state_change().
+  bool settle_hold{false};
 };
 
 // ---- Persisted slot->MAC mapping (stable bike->slot assignment) -------------

@@ -337,14 +337,15 @@ static int gap_event_handler(struct ble_gap_event *event, void *arg) {
           g_pairing_until_ms_dual = 0;
           g_pairing_target_slot_dual = -1;
         }
+        // Whether/when to resume advertising for a possible second bike is
+        // now decided inside on_connect_state_change() itself (issue #79,
+        // round 2: re-advertising immediately, unconditionally, is exactly
+        // what let a second bike connect while this one was still "young" -
+        // see settle_hold in the header).
         g_instance_dual->on_connect_state_change(slot, true);
 
         // Workaround for LDI-001: bike doesn't initiate DLE. We do.
         ble_gap_set_data_len(handle, 251, 2120);
-
-        // Keep advertising so the OTHER bike can still be found / reconnect.
-        // (start_advertising() is a no-op while not applicable.)
-        start_advertising();
       } else {
         // Connection failed – resume advertising.
         start_advertising();
@@ -731,14 +732,17 @@ void BoschEbikeLdiDual::loop() {
 
   // Discovery watchdog + staggered kickoff retry (issue #61 / #79). A slot
   // that is encrypted but has not started its own GATT discovery chain yet -
-  // because it was deferred while the OTHER slot's chain was still in
-  // flight - gets a fresh chance to start here every tick. A slot whose
-  // overall connect -> live-data deadline has elapsed (armed in
-  // on_connect_state_change(), regardless of whether discovery ever
-  // actually started) gets force-disconnected: the DISCONNECT handler's own
-  // re-advertising then gives it a clean, uncontended retry instead of
-  // sitting stuck or waiting on NimBLE's own, much coarser link layer
-  // supervision timeout.
+  // deferred while the OTHER slot's chain was still in flight, see
+  // try_start_discovery() - gets a fresh chance to start here every tick;
+  // this rarely has anything to do in practice since on_connect_state_
+  // change()'s settle_hold is what actually keeps a second bike from
+  // connecting this early now (issue #79, round 2). A slot whose overall
+  // connect -> live-data deadline has elapsed gets force-disconnected: the
+  // DISCONNECT handler's own re-advertising then gives it a clean retry.
+  // This mainly still covers #61's original failure (a stall that neither
+  // completes nor gets torn down by anything else) - real two-bike logs
+  // showed the link layer's own supervision timeout, when it fires, beats
+  // this to it by several seconds.
   for (int s = 0; s < NUM_SLOTS; s++) {
     ConnectionContext &peer = this->peer_[s];
     if (peer.conn_handle == CONN_HANDLE_NONE) continue;
@@ -848,6 +852,26 @@ void BoschEbikeLdiDual::on_connect_state_change(int slot, bool connected) {
     // be noticed either. Called exactly once per fresh connection instance,
     // from whichever of GAP CONNECT / ENC_CHANGE resolves this slot first.
     this->peer_[slot].discovery_deadline_ms = millis() + DISCOVERY_TIMEOUT_MS;
+
+    // Advertising decision (issue #79, round 2 - see the long comment on
+    // ConnectionContext in the header for the log evidence behind this).
+    // The previous fix re-advertised for a second bike immediately on every
+    // connect; a tester's precisely timed two-bike log showed that is
+    // exactly what let a second, genuinely idle connection form while this
+    // one was still "young" - and the link layer's own supervision timeout
+    // killed it 4-5s later regardless of GATT activity on either side.
+    //
+    // So: if this is the ONLY connected slot right now, hold off
+    // re-advertising for a second bike until THIS slot settles (see
+    // on_live_data_notify()) or its own watchdog above times out (see
+    // loop()) - both paths already resume advertising themselves (directly,
+    // or via the DISCONNECT that follows a forced/organic drop). If the
+    // OTHER slot is already connected, both slots are occupied and there is
+    // nothing to advertise for regardless.
+    const ConnectionContext &other = this->peer_[slot == 0 ? 1 : 0];
+    if (other.conn_handle == CONN_HANDLE_NONE) {
+      this->peer_[slot].settle_hold = true;
+    }
   } else {
     // Reset "present" flags so stale values don't get re-published on reconnect.
     this->latest_[slot] = LiveData{};
@@ -861,8 +885,11 @@ void BoschEbikeLdiDual::try_start_discovery(int slot) {
   const ConnectionContext &other = this->peer_[slot == 0 ? 1 : 0];
   // Defer while the OTHER slot's own chain is actively in flight, so the
   // single radio never has to service two fresh multi-step GATT procedures
-  // at once - this is the collision window issue #79's timing points at.
-  // loop() retries this every tick; this slot's OWN watchdog (armed in
+  // at once. In practice on_connect_state_change()'s settle_hold already
+  // keeps a second bike from connecting at all until the first has settled,
+  // so this should rarely have anything to defer against by the time it
+  // runs - kept as a second, harmless layer of defence (issue #79). loop()
+  // retries this every tick; this slot's OWN watchdog (armed in
   // on_connect_state_change(), not here) still bounds the total wait even
   // if it never gets a clear turn.
   if (other.discovery_started && other.discovery_deadline_ms != 0) return;
@@ -888,7 +915,15 @@ void BoschEbikeLdiDual::on_live_data_notify(int slot, const uint8_t *data, size_
   // genuinely done, not just "connected". Disarm the discovery watchdog
   // (see loop()) so it never force-disconnects a slot that is actually
   // working fine.
-  this->peer_[slot].discovery_deadline_ms = 0;
+  ConnectionContext &peer = this->peer_[slot];
+  peer.discovery_deadline_ms = 0;
+  if (peer.settle_hold) {
+    // This slot just settled: safe to let a second, not-yet-connected bike
+    // be found now (see on_connect_state_change()). No-op if settle_hold
+    // was never set for this slot (e.g. it was the second bike to connect).
+    peer.settle_hold = false;
+    start_advertising();
+  }
 
   LiveData &latest = this->latest_[slot];
 
