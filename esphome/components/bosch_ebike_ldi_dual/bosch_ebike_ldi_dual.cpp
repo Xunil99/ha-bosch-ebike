@@ -164,6 +164,22 @@ static bool g_ble_synced_dual = false;
 // under a second), so a merely slow but working exchange is never killed.
 static constexpr uint32_t DISCOVERY_TIMEOUT_MS = 8000;  // 8 s
 
+// Tighter cutoff for one specific, well-evidenced case (issue #79, round 6):
+// this slot's discovery has not finished AND the other slot is already
+// connected. Across eight tester runs, a discovery stall in that situation
+// has never once recovered on its own - it always eventually dies to the
+// bike's own ~4s supervision timeout regardless (both bikes negotiate
+// identical connection parameters here, a plausible reason two links'
+// connection events collide and stay collided rather than drifting apart -
+// see the round 6 tester log). Waiting out DISCOVERY_TIMEOUT_MS, let alone
+// the link layer's own timeout, is pure waste in that specific situation:
+// force it now and let a fresh reconnect roll new anchor timing sooner
+// instead - every successful recovery so far has come from exactly that.
+// Comfortably longer than every observed healthy, uncontended discovery
+// (well under 2.5s in every log so far) so a genuinely-just-slow exchange
+// on an otherwise idle radio is not the thing this targets.
+static constexpr uint32_t CONTENDED_DISCOVERY_TIMEOUT_MS = 2500;  // 2.5 s
+
 // How often loop() retries start_advertising() as a self-healing safety net
 // while a slot is free (issue #79, round 3). A round 2 tester log showed
 // ble_gap_adv_start can fail (observed: BLE_HS_ENOMEM) right after a failed
@@ -489,7 +505,21 @@ static int gap_event_handler(struct ble_gap_event *event, void *arg) {
         // left worth keeping the link open for. event->enc_change.
         // conn_handle is populated on failure the same as on success, no
         // slot routing needed for this.
-        ble_gap_terminate(event->enc_change.conn_handle, BLE_ERR_REM_USER_CONN_TERM);
+        //
+        // A round 6 tester log showed no observable effect from this call
+        // (advertising kept failing with ENOMEM for the same ~10s as
+        // before it existed) - logging the return code rather than
+        // assuming success, since round 5 didn't and that gap was
+        // rightly called out. Plausible explanation: this connection may
+        // still be in a pending, not-yet-host-confirmed state at the LL
+        // level (no GAP_CONNECT was ever seen for it either - see the
+        // ConnectionContext comment), which ble_gap_terminate's own doc
+        // comment does not clearly cover one way or the other.
+        int terminate_rc = ble_gap_terminate(event->enc_change.conn_handle, BLE_ERR_REM_USER_CONN_TERM);
+        if (terminate_rc != 0) {
+          ESP_LOGW(TAG, "ble_gap_terminate after pairing failure: rc=%d (handle=%u)",
+                   terminate_rc, event->enc_change.conn_handle);
+        }
       }
       return 0;
     }
@@ -816,13 +846,19 @@ void BoschEbikeLdiDual::loop() {
   // try_start_discovery() - gets a fresh chance to start here every tick;
   // this rarely has anything to do in practice since on_connect_state_
   // change()'s settle_hold is what actually keeps a second bike from
-  // connecting this early now (issue #79, round 2). A slot whose overall
-  // connect -> live-data deadline has elapsed gets force-disconnected: the
-  // DISCONNECT handler's own re-advertising then gives it a clean retry.
-  // This mainly still covers #61's original failure (a stall that neither
-  // completes nor gets torn down by anything else) - real two-bike logs
-  // showed the link layer's own supervision timeout, when it fires, beats
-  // this to it by several seconds.
+  // connecting this early now (issue #79, round 2) - though not at boot,
+  // when both bikes can connect off the very first advertisement before
+  // either slot exists yet to hold anything back (round 6). A slot whose
+  // overall connect -> live-data deadline has elapsed, OR (much sooner)
+  // whose discovery is stalled while the other slot is already connected
+  // (round 6's CONTENDED_DISCOVERY_TIMEOUT_MS - that specific situation has
+  // never once self-recovered in eight tester runs), gets force-
+  // disconnected: the DISCONNECT handler's own re-advertising then gives it
+  // a clean retry with freshly rolled connection timing. The full-deadline
+  // path mainly still covers #61's original failure (a stall with no
+  // contention to speak of) - real two-bike logs showed the link layer's
+  // own supervision timeout, when contention is what's actually going on,
+  // beats DISCOVERY_TIMEOUT_MS to it by several seconds regardless.
   for (int s = 0; s < NUM_SLOTS; s++) {
     ConnectionContext &peer = this->peer_[s];
     if (peer.conn_handle == CONN_HANDLE_NONE) continue;
@@ -831,12 +867,24 @@ void BoschEbikeLdiDual::loop() {
       this->try_start_discovery(s);
     }
 
-    if (peer.discovery_deadline_ms != 0 &&
-        (int32_t) (peer.discovery_deadline_ms - millis()) <= 0) {
-      ESP_LOGW(TAG, "Slot %d (eBike %d) setup stalled past %u ms - forcing reconnect",
-               s, s + 1, (unsigned) DISCOVERY_TIMEOUT_MS);
-      peer.discovery_deadline_ms = 0;  // don't refire while terminate() is pending
-      ble_gap_terminate(peer.conn_handle, BLE_ERR_REM_USER_CONN_TERM);
+    if (peer.discovery_deadline_ms != 0) {
+      bool full_timeout = (int32_t) (peer.discovery_deadline_ms - millis()) <= 0;
+      // Contended cutoff (issue #79, round 6) - see
+      // CONTENDED_DISCOVERY_TIMEOUT_MS. discovery_deadline_ms was armed as
+      // connect-time + DISCOVERY_TIMEOUT_MS, so subtracting that back out
+      // recovers the original connect time exactly, no separate field
+      // needed just to measure "how long has this slot been trying".
+      const ConnectionContext &other = this->peer_[s == 0 ? 1 : 0];
+      uint32_t connected_at_ms = peer.discovery_deadline_ms - DISCOVERY_TIMEOUT_MS;
+      bool contended_cutoff =
+          other.conn_handle != CONN_HANDLE_NONE &&
+          (int32_t) (millis() - connected_at_ms) >= (int32_t) CONTENDED_DISCOVERY_TIMEOUT_MS;
+      if (full_timeout || contended_cutoff) {
+        ESP_LOGW(TAG, "Slot %d (eBike %d) setup stalled%s - forcing reconnect",
+                 s, s + 1, contended_cutoff && !full_timeout ? " (contended cutoff)" : "");
+        peer.discovery_deadline_ms = 0;  // don't refire while terminate() is pending
+        ble_gap_terminate(peer.conn_handle, BLE_ERR_REM_USER_CONN_TERM);
+      }
     }
   }
 
