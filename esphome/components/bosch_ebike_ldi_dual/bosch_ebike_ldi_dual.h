@@ -39,6 +39,27 @@ struct ConnectionContext {
   uint16_t live_svc_start_handle{0};
   uint16_t live_svc_end_handle{0};
   bool encrypted{false};
+  // Discovery-sequence tracking (issue #61 / #79). The post-encryption setup
+  // chain (MTU exchange, service/characteristic discovery, enabling
+  // notifications, initial read) has no timeout or retry of its own, so on
+  // the classic ESP32's single radio a stall - most likely from both bikes'
+  // setup racing for radio time at once - would otherwise sit "connected"
+  // forever with no live data, or only get noticed once NimBLE's own, much
+  // coarser link layer supervision timeout eventually tears it down.
+  //
+  // discovery_started: true once exchange_mtu() has actually been called for
+  // this connection (try_start_discovery() may defer it while the OTHER slot
+  // is mid-chain, to avoid asking the radio to run two fresh multi-step GATT
+  // procedures at once).
+  bool discovery_started{false};
+  // discovery_deadline_ms: armed (millis() + DISCOVERY_TIMEOUT_MS) the
+  // moment this slot connects, covering the whole connect -> encrypt ->
+  // discovery -> live-data chain including any time spent deferred waiting
+  // for the other slot. Cleared (0) once real live data arrives for this
+  // slot. loop() force-disconnects the slot if this elapses first - the
+  // DISCONNECT handler's own re-advertising then gives it a clean, retried
+  // attempt. 0 means "not armed".
+  uint32_t discovery_deadline_ms{0};
 };
 
 // ---- Persisted slot->MAC mapping (stable bike->slot assignment) -------------
@@ -92,6 +113,15 @@ class BoschEbikeLdiDual : public Component {
   // applied to peer_[slot] / latest_[slot] only.
   void on_connect_state_change(int slot, bool connected);
   void on_live_data_notify(int slot, const uint8_t *data, size_t len);
+
+  // Kick off this slot's MTU/discovery chain (exchange_mtu(), which the rest
+  // of the chain follows on from its own callback), unless it has already
+  // started or the OTHER slot's own chain is still in flight - in which case
+  // this is a no-op and loop() retries it on a later tick (issue #61 / #79).
+  // Callable from both NimBLE callback context (ENC_CHANGE, for the common
+  // uncontended case) and the ESPHome main loop task (loop()'s retry), same
+  // as the other direct ble_gap_*/ble_gattc_* callers already in this file.
+  void try_start_discovery(int slot);
 
   // conn_handle -> slot index whose peer_[i].conn_handle matches, else -1.
   int slot_for_conn(uint16_t conn_handle) const;

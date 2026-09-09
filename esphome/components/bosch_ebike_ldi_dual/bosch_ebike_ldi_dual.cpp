@@ -153,6 +153,17 @@ static bool g_adv_enabled_dual = true;
 // 2nd boot once the NVS store is populated (Issue #41).
 static bool g_ble_synced_dual = false;
 
+// Ceiling on the whole connect -> encrypt -> discover -> live-data chain for
+// one slot, including any time spent deferred waiting for the other slot's
+// own chain to clear (issue #61 / #79). No single step in that chain has its
+// own timeout, so without this a stall - most likely from both bikes' setup
+// racing for the single radio at once - would otherwise sit "connected"
+// forever with no live data, or only get noticed once NimBLE's own, much
+// coarser link layer supervision timeout eventually tears it down. Generous
+// relative to how long a healthy, uncontended sequence normally takes (well
+// under a second), so a merely slow but working exchange is never killed.
+static constexpr uint32_t DISCOVERY_TIMEOUT_MS = 8000;  // 8 s
+
 static bool pairing_window_open() {
   return g_pairing_until_ms_dual != 0 && (int32_t) (g_pairing_until_ms_dual - millis()) > 0;
 }
@@ -306,10 +317,17 @@ static int gap_event_handler(struct ble_gap_event *event, void *arg) {
         ConnectionContext &peer = g_instance_dual->peer(slot);
         if (peer.conn_handle != handle) {
           // Newly assigned slot: start discovery from a clean context.
+          // (ConnectionContext{} already default-initialises encrypted to
+          // false, so nothing else to reset here.) When this handle is
+          // ALREADY the slot's context - the bond-resume ordering where
+          // NimBLE delivered ENC_CHANGE before this CONNECT event - leave it
+          // untouched instead: forcing encrypted back to false here used to
+          // be harmless because nothing read it, but try_start_discovery()
+          // now gates on it, so clobbering an already-true value would
+          // silently strand that slot's discovery chain.
           peer = ConnectionContext{};
           peer.conn_handle = handle;
         }
-        peer.encrypted = false;
         ESP_LOGI(TAG, "Peer assigned to slot %d (eBike %d)", slot, slot + 1);
         // Close the discoverable window ONLY when the TARGETED bike connected.
         // A reconnecting bonded bike on the OTHER slot must not close a window
@@ -411,11 +429,10 @@ static int gap_event_handler(struct ble_gap_event *event, void *arg) {
         }
         g_instance_dual->peer(slot).conn_handle = handle;
         g_instance_dual->peer(slot).encrypted = true;
-        // Workaround for LDI-001/003: initiate MTU ourselves.
-        int rc = ble_gattc_exchange_mtu(handle, on_mtu_exchange, nullptr);
-        if (rc != 0) {
-          ESP_LOGE(TAG, "exchange_mtu start failed: %d (handle=%u)", rc, handle);
-        }
+        // Workaround for LDI-001/003: initiate MTU ourselves. try_start_
+        // discovery() defers this if the OTHER slot's own chain is still in
+        // flight (issue #79) - loop() retries it on a later tick either way.
+        g_instance_dual->try_start_discovery(slot);
       } else if (event->enc_change.status != 0) {
         ESP_LOGE(TAG, "Pairing failed; consider clearing bonding on both sides.");
       }
@@ -712,6 +729,33 @@ void BoschEbikeLdiDual::loop() {
     }
   }
 
+  // Discovery watchdog + staggered kickoff retry (issue #61 / #79). A slot
+  // that is encrypted but has not started its own GATT discovery chain yet -
+  // because it was deferred while the OTHER slot's chain was still in
+  // flight - gets a fresh chance to start here every tick. A slot whose
+  // overall connect -> live-data deadline has elapsed (armed in
+  // on_connect_state_change(), regardless of whether discovery ever
+  // actually started) gets force-disconnected: the DISCONNECT handler's own
+  // re-advertising then gives it a clean, uncontended retry instead of
+  // sitting stuck or waiting on NimBLE's own, much coarser link layer
+  // supervision timeout.
+  for (int s = 0; s < NUM_SLOTS; s++) {
+    ConnectionContext &peer = this->peer_[s];
+    if (peer.conn_handle == CONN_HANDLE_NONE) continue;
+
+    if (peer.encrypted && !peer.discovery_started) {
+      this->try_start_discovery(s);
+    }
+
+    if (peer.discovery_deadline_ms != 0 &&
+        (int32_t) (peer.discovery_deadline_ms - millis()) <= 0) {
+      ESP_LOGW(TAG, "Slot %d (eBike %d) setup stalled past %u ms - forcing reconnect",
+               s, s + 1, (unsigned) DISCOVERY_TIMEOUT_MS);
+      peer.discovery_deadline_ms = 0;  // don't refire while terminate() is pending
+      ble_gap_terminate(peer.conn_handle, BLE_ERR_REM_USER_CONN_TERM);
+    }
+  }
+
   // Pairing window auto-expiry: once it lapses and NO bike is connected, drop
   // back to private (non-discoverable, whitelist) advertising so the bridge
   // stops being visible to other users' Flow apps. If a bike IS connected we
@@ -797,9 +841,39 @@ float BoschEbikeLdiDual::get_setup_priority() const {
 void BoschEbikeLdiDual::on_connect_state_change(int slot, bool connected) {
   this->pending_connected_state_[slot] = connected;
   this->connection_dirty_[slot] = true;
-  if (!connected) {
+  if (connected) {
+    // Arm the discovery watchdog (see loop()) for the WHOLE chain from here
+    // to live data, not just from encryption onward - a stall during
+    // pairing itself (before ENC_CHANGE ever fires) would otherwise never
+    // be noticed either. Called exactly once per fresh connection instance,
+    // from whichever of GAP CONNECT / ENC_CHANGE resolves this slot first.
+    this->peer_[slot].discovery_deadline_ms = millis() + DISCOVERY_TIMEOUT_MS;
+  } else {
     // Reset "present" flags so stale values don't get re-published on reconnect.
     this->latest_[slot] = LiveData{};
+  }
+}
+
+void BoschEbikeLdiDual::try_start_discovery(int slot) {
+  ConnectionContext &peer = this->peer_[slot];
+  if (!peer.encrypted || peer.discovery_started || peer.conn_handle == CONN_HANDLE_NONE) return;
+
+  const ConnectionContext &other = this->peer_[slot == 0 ? 1 : 0];
+  // Defer while the OTHER slot's own chain is actively in flight, so the
+  // single radio never has to service two fresh multi-step GATT procedures
+  // at once - this is the collision window issue #79's timing points at.
+  // loop() retries this every tick; this slot's OWN watchdog (armed in
+  // on_connect_state_change(), not here) still bounds the total wait even
+  // if it never gets a clear turn.
+  if (other.discovery_started && other.discovery_deadline_ms != 0) return;
+
+  peer.discovery_started = true;
+  ESP_LOGI(TAG, "Starting MTU/discovery for slot %d (eBike %d)", slot, slot + 1);
+  // Workaround for LDI-001/003: initiate MTU ourselves, the bike does not.
+  int rc = ble_gattc_exchange_mtu(peer.conn_handle, on_mtu_exchange, nullptr);
+  if (rc != 0) {
+    ESP_LOGE(TAG, "exchange_mtu start failed: %d (slot %d)", rc, slot);
+    peer.discovery_started = false;  // let loop() retry on a later tick
   }
 }
 
@@ -809,6 +883,12 @@ void BoschEbikeLdiDual::on_live_data_notify(int slot, const uint8_t *data, size_
     ESP_LOGW(TAG, "Protobuf decode failed (slot %d, len=%u)", slot, (unsigned) len);
     return;
   }
+
+  // Real live data decoded successfully: this slot's setup chain is
+  // genuinely done, not just "connected". Disarm the discovery watchdog
+  // (see loop()) so it never force-disconnects a slot that is actually
+  // working fine.
+  this->peer_[slot].discovery_deadline_ms = 0;
 
   LiveData &latest = this->latest_[slot];
 
