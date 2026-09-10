@@ -192,6 +192,21 @@ static constexpr uint32_t CONTENDED_DISCOVERY_TIMEOUT_MS = 2500;  // 2.5 s
 // advertising" state of our own to stay correct.
 static constexpr uint32_t ADV_RETRY_INTERVAL_MS = 5000;  // 5 s
 
+// Grace period before the ghost hunt (see loop()) actually fires a
+// terminate, instead of acting on the very first ENOMEM it sees (issue
+// #79, round 8). A tester's log caught round 7's version doing exactly
+// that and killing a perfectly healthy, freshly reconnecting bike: the
+// controller allocates a connection context (hence ENOMEM) before this
+// bridge's own event handling ever sees CONNECT/ENC_CHANGE for it - the
+// same 0.6-1.7s lag documented throughout this investigation - and the 5s
+// retry tick can land inside that window purely by chance, at which point
+// the "only one slot known, ENOMEM present" ghost signature is briefly
+// indistinguishable from an actual ghost. Comfortably longer than that
+// lag so a real reconnect has time to become visible and take
+// connected_count to 2 (clearing the suspicion, see below) before this
+// elapses.
+static constexpr uint32_t GHOST_GRACE_MS = 3000;  // 3 s
+
 static bool pairing_window_open() {
   return g_pairing_until_ms_dual != 0 && (int32_t) (g_pairing_until_ms_dual - millis()) > 0;
 }
@@ -927,35 +942,59 @@ void BoschEbikeLdiDual::loop() {
       }
       if (this->peer_[s].settle_hold) holding = true;
     }
+    // Ghost-connection hunt (issue #79, round 7 - PEPITO82's own detection
+    // idea, not mine; round 8 added the grace period below after a tester's
+    // log caught the round 7 version killing a perfectly healthy,
+    // freshly-reconnecting bike). Two tester logs showed 40+ of a ~50-60s
+    // recovery spent on a connection this bridge never sees a GAP_CONNECT
+    // for at all - the controller has already allocated it a connection
+    // context (that is exactly what ENOMEM here means: no free context left
+    // for a new advertisement to potentially need), but it stays invisible
+    // to application code until NimBLE's own hardcoded 30s pairing timeout
+    // eventually gives up on it. Detecting it without ever seeing its own
+    // event: if advertising fails with ENOMEM while EXACTLY ONE of our two
+    // slots is actually connected, the controller's OTHER connection
+    // context must be the ghost - PROVIDED that state has held for
+    // GHOST_GRACE_MS, since a genuinely healthy reconnect looks identical
+    // for the first ~0.6-1.7s (the controller allocates it before this
+    // bridge's own CONNECT/ENC_CHANGE handling ever sees it either - same
+    // lag, same ambiguity). ghost_suspected_since_ms resets the instant
+    // that ambiguity resolves either way: connected_count leaving 1 means
+    // the suspect turned out to be a real second bike now fully connected;
+    // advertising no longer failing with ENOMEM means whatever the
+    // contention was, it is gone.
+    //
+    // This hardware's CONFIG_BT_NIMBLE_MAX_CONNECTIONS=2 means only handles
+    // 0 and 1 are ever in play - confirmed by every log across this whole
+    // investigation - so trying both candidates other than our own known
+    // handle is exhaustive, not a guess. ble_gap_terminate() on a handle
+    // with no live connection just returns BLE_HS_ENOTCONN harmlessly.
+    // Whether this can actually END a true ghost this way at all remains
+    // unverified as of round 8 (a tester's log showed rc=0 once then
+    // rc=2/EALREADY repeatedly with no observable effect on a confirmed
+    // ghost - consistent with the host having accepted the disconnect
+    // request but the controller never completing it) - kept anyway since
+    // it is harmless and the logged rc is itself the ongoing diagnostic.
+    static uint32_t ghost_suspected_since_ms = 0;
+    if (connected_count != 1) {
+      ghost_suspected_since_ms = 0;
+    }
     static uint32_t last_adv_retry_ms = 0;
     if (free_slot && !holding && !ble_gap_adv_active() &&
         (int32_t) (millis() - last_adv_retry_ms) >= (int32_t) ADV_RETRY_INTERVAL_MS) {
       last_adv_retry_ms = millis();
       int adv_rc = start_advertising();
-      // Ghost-connection hunt (issue #79, round 7 - PEPITO82's own
-      // detection idea, not mine). Two tester logs showed 40+ of a ~50-60s
-      // recovery spent on a connection this bridge never sees a GAP_CONNECT
-      // for at all - the controller has already allocated it a connection
-      // context (that is exactly what ENOMEM here means: no free context
-      // left for a NEW advertisement to potentially need), but it stays
-      // invisible to application code until NimBLE's own hardcoded 30s
-      // pairing timeout eventually gives up on it. Detecting it without
-      // ever seeing its own event: if advertising fails with ENOMEM while
-      // EXACTLY ONE of our two slots is actually connected, the controller's
-      // OTHER connection context must be the ghost. This hardware's
-      // CONFIG_BT_NIMBLE_MAX_CONNECTIONS=2 means only handles 0 and 1 are
-      // ever in play - confirmed by every log across this whole
-      // investigation - so trying both candidates other than our own known
-      // handle is exhaustive, not a guess. ble_gap_terminate() on a handle
-      // with no live connection just returns BLE_HS_ENOTCONN harmlessly, so
-      // this is safe even on the (currently unverified) chance that the
-      // ghost cannot actually be terminated this way at all - the logged rc
-      // will settle that.
-      if (adv_rc == BLE_HS_ENOMEM && connected_count == 1) {
-        for (uint16_t candidate = 0; candidate < 2; candidate++) {
-          if (candidate == connected_handle) continue;
-          int term_rc = ble_gap_terminate(candidate, BLE_ERR_REM_USER_CONN_TERM);
-          ESP_LOGI(TAG, "Ghost hunt: terminate handle=%u rc=%d", candidate, term_rc);
+      if (adv_rc != BLE_HS_ENOMEM) {
+        ghost_suspected_since_ms = 0;
+      } else if (connected_count == 1) {
+        if (ghost_suspected_since_ms == 0) {
+          ghost_suspected_since_ms = millis();
+        } else if ((int32_t) (millis() - ghost_suspected_since_ms) >= (int32_t) GHOST_GRACE_MS) {
+          for (uint16_t candidate = 0; candidate < 2; candidate++) {
+            if (candidate == connected_handle) continue;
+            int term_rc = ble_gap_terminate(candidate, BLE_ERR_REM_USER_CONN_TERM);
+            ESP_LOGI(TAG, "Ghost hunt: terminate handle=%u rc=%d", candidate, term_rc);
+          }
         }
       }
     }
