@@ -515,11 +515,15 @@ static int gap_event_handler(struct ble_gap_event *event, void *arg) {
         // level (no GAP_CONNECT was ever seen for it either - see the
         // ConnectionContext comment), which ble_gap_terminate's own doc
         // comment does not clearly cover one way or the other.
+        // Round 7: log on success too, not just failure - a tester's two
+        // logs showed rc=0 here with no observable effect (the eventual
+        // disconnect still carried the link layer's own supervision-
+        // timeout reason, not this termination's), so "the call returned
+        // 0" alone does not prove it actually did anything to a
+        // not-yet-host-confirmed connection.
         int terminate_rc = ble_gap_terminate(event->enc_change.conn_handle, BLE_ERR_REM_USER_CONN_TERM);
-        if (terminate_rc != 0) {
-          ESP_LOGW(TAG, "ble_gap_terminate after pairing failure: rc=%d (handle=%u)",
-                   terminate_rc, event->enc_change.conn_handle);
-        }
+        ESP_LOGI(TAG, "ble_gap_terminate after pairing failure: rc=%d (handle=%u)",
+                 terminate_rc, event->enc_change.conn_handle);
       }
       return 0;
     }
@@ -883,7 +887,15 @@ void BoschEbikeLdiDual::loop() {
         ESP_LOGW(TAG, "Slot %d (eBike %d) setup stalled%s - forcing reconnect",
                  s, s + 1, contended_cutoff && !full_timeout ? " (contended cutoff)" : "");
         peer.discovery_deadline_ms = 0;  // don't refire while terminate() is pending
-        ble_gap_terminate(peer.conn_handle, BLE_ERR_REM_USER_CONN_TERM);
+        // Round 7: log the rc here too (previously silent) - a tester's
+        // log showed this specific call return 0 while the connection was
+        // already dying to the link layer's own timeout at essentially the
+        // same moment (GAP DISCONNECT reason ended up 0x208, the link
+        // layer's own reason, not 0x216 = locally terminated), so success
+        // here does not by itself mean this call is what ended the link.
+        int terminate_rc = ble_gap_terminate(peer.conn_handle, BLE_ERR_REM_USER_CONN_TERM);
+        ESP_LOGI(TAG, "ble_gap_terminate after setup stall: rc=%d (handle=%u)",
+                 terminate_rc, peer.conn_handle);
       }
     }
   }
@@ -904,15 +916,48 @@ void BoschEbikeLdiDual::loop() {
   if (g_ble_synced_dual) {
     bool free_slot = false;
     bool holding = false;
+    int connected_count = 0;
+    uint16_t connected_handle = CONN_HANDLE_NONE;  // meaningful only if connected_count == 1
     for (int s = 0; s < NUM_SLOTS; s++) {
-      if (this->peer_[s].conn_handle == CONN_HANDLE_NONE) free_slot = true;
+      if (this->peer_[s].conn_handle == CONN_HANDLE_NONE) {
+        free_slot = true;
+      } else {
+        connected_count++;
+        connected_handle = this->peer_[s].conn_handle;
+      }
       if (this->peer_[s].settle_hold) holding = true;
     }
     static uint32_t last_adv_retry_ms = 0;
     if (free_slot && !holding && !ble_gap_adv_active() &&
         (int32_t) (millis() - last_adv_retry_ms) >= (int32_t) ADV_RETRY_INTERVAL_MS) {
       last_adv_retry_ms = millis();
-      start_advertising();
+      int adv_rc = start_advertising();
+      // Ghost-connection hunt (issue #79, round 7 - PEPITO82's own
+      // detection idea, not mine). Two tester logs showed 40+ of a ~50-60s
+      // recovery spent on a connection this bridge never sees a GAP_CONNECT
+      // for at all - the controller has already allocated it a connection
+      // context (that is exactly what ENOMEM here means: no free context
+      // left for a NEW advertisement to potentially need), but it stays
+      // invisible to application code until NimBLE's own hardcoded 30s
+      // pairing timeout eventually gives up on it. Detecting it without
+      // ever seeing its own event: if advertising fails with ENOMEM while
+      // EXACTLY ONE of our two slots is actually connected, the controller's
+      // OTHER connection context must be the ghost. This hardware's
+      // CONFIG_BT_NIMBLE_MAX_CONNECTIONS=2 means only handles 0 and 1 are
+      // ever in play - confirmed by every log across this whole
+      // investigation - so trying both candidates other than our own known
+      // handle is exhaustive, not a guess. ble_gap_terminate() on a handle
+      // with no live connection just returns BLE_HS_ENOTCONN harmlessly, so
+      // this is safe even on the (currently unverified) chance that the
+      // ghost cannot actually be terminated this way at all - the logged rc
+      // will settle that.
+      if (adv_rc == BLE_HS_ENOMEM && connected_count == 1) {
+        for (uint16_t candidate = 0; candidate < 2; candidate++) {
+          if (candidate == connected_handle) continue;
+          int term_rc = ble_gap_terminate(candidate, BLE_ERR_REM_USER_CONN_TERM);
+          ESP_LOGI(TAG, "Ghost hunt: terminate handle=%u rc=%d", candidate, term_rc);
+        }
+      }
     }
   }
 
