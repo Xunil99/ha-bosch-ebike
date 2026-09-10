@@ -274,8 +274,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # entries/integrations (manual "combine devices"), so double-check no
     # entity still points at it before deleting it from the registry.
     device_registry = dr.async_get(hass)
-    ghost_device = device_registry.async_get_device(
-        identifiers={(DOMAIN, entry.entry_id)}
+    ghost_device = device_registry.async_get_device_by_identifier(
+        identifier=(DOMAIN, entry.entry_id),
+        config_entry_id=entry.entry_id
     )
     if ghost_device is not None:
         entity_registry = er.async_get(hass)
