@@ -222,16 +222,16 @@
 
     <div class="install-card">
       <h2 style="margin-top:0;font-size:1.15rem;">
-        <span class="lang-de">eBike-Bridge (2 Räder, experimentell)</span>
-        <span class="lang-en">eBike Bridge (2 bikes, experimental)</span>
+        <span class="lang-de">eBike-Bridge (2 Räder)</span>
+        <span class="lang-en">eBike Bridge (2 bikes)</span>
       </h2>
       <p class="subtitle" style="margin:.25rem 0 1rem;">
         <span class="lang-de">Ein einzelner ESP32 verbindet sich gleichzeitig mit zwei Bosch eBikes (zwei BLE-Verbindungen parallel) und liefert für beide Räder getrennte Sensoren in Home Assistant. Nur klassischer ESP32, kein ESP32-C3.</span>
         <span class="lang-en">A single ESP32 links to two Bosch eBikes at once (two simultaneous BLE connections) and provides separate sensors for both bikes in Home Assistant. Classic ESP32 only, no ESP32-C3.</span>
       </p>
       <p class="subtitle" style="margin:.25rem 0 1rem;">
-        <span class="lang-de"><strong>Warnhinweis:</strong> Diese Variante ist experimentell und wurde noch NICHT mit zwei Rädern gleichzeitig getestet. Wenn zwei Räder parallel Probleme machen (Verbindungsabbrüche, fehlende Werte), verwende stattdessen die Einzel-Bridge-Firmware oben auf zwei getrennten ESP32-Boards. Nur klassischer ESP32, kein ESP32-C3.</span>
-        <span class="lang-en"><strong>Warning:</strong> This variant is experimental and has NOT yet been tested with two bikes at the same time. If two bikes misbehave in parallel (dropouts, missing values), use the single-bike bridge firmware above on two separate ESP32 boards instead. Classic ESP32 only, no ESP32-C3.</span>
+        <span class="lang-de"><strong>Hinweis:</strong> Diese Variante wurde ausführlich mit zwei Bikes gleichzeitig getestet und läuft seit v1.19.52 stabil. Sehr selten kollidieren die beiden Verbindungsaufbauten, wenn beide Bikes im exakt selben Moment verbinden; die Bridge erkennt das inzwischen automatisch und erholt sich von selbst innerhalb von etwa einer Minute. Ganz herzlichen Dank an PEPITO82 für die unermüdlichen Tests, ohne die diese Firmware nicht so weit gekommen wäre.</span>
+        <span class="lang-en"><strong>Note:</strong> This variant has been extensively tested with two bikes at the same time and has been running stable since v1.19.52. On rare occasions, the two connection setups can collide if both bikes connect at the exact same moment; the bridge now detects this automatically and recovers on its own within about a minute. Heartfelt thanks to PEPITO82, whose tireless testing got this firmware to where it is.</span>
       </p>
       <esp-web-install-button manifest="manifest-bridge-dual.json">
         <button slot="activate" type="button">
