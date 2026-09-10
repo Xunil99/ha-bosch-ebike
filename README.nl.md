@@ -11,9 +11,11 @@
 > Deze integratie werkt **uitsluitend met een Bosch SingleKey-ID-account dat binnen de EU is geregistreerd**. Ze gebruikt de officiële Bosch Data Act API, waarvan de beschikbaarheid beperkt is tot EU-accounts. Accounts uit andere regio's worden door het API-endpoint geweigerd en de integratie kan zich dan niet aanmelden.
 
 > ### 🔌 Echte live-data via Bluetooth (smart system v19+)
-> Dit repo bevat naast de HACS-integratie ook een **ESPHome-BLE-bridge** die van een ESP32 een brug naar het **Bosch eBike Live Data Interface** maakt. Daarmee stromen accu-SoC, snelheid, kilometerstand & co. in realtime naar Home Assistant.
+> Dit repo bevat naast de HACS-integratie ook een **ESPHome-BLE-bridge** die van een ESP32 een brug naar het **Bosch eBike Live Data Interface** maakt. Daarmee stromen accu-SoC, snelheid, kilometerstand & co. in realtime naar Home Assistant. Sinds kort is er ook een **dual bridge**: één ESP32 verbindt zich daarmee gelijktijdig met twee Bosch eBikes.
 >
-> 🚀 **Flashen zonder ESPHome-installatie**: sluit een ESP32 (of ESP32-C3, bijv. "C3 Mini") via USB aan, open in Chrome / Edge **[https://xunil99.github.io/ha-bosch-ebike/](https://xunil99.github.io/ha-bosch-ebike/)** en klik op *Install*. De installer herkent de chip automatisch en flasht de juiste firmware. De wifi-setup verloopt in dezelfde browserstap. Volledige handleiding (DE/EN) incl. koppelen via de Flow-app: [`esphome/`](https://github.com/Xunil99/ha-bosch-ebike/tree/main/esphome).
+> 🚀 **Flashen zonder ESPHome-installatie**: sluit een ESP32 (of ESP32-C3, bijv. "C3 Mini") via USB aan, open in Chrome / Edge **[https://xunil99.github.io/ha-bosch-ebike/](https://xunil99.github.io/ha-bosch-ebike/)** en klik op *Install*. De installer herkent de chip automatisch en flasht de juiste firmware (ook de dual bridge-variant). De wifi-setup verloopt in dezelfde browserstap. Volledige handleiding (DE/EN) incl. koppelen via de Flow-app: [`esphome/`](https://github.com/Xunil99/ha-bosch-ebike/tree/main/esphome).
+>
+> **Ontzettend veel dank aan PEPITO82** voor het onvermoeibare testen van de dual bridge: zonder dat testen zou de dual bridge tot op de dag van vandaag niet werken, en had ik het project allang opgegeven.
 
 > ### 🖥️ Optioneel: 4,3"-display voor datum, weer en live-data
 > Naast de bridge is er nu een tweede firmware voor het **Guition/Sunton JC4827W543** (ESP32-S3 met 4,3" IPS-touchscreen). Deze leest de bridge-sensoren uit Home Assistant en toont datum, tijd, weer en maximaal twee eBikes tegelijk. Bestaande bridge-gebruikers hoeven niets te wijzigen; het display is puur additief. Setup-handleiding: [`esphome/DISPLAY.md`](https://github.com/Xunil99/ha-bosch-ebike/blob/main/esphome/DISPLAY.md).
