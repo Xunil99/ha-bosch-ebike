@@ -153,6 +153,60 @@ static bool g_adv_enabled_dual = true;
 // 2nd boot once the NVS store is populated (Issue #41).
 static bool g_ble_synced_dual = false;
 
+// Ceiling on the whole connect -> encrypt -> discover -> live-data chain for
+// one slot, including any time spent deferred waiting for the other slot's
+// own chain to clear (issue #61 / #79). No single step in that chain has its
+// own timeout, so without this a stall - most likely from both bikes' setup
+// racing for the single radio at once - would otherwise sit "connected"
+// forever with no live data, or only get noticed once NimBLE's own, much
+// coarser link layer supervision timeout eventually tears it down. Generous
+// relative to how long a healthy, uncontended sequence normally takes (well
+// under a second), so a merely slow but working exchange is never killed.
+static constexpr uint32_t DISCOVERY_TIMEOUT_MS = 8000;  // 8 s
+
+// Tighter cutoff for one specific, well-evidenced case (issue #79, round 6):
+// this slot's discovery has not finished AND the other slot is already
+// connected. Across eight tester runs, a discovery stall in that situation
+// has never once recovered on its own - it always eventually dies to the
+// bike's own ~4s supervision timeout regardless (both bikes negotiate
+// identical connection parameters here, a plausible reason two links'
+// connection events collide and stay collided rather than drifting apart -
+// see the round 6 tester log). Waiting out DISCOVERY_TIMEOUT_MS, let alone
+// the link layer's own timeout, is pure waste in that specific situation:
+// force it now and let a fresh reconnect roll new anchor timing sooner
+// instead - every successful recovery so far has come from exactly that.
+// Comfortably longer than every observed healthy, uncontended discovery
+// (well under 2.5s in every log so far) so a genuinely-just-slow exchange
+// on an otherwise idle radio is not the thing this targets.
+static constexpr uint32_t CONTENDED_DISCOVERY_TIMEOUT_MS = 2500;  // 2.5 s
+
+// How often loop() retries start_advertising() as a self-healing safety net
+// while a slot is free (issue #79, round 3). A round 2 tester log showed
+// ble_gap_adv_start can fail (observed: BLE_HS_ENOMEM) right after a failed
+// reconnect attempt, and nothing was ever asking NimBLE to try again - the
+// bridge then stayed silently unreachable on that slot until the OTHER bike
+// happened to disconnect and trigger a DISCONNECT-handler re-advertise, up
+// to an hour in the original report. Calling start_advertising() again
+// while already advertising just fails harmlessly with BLE_HS_EALREADY, so
+// retrying unconditionally on a plain interval needs no "are we already
+// advertising" state of our own to stay correct.
+static constexpr uint32_t ADV_RETRY_INTERVAL_MS = 5000;  // 5 s
+
+// Grace period before the ghost hunt (see loop()) actually fires a
+// terminate, instead of acting on the very first ENOMEM it sees (issue
+// #79, round 8). A tester's log caught round 7's version doing exactly
+// that and killing a perfectly healthy, freshly reconnecting bike: the
+// controller allocates a connection context (hence ENOMEM) before this
+// bridge's own event handling ever sees CONNECT/ENC_CHANGE for it - the
+// same 0.6-1.7s lag documented throughout this investigation - and the 5s
+// retry tick can land inside that window purely by chance, at which point
+// the "only one slot known, ENOMEM present" ghost signature is briefly
+// indistinguishable from an actual ghost. Comfortably longer than that
+// lag so a real reconnect has time to become visible and take
+// connected_count to 2 (clearing the suspicion, see below) before this
+// elapses.
+static constexpr uint32_t GHOST_GRACE_MS = 3000;  // 3 s
+
 static bool pairing_window_open() {
   return g_pairing_until_ms_dual != 0 && (int32_t) (g_pairing_until_ms_dual - millis()) > 0;
 }
@@ -227,6 +281,32 @@ static int start_advertising() {
              g_device_name_cache_dual.c_str());
   }
   return rc;
+}
+
+// round 4 (issue #79) tried requesting a longer supervision timeout right
+// after connecting, on the theory that giving a young connection more slack
+// would help it survive whatever radio contention was killing it 4-5s in.
+// A tester's log conclusively closed that off: the bike (the real Link
+// Layer Central here - this bridge only ever advertises) rejects it outright
+// every time with HCI 0x3B "Unacceptable Connection Parameters", not a
+// timing fluke. The same log did reveal something more useful though: the
+// bike negotiates a supervision_timeout of exactly 400 (4.0s) by default -
+// which is exactly the 4-5s window every drop across every run has died
+// in - and offered a theory worth checking: two Bosch centrals each pick
+// their own connection interval/anchor point, and when a young link's
+// anchor collides with the other's on the single radio, the controller
+// drops it once that 4.0s runs out with no served event. If true, the
+// negotiated intervals on both links should match. So: log what actually
+// gets negotiated on every connect, rather than trying to change it -
+// round 5's diagnostic, not another fix attempt.
+static void log_negotiated_conn_params(uint16_t conn_handle) {
+  struct ble_gap_conn_desc desc;
+  if (ble_gap_conn_find(conn_handle, &desc) != 0) {
+    ESP_LOGW(TAG, "conn_find failed for param log (handle=%u)", conn_handle);
+    return;
+  }
+  ESP_LOGI(TAG, "Negotiated params handle=%u itvl=%u latency=%u supervision_timeout=%u",
+           conn_handle, desc.conn_itvl, desc.conn_latency, desc.supervision_timeout);
 }
 
 // Definition of the cache declared above.
@@ -306,10 +386,17 @@ static int gap_event_handler(struct ble_gap_event *event, void *arg) {
         ConnectionContext &peer = g_instance_dual->peer(slot);
         if (peer.conn_handle != handle) {
           // Newly assigned slot: start discovery from a clean context.
+          // (ConnectionContext{} already default-initialises encrypted to
+          // false, so nothing else to reset here.) When this handle is
+          // ALREADY the slot's context - the bond-resume ordering where
+          // NimBLE delivered ENC_CHANGE before this CONNECT event - leave it
+          // untouched instead: forcing encrypted back to false here used to
+          // be harmless because nothing read it, but try_start_discovery()
+          // now gates on it, so clobbering an already-true value would
+          // silently strand that slot's discovery chain.
           peer = ConnectionContext{};
           peer.conn_handle = handle;
         }
-        peer.encrypted = false;
         ESP_LOGI(TAG, "Peer assigned to slot %d (eBike %d)", slot, slot + 1);
         // Close the discoverable window ONLY when the TARGETED bike connected.
         // A reconnecting bonded bike on the OTHER slot must not close a window
@@ -319,14 +406,19 @@ static int gap_event_handler(struct ble_gap_event *event, void *arg) {
           g_pairing_until_ms_dual = 0;
           g_pairing_target_slot_dual = -1;
         }
+        // Whether/when to resume advertising for a possible second bike is
+        // now decided inside on_connect_state_change() itself (issue #79,
+        // round 2: re-advertising immediately, unconditionally, is exactly
+        // what let a second bike connect while this one was still "young" -
+        // see settle_hold in the header).
         g_instance_dual->on_connect_state_change(slot, true);
 
         // Workaround for LDI-001: bike doesn't initiate DLE. We do.
         ble_gap_set_data_len(handle, 251, 2120);
 
-        // Keep advertising so the OTHER bike can still be found / reconnect.
-        // (start_advertising() is a no-op while not applicable.)
-        start_advertising();
+        // Diagnostic (issue #79, round 5) - see log_negotiated_conn_params()'s
+        // own doc comment for what this is checking.
+        log_negotiated_conn_params(handle);
       } else {
         // Connection failed – resume advertising.
         start_advertising();
@@ -411,13 +503,42 @@ static int gap_event_handler(struct ble_gap_event *event, void *arg) {
         }
         g_instance_dual->peer(slot).conn_handle = handle;
         g_instance_dual->peer(slot).encrypted = true;
-        // Workaround for LDI-001/003: initiate MTU ourselves.
-        int rc = ble_gattc_exchange_mtu(handle, on_mtu_exchange, nullptr);
-        if (rc != 0) {
-          ESP_LOGE(TAG, "exchange_mtu start failed: %d (handle=%u)", rc, handle);
-        }
+        // Workaround for LDI-001/003: initiate MTU ourselves. try_start_
+        // discovery() defers this if the OTHER slot's own chain is still in
+        // flight (issue #79) - loop() retries it on a later tick either way.
+        g_instance_dual->try_start_discovery(slot);
       } else if (event->enc_change.status != 0) {
         ESP_LOGE(TAG, "Pairing failed; consider clearing bonding on both sides.");
+        // Proactively end this connection now rather than leaving it for
+        // whatever passive cleanup otherwise follows (issue #79, round 5:
+        // a tester's log showed roughly 10s between this event and the
+        // eventual GAP DISCONNECT/failed reconnect that frees the slot).
+        // The encryption procedure has already definitively failed -
+        // NimBLE's own hardcoded 30s pairing timeout (BLE_SM_TIMEOUT_MS,
+        // not something this bridge can shorten - it is what produced this
+        // very event) already spent that long waiting, so there is nothing
+        // left worth keeping the link open for. event->enc_change.
+        // conn_handle is populated on failure the same as on success, no
+        // slot routing needed for this.
+        //
+        // A round 6 tester log showed no observable effect from this call
+        // (advertising kept failing with ENOMEM for the same ~10s as
+        // before it existed) - logging the return code rather than
+        // assuming success, since round 5 didn't and that gap was
+        // rightly called out. Plausible explanation: this connection may
+        // still be in a pending, not-yet-host-confirmed state at the LL
+        // level (no GAP_CONNECT was ever seen for it either - see the
+        // ConnectionContext comment), which ble_gap_terminate's own doc
+        // comment does not clearly cover one way or the other.
+        // Round 7: log on success too, not just failure - a tester's two
+        // logs showed rc=0 here with no observable effect (the eventual
+        // disconnect still carried the link layer's own supervision-
+        // timeout reason, not this termination's), so "the call returned
+        // 0" alone does not prove it actually did anything to a
+        // not-yet-host-confirmed connection.
+        int terminate_rc = ble_gap_terminate(event->enc_change.conn_handle, BLE_ERR_REM_USER_CONN_TERM);
+        ESP_LOGI(TAG, "ble_gap_terminate after pairing failure: rc=%d (handle=%u)",
+                 terminate_rc, event->enc_change.conn_handle);
       }
       return 0;
     }
@@ -436,7 +557,10 @@ static int gap_event_handler(struct ble_gap_event *event, void *arg) {
       uint16_t copy_len = len < sizeof(buf) ? len : sizeof(buf);
       os_mbuf_copydata(event->notify_rx.om, 0, copy_len, buf);
       log_hex("NOTIFY_RX raw", buf, copy_len);
-      ESP_LOGI(TAG, "NOTIFY conn_handle=%u attr=0x%04x len=%u indication=%d",
+      // DEBUG, not INFO: with two bikes connected this fires roughly twice a
+      // second and drowned out the connect/discovery messages that actually
+      // matter for diagnosing issue #79 in a tester's INFO-level log.
+      ESP_LOGD(TAG, "NOTIFY conn_handle=%u attr=0x%04x len=%u indication=%d",
                event->notify_rx.conn_handle, handle, len, event->notify_rx.indication);
       if (g_instance_dual) {
         int slot = g_instance_dual->slot_for_conn(event->notify_rx.conn_handle);
@@ -477,6 +601,24 @@ static int gap_event_handler(struct ble_gap_event *event, void *arg) {
       ESP_LOGI(TAG, "DLE updated tx_max=%u rx_max=%u",
                event->data_len_chg.max_tx_octets,
                event->data_len_chg.max_rx_octets);
+      return 0;
+    }
+    case BLE_GAP_EVENT_CONN_UPDATE: {
+      // Fires whenever the link's parameters change after the initial
+      // negotiation logged by log_negotiated_conn_params() - whether from
+      // the peer's (Central's) own initiative or a future update request
+      // from this side. Logged explicitly (issue #79) so a tester's log
+      // shows it either way, not just the connection's starting values.
+      struct ble_gap_conn_desc desc;
+      if (event->conn_update.status == 0 &&
+          ble_gap_conn_find(event->conn_update.conn_handle, &desc) == 0) {
+        ESP_LOGI(TAG, "Connection params updated conn_handle=%u itvl=%u latency=%u supervision_timeout=%u",
+                 event->conn_update.conn_handle, desc.conn_itvl, desc.conn_latency,
+                 desc.supervision_timeout);
+      } else {
+        ESP_LOGW(TAG, "Connection param update failed status=%d conn_handle=%u",
+                 event->conn_update.status, event->conn_update.conn_handle);
+      }
       return 0;
     }
     default:
@@ -645,6 +787,11 @@ static int on_chr_read(uint16_t conn_handle, const struct ble_gatt_error *error,
   if (g_instance_dual) {
     int slot = g_instance_dual->slot_for_conn(conn_handle);
     if (slot >= 0) {
+      // The initial read transaction succeeding is the one true "this
+      // slot's setup chain is done" signal - see on_discovery_complete()'s
+      // own doc comment for why this must NOT be inferred from an ordinary
+      // notify instead (issue #79, round 3).
+      g_instance_dual->on_discovery_complete(slot);
       g_instance_dual->on_live_data_notify(slot, buf, copy_len);
     } else {
       ESP_LOGW(TAG, "Initial read for unknown conn_handle=%u – dropping", conn_handle);
@@ -709,6 +856,147 @@ void BoschEbikeLdiDual::loop() {
     if (this->data_dirty_[s]) {
       this->data_dirty_[s] = false;
       this->publish_decoded_(s);
+    }
+  }
+
+  // Discovery watchdog + staggered kickoff retry (issue #61 / #79). A slot
+  // that is encrypted but has not started its own GATT discovery chain yet -
+  // deferred while the OTHER slot's chain was still in flight, see
+  // try_start_discovery() - gets a fresh chance to start here every tick;
+  // this rarely has anything to do in practice since on_connect_state_
+  // change()'s settle_hold is what actually keeps a second bike from
+  // connecting this early now (issue #79, round 2) - though not at boot,
+  // when both bikes can connect off the very first advertisement before
+  // either slot exists yet to hold anything back (round 6). A slot whose
+  // overall connect -> live-data deadline has elapsed, OR (much sooner)
+  // whose discovery is stalled while the other slot is already connected
+  // (round 6's CONTENDED_DISCOVERY_TIMEOUT_MS - that specific situation has
+  // never once self-recovered in eight tester runs), gets force-
+  // disconnected: the DISCONNECT handler's own re-advertising then gives it
+  // a clean retry with freshly rolled connection timing. The full-deadline
+  // path mainly still covers #61's original failure (a stall with no
+  // contention to speak of) - real two-bike logs showed the link layer's
+  // own supervision timeout, when contention is what's actually going on,
+  // beats DISCOVERY_TIMEOUT_MS to it by several seconds regardless.
+  for (int s = 0; s < NUM_SLOTS; s++) {
+    ConnectionContext &peer = this->peer_[s];
+    if (peer.conn_handle == CONN_HANDLE_NONE) continue;
+
+    if (peer.encrypted && !peer.discovery_started) {
+      this->try_start_discovery(s);
+    }
+
+    if (peer.discovery_deadline_ms != 0) {
+      bool full_timeout = (int32_t) (peer.discovery_deadline_ms - millis()) <= 0;
+      // Contended cutoff (issue #79, round 6) - see
+      // CONTENDED_DISCOVERY_TIMEOUT_MS. discovery_deadline_ms was armed as
+      // connect-time + DISCOVERY_TIMEOUT_MS, so subtracting that back out
+      // recovers the original connect time exactly, no separate field
+      // needed just to measure "how long has this slot been trying".
+      const ConnectionContext &other = this->peer_[s == 0 ? 1 : 0];
+      uint32_t connected_at_ms = peer.discovery_deadline_ms - DISCOVERY_TIMEOUT_MS;
+      bool contended_cutoff =
+          other.conn_handle != CONN_HANDLE_NONE &&
+          (int32_t) (millis() - connected_at_ms) >= (int32_t) CONTENDED_DISCOVERY_TIMEOUT_MS;
+      if (full_timeout || contended_cutoff) {
+        ESP_LOGW(TAG, "Slot %d (eBike %d) setup stalled%s - forcing reconnect",
+                 s, s + 1, contended_cutoff && !full_timeout ? " (contended cutoff)" : "");
+        peer.discovery_deadline_ms = 0;  // don't refire while terminate() is pending
+        // Round 7: log the rc here too (previously silent) - a tester's
+        // log showed this specific call return 0 while the connection was
+        // already dying to the link layer's own timeout at essentially the
+        // same moment (GAP DISCONNECT reason ended up 0x208, the link
+        // layer's own reason, not 0x216 = locally terminated), so success
+        // here does not by itself mean this call is what ended the link.
+        int terminate_rc = ble_gap_terminate(peer.conn_handle, BLE_ERR_REM_USER_CONN_TERM);
+        ESP_LOGI(TAG, "ble_gap_terminate after setup stall: rc=%d (handle=%u)",
+                 terminate_rc, peer.conn_handle);
+      }
+    }
+  }
+
+  // Self-healing periodic re-advertise (issue #79, round 3) - see
+  // ADV_RETRY_INTERVAL_MS. g_ble_synced_dual guard: loop() runs from boot,
+  // before on_stack_sync() every GAP/bond-store call is unsafe (Issue #41).
+  //
+  // Two bugs a round 4 tester log caught in the first version of this:
+  // (a) it never checked settle_hold, so it happily re-armed advertising
+  // for a second bike while a slot was still deliberately withholding it
+  // (see on_connect_state_change()) - undoing that mechanism's whole point
+  // on a 5s cycle; (b) it never checked whether advertising was already
+  // running, so on an idle bridge with a free slot it logged a harmless but
+  // noisy ble_gap_adv_start failure (BLE_HS_EALREADY) every single tick.
+  // ble_gap_adv_active() asks NimBLE directly rather than this bridge
+  // tracking its own possibly-stale copy of that state.
+  if (g_ble_synced_dual) {
+    bool free_slot = false;
+    bool holding = false;
+    int connected_count = 0;
+    uint16_t connected_handle = CONN_HANDLE_NONE;  // meaningful only if connected_count == 1
+    for (int s = 0; s < NUM_SLOTS; s++) {
+      if (this->peer_[s].conn_handle == CONN_HANDLE_NONE) {
+        free_slot = true;
+      } else {
+        connected_count++;
+        connected_handle = this->peer_[s].conn_handle;
+      }
+      if (this->peer_[s].settle_hold) holding = true;
+    }
+    // Ghost-connection hunt (issue #79, round 7 - PEPITO82's own detection
+    // idea, not mine; round 8 added the grace period below after a tester's
+    // log caught the round 7 version killing a perfectly healthy,
+    // freshly-reconnecting bike). Two tester logs showed 40+ of a ~50-60s
+    // recovery spent on a connection this bridge never sees a GAP_CONNECT
+    // for at all - the controller has already allocated it a connection
+    // context (that is exactly what ENOMEM here means: no free context left
+    // for a new advertisement to potentially need), but it stays invisible
+    // to application code until NimBLE's own hardcoded 30s pairing timeout
+    // eventually gives up on it. Detecting it without ever seeing its own
+    // event: if advertising fails with ENOMEM while EXACTLY ONE of our two
+    // slots is actually connected, the controller's OTHER connection
+    // context must be the ghost - PROVIDED that state has held for
+    // GHOST_GRACE_MS, since a genuinely healthy reconnect looks identical
+    // for the first ~0.6-1.7s (the controller allocates it before this
+    // bridge's own CONNECT/ENC_CHANGE handling ever sees it either - same
+    // lag, same ambiguity). ghost_suspected_since_ms resets the instant
+    // that ambiguity resolves either way: connected_count leaving 1 means
+    // the suspect turned out to be a real second bike now fully connected;
+    // advertising no longer failing with ENOMEM means whatever the
+    // contention was, it is gone.
+    //
+    // This hardware's CONFIG_BT_NIMBLE_MAX_CONNECTIONS=2 means only handles
+    // 0 and 1 are ever in play - confirmed by every log across this whole
+    // investigation - so trying both candidates other than our own known
+    // handle is exhaustive, not a guess. ble_gap_terminate() on a handle
+    // with no live connection just returns BLE_HS_ENOTCONN harmlessly.
+    // Whether this can actually END a true ghost this way at all remains
+    // unverified as of round 8 (a tester's log showed rc=0 once then
+    // rc=2/EALREADY repeatedly with no observable effect on a confirmed
+    // ghost - consistent with the host having accepted the disconnect
+    // request but the controller never completing it) - kept anyway since
+    // it is harmless and the logged rc is itself the ongoing diagnostic.
+    static uint32_t ghost_suspected_since_ms = 0;
+    if (connected_count != 1) {
+      ghost_suspected_since_ms = 0;
+    }
+    static uint32_t last_adv_retry_ms = 0;
+    if (free_slot && !holding && !ble_gap_adv_active() &&
+        (int32_t) (millis() - last_adv_retry_ms) >= (int32_t) ADV_RETRY_INTERVAL_MS) {
+      last_adv_retry_ms = millis();
+      int adv_rc = start_advertising();
+      if (adv_rc != BLE_HS_ENOMEM) {
+        ghost_suspected_since_ms = 0;
+      } else if (connected_count == 1) {
+        if (ghost_suspected_since_ms == 0) {
+          ghost_suspected_since_ms = millis();
+        } else if ((int32_t) (millis() - ghost_suspected_since_ms) >= (int32_t) GHOST_GRACE_MS) {
+          for (uint16_t candidate = 0; candidate < 2; candidate++) {
+            if (candidate == connected_handle) continue;
+            int term_rc = ble_gap_terminate(candidate, BLE_ERR_REM_USER_CONN_TERM);
+            ESP_LOGI(TAG, "Ghost hunt: terminate handle=%u rc=%d", candidate, term_rc);
+          }
+        }
+      }
     }
   }
 
@@ -797,9 +1085,83 @@ float BoschEbikeLdiDual::get_setup_priority() const {
 void BoschEbikeLdiDual::on_connect_state_change(int slot, bool connected) {
   this->pending_connected_state_[slot] = connected;
   this->connection_dirty_[slot] = true;
-  if (!connected) {
+  if (connected) {
+    // Arm the discovery watchdog (see loop()) for the WHOLE chain from here
+    // to live data, not just from encryption onward - a stall during
+    // pairing itself (before ENC_CHANGE ever fires) would otherwise never
+    // be noticed either. Called exactly once per fresh connection instance,
+    // from whichever of GAP CONNECT / ENC_CHANGE resolves this slot first.
+    this->peer_[slot].discovery_deadline_ms = millis() + DISCOVERY_TIMEOUT_MS;
+
+    // Advertising decision (issue #79, round 2 - see the long comment on
+    // ConnectionContext in the header for the log evidence behind this).
+    // The previous fix re-advertised for a second bike immediately on every
+    // connect; a tester's precisely timed two-bike log showed that is
+    // exactly what let a second, genuinely idle connection form while this
+    // one was still "young" - and the link layer's own supervision timeout
+    // killed it 4-5s later regardless of GATT activity on either side.
+    //
+    // So: if this is the ONLY connected slot right now, hold off
+    // re-advertising for a second bike until THIS slot settles (see
+    // on_live_data_notify()) or its own watchdog above times out (see
+    // loop()) - both paths already resume advertising themselves (directly,
+    // or via the DISCONNECT that follows a forced/organic drop). If the
+    // OTHER slot is already connected, both slots are occupied and there is
+    // nothing to advertise for regardless.
+    const ConnectionContext &other = this->peer_[slot == 0 ? 1 : 0];
+    if (other.conn_handle == CONN_HANDLE_NONE) {
+      this->peer_[slot].settle_hold = true;
+    }
+  } else {
     // Reset "present" flags so stale values don't get re-published on reconnect.
     this->latest_[slot] = LiveData{};
+  }
+}
+
+void BoschEbikeLdiDual::try_start_discovery(int slot) {
+  ConnectionContext &peer = this->peer_[slot];
+  if (!peer.encrypted || peer.discovery_started || peer.conn_handle == CONN_HANDLE_NONE) return;
+
+  const ConnectionContext &other = this->peer_[slot == 0 ? 1 : 0];
+  // Defer while the OTHER slot's own chain is actively in flight, so the
+  // single radio never has to service two fresh multi-step GATT procedures
+  // at once. In practice on_connect_state_change()'s settle_hold already
+  // keeps a second bike from connecting at all until the first has settled,
+  // so this should rarely have anything to defer against by the time it
+  // runs - kept as a second, harmless layer of defence (issue #79). loop()
+  // retries this every tick; this slot's OWN watchdog (armed in
+  // on_connect_state_change(), not here) still bounds the total wait even
+  // if it never gets a clear turn.
+  if (other.discovery_started && other.discovery_deadline_ms != 0) return;
+
+  peer.discovery_started = true;
+  ESP_LOGI(TAG, "Starting MTU/discovery for slot %d (eBike %d)", slot, slot + 1);
+  // Workaround for LDI-001/003: initiate MTU ourselves, the bike does not.
+  int rc = ble_gattc_exchange_mtu(peer.conn_handle, on_mtu_exchange, nullptr);
+  if (rc != 0) {
+    ESP_LOGE(TAG, "exchange_mtu start failed: %d (slot %d)", rc, slot);
+    peer.discovery_started = false;  // let loop() retry on a later tick
+  }
+}
+
+void BoschEbikeLdiDual::on_discovery_complete(int slot) {
+  // The initial read transaction itself succeeding - regardless of whether
+  // its payload later decodes cleanly in on_live_data_notify() - is what
+  // "this slot's setup chain is genuinely done" actually means. Issue #79's
+  // round 2 tester log caught the previous version inferring this from an
+  // ordinary notify instead: a bonded bike may send one from its own
+  // retained CCC descriptor state the moment it is connected and
+  // encrypted, before this bridge has even written its own CCCD - up to
+  // 0.8s before the chain this bridge itself ran was actually finished.
+  ConnectionContext &peer = this->peer_[slot];
+  peer.discovery_deadline_ms = 0;  // disarm the watchdog (see loop())
+  if (peer.settle_hold) {
+    // This slot just genuinely settled: safe to let a second, not-yet-
+    // connected bike be found now (see on_connect_state_change()). No-op if
+    // settle_hold was never set for this slot (e.g. it was the second bike
+    // to connect).
+    peer.settle_hold = false;
+    start_advertising();
   }
 }
 

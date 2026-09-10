@@ -39,6 +39,57 @@ struct ConnectionContext {
   uint16_t live_svc_start_handle{0};
   uint16_t live_svc_end_handle{0};
   bool encrypted{false};
+  // Discovery-sequence tracking (issue #61 / #79). The post-encryption setup
+  // chain (MTU exchange, service/characteristic discovery, enabling
+  // notifications, initial read) has no timeout or retry of its own, so a
+  // stall would otherwise sit "connected" forever with no live data.
+  //
+  // Real two-bike logs (issue #79, round 2 - a tester's precisely timed
+  // capture with the round 1 fix already in place) showed the failure is
+  // NOT GATT contention: an idle connection that had done zero GATT work,
+  // held back by discovery_started deferring below, still got torn down by
+  // the link layer's own supervision timeout (reason 0x08) 4-5s after ITS
+  // OWN connect - well before this struct's discovery_deadline_ms (8s) can
+  // fire, and the SAME failure a single, uncontended link never sees. The
+  // real cause is the classic ESP32's single radio not reliably servicing
+  // TWO connections' periodic connection events while both are still
+  // "young", regardless of what either is doing at the GATT level.
+  // BoschEbikeLdiDual::on_connect_state_change() now withholds re-
+  // advertising for a second bike until this slot settles (see
+  // settle_hold below), which is the layer that actually needed fixing;
+  // discovery_started staggering is kept as a harmless second layer of
+  // defence, not the primary fix.
+  //
+  // discovery_started: true once exchange_mtu() has actually been called for
+  // this connection (try_start_discovery() may defer it while the OTHER slot
+  // is mid-chain, to avoid asking the radio to run two fresh multi-step GATT
+  // procedures at once).
+  bool discovery_started{false};
+  // discovery_deadline_ms: armed (millis() + DISCOVERY_TIMEOUT_MS) the
+  // moment this slot connects, covering the whole connect -> encrypt ->
+  // discovery -> live-data chain including any time spent deferred waiting
+  // for the other slot. Cleared (0) only by on_discovery_complete() - NOT
+  // by an ordinary notify, see settle_hold below for why that distinction
+  // matters. loop() force-disconnects the slot if this elapses first - the
+  // DISCONNECT handler's own re-advertising then gives it a clean, retried
+  // attempt. 0 means "not armed". Also doubles as the upper bound on how
+  // long settle_hold below may withhold advertising for.
+  uint32_t discovery_deadline_ms{0};
+  // True while this slot is the only one connected and has not yet reached
+  // live data: re-advertising for a second, not-yet-connected bike is
+  // withheld until this clears or the slot disconnects (organically via
+  // the link layer, or forced by the discovery_deadline_ms watchdog) -
+  // either path's own handler resumes advertising. See
+  // on_connect_state_change().
+  //
+  // Cleared ONLY from on_discovery_complete() - the initial-read callback,
+  // NOT on_live_data_notify() (an ordinary NOTIFY_RX). A round 2 tester log
+  // (issue #79) caught this clearing 0.8s early on a bonded bike's very
+  // first notification, which per the BLE spec a server may send from a
+  // retained CCC descriptor value the moment it is connected and
+  // encrypted, before this bridge has even written its OWN CCCD - so an
+  // early notify is not proof this slot's setup chain is actually done.
+  bool settle_hold{false};
 };
 
 // ---- Persisted slot->MAC mapping (stable bike->slot assignment) -------------
@@ -92,6 +143,21 @@ class BoschEbikeLdiDual : public Component {
   // applied to peer_[slot] / latest_[slot] only.
   void on_connect_state_change(int slot, bool connected);
   void on_live_data_notify(int slot, const uint8_t *data, size_t len);
+
+  // Called ONLY from the initial-read callback (on_chr_read), never from an
+  // ordinary NOTIFY_RX - see the long comment on settle_hold below for why
+  // that distinction matters (issue #79, round 3). This is the one true
+  // signal that this slot's whole setup chain genuinely finished.
+  void on_discovery_complete(int slot);
+
+  // Kick off this slot's MTU/discovery chain (exchange_mtu(), which the rest
+  // of the chain follows on from its own callback), unless it has already
+  // started or the OTHER slot's own chain is still in flight - in which case
+  // this is a no-op and loop() retries it on a later tick (issue #61 / #79).
+  // Callable from both NimBLE callback context (ENC_CHANGE, for the common
+  // uncontended case) and the ESPHome main loop task (loop()'s retry), same
+  // as the other direct ble_gap_*/ble_gattc_* callers already in this file.
+  void try_start_discovery(int slot);
 
   // conn_handle -> slot index whose peer_[i].conn_handle matches, else -1.
   int slot_for_conn(uint16_t conn_handle) const;
