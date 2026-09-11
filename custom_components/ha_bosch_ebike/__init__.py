@@ -274,9 +274,24 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # entries/integrations (manual "combine devices"), so double-check no
     # entity still points at it before deleting it from the registry.
     device_registry = dr.async_get(hass)
-    ghost_device = device_registry.async_get_device(
-        identifiers={(DOMAIN, entry.entry_id)}
-    )
+    ghost_identifier = (DOMAIN, entry.entry_id)
+    if hasattr(device_registry, "async_get_device_by_identifier"):
+        # HA >= 2026.8.0: ownership-scoped lookup, added alongside devices
+        # becoming shareable across config entries. async_get_device is
+        # deprecated as of this version (issue #80), so use the direct
+        # replacement here instead of the ambiguous identifier-only match.
+        ghost_device = device_registry.async_get_device_by_identifier(
+            identifier=ghost_identifier, config_entry_id=entry.entry_id
+        )
+    else:
+        # HA < 2026.8.0: async_get_device_by_identifier does not exist yet,
+        # and async_get_device is not deprecated on these versions either
+        # (the cross-config-entry device sharing it warns about was only
+        # introduced in 2026.8.0). Remove this branch once the project's
+        # minimum supported HA version reaches 2026.8.0.
+        ghost_device = device_registry.async_get_device(
+            identifiers={ghost_identifier}
+        )
     if ghost_device is not None:
         entity_registry = er.async_get(hass)
         if not er.async_entries_for_device(entity_registry, ghost_device.id):
