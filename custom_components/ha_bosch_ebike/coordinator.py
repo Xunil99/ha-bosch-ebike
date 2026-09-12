@@ -1254,8 +1254,15 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # make the next successful poll fire an event for every ride in the
         # window at once.
         activities_fetched = False
+        # Diagnose-Sonde: zeigt PII-sicher, unter welchem Key ein von der
+        # Person vergebener Fahrtname tatsaechlich steckt (Forum-Meldung:
+        # BES2 zeigt immer "Unbenannte Fahrt"). Kann nach Klaerung wieder
+        # entfernt werden, siehe bes2.title_probe.
+        title_probe: dict[str, Any] | None = None
         try:
             raw_acts = await self.api.get_activities_bes2(limit=20, offset=0)
+            if raw_acts:
+                title_probe = bes2.title_probe(raw_acts[0])
             activities = [bes2.normalize_activity_summary(a) for a in (raw_acts or []) if isinstance(a, dict)]
             activities_fetched = True
         except Exception as err:  # noqa: BLE001
@@ -1353,6 +1360,7 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "all_activities": activities,
             "latest_activity_details": latest_details,
             "latest_activity_details_by_bike": latest_activity_details_by_bike,
+            "bes2_title_probe": title_probe,
             "activity_consumption": {},
             "activity_bike": {},
             "maintenance": self._maintenance,

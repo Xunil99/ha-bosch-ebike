@@ -70,6 +70,11 @@ async def async_get_config_entry_diagnostics(
         "latest_activity": async_redact_data(
             data.get("latest_activity") or {}, TO_REDACT
         ),
+        # Temporary diagnostic probe for a BES2 forum report ("Unnamed ride"
+        # always shown despite a title set in the Bosch Connect portal).
+        # Reports raw key names/shape only, never the chosen title text.
+        # Remove once the real key is confirmed, see bes2.title_probe.
+        "bes2_title_probe": data.get("bes2_title_probe"),
         "consumption_entries": len(consumption),
         "consumption_sample": dict(list(consumption.items())[:3]),
         "maintenance": maintenance,

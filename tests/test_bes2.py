@@ -20,6 +20,7 @@ normalize_activity_summary = bes2.normalize_activity_summary
 enrich_summary_from_detail = bes2.enrich_summary_from_detail
 normalize_track = bes2.normalize_track
 normalize_statistics = bes2.normalize_statistics
+title_probe = bes2.title_probe
 
 
 # ---------------------------------------------------------------------------
@@ -414,6 +415,50 @@ def test_normalize_statistics_empty_and_non_dict():
     assert normalize_statistics({"totalStatistics": {}}) == {}
     assert normalize_statistics(None) == {}
     assert normalize_statistics([1, 2]) == {}
+
+
+# ---------------------------------------------------------------------------
+# title_probe
+# ---------------------------------------------------------------------------
+
+def test_title_probe_reports_keys_and_candidate_presence():
+    a2 = {"id": 1, "title": "Morning ride", "startTime": "2026-01-01T10:00:00Z"}
+    p = title_probe(a2)
+    assert p["summary_keys"] == ["id", "startTime", "title"]
+    assert p["candidate_fields"] == {"title": {"type": "str", "populated": True}}
+
+
+def test_title_probe_finds_alternate_candidate_key():
+    a2 = {"id": 1, "name": "Morning ride"}
+    p = title_probe(a2)
+    assert p["candidate_fields"] == {"name": {"type": "str", "populated": True}}
+    assert "title" not in p["candidate_fields"]
+
+
+def test_title_probe_reports_empty_string_as_not_populated():
+    a2 = {"title": ""}
+    p = title_probe(a2)
+    assert p["candidate_fields"] == {"title": {"type": "str", "populated": False}}
+
+
+def test_title_probe_no_candidate_keys_present():
+    a2 = {"id": 1, "startTime": "2026-01-01T10:00:00Z"}
+    p = title_probe(a2)
+    assert p["candidate_fields"] == {}
+    assert p["summary_keys"] == ["id", "startTime"]
+
+
+def test_title_probe_non_dict_safe():
+    assert title_probe(None) == {"summary_type": "NoneType"}
+    assert title_probe([1, 2]) == {"summary_type": "list"}
+    assert title_probe("x") == {"summary_type": "str"}
+
+
+def test_title_probe_never_leaks_the_actual_title_text():
+    a2 = {"title": "My Secret Sunday Ride"}
+    p = title_probe(a2)
+    dumped = repr(p)
+    assert "My Secret Sunday Ride" not in dumped
 
 
 if __name__ == "__main__":
