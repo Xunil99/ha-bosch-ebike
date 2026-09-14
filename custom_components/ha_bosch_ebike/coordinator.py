@@ -1256,9 +1256,13 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         activities_fetched = False
         # Diagnose-Sonde: zeigt PII-sicher, unter welchem Key ein von der
         # Person vergebener Fahrtname tatsaechlich steckt (Forum-Meldung:
-        # BES2 zeigt immer "Unbenannte Fahrt"). Kann nach Klaerung wieder
-        # entfernt werden, siehe bes2.title_probe.
+        # BES2 zeigt immer "Unbenannte Fahrt"). Runde 1 (Joesy) zeigte: die
+        # 8 Keys der TRIP-Summary enthalten keinerlei Titel-Feld. Runde 2
+        # prueft deshalb zusaetzlich das Detail-Objekt und den ersten
+        # bikeRides-Eintrag derselben Fahrt, siehe bes2.title_probe. Kann
+        # nach Klaerung wieder entfernt werden.
         title_probe: dict[str, Any] | None = None
+        raw_acts: list[Any] = []
         try:
             raw_acts = await self.api.get_activities_bes2(limit=20, offset=0)
             if raw_acts:
@@ -1290,6 +1294,16 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     detail = await self.api.get_activity_detail_bes2(raw_id)
                     latest_details = bes2.normalize_track(detail)
                     bes2.enrich_summary_from_detail(latest_activity, detail)
+                    # Upgrade the probe above to the SAME activity whose
+                    # detail we just fetched (raw_acts[0] need not be the
+                    # true latest, the BES2 list endpoint order is not
+                    # guaranteed), now including the detail response's own
+                    # keys and the first bikeRides entry's keys.
+                    raw_latest = next(
+                        (a for a in raw_acts if str(a.get("id")) == raw_id), None
+                    )
+                    if raw_latest is not None:
+                        title_probe = bes2.title_probe(raw_latest, detail=detail)
                     # Trick Check (see trick_check.py) is only confirmed on
                     # the Smart System activity summary, not (yet) BES2's -
                     # try the detail response too, best-effort, in case

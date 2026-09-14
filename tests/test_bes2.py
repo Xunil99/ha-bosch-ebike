@@ -461,6 +461,42 @@ def test_title_probe_never_leaks_the_actual_title_text():
     assert "My Secret Sunday Ride" not in dumped
 
 
+def test_title_probe_checks_first_bike_ride_for_candidates():
+    a2 = {"id": 1, "bikeRides": [{"type": "BIKE_RIDE", "name": "Segment A"},
+                                  {"type": "BIKE_RIDE"}]}
+    p = title_probe(a2)
+    assert p["first_bike_ride_keys"] == ["name", "type"]
+    assert p["first_bike_ride_candidate_fields"] == {
+        "name": {"type": "str", "populated": True}}
+
+
+def test_title_probe_no_bike_ride_keys_when_absent_or_empty():
+    assert "first_bike_ride_keys" not in title_probe({"id": 1})
+    assert "first_bike_ride_keys" not in title_probe({"id": 1, "bikeRides": []})
+    assert "first_bike_ride_keys" not in title_probe(
+        {"id": 1, "bikeRides": ["not a dict"]})
+
+
+def test_title_probe_checks_detail_response_for_candidates():
+    a2 = {"id": 1}
+    detail = {"elevationGain": 100.0, "tripName": "Detail Name"}
+    p = title_probe(a2, detail=detail)
+    assert p["detail_keys"] == ["elevationGain", "tripName"]
+    assert p["detail_candidate_fields"] == {
+        "tripName": {"type": "str", "populated": True}}
+
+
+def test_title_probe_no_detail_keys_when_detail_missing_or_invalid():
+    assert "detail_keys" not in title_probe({"id": 1})
+    assert "detail_keys" not in title_probe({"id": 1}, detail=None)
+    assert "detail_keys" not in title_probe({"id": 1}, detail="not a dict")
+
+
+def test_title_probe_detail_never_leaks_the_actual_title_text():
+    p = title_probe({"id": 1}, detail={"tripName": "My Secret Sunday Ride"})
+    assert "My Secret Sunday Ride" not in repr(p)
+
+
 if __name__ == "__main__":
     for name, fn in sorted(globals().items()):
         if name.startswith("test_") and callable(fn):
