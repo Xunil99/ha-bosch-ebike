@@ -107,13 +107,22 @@ def normalize_activity_summary(a2: dict) -> dict:
                 if _num(r.get("caloriesBurned"))]
     calories_total = sum(calories) if calories else None
 
+    # Confirmed via diagnostics against real BES2 payloads (forum report,
+    # Joesy/Joachim): the TRIP object itself never carries a "title" key at
+    # all. The rider-given name lives one level down, on the first ride
+    # segment (bikeRides[0].title) - a trip is apparently modelled as one or
+    # more constituent rides, and the name belongs to the ride, not the
+    # trip. Falls back to the old trip-level lookup too, harmlessly, in case
+    # some other BES2 payload shape does carry it there.
+    title = (rides[0].get("title") if rides else None) or _get(a2, "title")
+
     return {
         "id": activity_id,
         "distance": distance,
         "durationWithoutStops": duration,
         "startTime": _get(a2, "startTime"),
         "endTime": _get(a2, "endTime"),
-        "title": _get(a2, "title"),
+        "title": title,
         "speed": {"average": speed_avg, "maximum": speed_max},
         "cadence": {},
         "riderPower": {},
@@ -237,63 +246,4 @@ def normalize_statistics(raw: dict) -> dict:
         out["total_elevation_gain_m"] = tot.get("elevationGain")
     if _num(tot.get("yearlyDistance")):
         out["yearly_distance_m"] = tot.get("yearlyDistance")
-    return out
-
-
-# ---------------------------------------------------------------------------
-# Diagnostics probe — is a rider-given trip title present, under what key?
-# ---------------------------------------------------------------------------
-
-def _title_candidate_fields(d: dict) -> dict:
-    """PII-safe presence report for plausible trip-title keys in one dict.
-
-    Names Bosch could plausibly use for a rider-given trip title: "title" is
-    what the code currently reads (mirroring the Smart System shape), the
-    rest are common alternatives in similar Bosch Data Act payloads. Reports
-    only the key's type and whether it is populated, never the value.
-    """
-    candidates = ["title", "name", "tripName", "activityName", "label"]
-    fields = {}
-    for key in candidates:
-        if key in d:
-            v = d[key]
-            fields[key] = {"type": type(v).__name__, "populated": bool(v)}
-    return fields
-
-
-def title_probe(a2: Any, detail: Any = None) -> dict:
-    """PII-safe shape report of a raw BES2 TRIP summary (for diagnostics).
-
-    Forum report: BES2 activities always show "Unnamed ride" even though the
-    user set a name in the Bosch Connect portal. normalize_activity_summary
-    reads a top-level "title" key, copied over from the Smart System shape
-    at BES2's original implementation, but this was never confirmed against
-    a real TRIP payload the way the GPS track fields were (see the removed
-    track_probe in git history).
-
-    Round 1 (forum user Joesy) showed the TRIP summary's 8 keys hold no
-    title-like field at all. Round 2 also probes the first bikeRides entry
-    (maybe the name is per-ride, not per-trip) and, if the caller passes the
-    already-fetched per-trip detail response, that too (maybe the summary
-    endpoint just omits it). Reports key names and, for the same short
-    candidate list, whether each is present and non-empty - never the
-    chosen title text itself. Can be removed once the real key is confirmed.
-    """
-    if not isinstance(a2, dict):
-        return {"summary_type": type(a2).__name__}
-
-    out: dict = {
-        "summary_keys": sorted(a2.keys()),
-        "candidate_fields": _title_candidate_fields(a2),
-    }
-
-    rides = a2.get("bikeRides")
-    if isinstance(rides, list) and rides and isinstance(rides[0], dict):
-        out["first_bike_ride_keys"] = sorted(rides[0].keys())
-        out["first_bike_ride_candidate_fields"] = _title_candidate_fields(rides[0])
-
-    if isinstance(detail, dict):
-        out["detail_keys"] = sorted(detail.keys())
-        out["detail_candidate_fields"] = _title_candidate_fields(detail)
-
     return out

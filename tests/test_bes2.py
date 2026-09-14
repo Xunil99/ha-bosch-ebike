@@ -20,7 +20,6 @@ normalize_activity_summary = bes2.normalize_activity_summary
 enrich_summary_from_detail = bes2.enrich_summary_from_detail
 normalize_track = bes2.normalize_track
 normalize_statistics = bes2.normalize_statistics
-title_probe = bes2.title_probe
 
 
 # ---------------------------------------------------------------------------
@@ -418,83 +417,61 @@ def test_normalize_statistics_empty_and_non_dict():
 
 
 # ---------------------------------------------------------------------------
-# title_probe
+# normalize_activity_summary - trip title (forum report: Joesy/Joachim)
 # ---------------------------------------------------------------------------
 
-def test_title_probe_reports_keys_and_candidate_presence():
-    a2 = {"id": 1, "title": "Morning ride", "startTime": "2026-01-01T10:00:00Z"}
-    p = title_probe(a2)
-    assert p["summary_keys"] == ["id", "startTime", "title"]
-    assert p["candidate_fields"] == {"title": {"type": "str", "populated": True}}
+def test_activity_summary_title_comes_from_first_bike_ride():
+    # The real shape, confirmed via diagnostics against Joesy/Joachim's
+    # account: the TRIP object itself has no "title" key at all, the name
+    # lives on the first bikeRides entry instead.
+    a2 = {
+        "id": 1,
+        "startTime": "2026-01-01T10:00:00Z",
+        "bikeRides": [
+            {"type": "BIKE_RIDE", "title": "Feierabendrunde", "avgSpeed": 20.0},
+        ],
+    }
+    out = normalize_activity_summary(a2)
+    assert out["title"] == "Feierabendrunde"
 
 
-def test_title_probe_finds_alternate_candidate_key():
-    a2 = {"id": 1, "name": "Morning ride"}
-    p = title_probe(a2)
-    assert p["candidate_fields"] == {"name": {"type": "str", "populated": True}}
-    assert "title" not in p["candidate_fields"]
+def test_activity_summary_title_falls_back_to_trip_level_key():
+    # Belt and braces: if some other BES2 shape does carry a trip-level
+    # title, still use it.
+    a2 = {"id": 1, "title": "Trip Level Name", "bikeRides": []}
+    out = normalize_activity_summary(a2)
+    assert out["title"] == "Trip Level Name"
 
 
-def test_title_probe_reports_empty_string_as_not_populated():
-    a2 = {"title": ""}
-    p = title_probe(a2)
-    assert p["candidate_fields"] == {"title": {"type": "str", "populated": False}}
+def test_activity_summary_title_prefers_bike_ride_over_trip_level():
+    a2 = {
+        "id": 1,
+        "title": "Stale Trip Name",
+        "bikeRides": [{"type": "BIKE_RIDE", "title": "Actual Ride Name"}],
+    }
+    out = normalize_activity_summary(a2)
+    assert out["title"] == "Actual Ride Name"
 
 
-def test_title_probe_no_candidate_keys_present():
-    a2 = {"id": 1, "startTime": "2026-01-01T10:00:00Z"}
-    p = title_probe(a2)
-    assert p["candidate_fields"] == {}
-    assert p["summary_keys"] == ["id", "startTime"]
+def test_activity_summary_title_none_when_nowhere_to_be_found():
+    a2 = {"id": 1, "bikeRides": [{"type": "BIKE_RIDE"}]}
+    out = normalize_activity_summary(a2)
+    assert out["title"] is None
 
 
-def test_title_probe_non_dict_safe():
-    assert title_probe(None) == {"summary_type": "NoneType"}
-    assert title_probe([1, 2]) == {"summary_type": "list"}
-    assert title_probe("x") == {"summary_type": "str"}
+def test_activity_summary_title_ignores_empty_bike_ride_title():
+    a2 = {
+        "id": 1,
+        "title": "Fallback Name",
+        "bikeRides": [{"type": "BIKE_RIDE", "title": ""}],
+    }
+    out = normalize_activity_summary(a2)
+    assert out["title"] == "Fallback Name"
 
 
-def test_title_probe_never_leaks_the_actual_title_text():
-    a2 = {"title": "My Secret Sunday Ride"}
-    p = title_probe(a2)
-    dumped = repr(p)
-    assert "My Secret Sunday Ride" not in dumped
-
-
-def test_title_probe_checks_first_bike_ride_for_candidates():
-    a2 = {"id": 1, "bikeRides": [{"type": "BIKE_RIDE", "name": "Segment A"},
-                                  {"type": "BIKE_RIDE"}]}
-    p = title_probe(a2)
-    assert p["first_bike_ride_keys"] == ["name", "type"]
-    assert p["first_bike_ride_candidate_fields"] == {
-        "name": {"type": "str", "populated": True}}
-
-
-def test_title_probe_no_bike_ride_keys_when_absent_or_empty():
-    assert "first_bike_ride_keys" not in title_probe({"id": 1})
-    assert "first_bike_ride_keys" not in title_probe({"id": 1, "bikeRides": []})
-    assert "first_bike_ride_keys" not in title_probe(
-        {"id": 1, "bikeRides": ["not a dict"]})
-
-
-def test_title_probe_checks_detail_response_for_candidates():
-    a2 = {"id": 1}
-    detail = {"elevationGain": 100.0, "tripName": "Detail Name"}
-    p = title_probe(a2, detail=detail)
-    assert p["detail_keys"] == ["elevationGain", "tripName"]
-    assert p["detail_candidate_fields"] == {
-        "tripName": {"type": "str", "populated": True}}
-
-
-def test_title_probe_no_detail_keys_when_detail_missing_or_invalid():
-    assert "detail_keys" not in title_probe({"id": 1})
-    assert "detail_keys" not in title_probe({"id": 1}, detail=None)
-    assert "detail_keys" not in title_probe({"id": 1}, detail="not a dict")
-
-
-def test_title_probe_detail_never_leaks_the_actual_title_text():
-    p = title_probe({"id": 1}, detail={"tripName": "My Secret Sunday Ride"})
-    assert "My Secret Sunday Ride" not in repr(p)
+def test_activity_summary_title_no_bike_rides_no_raise():
+    assert normalize_activity_summary({"id": 1})["title"] is None
+    assert normalize_activity_summary({"id": 1, "bikeRides": None})["title"] is None
 
 
 if __name__ == "__main__":
