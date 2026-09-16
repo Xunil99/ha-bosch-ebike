@@ -71,7 +71,7 @@ ota:
   - platform: esphome
 
 external_components:
-  - source: github://Xunil99/ha-bosch-ebike@fix/issue81-esp-bt-header
+  - source: github://Xunil99/ha-bosch-ebike@main
     components: [bosch_ebike_ldi]
     refresh: 1d
 
