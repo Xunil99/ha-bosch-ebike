@@ -20,15 +20,13 @@ try:
         include_builtin_idf_component,
         request_bluetooth,
     )
-except ImportError:
+except ImportError as _issue81_import_err:
     request_bluetooth = None
     get_excluded_builtin_components = None
     include_builtin_idf_component = None
-
-print(
-    f"[issue81-diag] import: request_bluetooth={request_bluetooth!r} "
-    f"get_excluded_builtin_components={get_excluded_builtin_components!r}"
-)
+    _ISSUE81_IMPORT_ERROR = repr(_issue81_import_err)
+else:
+    _ISSUE81_IMPORT_ERROR = None
 
 CODEOWNERS = ["@Xunil99"]
 DEPENDENCIES = ["esp32"]
@@ -62,11 +60,18 @@ async def to_code(config):
         request_bluetooth()
     if include_builtin_idf_component is not None:
         include_builtin_idf_component("bt")
-    if get_excluded_builtin_components is not None:
-        print(
-            f"[issue81-diag] after request_bluetooth(): "
-            f"excluded={get_excluded_builtin_components()!r}"
-        )
+
+    # TEMPORARY diagnostic (issue #81): raise loudly so the state is visible
+    # in CI regardless of stdout capturing - print() during codegen does not
+    # reach the esphome/build-action log. Remove once the real mechanism is
+    # confirmed working.
+    raise RuntimeError(
+        "[issue81-diag] "
+        f"import_error={_ISSUE81_IMPORT_ERROR!r} "
+        f"request_bluetooth={request_bluetooth!r} "
+        f"excluded_after_call="
+        f"{get_excluded_builtin_components() if get_excluded_builtin_components else 'N/A'!r}"
+    )
 
     # NimBLE sdkconfig requirements (issue #59): declare these ourselves so
     # the bridge builds and runs correctly out of the box, instead of users
