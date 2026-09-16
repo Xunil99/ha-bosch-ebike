@@ -15,18 +15,9 @@ try:
     # directories get compiled are now two separate mechanisms. Older
     # ESPHome versions never excluded "bt" in the first place, so this
     # import fails there and the call is simply skipped.
-    from esphome.components.esp32 import (
-        get_excluded_builtin_components,
-        include_builtin_idf_component,
-        request_bluetooth,
-    )
-except ImportError as _issue81_import_err:
+    from esphome.components.esp32 import request_bluetooth
+except ImportError:
     request_bluetooth = None
-    get_excluded_builtin_components = None
-    include_builtin_idf_component = None
-    _ISSUE81_IMPORT_ERROR = repr(_issue81_import_err)
-else:
-    _ISSUE81_IMPORT_ERROR = None
 
 CODEOWNERS = ["@Xunil99"]
 DEPENDENCIES = ["esp32"]
@@ -58,20 +49,6 @@ async def to_code(config):
     # versions that exclude it by default. No-op on older ESPHome.
     if request_bluetooth is not None:
         request_bluetooth()
-    if include_builtin_idf_component is not None:
-        include_builtin_idf_component("bt")
-
-    # TEMPORARY diagnostic (issue #81): raise loudly so the state is visible
-    # in CI regardless of stdout capturing - print() during codegen does not
-    # reach the esphome/build-action log. Remove once the real mechanism is
-    # confirmed working.
-    raise RuntimeError(
-        "[issue81-diag] "
-        f"import_error={_ISSUE81_IMPORT_ERROR!r} "
-        f"request_bluetooth={request_bluetooth!r} "
-        f"excluded_after_call="
-        f"{get_excluded_builtin_components() if get_excluded_builtin_components else 'N/A'!r}"
-    )
 
     # NimBLE sdkconfig requirements (issue #59): declare these ourselves so
     # the bridge builds and runs correctly out of the box, instead of users
