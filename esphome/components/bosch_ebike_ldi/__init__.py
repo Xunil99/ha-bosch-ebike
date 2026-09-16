@@ -5,6 +5,20 @@ import esphome.config_validation as cv
 from esphome.components.esp32 import add_idf_sdkconfig_option
 from esphome.const import CONF_ID
 
+try:
+    # ESPHome >= 2026.9.0 excludes the ESP-IDF "bt" component from the build
+    # by default (compile-time optimization) unless something asks for it
+    # back via this call - without it, esp_bt.h is no longer on the include
+    # path at all and the build fails with "esp_bt.h: No such file or
+    # directory" (issue #81), even though every CONFIG_BT_* sdkconfig option
+    # below is still set correctly; sdkconfig options and which component
+    # directories get compiled are now two separate mechanisms. Older
+    # ESPHome versions never excluded "bt" in the first place, so this
+    # import fails there and the call is simply skipped.
+    from esphome.components.esp32 import request_bluetooth
+except ImportError:
+    request_bluetooth = None
+
 CODEOWNERS = ["@Xunil99"]
 DEPENDENCIES = ["esp32"]
 AUTO_LOAD = ["binary_sensor", "sensor"]
@@ -30,6 +44,11 @@ async def to_code(config):
 
     # ESP-IDF only - NimBLE is the host stack we depend on
     cg.add_build_flag("-DBOSCH_EBIKE_LDI_NIMBLE")
+
+    # Issue #81: keep the ESP-IDF "bt" component in the build on ESPHome
+    # versions that exclude it by default. No-op on older ESPHome.
+    if request_bluetooth is not None:
+        request_bluetooth()
 
     # NimBLE sdkconfig requirements (issue #59): declare these ourselves so
     # the bridge builds and runs correctly out of the box, instead of users
