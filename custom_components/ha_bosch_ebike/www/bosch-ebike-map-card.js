@@ -4181,10 +4181,21 @@ class BoschEBikeHeatmapCard extends HTMLElement {
     } else {
       this._lockedBike = false;
     }
+    // Issue #83: basemap style, reusing the same MAP_STYLES keys (osm/topo/
+    // sat) the regular map card's in-card switcher already uses. Unlike
+    // that switcher this is a static config value, no live toggle buttons.
+    const newMapStyle = MAP_STYLES[config.map_style] ? config.map_style : "osm";
+    const mapStyleChanged = this._mapStyle !== newMapStyle;
+    this._mapStyle = newMapStyle;
     if (this._ready) {
       this._applyHeatTitle();
       this._populateFilters();
       this._renderTracks();
+      if (mapStyleChanged && this._map && this._baseLayer) {
+        const def = MAP_STYLES[this._mapStyle];
+        this._map.removeLayer(this._baseLayer);
+        this._baseLayer = window.L.tileLayer(def.url, def.options).addTo(this._map);
+      }
     }
   }
 
@@ -4598,7 +4609,7 @@ class BoschEBikeHeatmapCard extends HTMLElement {
       attributionControl: false,
       preferCanvas: true,
     }).setView([48.7, 12.4], 6);
-    const def = MAP_STYLES.osm;
+    const def = MAP_STYLES[this._mapStyle] || MAP_STYLES.osm;
     this._baseLayer = Leaflet.tileLayer(def.url, def.options).addTo(this._map);
     this._tracksGroup = Leaflet.layerGroup().addTo(this._map);
 
@@ -4715,6 +4726,28 @@ class BoschEBikeHeatmapCard extends HTMLElement {
     if (msg) msg.style.display = "none";
   }
 
+  // Issue #83: OSM's standard tiles already use red/orange/pink for roads,
+  // so the old fixed dark-red-at-35%-opacity tracks nearly disappeared into
+  // the basemap. Defaults switch to a saturated blue that does not compete
+  // with the road palette, with a modest opacity/weight bump; all three
+  // stay configurable via track_color/track_opacity/track_weight. Opacity
+  // deliberately stays well under 1 even as a default: with many
+  // overlapping rides drawn as stacked semi-transparent lines, frequently
+  // ridden routes naturally end up looking more solid than one-off rides -
+  // an accumulation effect a too-opaque default would erase.
+  _trackStyle() {
+    const cfg = this._config || {};
+    const color = typeof cfg.track_color === "string" && cfg.track_color.trim()
+      ? cfg.track_color.trim() : "#0050ff";
+    const opacityNum = Number(cfg.track_opacity);
+    const opacity = Number.isFinite(opacityNum)
+      ? Math.min(1, Math.max(0, opacityNum)) : 0.5;
+    const weightNum = Number(cfg.track_weight);
+    const weight = Number.isFinite(weightNum) && weightNum > 0
+      ? weightNum : 3;
+    return { color, opacity, weight };
+  }
+
   _renderTracks() {
     if (!this._map || !this._tracksGroup) return;
     const Leaflet = window.L;
@@ -4726,15 +4759,14 @@ class BoschEBikeHeatmapCard extends HTMLElement {
       return true;
     });
 
+    const trackStyle = this._trackStyle();
     let totalDist = 0;
     let allLatLngs = [];
     for (const t of filtered) {
       if (!t.points || t.points.length < 2) continue;
       const latlngs = t.points.map((p) => [p.lat, p.lon]);
       Leaflet.polyline(latlngs, {
-        color: "#d32f2f",
-        weight: 2.5,
-        opacity: 0.35,
+        ...trackStyle,
         smoothFactor: 1.5,
       }).addTo(this._tracksGroup);
       allLatLngs = allLatLngs.concat(latlngs);
@@ -5249,6 +5281,20 @@ class BoschEBikeHeatmapCardEditor extends BoschEBikeMapCardEditor {
       bikeOpts += `<option value="${this._escapeHtml(b.id)}"${selected}>${this._escapeHtml(b.label)}</option>`;
     }
 
+    // Issue #83: basemap style + track appearance, both configurable so the
+    // default dark-red tracks (barely visible against OSM's own red/orange
+    // roads) can be adjusted instead of only fixed via card_mod workarounds.
+    const STYLE_LABEL_KEYS = { osm: "style_standard", topo: "style_topo", sat: "style_sat" };
+    let styleOpts = "";
+    for (const key of ["osm", "topo", "sat"]) {
+      const selected = (cfg.map_style || "osm") === key ? " selected" : "";
+      styleOpts += `<option value="${key}"${selected}>${ebT(this._hass, STYLE_LABEL_KEYS[key])}</option>`;
+    }
+    const trackColor = typeof cfg.track_color === "string" && /^#[0-9a-fA-F]{6}$/.test(cfg.track_color)
+      ? cfg.track_color : "#0050ff";
+    const trackOpacity = Number.isFinite(Number(cfg.track_opacity)) ? Number(cfg.track_opacity) : 0.5;
+    const trackWeight = Number.isFinite(Number(cfg.track_weight)) ? Number(cfg.track_weight) : 3;
+
     const t = (k, ...a) => ebT(this._hass, k, ...a);
     this.innerHTML = `<div style="padding:16px">
       <label style="${labelStyle.replace('margin-top:14px;', '')}">${t("editor_height")}</label>
@@ -5264,6 +5310,18 @@ class BoschEBikeHeatmapCardEditor extends BoschEBikeMapCardEditor {
       <label style="${labelStyle}">${t("editor_bike_label")}</label>
       <select id="bike-in" style="${inputStyle}">${bikeOpts}</select>
       <span style="${hintStyle}">${t("editor_bike_hint")}</span>
+
+      <label style="${labelStyle}">${t("editor_map_style_label")}</label>
+      <select id="style-in" style="${inputStyle}">${styleOpts}</select>
+
+      <label style="${labelStyle}">${t("editor_track_color_label")}</label>
+      <input type="color" value="${trackColor}" style="${inputStyle}padding:4px;height:40px;" id="track-color-in">
+
+      <label style="${labelStyle}">${t("editor_track_opacity_label")}</label>
+      <input type="number" value="${trackOpacity}" min="0" max="1" step="0.05" style="${inputStyle}" id="track-opacity-in">
+
+      <label style="${labelStyle}">${t("editor_track_weight_label")}</label>
+      <input type="number" value="${trackWeight}" min="0.5" max="10" step="0.5" style="${inputStyle}" id="track-weight-in">
     </div>`;
 
     this.querySelector("#h-in").addEventListener("change", (e) => {
@@ -5291,6 +5349,34 @@ class BoschEBikeHeatmapCardEditor extends BoschEBikeMapCardEditor {
       this._config = { ...this._config };
       if (v) this._config.bike_id = v;
       else delete this._config.bike_id;
+      this._emit();
+    });
+    this.querySelector("#style-in").addEventListener("change", (e) => {
+      const v = e.target.value;
+      this._config = { ...this._config };
+      if (v && v !== "osm") this._config.map_style = v;
+      else delete this._config.map_style;
+      this._emit();
+    });
+    this.querySelector("#track-color-in").addEventListener("change", (e) => {
+      const v = e.target.value;
+      this._config = { ...this._config };
+      if (v && v.toLowerCase() !== "#0050ff") this._config.track_color = v;
+      else delete this._config.track_color;
+      this._emit();
+    });
+    this.querySelector("#track-opacity-in").addEventListener("change", (e) => {
+      const v = Math.min(1, Math.max(0, parseFloat(e.target.value)));
+      this._config = { ...this._config };
+      if (Number.isFinite(v) && v !== 0.5) this._config.track_opacity = v;
+      else delete this._config.track_opacity;
+      this._emit();
+    });
+    this.querySelector("#track-weight-in").addEventListener("change", (e) => {
+      const v = parseFloat(e.target.value);
+      this._config = { ...this._config };
+      if (Number.isFinite(v) && v > 0 && v !== 3) this._config.track_weight = v;
+      else delete this._config.track_weight;
       this._emit();
     });
   }

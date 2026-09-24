@@ -539,12 +539,18 @@ brouter.de), `entity` (Reichweiten-Sensor), `soc_entity` (Live-Akkustand).
 
 ### Heatmap-Card - alle Touren auf einer Karte
 
-Eine zweite Card-Variante `bosch-ebike-heatmap-card` legt alle Touren einer Auswahl als halbtransparente Linien übereinander. Filter-Dropdowns für Zeitraum (30 Tage / 3 Monate / 12 Monate / Alle), Konto und Bike. Darunter eine Statuszeile mit Tour- und Kilometeranzahl der Auswahl.
+Eine zweite Card-Variante `bosch-ebike-heatmap-card` legt alle Touren einer Auswahl als halbtransparente Linien übereinander. Filter-Dropdowns für Zeitraum (30 Tage / 3 Monate / 12 Monate / Alle), Konto und Bike. Darunter eine Statuszeile mit Tour- und Kilometeranzahl der Auswahl. Kartenstil und Track-Optik sind konfigurierbar, standardmäßig ein kräftiges Blau, das sich von den rot/orangen Straßen der OSM-Kachel gut abhebt.
 
 ```yaml
 type: custom:bosch-ebike-heatmap-card
 height: 600
+map_style: topo        # osm (Standard) / topo / sat
+track_color: "#0050ff" # Standardwert, hier nur zur Veranschaulichung
+track_opacity: 0.5     # 0-1
+track_weight: 3        # Linienstärke in px
 ```
+
+Alle vier Optionen sind optional, ohne Angabe gelten die oben gezeigten Standardwerte.
 
 Die erste Anzeige kann etwas dauern - bei jeder bisher nicht abgerufenen Tour wird ein zusätzlicher API-Call gemacht (mit Concurrency-Limit). Die Tracks werden serverseitig im Speicher gecacht, weitere Aufrufe sind sofort.
 
@@ -1411,12 +1417,18 @@ of brouter.de), `entity` (range sensor), `soc_entity` (live battery level).
 
 ### Heatmap card - all rides overlaid
 
-A second card type, `bosch-ebike-heatmap-card`, draws all rides in a selection as semi-transparent overlays on a single map. Filter dropdowns for time range (30 days / 3 months / 12 months / All), account and bike. A status line below shows ride count and total distance for the current selection.
+A second card type, `bosch-ebike-heatmap-card`, draws all rides in a selection as semi-transparent overlays on a single map. Filter dropdowns for time range (30 days / 3 months / 12 months / All), account and bike. A status line below shows ride count and total distance for the current selection. Basemap style and track appearance are configurable, defaulting to a bold blue that stands out well against OSM's own red/orange roads.
 
 ```yaml
 type: custom:bosch-ebike-heatmap-card
 height: 600
+map_style: topo        # osm (default) / topo / sat
+track_color: "#0050ff" # this is the default, shown here just for illustration
+track_opacity: 0.5     # 0-1
+track_weight: 3        # line thickness in px
 ```
+
+All four options are optional; without them the defaults shown above apply.
 
 First render can take a moment - every ride whose detail hasn't been fetched yet triggers an API call (rate-limited via concurrency limit). Tracks are then cached server-side in memory; subsequent renders are instant.
 

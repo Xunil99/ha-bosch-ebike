@@ -397,12 +397,18 @@ de batterie en direct).
 
 ### Carte heatmap – toutes les sorties sur une seule carte
 
-Une deuxième variante de carte, `bosch-ebike-heatmap-card`, superpose toutes les sorties d'une sélection sous forme de lignes semi-transparentes. Menus déroulants de filtre pour la période (30 jours / 3 mois / 12 mois / tout), le compte et le vélo. En dessous, une ligne d'état avec le nombre de sorties et de kilomètres de la sélection.
+Une deuxième variante de carte, `bosch-ebike-heatmap-card`, superpose toutes les sorties d'une sélection sous forme de lignes semi-transparentes. Menus déroulants de filtre pour la période (30 jours / 3 mois / 12 mois / tout), le compte et le vélo. En dessous, une ligne d'état avec le nombre de sorties et de kilomètres de la sélection. Le style de fond de carte et l'apparence du tracé sont configurables, avec par défaut un bleu vif qui se détache bien des routes rouges/oranges du fond OSM.
 
 ```yaml
 type: custom:bosch-ebike-heatmap-card
 height: 600
+map_style: topo        # osm (par défaut) / topo / sat
+track_color: "#0050ff" # valeur par défaut, indiquée ici à titre d'exemple
+track_opacity: 0.5     # 0-1
+track_weight: 3        # épaisseur du trait en px
 ```
+
+Les quatre options sont facultatives, sans indication les valeurs par défaut ci-dessus s'appliquent.
 
 Le premier affichage peut prendre un peu de temps – pour chaque sortie pas encore récupérée, un appel API supplémentaire est effectué (avec limite de concurrence). Les traces sont mises en cache en mémoire côté serveur, les appels suivants sont immédiats.
 

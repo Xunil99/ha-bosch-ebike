@@ -385,12 +385,18 @@ van brouter.de), `entity` (actieradius-sensor), `soc_entity` (live-accuniveau).
 
 ### Heatmap-kaart – alle tours op één kaart
 
-Een tweede kaartvariant `bosch-ebike-heatmap-card` legt alle tours van een selectie als halftransparante lijnen over elkaar. Filter-dropdowns voor periode (30 dagen / 3 maanden / 12 maanden / alles), account en fiets. Daaronder een statusregel met het aantal tours en kilometers van de selectie.
+Een tweede kaartvariant `bosch-ebike-heatmap-card` legt alle tours van een selectie als halftransparante lijnen over elkaar. Filter-dropdowns voor periode (30 dagen / 3 maanden / 12 maanden / alles), account en fiets. Daaronder een statusregel met het aantal tours en kilometers van de selectie. Kaartstijl en trackweergave zijn configureerbaar, standaard een fel blauw dat goed opvalt tegen de rode/oranje wegen van de OSM-ondergrond.
 
 ```yaml
 type: custom:bosch-ebike-heatmap-card
 height: 600
+map_style: topo        # osm (standaard) / topo / sat
+track_color: "#0050ff" # standaardwaarde, hier alleen ter illustratie
+track_opacity: 0.5     # 0-1
+track_weight: 3        # lijndikte in px
 ```
+
+Alle vier de opties zijn optioneel, zonder opgave gelden de hierboven getoonde standaardwaarden.
 
 De eerste weergave kan even duren – voor elke nog niet opgehaalde tour wordt een extra API-call gedaan (met concurrency-limiet). De tracks worden serverzijdig in het geheugen gecachet; volgende oproepen zijn direct.
 

@@ -385,12 +385,18 @@ brouter.de), `entity` (senzor dojezdu), `soc_entity` (živý stav nabití).
 
 ### Karta s heatmapou – všechny jízdy na jedné mapě
 
-Druhá varianta mapy `bosch-ebike-heatmap-card` překrývá všechny jízdy z výběru jako poloprůhledné čáry. Rozbalovací filtry pro období (30 dní / 3 měsíce / 12 měsíců / vše), účet a kolo. Pod nimi stavový řádek s počtem jízd a kilometrů ve výběru.
+Druhá varianta mapy `bosch-ebike-heatmap-card` překrývá všechny jízdy z výběru jako poloprůhledné čáry. Rozbalovací filtry pro období (30 dní / 3 měsíce / 12 měsíců / vše), účet a kolo. Pod nimi stavový řádek s počtem jízd a kilometrů ve výběru. Styl mapy a vzhled trasy jsou nastavitelné, výchozí je sytá modrá, která je dobře vidět proti červeným/oranžovým silnicím na OSM podkladu.
 
 ```yaml
 type: custom:bosch-ebike-heatmap-card
 height: 600
+map_style: topo        # osm (výchozí) / topo / sat
+track_color: "#0050ff" # výchozí hodnota, zde jen pro ukázku
+track_opacity: 0.5     # 0-1
+track_weight: 3        # tloušťka čáry v px
 ```
+
+Všechny čtyři volby jsou nepovinné, bez zadání platí výchozí hodnoty uvedené výše.
 
 První zobrazení může chvíli trvat – pro každou dosud nenačtenou jízdu se provede další API volání (s limitem souběžnosti). Trasy se ukládají do mezipaměti na straně serveru; další vyvolání jsou okamžitá.
 

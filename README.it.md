@@ -393,12 +393,18 @@ live).
 
 ### Heatmap card – tutti i tour su una sola mappa
 
-Una seconda variante della card, `bosch-ebike-heatmap-card`, sovrappone tutti i tour di una selezione come linee semitrasparenti. Dropdown di filtro per periodo (30 giorni / 3 mesi / 12 mesi / tutti), account e bici. Sotto, una riga di stato con il numero di tour e di chilometri della selezione.
+Una seconda variante della card, `bosch-ebike-heatmap-card`, sovrappone tutti i tour di una selezione come linee semitrasparenti. Dropdown di filtro per periodo (30 giorni / 3 mesi / 12 mesi / tutti), account e bici. Sotto, una riga di stato con il numero di tour e di chilometri della selezione. Lo stile della mappa e l'aspetto del tracciato sono configurabili, di default un blu acceso che risalta bene sulle strade rosse/arancioni della mappa OSM.
 
 ```yaml
 type: custom:bosch-ebike-heatmap-card
 height: 600
+map_style: topo        # osm (predefinito) / topo / sat
+track_color: "#0050ff" # valore predefinito, qui solo a titolo di esempio
+track_opacity: 0.5     # 0-1
+track_weight: 3        # spessore della linea in px
 ```
+
+Tutte e quattro le opzioni sono facoltative, senza indicazioni valgono i valori predefiniti sopra.
 
 La prima visualizzazione può richiedere un po' di tempo – per ogni tour non ancora recuperato viene effettuata una chiamata API aggiuntiva (con limite di concorrenza). Le tracce vengono memorizzate in cache lato server in memoria; le chiamate successive sono immediate.
 
