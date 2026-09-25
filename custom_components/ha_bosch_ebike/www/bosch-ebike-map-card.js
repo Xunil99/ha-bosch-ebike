@@ -7767,7 +7767,17 @@ class BoschEBikeDashboardCard extends HTMLElement {
     const odo = this._num(cfg.odometer_entity);
     const lastTour = this._num(cfg.last_tour_distance_entity);
     const power = this._num(cfg.charge_power_entity);
-    const batteryLive = cfg.battery_live_entity ? this._num(cfg.battery_live_entity) : null;
+    // Issue #85: an ESPHome sensor does not go "unavailable" just because
+    // the BLE link to the bike drops - it keeps reporting its last value
+    // for as long as the bridge device itself stays online, which looks
+    // identical to a fresh live reading. If a "connected" binary sensor is
+    // linked and it reports off, treat the live reading as not currently
+    // available so it falls through to the cloud value / remembered value
+    // below exactly like a genuinely unavailable live entity already does -
+    // no other logic in this function needs to change for that.
+    const bridgeDisconnected = this._onOff(cfg.connected_entity) === false;
+    const batteryLive = (cfg.battery_live_entity && !bridgeDisconnected)
+      ? this._num(cfg.battery_live_entity) : null;
     const batteryCloud = this._num(cfg.battery_entity);
     // Prefer the real-time value from the local LDI bridge when it is
     // available; otherwise fall back to the second configured SoC entity.
@@ -8840,6 +8850,8 @@ class BoschEBikeDashboardCardEditor extends HTMLElement {
         ["sensor"]),
       battery_live_entity: mkEntity("battery_live_entity", "dash_editor_battery_live", "dash_editor_battery_live_hint",
         ["sensor"]),
+      connected_entity: mkEntity("connected_entity", "dash_editor_connected", "dash_editor_connected_hint",
+        ["binary_sensor"]),
       charging_entity: mkEntity("charging_entity", "dash_editor_charging", null,
         ["binary_sensor", "sensor"]),
       last_tour_distance_entity: mkEntity("last_tour_distance_entity", "dash_editor_last_tour", null,
