@@ -106,10 +106,12 @@ Komplette Anleitung: **[esphome/README.md](https://github.com/Xunil99/ha-bosch-e
 
 #### Live-Werte für exakte Tour-Berechnung verwenden (optional, ab v1.10.0)
 
-Wenn die Bridge läuft, kannst du in den **Integrations-Einstellungen** (HA → *Einstellungen → Geräte & Dienste → Bosch eBike → Konfigurieren*) zwei Sensoren hinterlegen:
+Wenn die Bridge oder der Ladebegrenzer läuft, kannst du in den **Integrations-Einstellungen** (HA → *Einstellungen → Geräte & Dienste → Bosch eBike → Konfigurieren*) zwei Sensoren hinterlegen:
 
 - **Live-Tachostand-Sensor** (z. B. `sensor.ebike_odometer_live`)
 - **Live-Akkustand-Sensor** (z. B. `sensor.ebike_battery_soc_live`)
+
+Beide Firmware-Varianten liefern passende Sensoren dafür: Bei der Bridge heißen sie standardmäßig *eBike Odometer (Live)* / *eBike Battery SoC (Live)*, beim Ladebegrenzer *eBike Odometer* / *eBike Battery* - jeweils unter dem zugehörigen Gerät in Home Assistant zu finden.
 
 Sind diese gesetzt, fragt die Integration bei jedem Tour-Update den HA-Recorder nach dem Wert dieser Sensoren bei Tour-Start und Tour-Ende ab. Aus den Differenzen ergibt sich:
 
@@ -379,6 +381,8 @@ Mit demselben Live-SoC-Sensor stehen zusätzlich vier weitere Sensoren zur Verf�
 - **`Voraussichtlich fertig bei 80%`** / **`Voraussichtlich fertig bei 100%`** — der voraussichtliche Uhrzeit-Zeitpunkt (Zeitstempel), zu dem dieser Ladestand erreicht wird
 
 Alle vier stehen auf „nicht verfügbar", solange gerade nicht geladen wird oder der Live-Ladestand nicht gelesen werden kann — genau wie bei `Letzte Ladung: Energie` weiter oben.
+
+**Ohne verknüpften Live-Akkustand-Sensor erscheinen diese vier Sensoren gar nicht erst als Entities** (siehe Abschnitt „Live-Werte für exakte Tour-Berechnung verwenden" weiter oben - der Ladebegrenzer liefert dafür ebenso einen passenden Sensor wie die Bridge). Das ist ein anderer Fall als „nicht verfügbar" und der häufigste Grund, warum die Sensoren beim ersten Einrichten des Charging-Live-Activity-Blueprints fehlen.
 
 Li-Ionen-Akkus laden nicht linear: unterhalb von 80 % geht es zügig voran, danach (Konstantspannungsphase) spürbar langsamer. Die Schätzung lernt deshalb zwei getrennte Laderaten aus der eigenen Ladehistorie des Rads — eine für 0–80 %, eine für 80–100 % — statt eine einzige Rate über den gesamten Bereich anzunehmen.
 
@@ -985,10 +989,12 @@ Full guide: **[esphome/README.md](https://github.com/Xunil99/ha-bosch-ebike/blob
 
 #### Use live values for exact tour math (optional, from v1.10.0)
 
-Once the bridge is running, you can wire two sensors in the **integration options** (HA → *Settings → Devices & services → Bosch eBike → Configure*):
+Once the bridge or the charge limiter is running, you can wire two sensors in the **integration options** (HA → *Settings → Devices & services → Bosch eBike → Configure*):
 
 - **Live odometer sensor** (e.g. `sensor.ebike_odometer_live`)
 - **Live battery state-of-charge sensor** (e.g. `sensor.ebike_battery_soc_live`)
+
+Both firmware variants provide matching sensors for this: on the bridge they are named *eBike Odometer (Live)* / *eBike Battery SoC (Live)* by default, on the charge limiter *eBike Odometer* / *eBike Battery* - find them under the corresponding device in Home Assistant.
 
 When set, the integration queries the HA recorder for these sensors at every tour's start and end timestamps. The deltas yield:
 
@@ -1256,6 +1262,8 @@ With the same live SoC sensor, four more sensors become available that estimate 
 - **`Estimated Ready at 80%`** / **`Estimated Ready at 100%`** — the projected wall-clock timestamp at which that state of charge will be reached
 
 All four read "unavailable" whenever nothing is currently charging or the live state of charge cannot be read - the same as `Last Charge Energy` above.
+
+**Without a linked live battery state-of-charge sensor, these four sensors do not appear as entities at all** (see "Use live values for exact tour math" above - the charge limiter provides a matching sensor for this just as well as the bridge). That is a different situation from "unavailable", and the most common reason they are missing when first setting up the Charging Live Activity blueprint.
 
 Li-ion batteries do not charge linearly: charging is fast below 80%, then noticeably slower afterwards (the constant-voltage phase). The estimate therefore learns two separate charge rates from the bike's own charge history - one for 0–80%, one for 80–100% - instead of assuming a single rate across the whole range.
 
