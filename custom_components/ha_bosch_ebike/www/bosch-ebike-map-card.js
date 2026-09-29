@@ -9791,6 +9791,14 @@ class BoschEBike3DMapCard extends HTMLElement {
     this._ready = false;
     this._booting = false;
     this._mode = "list";          // "list" or "detail"
+    // Issue #86: the tour list only ever rendered the newest 50 rides, with
+    // no indication that older ones existed - an active rider can easily
+    // rack up 50 rides within ~3 months, which then looks like a hard date
+    // cutoff. All activities were already fetched into _activities; only
+    // the render was truncated. This tracks how many to show, growing via
+    // the "load more" row instead of dumping the full (potentially
+    // thousand-ride) history into the DOM at once.
+    this._listLimit = 50;
     this._currentActivity = null;
     this._currentTrack = null;
     this._weatherSeries = null;   // hourly series for the open tour (Task 7), or null when off/unfetched
@@ -9945,6 +9953,10 @@ class BoschEBike3DMapCard extends HTMLElement {
     if (this._filterAccount !== "all") list = list.filter((a) => a.accountId === this._filterAccount);
     if (this._filterBike !== "all") list = list.filter((a) => a.bikeId === this._filterBike);
     this._activities = list;
+    // A limit expanded via "load more" belongs to the previous filter's
+    // result set; starting over at the default keeps a freshly filtered
+    // list from opening already-expanded for an unrelated reason.
+    this._listLimit = 50;
   }
 
   _buildShell() {
@@ -9983,6 +9995,12 @@ class BoschEBike3DMapCard extends HTMLElement {
       .map3d-tour .right { font-size: 13px; color: var(--secondary-text-color); }
       .map3d-tour .right b { color: var(--primary-text-color); font-weight: 600; }
       .map3d-tour ha-icon { color: var(--primary-color); --mdc-icon-size: 20px; }
+      .map3d-load-more {
+        display: flex; align-items: center; justify-content: center;
+        padding: 12px 16px; cursor: pointer;
+        color: var(--primary-color); font-size: 14px; font-weight: 500;
+      }
+      .map3d-load-more:hover { background: var(--secondary-background-color); }
       .map3d-msg { padding: 24px; text-align: center; color: var(--secondary-text-color); }
       .map3d-detail { position: relative; }
       .map3d-canvas { width: 100%; height: var(--m3d-h, 540px); position: relative; }
@@ -10337,7 +10355,7 @@ class BoschEBike3DMapCard extends HTMLElement {
       const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
       return h > 0 ? `${h}h ${m}min` : `${m} min`;
     };
-    const rows = this._activities.slice(0, 50).map((a, i) => {
+    const rows = this._activities.slice(0, this._listLimit).map((a, i) => {
       const km = fmtKm(a.distance);
       const dur = fmtDur(this._tourDurationSec(a));
       const title = a.title || this._t("msg_unnamed_ride");
@@ -10350,9 +10368,13 @@ class BoschEBike3DMapCard extends HTMLElement {
         </div>
       `;
     }).join("");
+    const hasMore = this._activities.length > this._listLimit;
+    const loadMoreRow = hasMore
+      ? `<div class="map3d-load-more">${this._t("map3d_load_more")}</div>`
+      : "";
     this._root.innerHTML = `
       <div class="map3d-head"><div class="title">${this._config.title || this._t("map3d_title")}</div></div>
-      <div class="map3d-list">${rows}</div>
+      <div class="map3d-list">${rows}${loadMoreRow}</div>
     `;
     this._root.querySelectorAll(".map3d-tour").forEach((el) => {
       el.addEventListener("click", () => {
@@ -10361,6 +10383,13 @@ class BoschEBike3DMapCard extends HTMLElement {
         if (act) this._openTour(act);
       });
     });
+    const loadMoreEl = this._root.querySelector(".map3d-load-more");
+    if (loadMoreEl) {
+      loadMoreEl.addEventListener("click", () => {
+        this._listLimit += 50;
+        this._renderList();
+      });
+    }
   }
 
   _escapeHtml(s) {

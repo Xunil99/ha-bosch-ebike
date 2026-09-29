@@ -639,7 +639,7 @@ playback_speed: 60     # 60x Echtzeit (1h-Tour = 1min Wiedergabe)
 
 **Was die Karte zeigt:**
 
-- Tour-Liste (Standardansicht) mit Datum, Titel, Distanz und Dauer
+- Tour-Liste (Standardansicht) mit Datum, Titel, Distanz und Dauer; zeigt zunächst die 50 neuesten Touren, „Weitere Touren laden" am Listenende blendet bei Bedarf die nächsten 50 nach, bis die komplette Historie sichtbar ist
 - 3D-Chase-Cam nach Klick auf eine Tour, mit Gebäude-Extrusionen aus OpenStreetMap
 - Track-Polyline in zwei Schichten (Glow + Hauptlinie) für gute Lesbarkeit
 - Start- und Ziel-Marker sowie ein blauer pulsierender Positionsmarker, der das Bike repräsentiert
@@ -1521,7 +1521,7 @@ playback_speed: 60     # 60× real time (1 h ride plays in 1 min)
 
 **What the card shows:**
 
-- Tour list (default view) with date, title, distance, duration
+- Tour list (default view) with date, title, distance, duration; shows the 50 most recent tours first, a "Load more tours" row at the bottom reveals the next 50 on demand until the full history is visible
 - 3D chase-cam after clicking a tour, with OSM building extrusions
 - Track polyline rendered in two layers (glow + main stroke) for readability
 - Start and finish dot markers, plus a pulsing blue current-position marker that represents the bike
