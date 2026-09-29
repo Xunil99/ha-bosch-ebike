@@ -7948,17 +7948,35 @@ class BoschEBikeDashboardCard extends HTMLElement {
     if (cfg.target_soc_entity) {
       const targetState = this._state(cfg.target_soc_entity);
       if (targetState) {
-        sliderRow.style.display = "flex";
-        sliderWarn.style.display = "none";
-        sliderLbl.textContent = this._t("dash_label_target_soc");
         const a = targetState.attributes || {};
-        if (a.min != null) slider.min = a.min;
-        if (a.max != null) slider.max = a.max;
-        if (a.step != null) slider.step = a.step;
-        const v = Number(targetState.state);
-        if (Number.isFinite(v) && document.activeElement !== slider) {
-          slider.value = v;
-          sliderVal.textContent = v + "%";
+        // Issue #87: target_soc_entity is documented as a 0-100 percentage,
+        // but nothing checked that - a linked entity with an implausible
+        // range (its own input_number helper misconfigured, or the wrong
+        // entity linked entirely) still sized the slider off that entity's
+        // own min/max while the label kept hardcoding a "%" suffix on the
+        // raw state, so a genuinely-reported value like 800 rendered as
+        // the nonsensical "800%" even though the slider thumb itself, sized
+        // off the same bad max, looked plausibly positioned.
+        const min = Number(a.min);
+        const max = Number(a.max);
+        const rangeOk = Number.isFinite(min) && Number.isFinite(max)
+          && min >= 0 && max <= 100 && max > min;
+        if (rangeOk) {
+          sliderRow.style.display = "flex";
+          sliderWarn.style.display = "none";
+          sliderLbl.textContent = this._t("dash_label_target_soc");
+          slider.min = min;
+          slider.max = max;
+          if (a.step != null) slider.step = a.step;
+          const v = Number(targetState.state);
+          if (Number.isFinite(v) && document.activeElement !== slider) {
+            slider.value = v;
+            sliderVal.textContent = v + "%";
+          }
+        } else {
+          sliderRow.style.display = "none";
+          sliderWarn.style.display = "flex";
+          sliderWarnText.textContent = `${this._t("dash_target_soc_range")} (${cfg.target_soc_entity})`;
         }
       } else {
         // Configured entity_id does not exist (issue #62): showing a live
