@@ -41,6 +41,7 @@ from .range_estimate import (
     track_distance_m,
     corrected_track_distance,
     ble_distance_implausible,
+    MIN_PLAUSIBLE_WH_PER_KM,
 )
 from .unassigned_activities import compute_unassigned_activities, merge_manual_overrides
 from .trick_check import parse_trick_check
@@ -95,29 +96,14 @@ MAX_PROTECTED_DELIVERED_WH_DIP = 50.0
 # swap) ages out within a reasonable number of real charges.
 CHARGE_HISTORY_MAX_SESSIONS = 20
 
-# The floor below which a poll's implied wh_per_km (deliveredWhOverLifetime
-# delta divided by the distance of the activities it is about to be split
-# across) is treated as physically implausible in _track_battery_consumption
-# (issue #78) - no real e-bike ride uses this little energy for this much
-# distance. "Newly discovered this poll" is only a valid proxy for "the
-# ride(s) that generated this poll's counter growth" when the batch's own
-# distance genuinely explains the delta; that stays true even across a long
-# gap as long as real riding happened throughout it (several real rides
-# during an extended HA downtime, still correctly split proportionally
-# across all of them - unmodified). It stops being true when a whole backlog
-# of already-completed historical rides surfaces together in one poll (fresh
-# install, or a downtime with NO real riding in the gap) while the counter
-# barely moved - splitting that tiny delta across the backlog's real
-# distance produced a wh_per_km around 100-1000x too low (0.01 instead of
-# ~10-15, a reported 75000 km "range"). Only once the implied wh_per_km
-# fails this floor does a batch get narrowed to just its
-# CONSUMPTION_BACKLOG_CUTOFF-recent activities (and only if THAT narrower
-# split is itself plausible - see below).
-MIN_PLAUSIBLE_WH_PER_KM = 1.0
+# MIN_PLAUSIBLE_WH_PER_KM now lives in range_estimate.py (issue #78 follow-up):
+# compute_range_estimate() needs the same floor to filter already-persisted
+# implausible entries, and that module is the HA-free one, so importing in
+# this direction avoids a circular import between the two.
 
 # How old an activity's end (or start) time may be to still count as part of
 # the "recent" subset _track_battery_consumption falls back to once a whole
-# batch's implied wh_per_km has already failed MIN_PLAUSIBLE_WH_PER_KM above
+# batch's implied wh_per_km has already failed MIN_PLAUSIBLE_WH_PER_KM
 # - NOT a blanket age filter on its own (an unconditional one wrongly
 # reassigns real energy away from equally-legitimate older rides in a
 # downtime-with-real-riding batch, since that batch's whole-distance split

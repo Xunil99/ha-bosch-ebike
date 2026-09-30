@@ -126,6 +126,25 @@ def test_skips_invalid_tours():
     assert abs(r["wh_per_km"] - 5.0) < 0.001
 
 
+def test_skips_implausible_wh_per_km_stale_entry():
+    # Issue #78 follow-up: a consumption entry persisted before the write-time
+    # guard existed (or any other already-stored implausible value) must not
+    # poison the average just because it is still sitting in storage - a
+    # single entry with a 75000 km-range-implying ratio (0.01 Wh/km) mixed
+    # among otherwise-normal tours.
+    activities = [
+        act("ok1", 20), act("ok2", 20), act("ok3", 20), act("stale", 500),
+    ]
+    bike_map = {a["id"]: "bike1" for a in activities}
+    cons = {
+        "ok1": {"consumed_wh": 100.0}, "ok2": {"consumed_wh": 100.0},
+        "ok3": {"consumed_wh": 100.0}, "stale": {"consumed_wh": 5.0},
+    }
+    r = compute_range_estimate(activities, bike_map, cons, "bike1")
+    assert r["tours_used"] == 3
+    assert abs(r["wh_per_km"] - 5.0) < 0.001
+
+
 def test_unmapped_activities_count_for_single_bike_fallback():
     # leere bike_map + fallback_all=True (Single-Bike-Konto, Attribution leer)
     activities = [act(f"a{i}", 20) for i in range(3)]

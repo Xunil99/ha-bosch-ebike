@@ -55,10 +55,10 @@ _SRC = _COORD.read_text(encoding="utf-8")
 _TREE = ast.parse(_SRC)
 
 
-def _module_const(name: str) -> ast.Assign:
+def _module_const(name: str, tree: ast.Module = _TREE) -> ast.Assign:
     node = next(
         (
-            n for n in _TREE.body
+            n for n in tree.body
             if isinstance(n, ast.Assign)
             and len(n.targets) == 1
             and isinstance(n.targets[0], ast.Name)
@@ -67,7 +67,7 @@ def _module_const(name: str) -> ast.Assign:
         None,
     )
     assert node is not None, (
-        f"coordinator.py no longer defines {name} at module level - update "
+        f"module no longer defines {name} at module level - update "
         "this test alongside the rename/removal"
     )
     return node
@@ -77,7 +77,6 @@ _window_node = _module_const("CONSUMPTION_TOPUP_WINDOW")
 _tolerance_node = _module_const("CONSUMPTION_TOPUP_ODOMETER_TOLERANCE_M")
 _max_dip_node = _module_const("MAX_PROTECTED_DELIVERED_WH_DIP")
 _backlog_cutoff_node = _module_const("CONSUMPTION_BACKLOG_CUTOFF")
-_min_plausible_node = _module_const("MIN_PLAUSIBLE_WH_PER_KM")
 
 # parse_iso_utc lives in live_enrichment.py, which (like coordinator.py)
 # imports Home Assistant and so cannot be imported directly here either -
@@ -88,6 +87,14 @@ _parse_iso_utc_node = next(
     n for n in _LIVE_ENRICHMENT_TREE.body
     if isinstance(n, ast.FunctionDef) and n.name == "parse_iso_utc"
 )
+
+# MIN_PLAUSIBLE_WH_PER_KM moved to range_estimate.py (issue #78 follow-up:
+# compute_range_estimate() needs it too, and that module is the HA-free one),
+# with coordinator.py importing it from there - so it is extracted from its
+# new home the same way parse_iso_utc is extracted from live_enrichment.py.
+_RANGE_ESTIMATE = _ROOT / "custom_components" / "ha_bosch_ebike" / "range_estimate.py"
+_RANGE_ESTIMATE_TREE = ast.parse(_RANGE_ESTIMATE.read_text(encoding="utf-8"))
+_min_plausible_node = _module_const("MIN_PLAUSIBLE_WH_PER_KM", _RANGE_ESTIMATE_TREE)
 
 _class_node = next(
     n for n in _TREE.body

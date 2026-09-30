@@ -15,6 +15,20 @@ MIN_TOURS = 3
 MIN_KM = 30.0
 MIN_TOUR_KM = 0.5
 
+# The floor below which a tour's own wh_per_km is treated as physically
+# implausible (issue #78 follow-up) - no real e-bike ride uses this little
+# energy for this much distance. coordinator.py's _track_battery_consumption
+# already refuses to persist a consumed_wh this implausible for a NEW poll,
+# but that guard did not exist before it shipped, and a restored
+# consumption entry is never re-validated against it - so a single
+# already-stored pre-fix entry (a reported wh_per_km of 0.01, or a milder
+# case reported afterwards on an up-to-date version) can silently poison
+# this function's average for as long as it stays within window_km, with no
+# way for the affected install to self-heal. Filtering here, at the one
+# place that reads consumption back out, closes that gap regardless of how
+# an implausible entry got into storage.
+MIN_PLAUSIBLE_WH_PER_KM = 1.0
+
 
 def compute_range_estimate(
     activities: list[dict[str, Any]],
@@ -57,6 +71,8 @@ def compute_range_estimate(
         except (TypeError, ValueError):
             continue
         if wh <= 0 or km <= MIN_TOUR_KM:
+            continue
+        if wh / km < MIN_PLAUSIBLE_WH_PER_KM:
             continue
 
         total_wh += wh
