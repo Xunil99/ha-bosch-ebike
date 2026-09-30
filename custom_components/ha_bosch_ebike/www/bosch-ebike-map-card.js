@@ -12722,6 +12722,7 @@ class BoschEBike3DMapCardEditor extends HTMLElement {
     this._hass = null;
     this._config = {};
     this._built = false;
+    this._instances = [];
     // Debouncer-Timer pro Shared-Setting-Key, damit jeder Keystroke
     // im Number-/Text-Field nicht direkt einen WebSocket-Call auslöst.
     this._sharedSaveTimers = new Map();
@@ -12735,6 +12736,11 @@ class BoschEBike3DMapCardEditor extends HTMLElement {
       // Shared Settings nachladen, sobald hass da ist - dann Inputs
       // mit den richtigen Werten überschreiben.
       ensureCardSettingsLoaded(hass).then(() => this._sync()).catch(() => {});
+      // Issue #87: account_id/bike_id used to be plain text inputs with no
+      // way to discover the right IDs, unlike every other card's editor in
+      // this file. Fetch the same instance/bike list those use and turn
+      // them into real dropdowns once loaded.
+      this._fetchInstances().then(() => this._populateAccountBikeSelects()).catch(() => {});
     }
     if (!this._sharedSettingsHandler) {
       this._sharedSettingsHandler = () => this._sync();
@@ -12828,6 +12834,32 @@ class BoschEBike3DMapCardEditor extends HTMLElement {
       return i;
     };
 
+    // account_id/bike_id are plain filters, not shared settings, so this
+    // only ever needs the simple this._config write path - no debounce,
+    // no HA-storage round trip. Options are filled in later by
+    // _populateAccountBikeSelects() once the instance list has loaded.
+    const mkSelect = (key, labelKey) => {
+      const el = mkLabeled(labelKey, null, () => {
+        const s = document.createElement("select");
+        s.style.cssText = "padding:8px;border-radius:4px;border:1px solid var(--divider-color);background:var(--card-background-color);color:var(--primary-text-color);";
+        return s;
+      });
+      el.addEventListener("change", () => {
+        const v = el.value;
+        if (v) this._config[key] = v;
+        else delete this._config[key];
+        if (key === "account_id") {
+          // Switching accounts invalidates any previously selected bike,
+          // same as the 2D card's editor - otherwise a stale bike_id from
+          // a different account would silently keep filtering the card.
+          delete this._config.bike_id;
+          this._populateAccountBikeSelects();
+        }
+        this._emit();
+      });
+      return el;
+    };
+
     this._fields = {
       title: mkText("title", "map3d_editor_title", null, "text"),
       height: mkText("height", "map3d_editor_height", null, "number"),
@@ -12842,8 +12874,8 @@ class BoschEBike3DMapCardEditor extends HTMLElement {
       satellite_max_zoom: mkText("satellite_max_zoom", "map3d_editor_sat_maxzoom", "map3d_editor_sat_maxzoom_hint", "number"),
       north_up: mkText("north_up", "map3d_editor_north_up", "map3d_editor_north_up_hint", "number"),
       animate_seconds: mkText("animate_seconds", "map3d_editor_animate_seconds", "map3d_editor_animate_seconds_override_hint", "number"),
-      account_id: mkText("account_id", "map3d_editor_account", null, "text"),
-      bike_id: mkText("bike_id", "map3d_editor_bike", null, "text"),
+      account_id: mkSelect("account_id", "map3d_editor_account"),
+      bike_id: mkSelect("bike_id", "map3d_editor_bike"),
     };
 
     // Overlay-visibility section: small heading followed by the six toggles
@@ -12905,6 +12937,64 @@ class BoschEBike3DMapCardEditor extends HTMLElement {
         : (this._config[k] != null ? this._config[k] : "");
       el.value = v !== "" && v != null ? String(v) : "";
     }
+  }
+
+  async _fetchInstances() {
+    try {
+      const res = await this._hass.callWS({ type: "bosch_ebike/list_instances" });
+      this._instances = res.instances || [];
+    } catch (_) {
+      this._instances = [];
+    }
+  }
+
+  _bikeOptionsForAccount(accountId) {
+    const out = [];
+    for (const inst of (this._instances || [])) {
+      if (accountId && inst.config_entry_id !== accountId) continue;
+      for (const b of (inst.bikes || [])) {
+        const hasMultiInst = (this._instances || []).length > 1;
+        const label = hasMultiInst && !accountId ? `${inst.label} — ${b.label}` : b.label;
+        out.push({ id: b.id, label });
+      }
+    }
+    return out;
+  }
+
+  // Rebuilds both dropdowns' <option> lists from this._instances / the
+  // currently selected account. Uses real <option> elements rather than an
+  // innerHTML string (like the sibling editors do) so an account or bike
+  // name from the user's own Bosch account never needs manual escaping.
+  _populateAccountBikeSelects() {
+    const accSel = this._fields && this._fields.account_id;
+    const bikeSel = this._fields && this._fields.bike_id;
+    if (!accSel || !bikeSel) return;
+
+    const fillSelect = (select, options, currentValue) => {
+      select.innerHTML = "";
+      const allOpt = document.createElement("option");
+      allOpt.value = "";
+      allOpt.textContent = this._t("editor_select_all");
+      select.appendChild(allOpt);
+      for (const opt of options) {
+        const o = document.createElement("option");
+        o.value = opt.value;
+        o.textContent = opt.label;
+        select.appendChild(o);
+      }
+      select.value = currentValue || "";
+    };
+
+    fillSelect(
+      accSel,
+      (this._instances || []).map((inst) => ({ value: inst.config_entry_id, label: inst.label })),
+      this._config.account_id
+    );
+    fillSelect(
+      bikeSel,
+      this._bikeOptionsForAccount(this._config.account_id).map((b) => ({ value: b.id, label: b.label })),
+      this._config.bike_id
+    );
   }
 }
 
