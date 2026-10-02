@@ -40,6 +40,21 @@ variant uses MQTT, and why only MQTT reliably gets data through the tunnel.
 
 You need an MQTT broker in HA, for example the **Mosquitto** add-on.
 
+### What happens if you keep the native API on the road
+
+You can keep `api:` while roaming, but expect to change the device address in
+Home Assistant by hand. Home Assistant stores exactly **one** host per ESPHome
+device, and a roaming bridge has two: its WiFi IP at home and its tunnel IP on
+the road. Home Assistant can switch itself back to the home IP when it sees the
+device again via mDNS (only while the connection is down), but mDNS does not
+travel through a WireGuard tunnel, so the switch to the tunnel IP never happens
+on its own. `wifi: use_address` does not help either: it only controls how the
+ESPHome dashboard and CLI reach the device (OTA, logs), not the host Home
+Assistant has stored.
+
+That is the reason this variant uses MQTT: nothing in Home Assistant depends on
+the device's IP then.
+
 ### Heads-up: switching from API to MQTT changes your entities
 
 If you previously ran the bridge with `api:`, moving to `mqtt:` means HA
@@ -201,6 +216,21 @@ ESP** seine Daten an den Broker, die wechselnde IP ist dann egal. Deshalb nutzt
 diese Variante MQTT, und nur so kommen die Daten zuverlässig durch den Tunnel.
 
 Du brauchst einen MQTT-Broker in HA, z. B. das **Mosquitto**-Add-on.
+
+### Was passiert, wenn du unterwegs bei der nativen API bleibst
+
+Du kannst `api:` auch unterwegs behalten, musst dann aber die Geräteadresse in
+Home Assistant von Hand umstellen. Home Assistant speichert pro ESPHome-Gerät
+genau **einen** Host, eine mobile Bridge hat aber zwei: die WLAN-IP zu Hause und
+die Tunnel-IP unterwegs. Zu Hause kann Home Assistant sich per mDNS selbst auf
+die Heim-IP zurückstellen (nur, solange die Verbindung gerade nicht steht),
+mDNS läuft aber nicht durch einen WireGuard-Tunnel, deshalb passiert die
+Umstellung auf die Tunnel-IP nie von allein. Auch `wifi: use_address` hilft
+nicht: Es steuert nur, wie das ESPHome-Dashboard und die CLI das Gerät
+erreichen (OTA, Logs), nicht den in Home Assistant gespeicherten Host.
+
+Genau deshalb nutzt diese Variante MQTT: Dann hängt in Home Assistant nichts
+mehr von der IP des Geräts ab.
 
 ### Achtung: der Wechsel von API auf MQTT ändert deine Entitäten
 
