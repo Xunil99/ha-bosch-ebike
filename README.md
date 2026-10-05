@@ -77,6 +77,8 @@ Die Integration unterstützt jetzt **zusätzlich** das ältere **eBike System 2 
 
 Nicht verfügbare Funktionen erzeugen für BES2-Bikes **gar keine** Entitäten — sie fehlen einfach, statt „unbekannt" anzuzeigen.
 
+**Einzelne Fahrten statt Bosch-Trips (BES2).** Bosch fasst bei BES2 mehrere Fahrten zu einem „Trip" zusammen und hängt neue Fahrten an einen noch offenen Trip an, ohne dass sich dessen ID ändert. Die Integration führt deshalb jede Fahrt eines Trips als eigene Aktivität (Liste, Kalender, Statistik, Event `ha_bosch_ebike_new_activity`, „Last Ride"-Sensoren). Trittfrequenz, Leistung und Höhenmeter liefert Bosch nur als Summe über den ganzen Trip, sie werden deshalb nur bei Trips mit genau einer Fahrt angezeigt. Die Strecke einer einzelnen Fahrt zeigen die Karten, wenn Bosch die Streckendaten je Fahrt getrennt liefert, sonst die Strecke des ganzen Trips.
+
 **Ohne die ausdauernden und genauen Beta-Tests von Habanatz** (pedelecforum.de) wäre die Unterstützung für eBike System 2 (BES2) nicht möglich gewesen. Ganz herzlichen Dank dafür!
 
 <a name="de-funktionen"></a>
@@ -959,6 +961,8 @@ The integration now **also** supports the older **eBike System 2 (BES2)** in add
 ¹ For BES2, odometer and total elevation gain come from the **aggregate statistics** (there is no separate live odometer).
 
 Features that are not available create **no** entities at all for BES2 bikes — they are simply absent instead of showing "unknown".
+
+**Single rides instead of Bosch trips (BES2).** With BES2, Bosch groups several rides into one "trip" and appends new rides to a still-open trip without its ID changing. The integration therefore lists each ride of a trip as its own activity (list, calendar, statistics, the `ha_bosch_ebike_new_activity` event, the "Last Ride" sensors). Bosch only provides cadence, power and elevation gain as totals over the whole trip, so they are only shown for trips with exactly one ride. The cards show a single ride's route when Bosch delivers the track data separately per ride, and the whole trip's route otherwise.
 
 **Without the persistent and meticulous beta testing by Habanatz** (pedelecforum.de), eBike System 2 (BES2) support would not have been possible. Many thanks!
 

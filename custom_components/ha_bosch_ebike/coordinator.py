@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timedelta, timezone
 import logging
 import time
@@ -96,6 +97,13 @@ MAX_PROTECTED_DELIVERED_WH_DIP = 50.0
 # swap) ages out within a reasonable number of real charges.
 CHARGE_HISTORY_MAX_SESSIONS = 20
 
+# How long a fetched BES2 trip detail stays shared between the per-ride
+# activities one trip is split into (issue #88). It only exists to collapse
+# the burst of near-simultaneous requests one heatmap load makes for rides of
+# the same trip into a single API call; the periodic poll always fetches
+# fresh.
+BES2_DETAIL_SHARE_SECONDS = 120
+
 # MIN_PLAUSIBLE_WH_PER_KM now lives in range_estimate.py (issue #78 follow-up):
 # compute_range_estimate() needs the same floor to filter already-persisted
 # implausible entries, and that module is the HA-free one, so importing in
@@ -172,6 +180,11 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # yet" - the first one only seeds the set, so setup never fires a burst
         # of events for rides that happened before the integration existed.
         self._bes2_seen_activity_ids: set[str] | None = None
+        # BES2 trip detail responses, shared between the several per-ride
+        # activities one trip is split into (issue #88). trip_id ->
+        # (monotonic fetch time, raw detail). See _bes2_trip_detail.
+        self._bes2_detail_cache: dict[str, tuple[float, dict[str, Any]]] = {}
+        self._bes2_detail_locks: dict[str, asyncio.Lock] = {}
         # (activity_id, activity) pairs awaiting an EVENT_NEW_ACTIVITY. See
         # the comment at the top of _async_update_data for why this outlives
         # a single poll.
@@ -1240,9 +1253,18 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # make the next successful poll fire an event for every ride in the
         # window at once.
         activities_fetched = False
+        raw_acts: list[Any] = []
         try:
             raw_acts = await self.api.get_activities_bes2(limit=20, offset=0)
-            activities = [bes2.normalize_activity_summary(a) for a in (raw_acts or []) if isinstance(a, dict)]
+            # Bosch's "activity" is a TRIP holding one or more bike rides, and
+            # an open trip keeps absorbing new rides under the SAME id. One
+            # activity per ride is what makes a new ride a new id (issue #88);
+            # trips with a single ride come through unchanged.
+            activities = [
+                ride
+                for a in (raw_acts or []) if isinstance(a, dict)
+                for ride in bes2.normalize_trip_activities(a)
+            ]
             activities_fetched = True
         except Exception as err:  # noqa: BLE001
             _LOGGER.debug("Could not fetch BES2 activities: %s", err)
@@ -1263,22 +1285,51 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         latest_activity = activities[0] if activities else None
         latest_details = None
         if latest_activity is not None:
-            raw_id = latest_activity.get("id")
+            # The detail endpoint is keyed by TRIP id; for a ride split out of
+            # a multi-ride trip the activity id is not the trip id.
+            raw_id = latest_activity.get("_bes2_trip_id") or latest_activity.get("id")
             if raw_id is not None:
                 try:
-                    detail = await self.api.get_activity_detail_bes2(raw_id)
-                    latest_details = bes2.normalize_track(detail)
-                    bes2.enrich_summary_from_detail(latest_activity, detail)
-                    # Trick Check (see trick_check.py) is only confirmed on
-                    # the Smart System activity summary, not (yet) BES2's -
-                    # try the detail response too, best-effort, in case
-                    # Bosch has it there instead.
-                    trick = parse_trick_check(detail)
-                    if trick is not None:
-                        latest_activity["_trick_check"] = trick
-                        latest_activity["_trick_hint"] = trick["has_any"]
+                    detail = await self._bes2_trip_detail(str(raw_id), fresh=True)
+                    latest_details, _scope = bes2.track_for_activity(detail, latest_activity)
+                    if (latest_activity.get("_bes2_ride_count") or 0) < 2:
+                        # Cadence, power, elevation and tricks are TRIP totals
+                        # in the detail response. They describe this ride only
+                        # when the trip has just the one; otherwise they would
+                        # give a 0.4 km ride the totals of days of riding
+                        # (issue #88), so they stay empty.
+                        bes2.enrich_summary_from_detail(latest_activity, detail)
+                        # Trick Check (see trick_check.py) is only confirmed on
+                        # the Smart System activity summary, not (yet) BES2's -
+                        # try the detail response too, best-effort, in case
+                        # Bosch has it there instead.
+                        trick = parse_trick_check(detail)
+                        if trick is not None:
+                            latest_activity["_trick_check"] = trick
+                            latest_activity["_trick_hint"] = trick["has_any"]
                 except Exception as err:  # noqa: BLE001
                     _LOGGER.debug("Could not fetch BES2 activity detail %s: %s", raw_id, err)
+
+            # Debug aid for issue #88: what Bosch reports about the newest
+            # trip, and how it was split. Counts and flags only.
+            for trip in (raw_acts or []):
+                if isinstance(trip, dict) and str(trip.get("id")) == str(raw_id):
+                    n_split = sum(
+                        1 for a in activities
+                        if a.get("_bes2_trip_id") == str(raw_id)
+                    )
+                    _LOGGER.debug(
+                        "BES2 newest trip %s: %d ride(s) in payload, "
+                        "isCompleted=%s, %s, bikeRides chronological: %s, "
+                        "latest ride track scope: %s",
+                        raw_id,
+                        len(trip.get("bikeRides") or []),
+                        trip.get("isCompleted"),
+                        f"split into {n_split} activities" if n_split else "not split",
+                        latest_activity.get("_bes2_order_ok", "n/a"),
+                        _scope if latest_details is not None else "none",
+                    )
+                    break
 
         # Lifetime totals (Gesamt-km / Gesamt-Höhenmeter) from /statistics.
         # totalStatistics.distance feeds the existing odometer sensor (it reads
@@ -1354,6 +1405,37 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "drive_unit_field_data": self._drive_unit_field_data,
         }
 
+    async def _bes2_trip_detail(
+        self, trip_id: str, fresh: bool = False
+    ) -> dict[str, Any]:
+        """Raw BES2 detail of one trip, shared between its per-ride activities.
+
+        One trip surfaces as several activities (issue #88), and the heatmap
+        asks for all of them at once. Without sharing, every ride of a trip
+        would trigger its own identical API call. ``fresh=True`` (the
+        periodic poll) bypasses the shared copy: a trip that just gained a
+        ride must not be served a response from before that ride.
+        """
+        lock = self._bes2_detail_locks.setdefault(trip_id, asyncio.Lock())
+        async with lock:
+            now = time.monotonic()
+            hit = self._bes2_detail_cache.get(trip_id)
+            if (
+                not fresh
+                and hit is not None
+                and now - hit[0] < BES2_DETAIL_SHARE_SECONDS
+            ):
+                return hit[1]
+            detail = await self.api.get_activity_detail_bes2(trip_id)
+            # Drop expired copies so this never holds more than the trips
+            # fetched in the last couple of minutes.
+            self._bes2_detail_cache = {
+                k: v for k, v in self._bes2_detail_cache.items()
+                if now - v[0] < BES2_DETAIL_SHARE_SECONDS
+            }
+            self._bes2_detail_cache[trip_id] = (now, detail)
+            return detail
+
     async def fetch_track_detail(self, activity_id: Any) -> dict[str, Any]:
         """Return an activity detail as ``{"activityDetails": [...]}``.
 
@@ -1364,8 +1446,28 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """
         if self._system == SYSTEM_BES2:
             from . import bes2
-            raw = await self.api.get_activity_detail_bes2(activity_id)
-            return bes2.normalize_track(raw)
+            # A ride split out of a multi-ride trip (issue #88) has no detail
+            # of its own: the endpoint is keyed by the TRIP id, and the ride's
+            # route is cut out of the trip's response when the track data
+            # allows it (see bes2.track_for_activity).
+            trip_id = bes2.trip_id_of(activity_id) or str(activity_id)
+            raw = await self._bes2_trip_detail(trip_id)
+            activity = next(
+                (
+                    a for a in ((self.data or {}).get("all_activities") or [])
+                    if str(a.get("id")) == str(activity_id)
+                ),
+                None,
+            )
+            track, scope = bes2.track_for_activity(raw, activity)
+            # "scope" tells callers whether this is the ride's own route or
+            # the whole trip's; "primary" marks the one ride of a trip that
+            # should draw the whole-trip route when several rides share it.
+            track["scope"] = scope
+            track["primary"] = (
+                bool(activity.get("_bes2_primary", True)) if activity else True
+            )
+            return track
         return await self.api.get_activity_detail(activity_id)
 
     async def _recheck_recent_activity_distances(self) -> None:

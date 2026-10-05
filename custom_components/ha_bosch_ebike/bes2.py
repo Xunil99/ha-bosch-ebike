@@ -131,6 +131,123 @@ def normalize_activity_summary(a2: dict) -> dict:
     }
 
 
+# Per-ride distances may differ from the trip total by this much before the
+# per-ride data is distrusted. A unit mix-up (km vs m) would be off by 1000x,
+# so a generous bound still catches it.
+_RIDE_SUM_TOLERANCE_M = 1000.0
+_RIDE_SUM_TOLERANCE_RATIO = 0.15
+
+
+def trip_id_of(activity_id: Any) -> str | None:
+    """Trip id behind an activity id.
+
+    Activities split out of a multi-ride trip carry ``"<trip_id>-<token>"``
+    (see normalize_trip_activities); every other activity id already is the
+    trip id. Trip ids are plain integers, so the first "-" separates safely.
+    """
+    if activity_id is None:
+        return None
+    head = str(activity_id).split("-", 1)[0].strip()
+    return head or None
+
+
+def normalize_trip_activities(a2: dict) -> list[dict]:
+    """Expand a BES2 TRIP into one activity per bike ride.
+
+    Bosch's BES2 API calls a TRIP an "activity", but a trip is a container of
+    one or more bike rides, and it stays open (``isCompleted`` false) so new
+    rides keep being appended to it. Mapping the whole trip to one activity
+    meant an open trip never produced a new activity id, so no new-ride event
+    fired and every "last ride" value showed the trip's running totals
+    (issue #88).
+
+    A trip with two or more rides becomes one activity per ride, oldest
+    first. The oldest ride keeps the plain trip id, so a trip that grows from
+    one ride to two keeps its first id and adds exactly one new one. The
+    other rides get ``"<trip_id>-<digits of their start time>"``: derived
+    from the ride itself rather than its position, so a ride that Bosch
+    inserts later (a delayed sync) does not shift the ids of the others.
+    Each ride dict carries ``_bes2_*`` keys that map it back to the trip and
+    to its place in the API's ``bikeRides`` array (needed to find its track).
+
+    Falls back to the single trip-level activity - exactly the pre-#88
+    behaviour - when the trip has fewer than two rides, when any ride lacks a
+    start time or distance, or when the per-ride distances do not add up to
+    the trip total (the documented schema could be out of date). Never
+    raises.
+    """
+    trip = normalize_activity_summary(a2)
+    rides = [r for r in (_get(a2, "bikeRides", default=[]) or [])
+             if isinstance(r, dict)]
+    trip_id = trip.get("id")
+    if trip_id is None or len(rides) < 2:
+        return [trip]
+
+    dist_sum = 0.0
+    for r in rides:
+        start = r.get("startTime")
+        if not isinstance(start, str) or not start.strip():
+            return [trip]
+        if not _num(r.get("totalDistance")):
+            return [trip]
+        dist_sum += r["totalDistance"]
+
+    trip_total = _get(a2, "totalDistance")
+    if _num(trip_total):
+        allowed = max(_RIDE_SUM_TOLERANCE_M,
+                      _RIDE_SUM_TOLERANCE_RATIO * abs(trip_total))
+        if abs(dist_sum - trip_total) > allowed:
+            return [trip]
+
+    n = len(rides)
+    order = sorted(range(n), key=lambda i: (rides[i]["startTime"], i))
+    order_ok = order == list(range(n))
+    trip_title = _get(a2, "title")
+    if not isinstance(trip_title, str) or not trip_title:
+        trip_title = None
+
+    out: list[dict] = []
+    used_ids: set[str] = {trip_id}
+    for chrono, pos in enumerate(order):
+        r = rides[pos]
+        if chrono == 0:
+            rid = trip_id
+        else:
+            token = "".join(ch for ch in r["startTime"] if ch.isdigit())
+            rid = f"{trip_id}-{token or chrono}"
+            while rid in used_ids:
+                rid += "x"
+            used_ids.add(rid)
+
+        dur_ms = r.get("durationWithoutStops")
+        avg, mx = r.get("avgSpeed"), r.get("maxSpeed")
+        cal = r.get("caloriesBurned")
+        end = r.get("endTime")
+        title = r.get("title")
+        out.append({
+            "id": rid,
+            "distance": round(r["totalDistance"]),
+            "durationWithoutStops": round(dur_ms / 1000) if _num(dur_ms) else None,
+            "startTime": r["startTime"],
+            "endTime": end if isinstance(end, str) and end else None,
+            "title": title if isinstance(title, str) and title else trip_title,
+            "speed": {
+                "average": round(avg, 1) if _num(avg) else None,
+                "maximum": round(mx, 1) if _num(mx) else None,
+            },
+            "cadence": {},
+            "riderPower": {},
+            "elevation": {},
+            "caloriesBurned": cal if _num(cal) else None,
+            "_bes2_trip_id": trip_id,
+            "_bes2_ride_pos": pos,
+            "_bes2_ride_count": n,
+            "_bes2_order_ok": order_ok,
+            "_bes2_primary": chrono == 0,
+        })
+    return out
+
+
 def enrich_summary_from_detail(summary: dict, detail: dict) -> dict:
     """Fill cadence/riderPower/elevation (and missing speed/calories) from detail.
 
@@ -201,14 +318,26 @@ def normalize_track(detail: dict) -> dict:
     coords_rides = _get(detail, "coordinates", default=[]) or []
     alts = _flatten_rides(_get(detail, "altitudes", default=[]))
     spds = _flatten_rides(_get(detail, "speed", default=[]))
+    return {"activityDetails": _track_points(coords_rides, alts, spds)}
 
+
+def _track_points(coords_rides: Any, alts: list, spds: list,
+                  only_group: int | None = None) -> list[dict]:
+    """Walk the coordinate groups by one GLOBAL point index (see normalize_track).
+
+    ``only_group`` restricts the output to a single coordinate group while the
+    index still advances over every group before it, so the altitude/speed
+    lookup stays aligned.
+    """
     points: list[dict] = []
     gi = -1  # global coordinate-point index across all coordinate rides
-    for ride in coords_rides:
+    for group, ride in enumerate(coords_rides):
         if not isinstance(ride, list):
             continue
         for pt in ride:
             gi += 1
+            if only_group is not None and group != only_group:
+                continue
             if not isinstance(pt, dict):
                 continue
             lat = pt.get("latitude")
@@ -223,7 +352,52 @@ def normalize_track(detail: dict) -> dict:
                 "altitude": alt if _num(alt) else None,
                 "speed": spd if _num(spd) else None,
             })
-    return {"activityDetails": points}
+    return points
+
+
+def normalize_ride_track(detail: dict, ride_pos: int, ride_count: int) -> dict | None:
+    """Track of ONE ride out of a multi-ride trip detail, or None.
+
+    The trip detail holds every ride's points in ``coordinates``, one group
+    per ride. A ride can only be told apart when there is exactly one group
+    per ride; real payloads sometimes merge them (one group for a trip of two
+    rides), and then guessing a split would attach the wrong route to a ride.
+    None means "cannot isolate it", and the caller falls back to the whole
+    trip. ``ride_pos`` is the ride's position in the API's own ``bikeRides``
+    array, the order the detail groups are assumed to follow.
+    """
+    if not isinstance(detail, dict):
+        return None
+    if not isinstance(ride_pos, int) or not isinstance(ride_count, int):
+        return None
+    if ride_count < 2 or not 0 <= ride_pos < ride_count:
+        return None
+    coords_rides = _get(detail, "coordinates", default=[]) or []
+    if not isinstance(coords_rides, list) or len(coords_rides) != ride_count:
+        return None
+    alts = _flatten_rides(_get(detail, "altitudes", default=[]))
+    spds = _flatten_rides(_get(detail, "speed", default=[]))
+    return {"activityDetails": _track_points(coords_rides, alts, spds,
+                                             only_group=ride_pos)}
+
+
+def track_for_activity(detail: dict, activity: dict | None) -> tuple[dict, str]:
+    """Return ``(track, scope)`` for one activity out of a trip detail.
+
+    ``scope`` is ``"ride"`` when the track is isolated to the activity's own
+    ride, ``"trip"`` when it is the whole trip's route: an unsplit trip, an
+    unknown activity, a trip whose ``bikeRides`` order is not chronological
+    (the detail's group order cannot then be trusted to match), or one whose
+    track groups cannot be told apart per ride.
+    """
+    if isinstance(activity, dict):
+        count = activity.get("_bes2_ride_count")
+        if (isinstance(count, int) and count >= 2
+                and activity.get("_bes2_order_ok") is True):
+            ride = normalize_ride_track(detail, activity.get("_bes2_ride_pos"), count)
+            if ride is not None:
+                return ride, "ride"
+    return normalize_track(detail), "trip"
 
 
 # ---------------------------------------------------------------------------

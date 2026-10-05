@@ -20,6 +20,10 @@ normalize_activity_summary = bes2.normalize_activity_summary
 enrich_summary_from_detail = bes2.enrich_summary_from_detail
 normalize_track = bes2.normalize_track
 normalize_statistics = bes2.normalize_statistics
+normalize_trip_activities = bes2.normalize_trip_activities
+normalize_ride_track = bes2.normalize_ride_track
+track_for_activity = bes2.track_for_activity
+trip_id_of = bes2.trip_id_of
 
 
 # ---------------------------------------------------------------------------
@@ -472,6 +476,251 @@ def test_activity_summary_title_ignores_empty_bike_ride_title():
 def test_activity_summary_title_no_bike_rides_no_raise():
     assert normalize_activity_summary({"id": 1})["title"] is None
     assert normalize_activity_summary({"id": 1, "bikeRides": None})["title"] is None
+
+
+# ---------------------------------------------------------------------------
+# normalize_trip_activities — a BES2 TRIP holds several rides (issue #88)
+# ---------------------------------------------------------------------------
+
+TRIP_ID = 17659821156
+R1 = "2026-09-23T11:59:48Z"
+R2 = "2026-10-04T16:40:10Z"
+R3 = "2026-10-05T16:49:29Z"
+
+
+def _ride(start, dist_m, dur_ms=60000, **extra):
+    r = {
+        "type": "BIKE_RIDE", "startTime": start, "endTime": start,
+        "totalDistance": float(dist_m), "durationWithoutStops": float(dur_ms),
+        "avgSpeed": 15.04, "maxSpeed": 25.06, "caloriesBurned": 10.0,
+    }
+    r.update(extra)
+    return r
+
+
+def _trip(rides, trip_id=TRIP_ID, **extra):
+    t = {
+        "id": trip_id, "type": "TRIP", "isCompleted": False,
+        "startTime": rides[0]["startTime"] if rides else None,
+        "endTime": rides[-1]["endTime"] if rides else None,
+        "totalDistance": float(sum(r["totalDistance"] for r in rides)),
+        "durationWithoutStops": float(sum(r["durationWithoutStops"] for r in rides)),
+        "bikeRides": rides,
+    }
+    t.update(extra)
+    return t
+
+
+def test_trip_with_one_ride_stays_one_unchanged_activity():
+    # The common case (closed single-ride trip) must not change at all.
+    trip = _trip([_ride(R1, 5000, 900000)])
+    out = normalize_trip_activities(trip)
+    assert out == [normalize_activity_summary(trip)]
+    assert out[0]["id"] == str(TRIP_ID)
+
+
+def test_trip_without_bike_rides_stays_one_activity():
+    for rides in (None, [], "garbage"):
+        trip = {"id": 7, "totalDistance": 1234.0, "bikeRides": rides}
+        out = normalize_trip_activities(trip)
+        assert out == [normalize_activity_summary(trip)]
+    assert normalize_trip_activities({"id": 7})[0]["id"] == "7"
+
+
+def test_trip_with_several_rides_becomes_one_activity_per_ride():
+    trip = _trip([
+        _ride(R1, 30000, 7_000_000, title="Hausrunde"),
+        _ride(R2, 19389, 4_295_000),
+        _ride(R3, 406, 113_000, endTime="2026-10-05T16:51:22Z"),
+    ], title="Trip Name")
+    out = normalize_trip_activities(trip)
+    assert [a["id"] for a in out] == [
+        str(TRIP_ID),
+        f"{TRIP_ID}-20261004164010",
+        f"{TRIP_ID}-20261005164929",
+    ]
+    assert [a["distance"] for a in out] == [30000, 19389, 406]
+    assert [a["durationWithoutStops"] for a in out] == [7000, 4295, 113]
+    assert sum(a["distance"] for a in out) == 49795  # == the trip total
+    assert out[2]["startTime"] == R3 and out[2]["endTime"] == "2026-10-05T16:51:22Z"
+    assert out[0]["title"] == "Hausrunde"
+    assert out[1]["title"] == "Trip Name"  # ride without its own title -> trip-level
+    assert out[2]["speed"] == {"average": 15.0, "maximum": 25.1}
+    assert out[2]["caloriesBurned"] == 10.0
+    # trip-level aggregates must NOT be passed off as one ride's values
+    assert out[2]["cadence"] == {} and out[2]["riderPower"] == {} and out[2]["elevation"] == {}
+    for a in out:
+        assert a["_bes2_trip_id"] == str(TRIP_ID)
+        assert a["_bes2_ride_count"] == 3
+    assert [a["_bes2_primary"] for a in out] == [True, False, False]
+
+
+def test_rides_come_out_oldest_first_even_when_listed_newest_first():
+    trip = _trip([_ride(R3, 406), _ride(R2, 19389), _ride(R1, 30000)])
+    out = normalize_trip_activities(trip)
+    assert [a["startTime"] for a in out] == [R1, R2, R3]
+    assert out[0]["id"] == str(TRIP_ID)
+    assert [a["_bes2_ride_pos"] for a in out] == [2, 1, 0]  # position in the API array
+    assert all(a["_bes2_order_ok"] is False for a in out)
+
+
+def test_chronological_bike_rides_are_flagged_order_ok():
+    out = normalize_trip_activities(_trip([_ride(R1, 1000), _ride(R2, 2000)]))
+    assert all(a["_bes2_order_ok"] is True for a in out)
+    assert [a["_bes2_ride_pos"] for a in out] == [0, 1]
+
+
+def test_issue_88_new_ride_in_open_trip_is_a_new_activity():
+    # Reporter's numbers: trip totals 49389 m / 11295 s, then +406 m / +113 s.
+    r1 = _ride(R1, 30000, 7_000_000)
+    r2 = _ride(R2, 19389, 4_295_000, endTime="2026-10-04T16:55:55Z")
+    r3 = _ride(R3, 406, 113_000, endTime="2026-10-05T16:51:22Z")
+    before = normalize_trip_activities(_trip([r1, r2]))
+    after = normalize_trip_activities(_trip([r1, r2, r3]))
+    ids_before = {a["id"] for a in before}
+    ids_after = {a["id"] for a in after}
+    assert ids_before < ids_after
+    assert ids_after - ids_before == {f"{TRIP_ID}-20261005164929"}  # exactly one event
+    newest = max(after, key=lambda a: a["startTime"])
+    assert newest["distance"] == 406 and newest["durationWithoutStops"] == 113
+    assert newest["endTime"] == "2026-10-05T16:51:22Z"
+
+
+def test_single_ride_trip_growing_to_two_rides_keeps_its_first_id():
+    one = normalize_trip_activities(_trip([_ride(R1, 5000)]))
+    two = normalize_trip_activities(_trip([_ride(R1, 5000), _ride(R2, 800)]))
+    assert [a["id"] for a in one] == [str(TRIP_ID)]
+    assert {a["id"] for a in two} - {a["id"] for a in one} == {f"{TRIP_ID}-20261004164010"}
+    assert str(TRIP_ID) in {a["id"] for a in two}
+
+
+def test_ride_inserted_in_the_middle_does_not_shift_other_ids():
+    # A delayed sync can add an older ride after newer ones. Ids come from the
+    # ride's own start time, not its position, so only the new ride is new.
+    a, c = _ride(R1, 1000), _ride(R3, 3000)
+    b = _ride(R2, 2000)
+    before = {x["id"] for x in normalize_trip_activities(_trip([a, c]))}
+    after = {x["id"] for x in normalize_trip_activities(_trip([a, b, c]))}
+    assert after - before == {f"{TRIP_ID}-20261004164010"}
+    assert before < after
+
+
+def test_split_falls_back_to_the_trip_when_a_ride_lacks_start_or_distance():
+    no_start = _trip([_ride(R1, 1000), _ride(R2, 2000)])
+    del no_start["bikeRides"][1]["startTime"]
+    no_dist = _trip([_ride(R1, 1000), _ride(R2, 2000)])
+    no_dist["bikeRides"][0]["totalDistance"] = None
+    for trip in (no_start, no_dist):
+        assert normalize_trip_activities(trip) == [normalize_activity_summary(trip)]
+
+
+def test_split_falls_back_when_ride_distances_do_not_add_up_to_the_trip_total():
+    # e.g. the ride entries turn out to be in km although documented as metres
+    trip = _trip([_ride(R1, 10.0), _ride(R2, 20.0)], totalDistance=30000.0)
+    assert normalize_trip_activities(trip) == [normalize_activity_summary(trip)]
+
+
+def test_rides_sharing_a_start_time_still_get_unique_ids():
+    out = normalize_trip_activities(_trip([_ride(R1, 1000), _ride(R2, 1000), _ride(R2, 1000)]))
+    ids = [a["id"] for a in out]
+    assert len(set(ids)) == 3
+
+
+def test_trip_activities_never_raise_on_garbage():
+    for bad in (None, {}, {"id": 1, "bikeRides": "x"},
+                {"id": 1, "bikeRides": [None, 3, "a"]},
+                {"id": 1, "bikeRides": [{}, {}]},
+                {"id": 1, "bikeRides": [{"startTime": 5, "totalDistance": 1}] * 2}):
+        out = normalize_trip_activities(bad)
+        assert isinstance(out, list) and len(out) >= 1
+
+
+def test_trip_id_of():
+    assert trip_id_of("17659821156") == "17659821156"
+    assert trip_id_of(17659821156) == "17659821156"
+    assert trip_id_of("17659821156-20261005164929") == "17659821156"
+    assert trip_id_of(None) is None
+    assert trip_id_of("") is None
+
+
+# ---------------------------------------------------------------------------
+# Per-ride track slicing
+# ---------------------------------------------------------------------------
+
+def _pt(lat):
+    return {"latitude": lat, "longitude": lat + 100.0}
+
+
+def _detail(groups=None, alts=None, speeds=None):
+    groups = groups if groups is not None else [[_pt(1), _pt(2), _pt(3)], [_pt(4), _pt(5)]]
+    return {
+        "coordinates": groups,
+        "altitudes": alts if alts is not None else [[10, 11, 12], [20, 21]],
+        "speed": speeds if speeds is not None else [[1, 2, 3], [4, 5]],
+    }
+
+
+def test_ride_track_isolates_one_ride():
+    first = normalize_ride_track(_detail(), 0, 2)["activityDetails"]
+    second = normalize_ride_track(_detail(), 1, 2)["activityDetails"]
+    assert [p["latitude"] for p in first] == [1, 2, 3]
+    assert [p["latitude"] for p in second] == [4, 5]
+    assert [p["altitude"] for p in second] == [20, 21]
+    assert [p["speed"] for p in second] == [4, 5]
+
+
+def test_ride_track_altitude_lookup_survives_different_array_grouping():
+    # altitudes merged into one group while coordinates are per ride: the
+    # lookup is by global point index, so the second ride still gets 20/21.
+    d = _detail(alts=[[10, 11, 12, 20, 21]], speeds=[[1, 2, 3, 4, 5]])
+    second = normalize_ride_track(d, 1, 2)["activityDetails"]
+    assert [p["altitude"] for p in second] == [20, 21]
+    assert [p["speed"] for p in second] == [4, 5]
+
+
+def test_ride_track_none_when_coordinate_groups_do_not_match_ride_count():
+    merged = _detail(groups=[[_pt(1), _pt(2), _pt(3), _pt(4), _pt(5)]])
+    assert normalize_ride_track(merged, 0, 2) is None
+    assert normalize_ride_track(_detail(groups=[]), 0, 2) is None
+
+
+def test_ride_track_none_for_unusable_arguments():
+    d = _detail()
+    assert normalize_ride_track(None, 0, 2) is None
+    assert normalize_ride_track(d, 2, 2) is None   # position out of range
+    assert normalize_ride_track(d, -1, 2) is None
+    assert normalize_ride_track(d, 0, 1) is None   # not a multi-ride trip
+    assert normalize_ride_track(d, "0", 2) is None
+
+
+def test_ride_track_does_not_change_the_whole_trip_normalizer():
+    whole = normalize_track(_detail())["activityDetails"]
+    assert [p["latitude"] for p in whole] == [1, 2, 3, 4, 5]
+
+
+def _split_meta(**over):
+    meta = {"_bes2_ride_count": 2, "_bes2_ride_pos": 1, "_bes2_order_ok": True}
+    meta.update(over)
+    return meta
+
+
+def test_track_for_activity_scope():
+    d = _detail()
+    track, scope = track_for_activity(d, _split_meta())
+    assert scope == "ride"
+    assert [p["latitude"] for p in track["activityDetails"]] == [4, 5]
+    # unsplit trip, unknown activity -> whole trip
+    for act in ({"id": "1"}, None):
+        track, scope = track_for_activity(d, act)
+        assert scope == "trip"
+        assert len(track["activityDetails"]) == 5
+    # bikeRides not chronological: the detail's group order cannot be trusted
+    track, scope = track_for_activity(d, _split_meta(_bes2_order_ok=False))
+    assert scope == "trip" and len(track["activityDetails"]) == 5
+    # groups cannot be told apart -> whole trip, never a guessed split
+    merged = _detail(groups=[[_pt(1), _pt(2), _pt(3), _pt(4), _pt(5)]])
+    track, scope = track_for_activity(merged, _split_meta())
+    assert scope == "trip" and len(track["activityDetails"]) == 5
 
 
 if __name__ == "__main__":

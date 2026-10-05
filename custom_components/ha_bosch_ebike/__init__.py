@@ -684,6 +684,14 @@ async def ws_get_all_tracks(
                 except Exception as err:  # noqa: BLE001
                     _LOGGER.warning("Bosch eBike: get_all_tracks: failed to load %s: %s", aid, err)
                     return
+                # A BES2 trip with several rides whose track data cannot be
+                # told apart per ride (issue #88) comes back as the WHOLE
+                # trip's route for each of its rides. Only the trip's first
+                # ride may draw it, or the same route repeats once per ride.
+                # The empty entry is cached so a repeat call skips the fetch.
+                if detail.get("scope") == "trip" and detail.get("primary") is False:
+                    cache[aid] = []
+                    return
                 raw = detail.get("activityDetails", [])
                 points = []
                 for p in raw:
