@@ -24,6 +24,7 @@ normalize_trip_activities = bes2.normalize_trip_activities
 normalize_ride_track = bes2.normalize_ride_track
 track_for_activity = bes2.track_for_activity
 trip_id_of = bes2.trip_id_of
+trip_split_blocker = bes2.trip_split_blocker
 
 
 # ---------------------------------------------------------------------------
@@ -633,6 +634,39 @@ def test_trip_activities_never_raise_on_garbage():
                 {"id": 1, "bikeRides": [{"startTime": 5, "totalDistance": 1}] * 2}):
         out = normalize_trip_activities(bad)
         assert isinstance(out, list) and len(out) >= 1
+
+
+def test_trip_split_blocker_names_the_reason():
+    # The coordinator's debug log prints this, so a trip that stays one
+    # activity can be explained from the log alone (issue #88).
+    ok = _trip([_ride(R1, 1000), _ride(R2, 2000)])
+    assert trip_split_blocker(ok) is None
+    assert trip_split_blocker(_trip([_ride(R1, 1000)])) == "fewer than two rides (1)"
+    assert trip_split_blocker({"id": 1}) == "fewer than two rides (0)"
+    assert trip_split_blocker({"bikeRides": [_ride(R1, 1), _ride(R2, 1)]}) == "trip has no id"
+
+    no_start = _trip([_ride(R1, 1000), _ride(R2, 2000)])
+    del no_start["bikeRides"][1]["startTime"]
+    assert trip_split_blocker(no_start) == "ride 1 has no startTime"
+
+    no_dist = _trip([_ride(R1, 1000), _ride(R2, 2000)])
+    no_dist["bikeRides"][0]["totalDistance"] = None
+    assert trip_split_blocker(no_dist) == "ride 0 has no numeric totalDistance"
+
+    mismatch = _trip([_ride(R1, 10.0), _ride(R2, 20.0)], totalDistance=30000.0)
+    reason = trip_split_blocker(mismatch)
+    assert "add up to 30 m" in reason and "trip total is 30000 m" in reason
+
+
+def test_trip_split_blocker_never_raises_and_agrees_with_the_split():
+    for bad in (None, {}, 5, "x", {"id": 1, "bikeRides": "x"}):
+        assert isinstance(trip_split_blocker(bad), str)
+    # whatever the blocker says, normalize_trip_activities must agree
+    for trip in (_trip([_ride(R1, 1000), _ride(R2, 2000)]),
+                 _trip([_ride(R1, 1000)]),
+                 _trip([_ride(R1, 10.0), _ride(R2, 20.0)], totalDistance=30000.0)):
+        split = len(normalize_trip_activities(trip)) > 1
+        assert split == (trip_split_blocker(trip) is None)
 
 
 def test_trip_id_of():

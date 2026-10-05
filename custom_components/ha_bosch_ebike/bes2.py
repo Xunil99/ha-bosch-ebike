@@ -151,6 +151,40 @@ def trip_id_of(activity_id: Any) -> str | None:
     return head or None
 
 
+def trip_split_blocker(a2: dict) -> str | None:
+    """Why a trip is NOT split into per-ride activities, or None if it is.
+
+    The one place that decides this, shared by normalize_trip_activities and
+    the coordinator's debug log, so "why did my trip stay one activity" can be
+    answered from the log alone (the per-ride fields are documented, but a
+    live payload can differ from the documentation).
+    """
+    if _get(a2, "id") is None:
+        return "trip has no id"
+    rides = [r for r in (_get(a2, "bikeRides", default=[]) or [])
+             if isinstance(r, dict)]
+    if len(rides) < 2:
+        return f"fewer than two rides ({len(rides)})"
+
+    dist_sum = 0.0
+    for i, r in enumerate(rides):
+        start = r.get("startTime")
+        if not isinstance(start, str) or not start.strip():
+            return f"ride {i} has no startTime"
+        if not _num(r.get("totalDistance")):
+            return f"ride {i} has no numeric totalDistance"
+        dist_sum += r["totalDistance"]
+
+    trip_total = _get(a2, "totalDistance")
+    if _num(trip_total):
+        allowed = max(_RIDE_SUM_TOLERANCE_M,
+                      _RIDE_SUM_TOLERANCE_RATIO * abs(trip_total))
+        if abs(dist_sum - trip_total) > allowed:
+            return (f"ride distances add up to {dist_sum:.0f} m but the "
+                    f"trip total is {trip_total:.0f} m")
+    return None
+
+
 def normalize_trip_activities(a2: dict) -> list[dict]:
     """Expand a BES2 TRIP into one activity per bike ride.
 
@@ -177,27 +211,11 @@ def normalize_trip_activities(a2: dict) -> list[dict]:
     raises.
     """
     trip = normalize_activity_summary(a2)
+    if trip_split_blocker(a2) is not None:
+        return [trip]
     rides = [r for r in (_get(a2, "bikeRides", default=[]) or [])
              if isinstance(r, dict)]
-    trip_id = trip.get("id")
-    if trip_id is None or len(rides) < 2:
-        return [trip]
-
-    dist_sum = 0.0
-    for r in rides:
-        start = r.get("startTime")
-        if not isinstance(start, str) or not start.strip():
-            return [trip]
-        if not _num(r.get("totalDistance")):
-            return [trip]
-        dist_sum += r["totalDistance"]
-
-    trip_total = _get(a2, "totalDistance")
-    if _num(trip_total):
-        allowed = max(_RIDE_SUM_TOLERANCE_M,
-                      _RIDE_SUM_TOLERANCE_RATIO * abs(trip_total))
-        if abs(dist_sum - trip_total) > allowed:
-            return [trip]
+    trip_id = trip["id"]
 
     n = len(rides)
     order = sorted(range(n), key=lambda i: (rides[i]["startTime"], i))

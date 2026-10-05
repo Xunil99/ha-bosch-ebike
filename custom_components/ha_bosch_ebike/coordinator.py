@@ -1311,23 +1311,34 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     _LOGGER.debug("Could not fetch BES2 activity detail %s: %s", raw_id, err)
 
             # Debug aid for issue #88: what Bosch reports about the newest
-            # trip, and how it was split. Counts and flags only.
+            # trip, how it was split and, if it was not, why. Field NAMES and
+            # counts only, never values.
             for trip in (raw_acts or []):
                 if isinstance(trip, dict) and str(trip.get("id")) == str(raw_id):
                     n_split = sum(
                         1 for a in activities
                         if a.get("_bes2_trip_id") == str(raw_id)
                     )
+                    rides_raw = trip.get("bikeRides")
+                    first_ride = (
+                        rides_raw[0] if isinstance(rides_raw, list) and rides_raw else None
+                    )
                     _LOGGER.debug(
                         "BES2 newest trip %s: %d ride(s) in payload, "
                         "isCompleted=%s, %s, bikeRides chronological: %s, "
-                        "latest ride track scope: %s",
+                        "latest ride track scope: %s, trip fields: %s, "
+                        "first ride fields: %s",
                         raw_id,
-                        len(trip.get("bikeRides") or []),
+                        len(rides_raw) if isinstance(rides_raw, list) else 0,
                         trip.get("isCompleted"),
-                        f"split into {n_split} activities" if n_split else "not split",
+                        (
+                            f"split into {n_split} activities" if n_split
+                            else f"NOT split: {bes2.trip_split_blocker(trip)}"
+                        ),
                         latest_activity.get("_bes2_order_ok", "n/a"),
                         _scope if latest_details is not None else "none",
+                        sorted(trip.keys()),
+                        sorted(first_ride.keys()) if isinstance(first_ride, dict) else None,
                     )
                     break
 
