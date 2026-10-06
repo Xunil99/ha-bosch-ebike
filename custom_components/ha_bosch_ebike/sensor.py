@@ -905,6 +905,12 @@ async def async_setup_entry(
         # BoschChargedEnergySensor for which of the two owns it.
         if soc_entity:
             monitor = ChargeSessionMonitor(hass, coordinator, bike_id, soc_entity)
+            # A charge that was running when Home Assistant last stopped is
+            # picked up again here, before any entity exists. The sensors
+            # then restore their own state on top of it, which is safe in
+            # either order (see ChargeSessionTracker.restore_summary and
+            # restore_total_energy).
+            await monitor.async_restore()
             # Tied to the config entry, not to an entity: see charge_monitor.py
             # for why the subscription must outlive either sensor being
             # disabled in the entity registry.
@@ -2019,10 +2025,11 @@ class BoschChargeSessionSensor(RestoreEntity, SensorEntity):
         await super().async_added_to_hass()
 
         # Bring back the last completed charge, so a restart does not blank
-        # out last night's summary. An in-flight charge is deliberately not
-        # restored - see ChargeSessionTracker.restore_summary. Read from the
-        # ATTRIBUTES, which Home Assistant stores verbatim; the state string
-        # would be unit-converted (see BoschChargedEnergySensor).
+        # out last night's summary. A charge that was still running is not
+        # part of this: ChargeSessionMonitor.async_restore picks that up
+        # from its own store. Read from the ATTRIBUTES, which Home Assistant
+        # stores verbatim; the state string would be unit-converted (see
+        # BoschChargedEnergySensor).
         last_state = await self.async_get_last_state()
         if last_state is not None:
             restored = {

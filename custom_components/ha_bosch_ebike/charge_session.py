@@ -27,6 +27,13 @@ Design notes on the thresholds below:
 * A session is closed from its PEAK, not from the sample that closed it. A
   battery that reaches 100% and then sits there losing a percent to
   self-discharge charged to 100%, not to 99%.
+* A session that is still running when Home Assistant stops is carried over
+  a restart (export_inflight / restore_inflight) rather than dropped. Only
+  what was actually observed is carried over, and the state machine then
+  judges the SoC found at startup by its normal rules. Whatever happened
+  while Home Assistant was down can therefore only ever add the net rise
+  of the SoC, never energy that was not measured: the failure mode is
+  under-reporting, as it always was.
 """
 from __future__ import annotations
 
@@ -62,6 +69,21 @@ MIN_SESSION_PCT = 3.0
 # over", so it cannot coherently treat a longer silence as part of one.
 MAX_START_LOOKBACK_S = IDLE_TIMEOUT_S
 
+# A stored session whose last rise is older than this is dropped on restore
+# instead of being closed from its stored peak. Long enough to span an
+# overnight outage, short enough that a leftover from an integration that was
+# disabled for days is not booked into today's Energy Dashboard.
+MAX_RESTORE_AGE_S = 12 * 3600.0
+# Longest span a stored session may describe. Real charges end well inside
+# this; a longer one means the stored timestamps are corrupt, and publishing
+# it would also poison the charge-rate learning with a nonsense duration.
+MAX_RESTORE_SESSION_S = 24 * 3600.0
+# How far into the future a stored timestamp may lie before it is distrusted.
+# A host without a battery-backed clock can boot with a stale time and only
+# correct it a little later; a session that appears to end after "now" is
+# then ignored rather than left open until the clock catches up.
+CLOCK_SKEW_TOLERANCE_S = 120.0
+
 # Keys that make up a restorable summary. Anything else on a restored
 # entity state (in_progress, soc_source, and Home Assistant's own
 # friendly_name/unit/icon) is recomputed rather than carried over.
@@ -82,6 +104,9 @@ __all__ = [
     "IDLE_TIMEOUT_S",
     "MIN_SESSION_PCT",
     "MAX_START_LOOKBACK_S",
+    "MAX_RESTORE_AGE_S",
+    "MAX_RESTORE_SESSION_S",
+    "CLOCK_SKEW_TOLERANCE_S",
 ]
 
 
@@ -118,6 +143,14 @@ def clean_soc(value: Any) -> float | None:
     return soc
 
 
+def _clean_ts(value: Any) -> float | None:
+    """Return *value* as a usable epoch timestamp (seconds), or None."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    ts = float(value)
+    return ts if math.isfinite(ts) and ts >= 0.0 else None
+
+
 class ChargeSessionTracker:
     """Turns a stream of (soc, timestamp) samples into charge session summaries.
 
@@ -136,7 +169,13 @@ class ChargeSessionTracker:
         self._capacity_wh: float | None = None
         self._gaps = 0
         self._summary: dict[str, Any] | None = None
-        self._total_energy_wh = 0.0
+        # The running total is kept as two parts so that restoring the first
+        # can never erase the second, whichever happens first: what the meter
+        # read before this tracker started counting (restore_total_energy),
+        # and what the sessions published by this tracker added since.
+        self._restored_total_wh = 0.0
+        self._session_total_wh = 0.0
+        self._total_restored = False
 
     @property
     def in_progress(self) -> bool:
@@ -158,7 +197,7 @@ class ChargeSessionTracker:
         capacity was configured late - preferable to inventing kilowatt
         hours that were never measured.
         """
-        return round(self._total_energy_wh, 2)
+        return round(self._restored_total_wh + self._session_total_wh, 2)
 
     def restore_total_energy(self, value: Any) -> None:
         """Adopt a running total read back from a restored entity state.
@@ -168,31 +207,139 @@ class ChargeSessionTracker:
         sensor, where going backwards is read as a meter reset and would
         corrupt the Energy Dashboard's history.
 
-        Takes the larger of the restored value and whatever is already
-        accumulated, rather than overwriting it. The caller subscribes to
-        live SoC updates before it has necessarily restored this value (the
-        subscription has to exist early so no sample is missed), so a
-        session could in principle complete and add to the total before this
-        runs; overwriting would silently erase it. Idempotent for the same
-        reason, if this is ever called more than once.
+        The first call takes *value* as what the meter read BEFORE this
+        tracker started counting, and whatever sessions this tracker
+        publishes are added on top of it, no matter whether they complete
+        before or after this is called. That is not hypothetical: a session
+        restored from before a restart can be closed right at startup (see
+        restore_inflight), earlier than the sensor restores its total, and
+        taking the larger of the two numbers instead of adding them would
+        silently drop that session.
+
+        A later call on the same tracker (the sensor entity re-added within
+        one run) is a different thing: what it reads back was written while
+        this tracker was already counting, so it already contains the
+        sessions published since. It is taken as an absolute reading, which
+        can raise the total but never lowers it and never counts a session
+        twice.
         """
         try:
             restored = float(value)
         except (TypeError, ValueError):
             return
-        if math.isfinite(restored) and restored >= 0:
-            self._total_energy_wh = max(self._total_energy_wh, restored)
+        if not math.isfinite(restored) or restored < 0:
+            return
+        if not self._total_restored:
+            self._restored_total_wh = restored
+            self._total_restored = True
+        else:
+            self._restored_total_wh = max(
+                self._restored_total_wh, restored - self._session_total_wh
+            )
 
     def restore_summary(self, summary: dict[str, Any] | None) -> None:
         """Adopt a summary read back from a restored entity state.
 
         Only ever used to repopulate the last *completed* session across a
-        restart. An in-flight session is not restored: reconstructing it
-        would need the SoC history, and getting it wrong would publish a
-        charge that never happened.
+        restart, and only while this tracker has not completed one of its
+        own: a session closed straight from the restored in-flight state
+        (restore_inflight) is newer than anything stored, and must not be
+        overwritten by the previous run's summary when the sensor restores.
+        A session still running at shutdown is carried over separately, by
+        restore_inflight.
         """
-        if isinstance(summary, dict):
+        if isinstance(summary, dict) and self._summary is None:
             self._summary = summary
+
+    def export_inflight(self) -> dict[str, Any] | None:
+        """The running session as plain JSON-safe data, or None when idle.
+
+        What ChargeSessionMonitor persists, so that a restart does not lose
+        the part of a charge that was already observed. Only what the state
+        machine needs to carry on is included. The baseline (_last_soc and
+        _last_ts) is not: it is re-seeded from the live sensor at startup.
+        """
+        if not self.in_progress:
+            return None
+        return {
+            "start_soc": self._start_soc,
+            "start_ts": self._start_ts,
+            "peak_soc": self._peak_soc,
+            "peak_ts": self._peak_ts,
+            "capacity_wh": self._capacity_wh,
+            "gaps": self._gaps,
+        }
+
+    def restore_inflight(self, data: Any, now: float) -> bool:
+        """Resume a session that was running when Home Assistant stopped.
+
+        Returns True if a session was adopted. It only ever picks a session
+        back up, never invents one, and it is strict about what it accepts:
+        anything that is not a clean, plausible description of a session is
+        ignored, so the worst a corrupt store can do is fall back to the old
+        behaviour of starting afresh at the next rise.
+
+        The caller follows up with check_timeout(now). A session whose last
+        rise is already older than IDLE_TIMEOUT_S would have been closed by
+        the idle timer had Home Assistant been running, and is closed here
+        from its stored peak for exactly that reason. Otherwise the session
+        simply carries on: the first sample after startup is judged by
+        feed()'s normal rules, so a higher SoC raises the peak, a fall of
+        END_DROP_PCT closes it from the stored peak, and a silent sensor
+        lets the idle timer close it.
+
+        Nothing is extrapolated across the downtime. What was observed
+        before the stop counts as observed, and the SoC found afterwards
+        adds only its net rise, which can never exceed what went in.
+        """
+        if self.in_progress or not isinstance(data, dict):
+            return False
+        start_soc = clean_soc(data.get("start_soc"))
+        peak_soc = clean_soc(data.get("peak_soc"))
+        start_ts = _clean_ts(data.get("start_ts"))
+        peak_ts = _clean_ts(data.get("peak_ts"))
+        if start_soc is None or peak_soc is None or start_ts is None or peak_ts is None:
+            return False
+        if peak_soc < start_soc or peak_ts < start_ts:
+            return False
+        if peak_ts - start_ts > MAX_RESTORE_SESSION_S:
+            return False
+        if peak_ts > now + CLOCK_SKEW_TOLERANCE_S:
+            return False
+        if now - peak_ts > MAX_RESTORE_AGE_S:
+            return False
+
+        capacity = data.get("capacity_wh")
+        capacity_wh: float | None = None
+        if (
+            not isinstance(capacity, bool)
+            and isinstance(capacity, (int, float))
+            and math.isfinite(capacity)
+            and capacity > 0
+        ):
+            capacity_wh = float(capacity)
+        gaps = data.get("gaps")
+        if isinstance(gaps, bool) or not isinstance(gaps, int) or gaps < 0:
+            gaps = 0
+
+        self._start_soc = start_soc
+        self._start_ts = start_ts
+        self._peak_soc = peak_soc
+        self._peak_ts = peak_ts
+        self._capacity_wh = capacity_wh
+        self._gaps = gaps
+        return True
+
+    def idle_remaining_s(self, now: float) -> float | None:
+        """Seconds until check_timeout() would close the running session.
+
+        None when no session is running. The monitor uses it to arm its idle
+        timer for a session that was restored rather than started by a
+        sample, since no sample may arrive to arm it the usual way.
+        """
+        if not self.in_progress or self._peak_ts is None:
+            return None
+        return max(0.0, IDLE_TIMEOUT_S - (now - self._peak_ts))
 
     def seed(self, soc: Any, now: float) -> None:
         """Set the baseline without any chance of starting a session.
@@ -293,7 +440,7 @@ class ChargeSessionTracker:
         if capacity_wh and capacity_wh > 0:
             energy_wh = round(delta / 100.0 * capacity_wh, 1)
         if energy_wh:
-            self._total_energy_wh += energy_wh
+            self._session_total_wh += energy_wh
         self._summary = {
             "start_soc": round(start_soc, 1),
             "end_soc": round(peak_soc, 1),

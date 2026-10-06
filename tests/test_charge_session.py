@@ -1,5 +1,7 @@
 """Standalone tests for charge_session.py — run with: python3 tests/test_charge_session.py"""
 import importlib.util
+import json
+import math
 from pathlib import Path
 
 _path = (
@@ -12,6 +14,9 @@ _spec.loader.exec_module(charge_session)
 
 Tracker = charge_session.ChargeSessionTracker
 IDLE_TIMEOUT_S = charge_session.IDLE_TIMEOUT_S
+MAX_RESTORE_AGE_S = charge_session.MAX_RESTORE_AGE_S
+MAX_RESTORE_SESSION_S = charge_session.MAX_RESTORE_SESSION_S
+CLOCK_SKEW_TOLERANCE_S = charge_session.CLOCK_SKEW_TOLERANCE_S
 
 MIN = 60.0
 
@@ -341,6 +346,361 @@ def test_restore_total_rejects_garbage_without_lowering_an_existing_total():
     for junk in (None, "unknown", "unavailable", "", "None", -5, "-5",
                  float("nan"), float("inf"), [1], {}):
         assert _restored_onto_baseline(junk) == 99.0, junk
+
+
+# --- carrying a running session across a restart -------------------------
+#
+# A charge that is running when Home Assistant stops is persisted by the
+# monitor and picked up again at startup. These cover the tracker half: what
+# is exported, what restore_inflight accepts, and how the state machine then
+# treats the session. The failure mode to guard against is a charge that
+# never happened being published, or one that did being published twice.
+
+CAPACITY_WH = 625.0
+
+
+def _mid_charge():
+    """A tracker part-way through a charge: 20% -> 60%, one percent per 2 min.
+
+    Returns the tracker and the time of its last rise (80 min after plug-in).
+    """
+    t = Tracker()
+    t.seed(20, 0.0)
+    now = 0.0
+    for soc in range(21, 61):
+        now += 2 * MIN
+        t.feed(soc, now, capacity_wh=CAPACITY_WH)
+    assert t.in_progress and t.summary is None
+    return t, now
+
+
+def _snapshot():
+    """What the monitor would have persisted at the 60% mark."""
+    t, last_rise = _mid_charge()
+    snapshot = t.export_inflight()
+    return json.loads(json.dumps(snapshot)), last_rise
+
+
+def _restored(now_offset, snapshot=None, last_rise=None):
+    """A fresh tracker with the 60% session restored *now_offset* s later."""
+    if snapshot is None:
+        snapshot, last_rise = _snapshot()
+    t = Tracker()
+    now = last_rise + now_offset
+    assert t.restore_inflight(snapshot, now) is True
+    return t, now, last_rise
+
+
+def test_export_inflight_is_none_while_idle():
+    t = Tracker()
+    assert t.export_inflight() is None
+    t.seed(40, 0.0)
+    assert t.export_inflight() is None
+    t.feed(41, 60.0)   # a single percent starts a session ...
+    t.feed(40, 120.0)  # ... and falling again ends it before it is worth publishing
+    assert t.in_progress is False
+    assert t.export_inflight() is None
+
+
+def test_export_inflight_is_plain_json_data_of_the_running_session():
+    t, last_rise = _mid_charge()
+    snapshot = t.export_inflight()
+    assert snapshot == {
+        "start_soc": 20.0, "start_ts": 0.0,
+        "peak_soc": 60.0, "peak_ts": last_rise,
+        "capacity_wh": CAPACITY_WH, "gaps": 0,
+    }
+    assert json.loads(json.dumps(snapshot)) == snapshot
+
+
+def test_a_charge_survives_a_restart():
+    # The headline case: charge 20% -> 100%, Home Assistant restarts at 60%
+    # and is back three minutes later. Without carrying the session over,
+    # only the part after the restart was booked (about half the energy).
+    snapshot, last_rise = _snapshot()
+    t, now, _ = _restored(3 * MIN, snapshot, last_rise)
+    assert t.in_progress is True
+    t.seed(62, now)                       # what async_start does at startup
+    assert t.check_timeout(now) is False  # the idle window is still open
+
+    for soc in range(63, 101):
+        now += 2 * MIN
+        t.feed(soc, now, capacity_wh=CAPACITY_WH)
+    assert t.check_timeout(now + IDLE_TIMEOUT_S) is True
+
+    s = t.summary
+    assert s["start_soc"] == 20 and s["end_soc"] == 100 and s["soc_delta"] == 80
+    assert s["energy_wh"] == 500.0        # 80% of 625 Wh, not the 39% after the restart
+    assert s["started_at"] == 0.0         # dated from the plug-in, before the restart
+    assert s["ended_at"] == now
+    assert s["duration_min"] == round(now / 60.0, 1)
+    assert t.total_energy_wh == 500.0
+
+
+def test_the_soc_found_after_a_restart_only_raises_the_peak():
+    # While Home Assistant was down the battery went on charging: the net
+    # rise since the stored peak is booked, nothing beyond it.
+    t, now, _ = _restored(3 * MIN)
+    t.feed(66, now, capacity_wh=CAPACITY_WH)
+    assert t.in_progress is True
+    t.check_timeout(now + IDLE_TIMEOUT_S)
+    assert t.summary["end_soc"] == 66
+    assert t.summary["energy_wh"] == 287.5   # 20 -> 66 = 46% of 625 Wh
+
+
+def test_a_restored_session_ends_from_its_stored_peak_if_the_battery_fell():
+    # The bike was unplugged and ridden while Home Assistant was down. The
+    # first sample shows a lower SoC, which ends the session as usual, from
+    # the peak that was actually observed.
+    t, now, _ = _restored(3 * MIN)
+    assert t.feed(55, now, capacity_wh=CAPACITY_WH) is True
+    assert t.in_progress is False
+    s = t.summary
+    assert s["start_soc"] == 20 and s["end_soc"] == 60
+    assert s["energy_wh"] == 250.0        # 40% of 625 Wh
+
+
+def test_a_restored_session_that_idled_out_while_down_ends_from_its_peak():
+    # No sample may ever arrive (the bridge stays offline). Closed from the
+    # stored peak, dated by it - what the idle timer would have done.
+    t, now, last_rise = _restored(IDLE_TIMEOUT_S + 10 * MIN)
+    assert t.check_timeout(now) is True
+    assert t.in_progress is False
+    s = t.summary
+    assert s["end_soc"] == 60 and s["start_soc"] == 20
+    assert s["ended_at"] == last_rise
+    assert s["duration_min"] == 80.0
+    assert t.total_energy_wh == 250.0
+
+
+def test_a_restored_session_inside_the_idle_window_is_left_running():
+    t, now, _ = _restored(IDLE_TIMEOUT_S - 1)
+    assert t.check_timeout(now) is False
+    assert t.in_progress is True
+    assert t.idle_remaining_s(now) == 1.0
+    assert t.check_timeout(now + 1) is True
+
+
+def test_idle_remaining_s():
+    t = Tracker()
+    assert t.idle_remaining_s(0.0) is None
+    t, last_rise = _mid_charge()
+    assert t.idle_remaining_s(last_rise) == IDLE_TIMEOUT_S
+    assert t.idle_remaining_s(last_rise + 600) == IDLE_TIMEOUT_S - 600
+    assert t.idle_remaining_s(last_rise + IDLE_TIMEOUT_S + 99) == 0.0
+
+
+def test_a_restored_session_that_is_too_small_is_not_published():
+    # 20% -> 21% stored, then it idles out: below MIN_SESSION_PCT, so nothing
+    # is published and nothing is left in progress.
+    snapshot = {"start_soc": 20.0, "start_ts": 0.0, "peak_soc": 21.0,
+                "peak_ts": 120.0, "capacity_wh": CAPACITY_WH, "gaps": 0}
+    t = Tracker()
+    assert t.restore_inflight(snapshot, 120.0 + IDLE_TIMEOUT_S + 1) is True
+    assert t.check_timeout(120.0 + IDLE_TIMEOUT_S + 1) is False
+    assert t.in_progress is False
+    assert t.summary is None
+    assert t.total_energy_wh == 0.0
+
+
+def test_restore_inflight_rejects_what_does_not_describe_a_session():
+    good, last_rise = _snapshot()
+    now = last_rise + 60.0
+
+    def broken(**changes):
+        d = dict(good)
+        for key, value in changes.items():
+            if value is _MISSING:
+                d.pop(key, None)
+            else:
+                d[key] = value
+        return d
+
+    # Shape: what a corrupt or hand-edited store file could hold.
+    shapes = [None, "x", 5, [], good["start_soc"], True]
+    for key in ("start_soc", "peak_soc", "start_ts", "peak_ts"):
+        shapes.append(broken(**{key: _MISSING}))
+        shapes.append(broken(**{key: None}))
+    for junk in (float("nan"), float("inf"), -1, 101, True, [1], {}):
+        shapes.append(broken(start_soc=junk))
+        shapes.append(broken(peak_soc=junk))
+    for junk in (float("nan"), float("inf"), -5.0, True, "123", [1], None):
+        shapes.append(broken(start_ts=junk))
+        shapes.append(broken(peak_ts=junk))
+    shapes += [
+        broken(start_soc=70.0, peak_soc=60.0),    # fell, so that is not a peak
+        broken(start_ts=good["peak_ts"] + 1),     # started after it peaked
+    ]
+    cases = [(bad, now) for bad in shapes]
+
+    # Plausibility: these hinge on the clock or on the span. They are built far
+    # enough into the epoch that every timestamp stays valid, so each is
+    # rejected for the reason it names and for no other - the control below
+    # shows the same snapshot is fine when the clock is right.
+    late, late_now = _long_session(80 * MIN)
+    assert Tracker().restore_inflight(late, late_now) is True
+    cases += [
+        (dict(late, peak_ts=late_now + CLOCK_SKEW_TOLERANCE_S + 1), late_now),   # from the future
+        (dict(late, peak_ts=late_now - MAX_RESTORE_AGE_S - 1,
+              start_ts=late_now - MAX_RESTORE_AGE_S - 1 - 80 * MIN), late_now),  # too old to book
+        _long_session(MAX_RESTORE_SESSION_S + 1),                                # absurdly long
+    ]
+
+    for bad, at in cases:
+        t = Tracker()
+        assert t.restore_inflight(bad, at) is False, bad
+        assert t.in_progress is False, bad
+        assert t.export_inflight() is None, bad
+
+
+_MISSING = object()
+
+
+def _long_session(span_s):
+    """A snapshot whose session lasted *span_s*, ending a minute before "now".
+
+    Placed ten days into the epoch so the start stays a valid (non-negative)
+    timestamp however long the span is. Returns (snapshot, now).
+    """
+    peak_ts = 10 * 86400.0
+    snapshot = {"start_soc": 20.0, "start_ts": peak_ts - span_s,
+                "peak_soc": 60.0, "peak_ts": peak_ts,
+                "capacity_wh": CAPACITY_WH, "gaps": 0}
+    return snapshot, peak_ts + 60.0
+
+
+def test_restore_inflight_accepts_the_boundaries():
+    good, last_rise = _snapshot()
+    # Exactly as old as allowed.
+    t = Tracker()
+    assert t.restore_inflight(good, last_rise + MAX_RESTORE_AGE_S) is True
+    # Exactly as far in the future as tolerated (a clock that is a little behind).
+    t = Tracker()
+    assert t.restore_inflight(good, last_rise - CLOCK_SKEW_TOLERANCE_S) is True
+    # Exactly the longest session.
+    long_one, long_now = _long_session(MAX_RESTORE_SESSION_S)
+    t = Tracker()
+    assert t.restore_inflight(long_one, long_now) is True
+
+
+def test_restore_inflight_never_replaces_a_running_session():
+    t, last_rise = _mid_charge()
+    before = t.export_inflight()
+    other = {"start_soc": 5.0, "start_ts": 1.0, "peak_soc": 90.0,
+             "peak_ts": last_rise, "capacity_wh": 400.0, "gaps": 7}
+    assert t.restore_inflight(other, last_rise) is False
+    assert t.export_inflight() == before
+
+
+def test_restore_inflight_survives_bad_capacity_and_gap_values():
+    good, last_rise = _snapshot()
+    now = last_rise + 60.0
+    for junk in (None, "x", -5, 0, float("nan"), float("inf"), True, [1]):
+        t = Tracker()
+        assert t.restore_inflight(dict(good, capacity_wh=junk), now) is True, junk
+        assert t.export_inflight()["capacity_wh"] is None, junk
+        # Without a capacity the session still completes; it just has no energy.
+        t.check_timeout(now + IDLE_TIMEOUT_S)
+        assert t.summary["energy_wh"] is None and t.total_energy_wh == 0.0
+    for junk in (None, "2", -1, 1.5, True, [1]):
+        t = Tracker()
+        assert t.restore_inflight(dict(good, gaps=junk), now) is True, junk
+        assert t.export_inflight()["gaps"] == 0, junk
+
+
+def test_the_capacity_and_gaps_of_the_original_session_travel_with_it():
+    good, last_rise = _snapshot()
+    snapshot = dict(good, capacity_wh=500.0, gaps=2)
+    t = Tracker()
+    now = last_rise + 3 * MIN
+    assert t.restore_inflight(snapshot, now) is True
+    t.feed("unavailable", now + 10)           # one more dropout after the restart
+    # The capacity a session started with is the one it is booked with, even
+    # if a different one is passed for later samples.
+    t.feed(70, now + 20, capacity_wh=999.0)
+    t.check_timeout(now + 20 + IDLE_TIMEOUT_S)
+    s = t.summary
+    assert s["signal_gaps"] == 3
+    assert s["energy_wh"] == 250.0            # 20 -> 70 = 50% of 500 Wh
+
+
+def test_a_session_closed_from_the_restored_state_is_not_lost_to_a_late_total_restore():
+    # The sensor restores its total in async_added_to_hass, after the monitor
+    # has already restored and possibly closed the session at startup. That
+    # session must be added to the restored total, not swallowed by it.
+    t, now, _ = _restored(IDLE_TIMEOUT_S + 10 * MIN)
+    assert t.check_timeout(now) is True
+    assert t.total_energy_wh == 250.0
+    t.restore_total_energy(1000.0)
+    assert t.total_energy_wh == 1250.0
+
+    # And the other order gives the same answer.
+    t2, now2, _ = _restored(IDLE_TIMEOUT_S + 10 * MIN)
+    t2.restore_total_energy(1000.0)
+    assert t2.check_timeout(now2) is True
+    assert t2.total_energy_wh == 1250.0
+
+
+def test_restore_total_energy_is_idempotent():
+    t = Tracker()
+    t.restore_total_energy(300.0)
+    t.restore_total_energy(300.0)
+    assert t.total_energy_wh == 300.0
+    t.restore_total_energy(200.0)   # never lowers it
+    assert t.total_energy_wh == 300.0
+
+
+def test_a_second_restore_never_counts_a_session_twice():
+    # The sensor entity can be re-added within one run. What it then reads back
+    # was stored while the tracker was already counting, so it contains the
+    # sessions published since; adding the tracker's own total on top again
+    # would count them twice, and on a TOTAL_INCREASING meter that sticks.
+    t, now, _ = _restored(IDLE_TIMEOUT_S + 10 * MIN)
+    t.restore_total_energy(1000.0)
+    assert t.check_timeout(now) is True
+    assert t.total_energy_wh == 1250.0              # 1000 + the 250 Wh session
+    t.restore_total_energy(1250.0)                  # what the entity wrote back
+    assert t.total_energy_wh == 1250.0
+    t.restore_total_energy(1100.0)                  # older reading: never lowers
+    assert t.total_energy_wh == 1250.0
+    t.restore_total_energy(1300.0)                  # a reading that is ahead: adopted
+    assert t.total_energy_wh == 1300.0
+
+
+def test_an_unusable_first_restore_does_not_use_up_the_first_call():
+    t = Tracker()
+    for junk in (None, "unknown", -1, float("nan")):
+        t.restore_total_energy(junk)
+    t.restore_total_energy(500.0)
+    assert t.total_energy_wh == 500.0
+    # Still additive afterwards: this was the first usable call.
+    t, now, _ = _restored(IDLE_TIMEOUT_S + 10 * MIN)
+    t.restore_total_energy("unavailable")
+    assert t.check_timeout(now) is True
+    t.restore_total_energy(1000.0)
+    assert t.total_energy_wh == 1250.0
+
+
+def test_restore_summary_does_not_replace_a_session_completed_in_this_run():
+    old = {"start_soc": 10, "end_soc": 90, "soc_delta": 80, "energy_wh": 600.0,
+           "duration_min": 240.0, "started_at": 1.0, "ended_at": 2.0,
+           "signal_gaps": 0}
+    t, now, last_rise = _restored(IDLE_TIMEOUT_S + 10 * MIN)
+    assert t.check_timeout(now) is True
+    newer = t.summary
+    t.restore_summary(old)
+    assert t.summary is newer
+    assert t.summary["ended_at"] == last_rise
+
+
+def test_a_closed_session_exports_nothing_so_it_cannot_be_booked_twice():
+    t, now, _ = _restored(IDLE_TIMEOUT_S + 10 * MIN)
+    assert t.export_inflight() is not None
+    t.check_timeout(now)
+    assert t.export_inflight() is None
+    # Restoring the snapshot taken before the close would resurrect it; that
+    # is why the monitor clears the stored copy as soon as a session ends.
+    assert not math.isnan(t.total_energy_wh)
 
 
 def _fresh_restored(raw):

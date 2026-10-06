@@ -365,7 +365,7 @@ Ist in den Optionen ein Live-SoC-Sensor für ein Rad hinterlegt, entsteht dafür
 
 Ein Ladevorgang gilt als beendet, wenn der Ladestand entweder um mindestens 1 % fällt (Rad wird wieder gefahren) oder 30 Minuten lang nicht mehr steigt (Ladegerät fertig oder abgezogen). Gemeldet wird immer der **Höchststand**, nicht der letzte Messwert — ein Akku, der 100 % erreicht und danach durch Selbstentladung auf 99 % rutscht, wurde auf 100 % geladen. Aufladungen unter 3 % werden gar nicht erst veröffentlicht, damit das kurze Nachladen im Flur nicht die echte Ladung von letzter Nacht überschreibt.
 
-Der Sensor überlebt einen Neustart von Home Assistant: die letzte abgeschlossene Ladung wird wiederhergestellt. Ein zum Neustart-Zeitpunkt *laufender* Ladevorgang wird bewusst nicht rekonstruiert. Funktioniert auch mit eBike System 2, da ausschließlich das Live-Signal ausgewertet wird.
+Der Sensor überlebt einen Neustart von Home Assistant: die letzte abgeschlossene Ladung wird wiederhergestellt. Auch ein Ladevorgang, der beim Stoppen von Home Assistant (Neustart, Update) gerade *läuft*, geht nicht verloren. Die Integration merkt sich den bis dahin beobachteten Stand in einer kleinen eigenen Datei und setzt den Vorgang nach dem Start fort, wenn der letzte Anstieg weniger als 30 Minuten zurückliegt; ein inzwischen höherer Ladestand zählt dann mit, ein gefallener beendet den Vorgang am gespeicherten Höchststand. War die Pause länger (bis 12 Stunden), wird der Vorgang direkt vom gespeicherten Höchststand aus abgeschlossen, so wie es der Leerlauf-Timer ohne Neustart getan hätte. Was während einer längeren Ausfallzeit darüber hinaus geladen wurde, wird nicht dazugerechnet, es wird also eher zu wenig als zu viel gebucht. Funktioniert auch mit eBike System 2, da ausschließlich das Live-Signal ausgewertet wird.
 
 #### Im Energie-Dashboard
 
@@ -1249,7 +1249,7 @@ When a live SoC sensor is configured for a bike in the options, it gets a **`Las
 
 A charge is considered finished when the state of charge either drops by at least 1% (the bike is being ridden again) or stops rising for 30 minutes (charger done or unplugged). What gets reported is always the **peak**, not the last reading - a battery that reaches 100% and then slips to 99% through self-discharge was charged to 100%. Charges below 3% are not published at all, so topping up in the hallway does not overwrite last night's real charge.
 
-The sensor survives a Home Assistant restart: the last completed charge is restored. A charge that was *in progress* at restart is deliberately not reconstructed. Works with eBike System 2 too, since only the live signal is used.
+The sensor survives a Home Assistant restart: the last completed charge is restored. A charge that is *running* when Home Assistant stops (restart, update) is not lost either. The integration keeps what it has observed so far in a small file of its own and carries the charge on after startup if its last rise was less than 30 minutes ago; a state of charge that is higher by then counts too, a lower one ends the charge at the stored peak. After a longer pause (up to 12 hours) the charge is closed from the stored peak right away, as the idle timer would have done without the restart. Whatever was charged during a longer outage beyond that is not added, so the result errs on the low side rather than the high side. Works with eBike System 2 too, since only the live signal is used.
 
 #### In the Energy Dashboard
 
