@@ -255,8 +255,11 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._activity_bike: dict[str, str] = {}
         self._unassigned_activities: list[dict[str, Any]] = []
         self._manual_activity_bike: dict[str, str] = {}
-        # Per-activity track cache (activity_id -> [{lat,lon,...}]) for heatmap card
-        self._all_tracks_cache: dict[str, list[dict[str, Any]]] = {}
+        # Per-activity track cache for the heatmap card:
+        # activity_id -> (tag, [{lat,lon,...}]). The tag (see
+        # _track_cache_tag in __init__.py) says what the cached track was
+        # valid for; an entry with a different tag is refetched.
+        self._all_tracks_cache: dict[str, tuple[tuple, list[dict[str, Any]]]] = {}
         # Highest odometer (km) ever DISPLAYED for each bike (issue #60): see
         # _floored_odometer_km() for the full rationale. Deliberately never
         # written back into the bike/activity data itself, only used to

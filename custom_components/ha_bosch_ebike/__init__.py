@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 import json
 import logging
 import os
@@ -301,7 +302,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # entry so entities depending on options (e.g. the current-range
     # sensor) are created/removed immediately. The coordinator — and with
     # it the enrichment cache — is rebuilt as part of the reload.
-    entry.async_on_unload(entry.add_update_listener(_async_options_updated))
+    # Home Assistant fires update listeners for EVERY change to the entry,
+    # and the coordinator writes refreshed tokens back into entry.data about
+    # once an hour, so the listener has to tell those apart from a real
+    # change (issue #89).
+    entry.async_on_unload(entry.add_update_listener(_make_update_listener(entry)))
 
     # Cancel any pending debounced odometer-floor save (issue #60 follow-up)
     # on unload/reload. Without this, an options-triggered reload while a
@@ -313,9 +318,46 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return True
 
 
-async def _async_options_updated(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Handle options updates by reloading the config entry."""
-    await hass.config_entries.async_reload(entry.entry_id)
+# The only entry.data keys that change during normal operation: the
+# coordinator writes a refreshed token pair back after every token refresh.
+_TOKEN_KEYS = ("access_token", "refresh_token")
+
+
+def _reload_relevant_state(entry: ConfigEntry) -> dict:
+    """The part of an entry a reload actually depends on.
+
+    Options plus every data key except the tokens, deep-copied so a later
+    in-place change to a nested option cannot alias the snapshot. Comparing
+    "everything but the tokens" (rather than options alone) keeps a future
+    flow that writes some other data key from silently losing its reload.
+    """
+    return {
+        "options": copy.deepcopy(dict(entry.options)),
+        "data": {
+            k: copy.deepcopy(v) for k, v in entry.data.items()
+            if k not in _TOKEN_KEYS
+        },
+    }
+
+
+def _make_update_listener(entry: ConfigEntry):
+    """Build the entry update listener for this setup of the entry.
+
+    Reloading on every update meant every token refresh (about hourly) tore
+    down the whole entry: all entities went unavailable, a charge in progress
+    was dropped by its tracker, and the full activity history was imported
+    again, because the coordinator's "initial import done" flag only lives in
+    memory (issue #89). The snapshot is taken per setup, so every reload
+    re-registers a listener that compares against the options in force now.
+    """
+    snapshot = _reload_relevant_state(entry)
+
+    async def _async_entry_updated(hass: HomeAssistant, updated: ConfigEntry) -> None:
+        if _reload_relevant_state(updated) == snapshot:
+            return
+        await hass.config_entries.async_reload(updated.entry_id)
+
+    return _async_entry_updated
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -591,6 +633,20 @@ async def ws_get_track(
         connection.send_error(msg["id"], "fetch_error", str(err))
 
 
+def _track_cache_tag(activity: dict) -> tuple:
+    """What a cached heatmap track was valid for.
+
+    The per-activity track cache has no expiry. It used to be emptied
+    incidentally by the hourly entry reload (issue #89); now it lives until
+    Home Assistant restarts, so a stale entry has to be recognised instead.
+    A ride whose track was still uploading when it was cached gets its
+    distance corrected once the full track arrives, and a BES2 trip that
+    gains a ride changes its ride count (its whole-trip fallback route grows).
+    Either change makes the entry refetch.
+    """
+    return (activity.get("distance"), activity.get("_bes2_ride_count"))
+
+
 @websocket_api.websocket_command(
     {
         vol.Required("type"): "bosch_ebike/get_all_tracks",
@@ -676,7 +732,9 @@ async def ws_get_all_tracks(
                 return
 
         cache = coord._all_tracks_cache
-        points = cache.get(aid)
+        tag = _track_cache_tag(activity)
+        cached = cache.get(aid)
+        points = cached[1] if cached is not None and cached[0] == tag else None
         if points is None:
             async with semaphore:
                 try:
@@ -690,7 +748,7 @@ async def ws_get_all_tracks(
                 # ride may draw it, or the same route repeats once per ride.
                 # The empty entry is cached so a repeat call skips the fetch.
                 if detail.get("scope") == "trip" and detail.get("primary") is False:
-                    cache[aid] = []
+                    cache[aid] = (tag, [])
                     return
                 raw = detail.get("activityDetails", [])
                 points = []
@@ -704,7 +762,7 @@ async def ws_get_all_tracks(
                         "lon": lon,
                         "speed": p.get("speed"),
                     })
-                cache[aid] = points
+                cache[aid] = (tag, points)
 
         if not points:
             return
