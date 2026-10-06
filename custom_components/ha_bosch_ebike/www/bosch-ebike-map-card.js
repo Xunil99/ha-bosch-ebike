@@ -7585,7 +7585,13 @@ class BoschEBikeDashboardCard extends HTMLElement {
   /// localStorage, keyed by the configured entities, so it also survives a
   /// dashboard reload - which is exactly when the value is needed, since a
   /// sleeping bike will not produce a fresh reading to re-seed it.
-  _rememberBattery(cfg, freshValue) {
+  ///
+  /// `opts.held` marks a value the live sensor is merely HOLDING while the
+  /// bridge reports no BLE link (issue #90): it is the newest reading the
+  /// bridge delivered, but nothing confirms it right now, so it must not be
+  /// re-stamped as "just seen" on every render. `opts.observedAt` (ms) is
+  /// when the sensor took that value.
+  _rememberBattery(cfg, freshValue, opts) {
     const key = "bosch_ebike_last_soc:"
       + (cfg.battery_live_entity || "") + "|" + (cfg.battery_entity || "");
     // Drop the memo when the configured entities change: HA reuses the same
@@ -7594,6 +7600,24 @@ class BoschEBikeDashboardCard extends HTMLElement {
     if (this._lastSocKey !== key) {
       this._lastSoc = null;
       this._lastSocKey = key;
+    }
+    if (freshValue != null && opts && opts.held) {
+      const stored = this._lastSoc || this._readSocMemo(key);
+      // Same reading as already remembered: keep its stamp. Moving it forward
+      // would make the tooltip age restart every minute (and after every HA
+      // restart, which resets the sensor's last_changed), and would write to
+      // localStorage on every render for a value that is not changing.
+      if (stored && stored.value === freshValue) {
+        this._lastSoc = stored;
+        return stored;
+      }
+      const entry = {
+        value: freshValue,
+        ts: Number.isFinite(opts.observedAt) ? opts.observedAt : Date.now(),
+      };
+      this._lastSoc = entry;
+      try { localStorage.setItem(key, JSON.stringify(entry)); } catch (_) { /* quota/private mode */ }
+      return entry;
     }
     if (freshValue != null) {
       // set hass -> _render runs on every state change anywhere in HA, so
@@ -7611,15 +7635,28 @@ class BoschEBikeDashboardCard extends HTMLElement {
       return entry;
     }
     if (this._lastSoc) return this._lastSoc;
+    const stored = this._readSocMemo(key);
+    if (stored) {
+      this._lastSoc = stored;
+      return stored;
+    }
+    return { value: null, ts: null };
+  }
+
+  _readSocMemo(key) {
     try {
       const raw = localStorage.getItem(key);
       const parsed = raw ? JSON.parse(raw) : null;
-      if (parsed && Number.isFinite(parsed.value)) {
-        this._lastSoc = parsed;
-        return parsed;
-      }
+      if (parsed && Number.isFinite(parsed.value)) return parsed;
     } catch (_) { /* corrupt or unavailable */ }
-    return { value: null, ts: null };
+    return null;
+  }
+
+  /// When an entity last changed, in ms since the epoch, or null.
+  _lastChangedMs(entityId) {
+    const s = this._state(entityId);
+    const ms = s && s.last_changed ? Date.parse(s.last_changed) : NaN;
+    return Number.isFinite(ms) ? ms : null;
   }
 
   /// "2 h ago" style age for the stale-SoC tooltip.
@@ -7771,24 +7808,34 @@ class BoschEBikeDashboardCard extends HTMLElement {
     // the BLE link to the bike drops - it keeps reporting its last value
     // for as long as the bridge device itself stays online, which looks
     // identical to a fresh live reading. If a "connected" binary sensor is
-    // linked and it reports off, treat the live reading as not currently
-    // available so it falls through to the cloud value / remembered value
-    // below exactly like a genuinely unavailable live entity already does -
-    // no other logic in this function needs to change for that.
+    // linked and it reports off, the live reading no longer counts as fresh.
     const bridgeDisconnected = this._onOff(cfg.connected_entity) === false;
-    const batteryLive = (cfg.battery_live_entity && !bridgeDisconnected)
-      ? this._num(cfg.battery_live_entity) : null;
+    const liveRaw = cfg.battery_live_entity ? this._num(cfg.battery_live_entity) : null;
+    const batteryLive = (liveRaw != null && !bridgeDisconnected) ? liveRaw : null;
     const batteryCloud = this._num(cfg.battery_entity);
     // Prefer the real-time value from the local LDI bridge when it is
     // available; otherwise fall back to the second configured SoC entity.
     const batteryFresh = (batteryLive != null) ? batteryLive : batteryCloud;
     const batteryIsLive = (batteryLive != null);
+    // Issue #90: "disconnected" does not mean the live sensor holds nothing
+    // new. The bridge publishes only the final connection state per loop
+    // pass but always publishes decoded data, so a short connection (connect,
+    // read, disconnect) can deliver a newer SoC without Home Assistant ever
+    // seeing "connected". What the live sensor holds is then the newest
+    // reading there is, so it is shown as a stale value (~) in preference to
+    // an older remembered one.
+    const batteryHeld = (batteryFresh == null && bridgeDisconnected) ? liveRaw : null;
     // Both sources gone: the bike sleeps and the BLE bridge disconnects, so
     // every SoC entity goes unavailable at once (issue #65). Bosch's cloud
     // API exposes no state of charge at all, so there is nothing else to read
     // - show the last value we saw instead of "n/a", clearly marked as stale
     // so a days-old reading is never mistaken for a current one.
-    const batteryRemembered = this._rememberBattery(cfg, batteryFresh);
+    const batteryRemembered = (batteryHeld != null)
+      ? this._rememberBattery(cfg, batteryHeld, {
+          held: true,
+          observedAt: this._lastChangedMs(cfg.battery_live_entity),
+        })
+      : this._rememberBattery(cfg, batteryFresh);
     const battery = (batteryFresh != null) ? batteryFresh : batteryRemembered.value;
     const batteryIsStale = (batteryFresh == null) && (batteryRemembered.value != null);
     const isCharging = this._onOff(cfg.charging_entity);

@@ -703,7 +703,8 @@ type: custom:bosch-ebike-dashboard-card
 title: Performance CX
 bike_image: /local/ebike-cx.jpg
 odometer_entity: sensor.ebike_odometer_live
-battery_entity: sensor.ebike_battery_soc_live
+battery_live_entity: sensor.ebike_battery_soc_live
+connected_entity: binary_sensor.ebike_connected
 charging_entity: binary_sensor.ebike_charger_connected
 last_tour_distance_entity: sensor.bosch_ebike_last_activity_distance
 charge_power_entity: sensor.ebike_smart_plug_power
@@ -717,7 +718,7 @@ target_soc_entity: input_number.ebike_target_soc
 - **Bike-Foto** mit eingebautem Upload im Karten-Editor (Bild auswählen, Karte schreibt den Pfad selbst). Alternativ klassisch über `/config/www/` und `/local/datei.jpg` referenzieren. Platzhalter mit Fahrrad-Icon, solange nichts gesetzt ist.
 - **Tachostand-Kachel** und optional **Letzte-Tour-Distanz**, **Ladeleistung in Watt**
 - **Geschätzte Restreichweite** als Kachel (`≈ 62 km`) — automatisch, sobald der Sensor „Geschätzte Reichweite (aktuell)“ existiert, oder explizit über `range_entity`. Wie bei den Sensoren eine **Schätzung**.
-- **Status-Pills** für Lade-Zustand und Akku-Prozent. Geht die ganze ESPHome-Bridge offline (das Bike schläft und trennt auch die BLE-Verbindung), werden alle SoC-Sensoren `unavailable` und die Pill zeigt statt „n/v" den zuletzt bekannten Wert, erkennbar an `~`, ausgegraut und kursiv; der Tooltip nennt das Alter. Bleibt die Bridge selbst online und trennt sich nur die BLE-Verbindung zum Bike, behält der Live-Akkustand-Sensor dagegen seinen letzten Wert bei und sieht dadurch wie ein aktueller Messwert aus, obwohl er es nicht mehr ist. Für genau diesen Fall gibt es das optionale Feld `connected_entity`: verknüpfst Du dort den binären „eBike Connected"-Sensor der Bridge, behandelt die Karte den Live-Akkustand bei „aus" ebenfalls als nicht aktuell und zeigt `~` mit dem letzten bekannten Stand. Einen Cloud-Wert als Ersatz gibt es nicht, Boschs API liefert überhaupt keinen Ladestand
+- **Status-Pills** für Lade-Zustand und Akku-Prozent. Geht die ganze ESPHome-Bridge offline (das Bike schläft und trennt auch die BLE-Verbindung), werden alle SoC-Sensoren `unavailable` und die Pill zeigt statt „n/v" den zuletzt bekannten Wert, erkennbar an `~`, ausgegraut und kursiv; der Tooltip nennt das Alter. Bleibt die Bridge selbst online und trennt sich nur die BLE-Verbindung zum Bike, behält der Live-Akkustand-Sensor dagegen seinen letzten Wert bei und sieht dadurch wie ein aktueller Messwert aus, obwohl er es nicht mehr ist. Für genau diesen Fall gibt es das optionale Feld `connected_entity`: verknüpfst Du dort den binären „eBike Connected"-Sensor der Bridge, behandelt die Karte den Live-Akkustand bei „aus" ebenfalls als nicht aktuell und zeigt den Wert, den der Live-Sensor zuletzt gemeldet hat, mit `~` als letzten bekannten Stand (auch ein neuerer Wert aus einer kurzen Verbindung, die Home Assistant nie als „verbunden" gesehen hat). Das Feld wirkt nur zusammen mit dem Live-Akkustand-Sensor (`battery_live_entity`). Einen Cloud-Wert als Ersatz gibt es nicht, Boschs API liefert überhaupt keinen Ladestand
 - **Ziel-SoC-Schieberegler**, der den Wert eines `input_number` oder einer beliebigen `number`-Entität setzt (z. B. das eigene `Charge Limit` der Charge-Limiter-Firmware). Erwartet eine 0-100-Prozent-Skala; hat die verknüpfte Entität ein Min/Max außerhalb dieses Bereichs, zeigt die Karte statt eines irreführenden Reglers einen Hinweis
 - **Start- und Stop-Buttons** mit Zwei-Klick-Bestätigung bei Stop (Versehensschutz)
 - **Akku-Balken** unten, der unter 35 % auf Orange und unter 15 % auf Rot wechselt
@@ -1587,7 +1588,8 @@ type: custom:bosch-ebike-dashboard-card
 title: Performance CX
 bike_image: /local/ebike-cx.jpg
 odometer_entity: sensor.ebike_odometer_live
-battery_entity: sensor.ebike_battery_soc_live
+battery_live_entity: sensor.ebike_battery_soc_live
+connected_entity: binary_sensor.ebike_connected
 charging_entity: binary_sensor.ebike_charger_connected
 last_tour_distance_entity: sensor.bosch_ebike_last_activity_distance
 charge_power_entity: sensor.ebike_smart_plug_power
@@ -1601,7 +1603,7 @@ target_soc_entity: input_number.ebike_target_soc
 - **Bike photo** with a built-in upload right in the card editor (pick a file, the card fills the path itself). Or paste a classic `/local/file.jpg` URL after dropping a file into `/config/www/`. A placeholder with a bicycle icon is shown when nothing is set.
 - **Odometer tile**, plus optional **last-tour distance** and **charging power in watts**
 - **Estimated remaining range** as a tile (`≈ 62 km`) — automatic as soon as the "Estimated range (current)" sensor exists, or explicitly via `range_entity`. Like the sensors, an **estimate**.
-- **Status pills** for charging state and battery percent. When the whole ESPHome bridge goes offline (the bike sleeps and the BLE connection drops too), every SoC sensor goes `unavailable` and the pill shows the last known value instead of "n/a", marked with `~`, dimmed and italic, with its age in the tooltip. If the bridge itself stays online and only the BLE link to the bike drops, the live battery sensor instead keeps reporting its last value, which then looks like a current reading even though it no longer is. That's what the optional `connected_entity` field is for: link the bridge's binary "eBike Connected" sensor there, and the card treats the live reading as stale too whenever it reports "off", showing `~` with the last known value instead. There is no cloud value to fall back to, Bosch's API exposes no state of charge at all
+- **Status pills** for charging state and battery percent. When the whole ESPHome bridge goes offline (the bike sleeps and the BLE connection drops too), every SoC sensor goes `unavailable` and the pill shows the last known value instead of "n/a", marked with `~`, dimmed and italic, with its age in the tooltip. If the bridge itself stays online and only the BLE link to the bike drops, the live battery sensor instead keeps reporting its last value, which then looks like a current reading even though it no longer is. That's what the optional `connected_entity` field is for: link the bridge's binary "eBike Connected" sensor there, and the card treats the live reading as stale too whenever it reports "off": it shows the value the live sensor reported last, marked with `~` as the last known value (including a newer reading from a short connection that Home Assistant never saw as "connected"). The field only works together with the live battery sensor (`battery_live_entity`). There is no cloud value to fall back to, Bosch's API exposes no state of charge at all
 - **Target-SoC slider** that writes to an `input_number` or any `number` entity (e.g. the Charge Limiter firmware's own `Charge Limit`). Expects a 0-100 percentage scale; if the linked entity's min/max falls outside that range, the card shows a hint instead of a misleading slider
 - **Start and Stop buttons** with a two-click confirm on Stop (accident protection)
 - **Battery bar** at the bottom that turns amber under 35 % and red under 15 %
