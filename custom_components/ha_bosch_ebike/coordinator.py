@@ -1235,6 +1235,16 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     async def _update_bes2(self) -> dict[str, Any]:
         """Fetch + normalize eBike System 2 data into the BES3-shaped dict."""
         from . import bes2
+
+        # Restore what was persisted: maintenance items, service-due overrides,
+        # per-bike battery capacity, the odometer floor and the charge history.
+        # The Smart System path does this in _async_update_data. This one used
+        # to skip it, so for BES2 the store was written on every change but
+        # never read back: all of it was gone after a restart, and the next
+        # save replaced even what was still on disk with the empty in-memory
+        # copy. Idempotent, so it costs nothing after the first poll.
+        await self.async_load_persisted_state()
+
         try:
             raw_bikes = await self.api.get_bikes_bes2(self._bes2_serial, self._bes2_part)
         except AuthError as err:
