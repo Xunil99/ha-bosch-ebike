@@ -1,0 +1,48 @@
+name: Build C6 experiment (branch only)
+
+# Throwaway CI for the ESP32-C6 experiment (issue #91). It runs only on the
+# c6-experiment branch and on manual dispatch, and it never publishes
+# anything: the binaries stay workflow artifacts until a tester has confirmed
+# that they work, only then do they get a place in the manifests.
+on:
+  push:
+    branches:
+      - c6-experiment
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    strategy:
+      # One failing target must not hide the result of the other.
+      fail-fast: false
+      matrix:
+        include:
+          - name: single bike C6
+            yaml: esphome/factory-c6.yaml
+          - name: dual bike C6
+            yaml: esphome/factory-dual-c6.yaml
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Build firmware
+        id: build
+        uses: esphome/build-action@v7
+        with:
+          yaml-file: ${{ matrix.yaml }}
+          version: latest
+
+      - name: List build output
+        run: ls -la "${{ steps.build.outputs.name }}"
+
+      - name: Upload firmware as workflow artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: firmware-${{ steps.build.outputs.name }}
+          path: ${{ steps.build.outputs.name }}
+          retention-days: 14

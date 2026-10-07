@@ -1,0 +1,227 @@
+# EXPERIMENTAL factory firmware for the ESP32-C6 variant of the Bosch eBike
+# LDI bridge (issue #91). Not yet tested on real hardware.
+#
+# Same component, same behaviour as the ESP32-C3 factory firmware
+# (factory-c3.yaml), only the chip target differs. Like the C3, the C6 is a
+# single-core RISC-V part with BLE 5 and no BT-Classic.
+#
+# Produces ebike-bridge-c6.factory.bin. ESP Web Tools auto-detects the chip
+# family on connect and would offer this binary when an ESP32-C6 is plugged
+# in, once it is listed in the manifest.
+#
+# DIY users with C6 boards should base their own YAML on
+# example-bridge.yaml and copy this esp32: block.
+
+esphome:
+  name: ebike-bridge
+  friendly_name: eBike Bridge
+  min_version: 2025.11.0
+  name_add_mac_suffix: true
+  project:
+    name: "xunil99.bosch_ebike_ldi"
+    version: "1.0.0"
+
+esp32:
+  # The variant alone is enough: ESPHome fills in a standard Espressif C6
+  # dev board for it, which also suits the common boards such as the
+  # Waveshare ESP32-C6-DevKit. If your specific board needs a different
+  # setting, fork this YAML and add 'board:'.
+  variant: esp32c6
+  framework:
+    type: esp-idf
+    sdkconfig_options:
+      CONFIG_BT_ENABLED: y
+      CONFIG_BT_NIMBLE_ENABLED: y
+      CONFIG_BT_BLUEDROID_ENABLED: n
+      CONFIG_BT_CONTROLLER_ENABLED: y
+      # C6 is BLE-only by hardware design, so the BTDM mode toggles
+      # from the dual-mode ESP32 are not needed. Just NimBLE roles.
+      CONFIG_BT_NIMBLE_MAX_CONNECTIONS: "1"
+      CONFIG_BT_NIMBLE_ROLE_PERIPHERAL: y
+      CONFIG_BT_NIMBLE_ROLE_BROADCASTER: y
+      CONFIG_BT_NIMBLE_ROLE_CENTRAL: y
+      CONFIG_BT_NIMBLE_ROLE_OBSERVER: y
+      CONFIG_BT_NIMBLE_SM_LEGACY: n
+      CONFIG_BT_NIMBLE_SM_SC: y
+      CONFIG_BT_NIMBLE_NVS_PERSIST: y
+      CONFIG_BT_NIMBLE_ATT_PREFERRED_MTU: "247"
+
+logger:
+  level: DEBUG
+  logs:
+    bosch_ebike_ldi: DEBUG
+
+wifi:
+  # Same as the C3 firmware: the radio is shared between WiFi and BLE, and
+  # modem-sleep wake cycles add current spikes (cheap boards with weak
+  # onboard regulation can brown out on them, see issue #64) and make the
+  # coexistence less predictable. power_save_mode: none has no real downside
+  # for a bridge that stays powered, so it is on unconditionally.
+  power_save_mode: none
+  ap:
+    ssid: "eBike Bridge Setup"
+
+captive_portal:
+
+improv_serial:
+
+api:
+
+ota:
+  - platform: esphome
+
+# Local source: builds the component from the checked-out repo workspace
+# (instead of github@main), so the firmware CI finds it regardless of the ref,
+# the same way factory-dual.yaml does.
+external_components:
+  - source:
+      type: local
+      path: components
+    components: [bosch_ebike_ldi]
+
+bosch_ebike_ldi:
+  id: ebike_bridge
+  device_name: "HA eBike Bridge"
+
+# Charge-time estimate: while charging, measure the charging rate (%/min) from
+# the rising SoC and extrapolate the remaining time to 80 % and to 100 %. Two
+# fixed targets so the charge limit set in the Flow app does not need to be read.
+globals:
+  - id: chg_rate          # smoothed charging rate in %/min, -1 = unknown
+    type: float
+    restore_value: no
+    initial_value: '-1'
+  - id: chg_last_soc      # last SoC reference point
+    type: float
+    restore_value: no
+    initial_value: '-1'
+  - id: chg_last_ms       # timestamp (millis) of the last SoC reference point
+    type: uint32_t
+    restore_value: no
+    initial_value: '0'
+
+sensor:
+  - platform: bosch_ebike_ldi
+    bosch_ebike_ldi_id: ebike_bridge
+    speed:
+      name: "eBike Speed"
+    cadence:
+      name: "eBike Cadence"
+    rider_power:
+      name: "eBike Rider Power"
+    ambient_brightness:
+      name: "eBike Ambient Brightness"
+    battery_soc:
+      name: "eBike Battery SoC (Live)"
+      id: batt_soc
+      on_value:
+        - lambda: |-
+            if (!id(charger_conn).state || std::isnan(x)) return;
+            if (id(chg_last_soc) < 0) {
+              id(chg_last_soc) = x; id(chg_last_ms) = millis(); return;
+            }
+            float dsoc = x - id(chg_last_soc);
+            if (dsoc >= 1.0f) {
+              float dmin = (millis() - id(chg_last_ms)) / 60000.0f;
+              if (dmin > 0.01f) {
+                float r = dsoc / dmin;
+                if (r > 0)
+                  id(chg_rate) = (id(chg_rate) < 0) ? r
+                                                    : (0.3f * r + 0.7f * id(chg_rate));
+              }
+              id(chg_last_soc) = x;
+              id(chg_last_ms) = millis();
+            }
+    odometer:
+      name: "eBike Odometer (Live)"
+
+  # Estimated remaining charging time (minutes). NAN -> "unknown" until a
+  # reliable rate has built up. 80 % stays in the linear CC region (accurate);
+  # 100 % adds a slowdown factor for the CV tail.
+  - platform: template
+    name: "eBike Charge Time to 80% (Estimate)"
+    id: chg_eta_80
+    unit_of_measurement: "min"
+    device_class: duration
+    state_class: measurement
+    accuracy_decimals: 0
+    update_interval: 30s
+    lambda: |-
+      if (!id(charger_conn).state) return NAN;
+      float soc = id(batt_soc).state;
+      float rate = id(chg_rate);
+      if (rate <= 0 || std::isnan(soc) || soc >= 80.0f) return NAN;
+      return (80.0f - soc) / rate;
+  - platform: template
+    name: "eBike Charge Time to 100% (Estimate)"
+    id: chg_eta_100
+    unit_of_measurement: "min"
+    device_class: duration
+    state_class: measurement
+    accuracy_decimals: 0
+    update_interval: 30s
+    lambda: |-
+      if (!id(charger_conn).state) return NAN;
+      float soc = id(batt_soc).state;
+      float rate = id(chg_rate);
+      if (rate <= 0 || std::isnan(soc) || soc >= 100.0f) return NAN;
+      const float cv_start = 85.0f, cv_factor = 2.5f;
+      float mins = 0.0f, s = soc;
+      if (s < cv_start) { mins += (cv_start - s) / rate; s = cv_start; }
+      mins += (100.0f - s) / (rate / cv_factor);
+      return mins;
+
+binary_sensor:
+  - platform: bosch_ebike_ldi
+    bosch_ebike_ldi_id: ebike_bridge
+    connected:
+      name: "eBike Connected"
+    light:
+      name: "eBike Light"
+    system_locked:
+      name: "eBike System Locked"
+    charger_connected:
+      name: "eBike Charger Connected"
+      id: charger_conn
+      on_state:
+        - lambda: |-
+            id(chg_rate) = -1;
+            id(chg_last_soc) = -1;
+            id(chg_last_ms) = millis();
+    light_reserve:
+      name: "eBike Light Reserve"
+    diagnosis_active:
+      name: "eBike Diagnosis Active"
+    in_motion:
+      name: "eBike In Motion"
+
+switch:
+  # Master advertising toggle (Issue #36). Off = the bridge only advertises
+  # during a pairing window (boot 5 min / button) and is otherwise fully
+  # silent (no background reconnect). Default on. Boot window is unaffected.
+  - platform: template
+    name: "eBike Advertising"
+    icon: mdi:bluetooth
+    restore_mode: RESTORE_DEFAULT_ON
+    optimistic: true
+    turn_on_action:
+      - lambda: 'id(ebike_bridge).set_advertising_enabled(true);'
+    turn_off_action:
+      - lambda: 'id(ebike_bridge).set_advertising_enabled(false);'
+
+button:
+  # Open the pairing window (~5 min): the bridge becomes discoverable so the
+  # Flow app can add it. Outside the window it advertises privately and is NOT
+  # visible to other users' Flow apps. One bridge per bike. (Issue #36)
+  - platform: template
+    name: "eBike Pairing starten"
+    icon: mdi:bluetooth-connect
+    on_press:
+      then:
+        - lambda: 'id(ebike_bridge).start_pairing();'
+  - platform: template
+    name: "eBike Clear Bonding"
+    on_press:
+      then:
+        - lambda: |-
+            id(ebike_bridge).clear_bonding();
