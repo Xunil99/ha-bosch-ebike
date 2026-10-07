@@ -30,6 +30,22 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
+      # Stamp an identifiable version into the firmware (it shows on the
+      # device's page in Home Assistant), so a bug report says exactly which
+      # test build it is about. Patches the checkout only; the committed YAML
+      # keeps the "1.0.0" placeholder, like the release workflow expects.
+      - name: Stamp test version into project.version
+        run: |
+          set -euo pipefail
+          count=$(grep -c '^    version: "1.0.0"$' "${{ matrix.yaml }}")
+          if [ "$count" -ne 1 ]; then
+            echo "::error::${{ matrix.yaml }}: expected exactly one 'version: \"1.0.0\"' line, found $count" >&2
+            exit 1
+          fi
+          sed -i.bak "s/^    version: \"1.0.0\"\$/    version: \"c6-test-${GITHUB_SHA::7}\"/" "${{ matrix.yaml }}"
+          rm -f "${{ matrix.yaml }}.bak"
+          grep '    version:' "${{ matrix.yaml }}"
+
       - name: Build firmware
         id: build
         uses: esphome/build-action@v7
