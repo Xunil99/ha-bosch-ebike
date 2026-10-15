@@ -7507,6 +7507,10 @@ class BoschEBikeDashboardCard extends HTMLElement {
         <ha-icon icon="mdi:alert-outline"></ha-icon>
         <span id="dash-slider-warn-text"></span>
       </div>
+      <div class="dash-slider-warn" id="dash-battery-warn" style="display:none">
+        <ha-icon icon="mdi:alert-outline"></ha-icon>
+        <span id="dash-battery-warn-text"></span>
+      </div>
       <div class="dash-controls" id="dash-controls" style="display:none"></div>
       <div class="dash-batbar-wrap" id="dash-batbar-wrap">
         <div class="dash-batbar" id="dash-batbar" style="width:0%"></div>
@@ -8037,6 +8041,34 @@ class BoschEBikeDashboardCard extends HTMLElement {
     } else {
       sliderRow.style.display = "none";
       sliderWarn.style.display = "none";
+    }
+
+    // ---------- Battery field sanity (issue #91) ----------
+    // battery_entity is a measured charge level. Two mix-ups happen in
+    // practice, both from users who wanted the charge limit: the helper they
+    // made for it lands in the battery field (its 0-100 range looks like a
+    // fit), and the card then reports the helper's value as the battery
+    // level whenever the live sensor is not available. Behaviour stays as
+    // configured, but the card says what is wrong instead of silently
+    // showing a number that is not the battery.
+    const batteryWarn = this.querySelector("#dash-battery-warn");
+    const batteryWarnText = this.querySelector("#dash-battery-warn-text");
+    if (batteryWarn && batteryWarnText) {
+      const field = cfg.battery_entity;
+      let warnKey = null;
+      if (typeof field === "string" && field) {
+        if (cfg.target_soc_entity && field === cfg.target_soc_entity) {
+          warnKey = "dash_battery_is_target";
+        } else if (/^(input_number|number)\./.test(field)) {
+          warnKey = "dash_battery_is_helper";
+        }
+      }
+      if (warnKey) {
+        batteryWarn.style.display = "flex";
+        batteryWarnText.textContent = `${this._t(warnKey)} (${field})`;
+      } else {
+        batteryWarn.style.display = "none";
+      }
     }
 
     // ---------- Buttons ----------
@@ -8911,7 +8943,7 @@ class BoschEBikeDashboardCardEditor extends HTMLElement {
       bike_name: bikeNameField,
       odometer_entity: mkEntity("odometer_entity", "dash_editor_odo", null,
         ["sensor"]),
-      battery_entity: mkEntity("battery_entity", "dash_editor_battery", null,
+      battery_entity: mkEntity("battery_entity", "dash_editor_battery", "dash_editor_battery_hint",
         ["sensor"]),
       battery_live_entity: mkEntity("battery_live_entity", "dash_editor_battery_live", "dash_editor_battery_live_hint",
         ["sensor"]),
