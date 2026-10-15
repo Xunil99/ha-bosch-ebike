@@ -12,9 +12,16 @@ all-zero sub-objects when nothing happened, not just on rides with a trick.
 Units cross-verified against the Bosch Flow app's own display for the same
 ride ("Jump", 1x, max. 2,4 m / 0.25 s / 0,7 m) against the matching raw
 values (maxDistance: 2.38, maxDuration: 250, maxHeight: 710): distance in
-metres, duration in milliseconds, height in millimetres. maxAngle
-(manuals/stoppies/wheelies only) has not yet been observed non-zero in the
-wild, so its unit (assumed degrees) is inferred, not confirmed.
+metres, duration in milliseconds, height in millimetres.
+
+The duration unit differs per trick type, though: a real ride with wheelies
+returned `"wheelies": {"amount": 8, "maxDistance": 5.6, "maxDuration": 2.0,
+"maxAngle": 30}` next to `"jumps": {..., "maxDuration": 320, ...}`. 5.6 m in
+2 s is ~10 km/h, while 5.6 m in 2 ms would be >10,000 km/h, so wheelies
+report seconds (as a float), not milliseconds. Manuals and stoppies share
+the wheelie schema and are assumed to use seconds as well. maxAngle
+(manuals/stoppies/wheelies only) is assumed to be degrees (30 observed on
+wheelies), inferred, not confirmed.
 """
 from __future__ import annotations
 
@@ -44,7 +51,11 @@ def _parse_trick_type(raw: Any, trick_type: str) -> dict[str, Any] | None:
     out: dict[str, Any] = {
         "amount": int(amount),
         "max_distance_m": _num(raw.get("maxDistance"), digits=1),
-        "max_duration_s": _num(raw.get("maxDuration"), scale=0.001),
+        # Jumps report milliseconds, the angle-based types seconds.
+        "max_duration_s": _num(
+            raw.get("maxDuration"),
+            scale=0.001 if trick_type in _HEIGHT_TYPES else 1.0,
+        ),
     }
     if trick_type in _HEIGHT_TYPES:
         out["max_height_m"] = _num(raw.get("maxHeight"), scale=0.001, digits=2)

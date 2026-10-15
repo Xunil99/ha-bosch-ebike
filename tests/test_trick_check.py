@@ -39,6 +39,24 @@ def test_parses_real_jump_example():
     assert "max_height_m" not in result["manuals"]
 
 
+def test_parses_real_wheelie_example_duration_in_seconds():
+    # Real Smart System activity summary: wheelies report maxDuration in
+    # seconds (2.0 s for 5.6 m is ~10 km/h), jumps in milliseconds.
+    activity = {
+        "tricks": {
+            "jumps": {"amount": 5, "maxDistance": 2.36, "maxDuration": 320, "maxHeight": 490},
+            "manuals": {"amount": 0, "maxAngle": 0, "maxDistance": 0, "maxDuration": 0},
+            "stoppies": {"amount": 0, "maxAngle": 0, "maxDistance": 0, "maxDuration": 0},
+            "wheelies": {"amount": 8, "maxDistance": 5.6, "maxDuration": 2.0, "maxAngle": 30},
+        }
+    }
+    result = parse_trick_check(activity)
+    assert result["jumps"]["max_duration_s"] == 0.32
+    assert result["wheelies"] == {
+        "amount": 8, "max_distance_m": 5.6, "max_duration_s": 2.0, "max_angle_deg": 30,
+    }
+
+
 def test_parses_real_all_zero_example():
     # Real Smart System activity summary with no tricks on that ride
     # (forum report, issue #65 follow-up) - the field is always present,
