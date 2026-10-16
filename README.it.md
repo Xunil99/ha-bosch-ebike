@@ -323,6 +323,8 @@ di storico dei tour):
 > sensore (`wh_per_km`, `tours_used`, `window_km`). Finché sono disponibili
 > meno di 3 tour o 30 km di dati di consumo, i sensori restano vuoti.
 
+I tour la cui energia registrata è irrealisticamente bassa (sotto 2,5 Wh/km, oppure 0 Wh, di solito perché è stata rilevata solo in parte) vengono ignorati nella stima, perché farebbero sembrare l'autonomia troppo alta. Gli attributi `tours_ignored` e `tours_ignored_sample` mostrano quanti e quali sono, ciascuno con la fonte della sua energia (`cloud` = il contatore di energia del cloud Bosch, `ble_live` = il livello batteria live della bridge); `tours_used_by_source` conta i tour utilizzati per fonte, `wh_per_km_min` e `wh_per_km_max` indicano il loro intervallo. Se quasi tutti i tour sono interessati, i sensori restano vuoti finché non ci sono abbastanza tour registrati correttamente.
+
 ### Riepilogo della sessione di ricarica
 
 Il cloud Bosch non conosce affatto il concetto di ricarica: comunica solo il livello di carica al momento dell'ultima sincronizzazione. Chi invece utilizza la [bridge ESPHome LDI](https://github.com/Xunil99/ha-bosch-ebike/tree/main/esphome) dispone di un **livello di carica live**, e tanto basta per ricostruire l'intera ricarica.

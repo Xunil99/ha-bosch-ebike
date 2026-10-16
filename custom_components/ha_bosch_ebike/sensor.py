@@ -57,6 +57,7 @@ from .diagnosis_field_data import (
     capacity_test_summary,
     drive_unit_field_data,
 )
+from .range_estimate import range_estimate_attributes
 from .unassigned_activities import ATTRIBUTE_DISPLAY_LIMIT
 
 _LOGGER = logging.getLogger(__name__)
@@ -1909,10 +1910,7 @@ class BoschRangeEstimateSensor(CoordinatorEntity[BoschEBikeCoordinator], SensorE
             return {"disclaimer": RANGE_DISCLAIMER}
         return {
             "disclaimer": RANGE_DISCLAIMER,
-            "wh_per_km": est.get("wh_per_km"),
-            "tours_used": est.get("tours_used"),
-            "window_km": est.get("window_km"),
-            "newest_tour_date": est.get("newest_tour_date"),
+            **range_estimate_attributes(est),
             "battery_capacity_wh": self.coordinator.battery_capacity_wh(self._bike_id),
         }
 

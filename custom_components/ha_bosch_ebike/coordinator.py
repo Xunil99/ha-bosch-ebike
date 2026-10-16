@@ -39,6 +39,8 @@ from .energy_cost import compute_energy_windows
 from .live_enrichment import get_state_at, parse_iso_utc
 from .range_estimate import (
     compute_range_estimate,
+    describe_range_estimate,
+    range_estimate_log_key,
     track_distance_m,
     corrected_track_distance,
     ble_distance_implausible,
@@ -104,10 +106,13 @@ CHARGE_HISTORY_MAX_SESSIONS = 20
 # fresh.
 BES2_DETAIL_SHARE_SECONDS = 120
 
-# MIN_PLAUSIBLE_WH_PER_KM now lives in range_estimate.py (issue #78 follow-up):
-# compute_range_estimate() needs the same floor to filter already-persisted
-# implausible entries, and that module is the HA-free one, so importing in
-# this direction avoids a circular import between the two.
+# MIN_PLAUSIBLE_WH_PER_KM, the write gate used in _track_battery_consumption
+# below, lives in range_estimate.py next to MIN_REALISTIC_WH_PER_KM, the
+# stricter floor compute_range_estimate() applies when it reads entries back
+# out. The two only make sense side by side (a test pins their order: the write
+# gate must stay the looser one, or a ride's first partial credit is refused
+# and the top-up window never opens), and that module is the HA-free one, so
+# importing in this direction avoids a circular import between the two.
 
 # How old an activity's end (or start) time may be to still count as part of
 # the "recent" subset _track_battery_consumption falls back to once a whole
@@ -218,6 +223,11 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # look bigger than it really is.
         self._prev_delivered_wh: dict[str, float] = {}
         self._prev_activity_ids: set[str] = set()
+        # bike_id -> range_estimate_log_key() of the estimate last written to
+        # the log, so the INFO line below appears when the numbers change and
+        # not on every poll. Not persisted: one line per bike after a restart
+        # is fine, and useful.
+        self._range_log_keys: dict[str, tuple[Any, ...]] = {}
         # bike_id -> activity_id of that bike's most recently attributed
         # activity, still eligible for a top-up if deliveredWhOverLifetime
         # keeps climbing on a later poll without a newer activity appearing
@@ -2005,8 +2015,18 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 bid,
                 fallback_all=single_bike,
             )
-            if est:
-                range_estimate[bid] = est
+            # Kept even while there is no value yet: the sensors then show
+            # how many tours were used and ignored, which is the only way to
+            # see why they are empty, and the log line is the first thing to
+            # read when someone reports a range that looks wrong (issue #78).
+            range_estimate[bid] = est
+            log_key = range_estimate_log_key(est)
+            if self._range_log_keys.get(bid) != log_key:
+                self._range_log_keys[bid] = log_key
+                _LOGGER.info(
+                    "Range estimate for bike %s: %s",
+                    bid, describe_range_estimate(est),
+                )
 
         # Charging energy over rolling 7/30/365-day windows, per bike -
         # computed from data already in memory (no extra API calls). Feeds

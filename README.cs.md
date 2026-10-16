@@ -318,6 +318,8 @@ tvé skutečné spotřeby (vážený průměr podle vzdálenosti za posledních
 > (`wh_per_km`, `tours_used`, `window_km`). Dokud jsou k dispozici údaje
 > o spotřebě z méně než 3 jízd nebo z méně než 30 km, zůstávají čidla prázdná.
 
+Jízdy, jejichž zaznamenaná energie je nereálně nízká (méně než 2,5 Wh/km nebo 0 Wh, obvykle proto, že byla zachycena jen částečně), se v odhadu ignorují, protože by dojezd vypadal příliš vysoký. Atributy `tours_ignored` a `tours_ignored_sample` ukazují, kolik jich je a které to jsou, každá se zdrojem své energie (`cloud` = měřič energie v cloudu Bosch, `ble_live` = živý stav nabití z bridge); `tours_used_by_source` počítá použité jízdy podle zdroje, `wh_per_km_min` a `wh_per_km_max` ukazují jejich rozptyl. Pokud je postižena téměř každá jízda, zůstanou čidla prázdná, dokud nebude k dispozici dost správně zaznamenaných jízd.
+
 ### Souhrn nabíjení
 
 Cloud od Bosche pojem „nabíjení“ vůbec nezná – hlásí jen stav nabití k okamžiku poslední synchronizace. Kdo ale provozuje [ESPHome LDI bridge](https://github.com/Xunil99/ha-bosch-ebike/tree/main/esphome), ten má **živý stav nabití**, a z něj se dá celý nabíjecí cyklus zrekonstruovat.

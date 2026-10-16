@@ -324,6 +324,8 @@ ta consommation réelle (moyenne pondérée par la distance sur les derniers
 > Tant que moins de 3 sorties ou 30 km de données de consommation sont
 > disponibles, les capteurs restent vides.
 
+Les sorties dont l'énergie enregistrée est anormalement basse (moins de 2,5 Wh/km, ou 0 Wh, le plus souvent parce qu'elle n'a été saisie que partiellement) sont ignorées dans l'estimation, car elles feraient paraître l'autonomie trop élevée. Les attributs `tours_ignored` et `tours_ignored_sample` indiquent combien et lesquelles, chacune avec la source de son énergie (`cloud` = le compteur d'énergie du cloud Bosch, `ble_live` = le niveau de batterie en direct de la passerelle) ; `tours_used_by_source` compte les sorties utilisées par source, `wh_per_km_min` et `wh_per_km_max` montrent leur écart. Si presque toutes les sorties sont concernées, les capteurs restent vides jusqu'à ce qu'il y ait assez de sorties correctement enregistrées.
+
 ### Bilan de la session de charge
 
 Le cloud Bosch ne connaît tout simplement pas la notion de charge – il ne fournit que le niveau de batterie au moment de la dernière synchronisation. Mais quiconque fait tourner la [passerelle ESPHome LDI](https://github.com/Xunil99/ha-bosch-ebike/tree/main/esphome) dispose d'un **niveau de batterie en direct**, et cela suffit à reconstituer toute la charge.

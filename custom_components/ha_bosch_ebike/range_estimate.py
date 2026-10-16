@@ -15,19 +15,38 @@ MIN_TOURS = 3
 MIN_KM = 30.0
 MIN_TOUR_KM = 0.5
 
-# The floor below which a tour's own wh_per_km is treated as physically
-# implausible (issue #78 follow-up) - no real e-bike ride uses this little
-# energy for this much distance. coordinator.py's _track_battery_consumption
-# already refuses to persist a consumed_wh this implausible for a NEW poll,
-# but that guard did not exist before it shipped, and a restored
-# consumption entry is never re-validated against it - so a single
-# already-stored pre-fix entry (a reported wh_per_km of 0.01, or a milder
-# case reported afterwards on an up-to-date version) can silently poison
-# this function's average for as long as it stays within window_km, with no
-# way for the affected install to self-heal. Filtering here, at the one
-# place that reads consumption back out, closes that gap regardless of how
-# an implausible entry got into storage.
+# Impossible (issue #78): no real e-bike ride uses this little energy for this
+# much distance. This is the gate coordinator.py's _track_battery_consumption
+# applies before it PERSISTS a split of the cloud's energy counter across a
+# batch of newly seen rides. It has to stay this loose. The counter reaches
+# the cloud late and in pieces, so a ride's first credit is routinely a
+# fraction of its true energy, and the top-up window (issue #67) exists to
+# complete it. A stricter write gate would refuse exactly those first
+# credits, and with them the top-up that fixes them.
 MIN_PLAUSIBLE_WH_PER_KM = 1.0
+
+# Too good to be true for an AVERAGE (issue #78 follow-up): the estimate
+# ignores a tour recorded below this. The per-tour figure still comes from
+# that late, partial counter, or from a live SoC sample that can be stale, so
+# a ride that ended up with too little energy is stored without anything
+# being wrong at the time. It then pulls the average down and the range up,
+# which is the unsafe direction (the route planner's battery check reads the
+# same average). One real example: a ride of over 30 km with hundreds of
+# metres of climbing stored with 41 Wh, 1.33 Wh/km, which cleared the 1.0
+# floor above and by itself pushed the full battery range of that bike up by
+# about 14 percent. The rides counted properly on that same bike sat between
+# 7 and 14 Wh/km, so 2.5 is far below anything an assisted ride produces. A
+# ride that really is this efficient (the motor mostly off) falls away too,
+# which only errs towards a smaller range.
+# Applied when the estimate is read, so it also cleans up entries that are
+# already stored, whatever put them there.
+MIN_REALISTIC_WH_PER_KM = 2.5
+
+# How many of the ignored tours are listed (newest first) in the result, the
+# sensor attributes and the log line. Enough to see whether they share one
+# rate (a batch artefact) or are scattered (lag), small enough to stay an
+# attribute and not a table.
+MAX_IGNORED_SAMPLE = 5
 
 
 def compute_range_estimate(
@@ -37,15 +56,27 @@ def compute_range_estimate(
     bike_id: str,
     window_km: float = DEFAULT_WINDOW_KM,
     fallback_all: bool = False,
-) -> dict[str, Any] | None:
+) -> dict[str, Any]:
     """Distance-weighted average consumption over the last ~window_km.
 
     Walks activities newest-first, keeps tours that belong to the bike and
-    have a valid consumption record, and accumulates until the distance
+    have a usable consumption record, and accumulates until the distance
     window is filled (the tour crossing the threshold is still included).
+    A tour with 0 Wh or below ``MIN_REALISTIC_WH_PER_KM`` is not used but
+    counted, so it shows up in the diagnostics instead of vanishing.
 
-    Returns ``{wh_per_km, tours_used, window_km, newest_tour_date}`` or
-    ``None`` when the data base is too thin (< MIN_TOURS tours or < MIN_KM km).
+    Always returns a dict: ``wh_per_km``, ``tours_used``, ``window_km``,
+    ``newest_tour_date``, ``wh_per_km_min`` / ``wh_per_km_max`` (per-tour rates
+    of the tours used), ``tours_used_by_source``, ``tours_ignored`` and
+    ``tours_ignored_sample``. The source says where a tour's energy came from:
+    ``ble_live`` (live SoC of the bridge) or ``cloud`` (the cloud's energy
+    counter). They fail differently, and which one produced the tours that
+    were ignored, or that still feed the average, is the first thing to know
+    when an estimate looks wrong.
+    ``wh_per_km`` is ``None`` when the data base is too thin (fewer than
+    MIN_TOURS tours or MIN_KM km), but the rest still describes what was found,
+    so a sensor without a value can say why. That matters most exactly then:
+    when every tour got ignored there is no estimate left to look at.
 
     ``fallback_all=True`` treats unmapped activities as belonging to the
     bike (single-bike accounts where attribution is empty).
@@ -54,6 +85,11 @@ def compute_range_estimate(
     total_km = 0.0
     tours = 0
     newest_date: str | None = None
+    rate_min: float | None = None
+    rate_max: float | None = None
+    used_by_source: dict[str, int] = {}
+    ignored = 0
+    ignored_sample: list[dict[str, Any]] = []
 
     for activity in activities:
         aid = activity.get("id")
@@ -70,11 +106,29 @@ def compute_range_estimate(
             km = float(activity.get("distance") or 0) / 1000.0
         except (TypeError, ValueError):
             continue
-        if wh <= 0 or km <= MIN_TOUR_KM:
+        if km <= MIN_TOUR_KM:
             continue
-        if wh / km < MIN_PLAUSIBLE_WH_PER_KM:
+        # Only the live-SoC path stamps a source on its entries; everything
+        # else is a split of the cloud's energy counter.
+        source = entry.get("source") or "cloud"
+        # 0 Wh (and anything negative) falls under the floor as well.
+        if wh / km < MIN_REALISTIC_WH_PER_KM:
+            ignored += 1
+            if len(ignored_sample) < MAX_IGNORED_SAMPLE:
+                ignored_sample.append(
+                    {
+                        "date": str(activity.get("startTime") or "")[:10] or None,
+                        "km": round(km, 1),
+                        "wh": round(max(wh, 0.0), 1),
+                        "source": source,
+                    }
+                )
             continue
 
+        used_by_source[source] = used_by_source.get(source, 0) + 1
+        rate = wh / km
+        rate_min = rate if rate_min is None else min(rate_min, rate)
+        rate_max = rate if rate_max is None else max(rate_max, rate)
         total_wh += wh
         total_km += km
         tours += 1
@@ -83,15 +137,90 @@ def compute_range_estimate(
         if total_km >= window_km:
             break
 
-    if tours < MIN_TOURS or total_km < MIN_KM:
-        return None
-
+    enough = tours >= MIN_TOURS and total_km >= MIN_KM
     return {
-        "wh_per_km": round(total_wh / total_km, 2),
+        "wh_per_km": round(total_wh / total_km, 2) if enough else None,
         "tours_used": tours,
         "window_km": round(total_km, 1),
         "newest_tour_date": newest_date,
+        "wh_per_km_min": round(rate_min, 2) if rate_min is not None else None,
+        "wh_per_km_max": round(rate_max, 2) if rate_max is not None else None,
+        "tours_used_by_source": used_by_source,
+        "tours_ignored": ignored,
+        "tours_ignored_sample": ignored_sample,
     }
+
+
+def range_estimate_attributes(est: dict[str, Any] | None) -> dict[str, Any]:
+    """The calculation basis the range sensors expose as attributes.
+
+    Empty before the first estimate exists (first poll, eBike System 2).
+    Present with ``wh_per_km`` ``None`` when the data base is too thin, which
+    is when these numbers are the only way to see why the sensor is empty.
+    """
+    if not est:
+        return {}
+    return {
+        "wh_per_km": est.get("wh_per_km"),
+        "tours_used": est.get("tours_used"),
+        "window_km": est.get("window_km"),
+        "newest_tour_date": est.get("newest_tour_date"),
+        "wh_per_km_min": est.get("wh_per_km_min"),
+        "wh_per_km_max": est.get("wh_per_km_max"),
+        "tours_used_by_source": est.get("tours_used_by_source"),
+        "tours_ignored": est.get("tours_ignored"),
+        "tours_ignored_sample": est.get("tours_ignored_sample"),
+    }
+
+
+def range_estimate_log_key(est: dict[str, Any]) -> tuple[Any, ...]:
+    """What makes a new log line worth writing: the value and what fed it.
+
+    The estimate is recomputed every poll; logging it each time would bury
+    everything else. A changed average, a different number of tours used or a
+    different number left out is news, an unchanged one is not.
+    """
+    return (est.get("wh_per_km"), est.get("tours_used"), est.get("tours_ignored"))
+
+
+def describe_range_estimate(est: dict[str, Any]) -> str:
+    """One line for the INFO log: the estimate and the tours left out of it."""
+    used = est.get("tours_used") or 0
+    km = est.get("window_km") or 0.0
+    wh_per_km = est.get("wh_per_km")
+    by_source = est.get("tours_used_by_source") or {}
+    sources = (
+        " (" + ", ".join(f"{name} {n}" for name, n in sorted(by_source.items())) + ")"
+        if by_source
+        else ""
+    )
+    if wh_per_km is None:
+        text = (
+            f"no estimate yet, {used} usable tours{sources} over {km:.1f} km "
+            f"(needs {MIN_TOURS} tours and {MIN_KM:.0f} km)"
+        )
+    else:
+        lo = est.get("wh_per_km_min")
+        hi = est.get("wh_per_km_max")
+        spread = f", per tour {lo:.2f} to {hi:.2f}" if lo is not None and hi is not None else ""
+        text = f"{wh_per_km:.2f} Wh/km from {used} tours{sources} over {km:.1f} km{spread}"
+    ignored = est.get("tours_ignored") or 0
+    if not ignored:
+        return text
+    sample = est.get("tours_ignored_sample") or []
+    listed = ", ".join(
+        f"{t['date']} {t['km']} km {t['wh']} Wh {t.get('source', 'cloud')}"
+        for t in sample
+    )
+    more = ignored - len(sample)
+    text += (
+        f"; {ignored} tours ignored (0 Wh or below {MIN_REALISTIC_WH_PER_KM} Wh/km)"
+    )
+    if listed:
+        text += f": {listed}"
+    if more > 0:
+        text += f" and {more} more"
+    return text
 
 
 def track_distance_m(details: dict[str, Any]) -> float | None:

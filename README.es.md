@@ -324,6 +324,8 @@ de historial de recorridos):
 > haya menos de 3 recorridos o 30 km de datos de consumo, los sensores
 > permanecen vacíos.
 
+Los recorridos cuya energía registrada es irrealmente baja (menos de 2,5 Wh/km, o 0 Wh, normalmente porque solo se captó en parte) se ignoran en la estimación, porque harían que la autonomía pareciera demasiado alta. Los atributos `tours_ignored` y `tours_ignored_sample` indican cuántos y cuáles son, cada uno con la fuente de su energía (`cloud` = el contador de energía de la nube de Bosch, `ble_live` = el nivel de batería en vivo del puente); `tours_used_by_source` cuenta los recorridos utilizados por fuente, `wh_per_km_min` y `wh_per_km_max` muestran su rango. Si casi todos los recorridos están afectados, los sensores permanecen vacíos hasta que haya suficientes recorridos registrados correctamente.
+
 ### Resumen del proceso de carga
 
 La nube de Bosch no conoce siquiera el concepto de "cargar": solo informa del nivel de batería en el momento de la última sincronización. Sin embargo, quien utiliza el [puente LDI de ESPHome](https://github.com/Xunil99/ha-bosch-ebike/tree/main/esphome) dispone de un **nivel de batería en vivo**, y con eso se puede reconstruir el proceso de carga completo.

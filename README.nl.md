@@ -318,6 +318,8 @@ van je werkelijke verbruik (afstandsgewogen gemiddelde over de laatste
 > (`wh_per_km`, `tours_used`, `window_km`). Zolang er minder dan 3 tours
 > of 30 km aan verbruiksgegevens beschikbaar zijn, blijven de sensoren leeg.
 
+Tours waarvan de vastgelegde energie onrealistisch laag is (onder 2,5 Wh/km of 0 Wh, meestal omdat die maar gedeeltelijk is vastgelegd), worden in de schatting genegeerd, omdat ze de actieradius te hoog zouden laten lijken. De attributen `tours_ignored` en `tours_ignored_sample` laten zien hoeveel en welke, elk met de bron van de energie (`cloud` = de energieteller van de Bosch-cloud, `ble_live` = het live-accuniveau van de bridge); `tours_used_by_source` telt de gebruikte tours per bron, `wh_per_km_min` en `wh_per_km_max` tonen hun spreiding. Is bijna elke tour getroffen, dan blijven de sensoren leeg totdat er genoeg schoon vastgelegde tours zijn.
+
 ### Laadsessie-samenvatting
 
 De Bosch-cloud kent het begrip laden helemaal niet – ze meldt alleen het accuniveau op het moment van de laatste synchronisatie. Wie de [ESPHome-LDI-bridge](https://github.com/Xunil99/ha-bosch-ebike/tree/main/esphome) gebruikt, heeft echter een **live-accuniveau**, en dat is genoeg om de hele laadsessie te reconstrueren.
