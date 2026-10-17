@@ -50,6 +50,7 @@ from .profile_extra import (
     last_service,
     max_altitude,
     next_service_date,
+    reachable_range_band,
     reachable_ranges,
 )
 from .diagnosis_field_data import (
@@ -824,6 +825,11 @@ async def async_setup_entry(
             entities.append(
                 BoschReachableRangeSensor(coordinator, bike_id, drive_name, idx, mode_name)
             )
+        # The same figures as one value, the way the Flow app shows them
+        # ("40 to 84 km"). Created whenever the per-mode sensors are, so it
+        # never exists for eBike System 2 (no per-mode range there).
+        if reachable_ranges(bike):
+            entities.append(BoschReachableRangeBandSensor(coordinator, bike_id, drive_name))
 
         # Per-assist-mode lifetime distance/energy stats from the newest customer
         # report (service book). These only exist when a dealer customer report is
@@ -1191,6 +1197,61 @@ class BoschReachableRangeSensor(CoordinatorEntity[BoschEBikeCoordinator], Sensor
     def extra_state_attributes(self) -> dict[str, Any]:
         """Expose the assist mode this range belongs to."""
         return {"assist_mode": self._mode_name}
+
+
+class BoschReachableRangeBandSensor(CoordinatorEntity[BoschEBikeCoordinator], SensorEntity):
+    """Bosch's reachable range across all assist modes as one value, like Flow.
+
+    The state is text ("37\u201380 km": lowest to highest mode), so it has no unit
+    or device class and does not graph; the numbers are in the attributes
+    (min_km, max_km) and in the per-mode sensors it summarises. Like those it
+    follows the bike's last sync (see profile_extra.reachable_range_band).
+
+    A literal name without "reachable_range" in it, on purpose: the dashboard
+    card picks the per-mode pills out of the states by that part of the
+    entity_id, and this one is not a mode.
+    """
+
+    _attr_has_entity_name = True
+    _attr_icon = "mdi:map-marker-distance"
+    _attr_name = "Range Band"
+
+    def __init__(
+        self,
+        coordinator: BoschEBikeCoordinator,
+        bike_id: str,
+        drive_name: str,
+    ) -> None:
+        super().__init__(coordinator)
+        self._bike_id = bike_id
+        self._attr_unique_id = f"{bike_id}_range_band"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, bike_id)},
+            name=drive_name,
+            manufacturer="Bosch",
+            model=drive_name,
+        )
+
+    def _band(self) -> dict[str, Any] | None:
+        for bike in self.coordinator.data.get("bikes", []):
+            if bike.get("id") == self._bike_id:
+                return reachable_range_band(bike)
+        return None
+
+    @property
+    def native_value(self) -> str | None:
+        band = self._band()
+        return band["text"] if band else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        band = self._band()
+        if not band:
+            return None
+        return {
+            key: band[key]
+            for key in ("min_km", "max_km", "min_modes", "max_modes", "ranges")
+        }
 
 
 class BoschBatterySohSensor(CoordinatorEntity[BoschEBikeCoordinator], SensorEntity):

@@ -318,7 +318,7 @@ tvé skutečné spotřeby (vážený průměr podle vzdálenosti za posledních
 > (`wh_per_km`, `tours_used`, `window_km`). Dokud jsou k dispozici údaje
 > o spotřebě z méně než 3 jízd nebo z méně než 30 km, zůstávají čidla prázdná.
 
-Jízdy, jejichž zaznamenaná energie je nereálně nízká (méně než 2,5 Wh/km nebo 0 Wh, obvykle proto, že byla zachycena jen částečně), se v odhadu ignorují, protože by dojezd vypadal příliš vysoký. Atributy `tours_ignored` a `tours_ignored_sample` ukazují, kolik jich je a které to jsou, každá se zdrojem své energie (`cloud` = měřič energie v cloudu Bosch, `ble_live` = živý stav nabití z bridge); `tours_used_by_source` počítá použité jízdy podle zdroje, `wh_per_km_min` a `wh_per_km_max` ukazují jejich rozptyl. Pokud je postižena téměř každá jízda, zůstanou čidla prázdná, dokud nebude k dispozici dost správně zaznamenaných jízd.
+Jízdy, jejichž zaznamenaná energie je nereálně nízká (méně než 2,5 Wh/km nebo 0 Wh, obvykle proto, že byla zachycena jen částečně), se v odhadu ignorují, protože by dojezd vypadal příliš vysoký. Atributy `tours_ignored` a `tours_ignored_sample` ukazují, kolik jich je a které to jsou, každá se zdrojem své energie (`cloud` = měřič energie v cloudu Bosch, `ble_live` = živý stav nabití z bridge); `tours_used_by_source` počítá použité jízdy podle zdroje, `wh_per_km_min` a `wh_per_km_max` ukazují jejich rozptyl. Nepoužívají se ani jízdy kratší než 5 km: krátká jízda říká o dojezdu dlouhé jen málo a nejhůře se přesně měří. `tours_too_short` je počítá. Pokud jsou vynechány téměř všechny jízdy, zůstanou čidla prázdná, dokud nebude k dispozici dost použitelných jízd. Oficiální dojezd Bosch podle režimu i jako jedna hodnota (senzor `Range Band`, například „37–80 km“) se tím nemění.
 
 ### Souhrn nabíjení
 
@@ -625,6 +625,7 @@ Tyto entity se objeví **automaticky** při běžné instalaci. **Není potřeba
 | Entita | Typ/jednotka | Popis |
 |--------|--------------|-------|
 | Reachable Range {Eco/Tour/eMTB/Turbo} | sensor / km | Oficiální odhad dojezdu od Bosch pro každý jízdní režim (jeden senzor na aktivní režim) |
+| Range Band | sensor / text | Stejné hodnoty od Bosch jako jedna hodnota, od nejnižšího po nejvyšší režim (například „37–80 km“), jako v aplikaci Flow |
 | Next Service Date | sensor / datum | Příští servis jako datum (doplněk k Next Service Odometer založenému na km) |
 | State of Health | sensor / % | Kondice baterie pro každou baterii, z digitální servisní knížky |
 | Measured Capacity | sensor / Wh | Kapacita baterie naměřená prodejcem, pro každou baterii |

@@ -318,7 +318,7 @@ van je werkelijke verbruik (afstandsgewogen gemiddelde over de laatste
 > (`wh_per_km`, `tours_used`, `window_km`). Zolang er minder dan 3 tours
 > of 30 km aan verbruiksgegevens beschikbaar zijn, blijven de sensoren leeg.
 
-Tours waarvan de vastgelegde energie onrealistisch laag is (onder 2,5 Wh/km of 0 Wh, meestal omdat die maar gedeeltelijk is vastgelegd), worden in de schatting genegeerd, omdat ze de actieradius te hoog zouden laten lijken. De attributen `tours_ignored` en `tours_ignored_sample` laten zien hoeveel en welke, elk met de bron van de energie (`cloud` = de energieteller van de Bosch-cloud, `ble_live` = het live-accuniveau van de bridge); `tours_used_by_source` telt de gebruikte tours per bron, `wh_per_km_min` en `wh_per_km_max` tonen hun spreiding. Is bijna elke tour getroffen, dan blijven de sensoren leeg totdat er genoeg schoon vastgelegde tours zijn.
+Tours waarvan de vastgelegde energie onrealistisch laag is (onder 2,5 Wh/km of 0 Wh, meestal omdat die maar gedeeltelijk is vastgelegd), worden in de schatting genegeerd, omdat ze de actieradius te hoog zouden laten lijken. De attributen `tours_ignored` en `tours_ignored_sample` laten zien hoeveel en welke, elk met de bron van de energie (`cloud` = de energieteller van de Bosch-cloud, `ble_live` = het live-accuniveau van de bridge); `tours_used_by_source` telt de gebruikte tours per bron, `wh_per_km_min` en `wh_per_km_max` tonen hun spreiding. Tours korter dan 5 km worden ook niet gebruikt: een korte rit zegt weinig over het bereik van een lange en is het minst nauwkeurig te meten. `tours_too_short` telt ze. Worden bijna alle tours weggelaten, dan blijven de sensoren leeg totdat er genoeg bruikbare tours zijn. De officiële Bosch-actieradius per modus, en als één waarde (de sensor `Range Band`, bijvoorbeeld "37–80 km"), blijft hiervan onaangetast.
 
 ### Laadsessie-samenvatting
 
@@ -625,6 +625,7 @@ Deze entiteiten verschijnen **automatisch** met de normale installatie. Er is **
 | Entiteit | Type/eenheid | Beschrijving |
 |----------|--------------|--------------|
 | Reachable Range {Eco/Tour/eMTB/Turbo} | sensor / km | Officiële Bosch-actieradiusschatting per rijmodus (één sensor per actieve modus) |
+| Range Band | sensor / tekst | Dezelfde Bosch-waarden als één waarde, van de laagste tot de hoogste ondersteuningsmodus (bijvoorbeeld "37–80 km"), zoals in de Flow-app |
 | Next Service Date | sensor / datum | Volgende servicebeurt als datum (aanvulling op de km-gebaseerde Next Service Odometer) |
 | State of Health | sensor / % | Accugezondheid per accu, uit het digitale serviceboek |
 | Measured Capacity | sensor / Wh | Door de dealer gemeten accucapaciteit per accu |

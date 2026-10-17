@@ -19,6 +19,8 @@ range_estimate_log_key = _mod.range_estimate_log_key
 MIN_REALISTIC_WH_PER_KM = _mod.MIN_REALISTIC_WH_PER_KM
 MIN_PLAUSIBLE_WH_PER_KM = _mod.MIN_PLAUSIBLE_WH_PER_KM
 MAX_IGNORED_SAMPLE = _mod.MAX_IGNORED_SAMPLE
+MIN_ESTIMATE_TOUR_KM = _mod.MIN_ESTIMATE_TOUR_KM
+MIN_TOUR_KM = _mod.MIN_TOUR_KM
 
 
 def test_corrected_track_distance_partial_summary():
@@ -127,6 +129,7 @@ def test_min_data_thresholds():
     assert r["wh_per_km_min"] is None and r["wh_per_km_max"] is None
     assert r["newest_tour_date"] is None and r["tours_ignored_sample"] == []
     assert r["tours_used_by_source"] == {}
+    assert r["tours_too_short"] == 0
 
 
 def test_skips_invalid_tours():
@@ -234,6 +237,7 @@ def test_zero_wh_tour_counts_as_ignored_but_a_tiny_tour_does_not():
     r = compute_range_estimate(activities, bike_map, cons, "bike1")
     assert r["tours_used"] == 3
     assert r["tours_ignored"] == 1
+    assert r["tours_too_short"] == 0   # 0.3 km is not a ride at all
 
 
 def test_ignored_tours_do_not_fill_the_window():
@@ -315,6 +319,76 @@ def test_source_tells_the_live_soc_path_from_the_cloud_split():
     assert "30.0 Wh ble_live" in text and "30.0 Wh cloud" in text
 
 
+def test_the_minimum_length_is_a_real_ride_not_an_errand():
+    # A ride this short says little about how far a battery goes, and its
+    # energy is the hardest to capture precisely, so it stays out of the
+    # estimate no matter how plausible its own figure looks.
+    assert MIN_ESTIMATE_TOUR_KM > MIN_TOUR_KM
+
+
+def test_tours_under_the_minimum_length_are_not_used():
+    short = MIN_ESTIMATE_TOUR_KM - 0.01
+    activities = [act(f"a{i}", 20) for i in range(3)] + [act("s1", short), act("s2", 2.0)]
+    bike_map, cons = _bike_inputs(
+        activities,
+        {"a0": 100.0, "a1": 100.0, "a2": 100.0, "s1": short * 20.0, "s2": 2.0 * 20.0},
+    )
+    r = compute_range_estimate(activities, bike_map, cons, "bike1")
+    assert r["tours_used"] == 3
+    assert r["tours_too_short"] == 2
+    assert abs(r["wh_per_km"] - 5.0) < 0.001   # the 20 Wh/km short ones did not move it
+
+
+def test_the_minimum_length_is_inclusive():
+    activities = [act(f"a{i}", 20) for i in range(3)] + [act("edge", MIN_ESTIMATE_TOUR_KM)]
+    bike_map, cons = _bike_inputs(
+        activities,
+        {"a0": 100.0, "a1": 100.0, "a2": 100.0, "edge": MIN_ESTIMATE_TOUR_KM * 5.0},
+    )
+    r = compute_range_estimate(activities, bike_map, cons, "bike1")
+    assert r["tours_used"] == 4
+    assert r["tours_too_short"] == 0
+
+
+def test_a_short_tour_is_counted_as_short_not_as_unrealistic():
+    # Length is judged first. A short tour with 0 Wh is "too short", it must
+    # not also show up in the list of tours ignored for their energy.
+    activities = [act(f"a{i}", 20) for i in range(3)] + [act("short0", 3.0)]
+    bike_map, cons = _bike_inputs(
+        activities, {"a0": 100.0, "a1": 100.0, "a2": 100.0, "short0": 0.0}
+    )
+    r = compute_range_estimate(activities, bike_map, cons, "bike1")
+    assert r["tours_too_short"] == 1
+    assert r["tours_ignored"] == 0 and r["tours_ignored_sample"] == []
+
+
+def test_a_rider_with_only_short_rides_gets_no_value_and_sees_why():
+    # Issue #78 (a real report): 35 tours over 93 km, 2.7 km each, averaging
+    # 3.9 Wh/km while Bosch's own forecast for that bike implies 5 to 10. All
+    # the estimate can say about such a rider is how far errands go.
+    activities = [act(f"a{i}", 3.0, f"2026-06-{(i % 28) + 1:02d}T10:00:00Z") for i in range(40)]
+    bike_map, cons = _bike_inputs(activities, {a["id"]: 9.0 for a in activities})
+    r = compute_range_estimate(activities, bike_map, cons, "bike1")
+    assert r["wh_per_km"] is None
+    assert r["tours_used"] == 0
+    assert r["tours_too_short"] == 40
+    assert r["tours_ignored"] == 0
+
+
+def test_short_tours_are_reported_in_attributes_and_log_line():
+    activities = [act(f"a{i}", 20) for i in range(3)] + [act("s1", 2.0), act("s2", 3.0)]
+    bike_map, cons = _bike_inputs(
+        activities, {"a0": 100.0, "a1": 100.0, "a2": 100.0, "s1": 18.0, "s2": 27.0}
+    )
+    r = compute_range_estimate(activities, bike_map, cons, "bike1")
+    assert range_estimate_attributes(r)["tours_too_short"] == 2
+    text = describe_range_estimate(r)
+    assert "2 tours under 5 km not used" in text
+    # nothing short -> nothing said
+    clean = compute_range_estimate(activities[:3], bike_map, cons, "bike1")
+    assert "under" not in describe_range_estimate(clean)
+
+
 def test_attributes_expose_the_diagnostics_even_without_a_value():
     a = range_estimate_attributes(_all_tours_ignored())
     assert a["wh_per_km"] is None
@@ -323,7 +397,7 @@ def test_attributes_expose_the_diagnostics_even_without_a_value():
     assert len(a["tours_ignored_sample"]) == MAX_IGNORED_SAMPLE
     for key in ("wh_per_km", "tours_used", "window_km", "newest_tour_date",
                 "tours_ignored", "tours_ignored_sample", "wh_per_km_min",
-                "wh_per_km_max", "tours_used_by_source"):
+                "wh_per_km_max", "tours_used_by_source", "tours_too_short"):
         assert key in a, key
     # No estimate computed yet (first poll, eBike System 2): nothing to show.
     assert range_estimate_attributes(None) == {}

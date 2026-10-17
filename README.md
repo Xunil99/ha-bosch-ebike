@@ -507,7 +507,7 @@ letzten ~500 km Tour-Historie):
 > einsehbar (`wh_per_km`, `tours_used`, `window_km`). Solange weniger als
 > 3 Touren bzw. 30 km Verbrauchsdaten vorliegen, bleiben die Sensoren leer.
 
-Touren, deren erfasste Energie unrealistisch niedrig ist (unter 2,5 Wh/km oder 0 Wh, meist weil sie nur teilweise erfasst wurde), werden bei der Schätzung ignoriert, denn sie würden die Reichweite zu hoch erscheinen lassen. Wie viele es sind und welche, zeigen die Attribute `tours_ignored` und `tours_ignored_sample`, jeweils mit der Quelle der Energie (`cloud` = Energiezähler der Bosch Cloud, `ble_live` = Live-Akkustand der Bridge); `tours_used_by_source` zählt die verwendeten Touren nach Quelle, `wh_per_km_min` und `wh_per_km_max` zeigen ihre Spanne. Sind fast alle Touren betroffen, bleiben die Sensoren leer, bis genügend sauber erfasste Touren vorliegen.
+Touren, deren erfasste Energie unrealistisch niedrig ist (unter 2,5 Wh/km oder 0 Wh, meist weil sie nur teilweise erfasst wurde), werden bei der Schätzung ignoriert, denn sie würden die Reichweite zu hoch erscheinen lassen. Wie viele es sind und welche, zeigen die Attribute `tours_ignored` und `tours_ignored_sample`, jeweils mit der Quelle der Energie (`cloud` = Energiezähler der Bosch Cloud, `ble_live` = Live-Akkustand der Bridge); `tours_used_by_source` zählt die verwendeten Touren nach Quelle, `wh_per_km_min` und `wh_per_km_max` zeigen ihre Spanne. Touren unter 5 km werden ebenfalls nicht verwendet: Eine kurze Fahrt sagt wenig über die Reichweite einer langen aus und lässt sich am ungenauesten messen. `tours_too_short` zählt sie. Werden fast alle Touren ausgelassen, bleiben die Sensoren leer, bis genügend brauchbare Touren vorliegen. Die offizielle Bosch-Reichweite je Modus und als ein Wert (Sensor `Range Band`, z. B. „37–80 km“) bleibt davon unberührt.
 
 ### Routenplaner-Card (BRouter)
 
@@ -873,6 +873,7 @@ Diese Entitäten erscheinen **automatisch** mit der normalen Einrichtung. Eine *
 | Entität | Typ/Einheit | Beschreibung |
 |---------|-------------|--------------|
 | Reachable Range {Eco/Tour/eMTB/Turbo} | sensor / km | Offizielle Bosch-Reichweiten-Schätzung je Fahrmodus (ein Sensor pro aktivem Modus) |
+| Range Band | sensor / Text | Dieselben Bosch-Reichweiten als ein Wert, niedrigster bis höchster Modus (z. B. „37–80 km“), wie in der Flow App |
 | Next Service Date | sensor / Datum | Nächster Service als Datum (ergänzt den km-basierten Next Service Odometer) |
 | State of Health | sensor / % | Akku-Gesundheit je Batterie aus dem digitalen Serviceheft |
 | Measured Capacity | sensor / Wh | Vom Händler gemessene Akkukapazität je Batterie |
@@ -1394,7 +1395,7 @@ tour history):
 > `tours_used`, `window_km`). As long as less than 3 tours or 30 km of
 > consumption data are available, the sensors stay empty.
 
-Tours whose recorded energy is unrealistically low (below 2.5 Wh/km, or 0 Wh, usually because it was only partly captured) are left out of the estimate, because they would make the range look too high. The attributes `tours_ignored` and `tours_ignored_sample` show how many and which ones, each with the source of its energy (`cloud` = the Bosch cloud's energy counter, `ble_live` = the live battery level of the bridge); `tours_used_by_source` counts the tours that were used by source, `wh_per_km_min` and `wh_per_km_max` show their spread. If nearly all tours are affected, the sensors stay empty until enough cleanly recorded tours are available.
+Tours whose recorded energy is unrealistically low (below 2.5 Wh/km, or 0 Wh, usually because it was only partly captured) are left out of the estimate, because they would make the range look too high. The attributes `tours_ignored` and `tours_ignored_sample` show how many and which ones, each with the source of its energy (`cloud` = the Bosch cloud's energy counter, `ble_live` = the live battery level of the bridge); `tours_used_by_source` counts the tours that were used by source, `wh_per_km_min` and `wh_per_km_max` show their spread. Tours under 5 km are not used either: a short ride says little about the range of a long one and is the hardest to measure precisely. `tours_too_short` counts them. If nearly all tours are left out, the sensors stay empty until enough usable tours are available. Bosch's own reachable range per mode, and as one value (the `Range Band` sensor, for example "37–80 km"), is not affected by this.
 
 ### Route planner card (BRouter)
 
@@ -1760,6 +1761,7 @@ These entities appear **automatically** with the normal setup. **No additional o
 | Entity | Type/Unit | Description |
 |--------|-----------|-------------|
 | Reachable Range {Eco/Tour/eMTB/Turbo} | sensor / km | Official Bosch per-mode reachable-range estimate (one sensor per active mode) |
+| Range Band | sensor / text | The same Bosch figures as one value, lowest to highest assist mode (for example "37–80 km"), like the Flow app |
 | Next Service Date | sensor / date | Next service as a date (complements the km-based Next Service Odometer) |
 | State of Health | sensor / % | Battery state of health per battery, from the Digital Service Book |
 | Measured Capacity | sensor / Wh | Dealer-measured battery capacity per battery |

@@ -16,6 +16,7 @@ profile_extra = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(profile_extra)
 
 reachable_ranges = profile_extra.reachable_ranges
+reachable_range_band = profile_extra.reachable_range_band
 next_service_date = profile_extra.next_service_date
 theft_status = profile_extra.theft_status
 frame_number = profile_extra.frame_number
@@ -55,6 +56,75 @@ def test_reachable_ranges_maps_codes_to_display_names_in_order():
         {"name": "eMTB+", "range_km": 30.0},
         {"name": "TURBO", "range_km": 27.0},
     ]
+
+
+def _bike_with_ranges(*pairs):
+    """A bike whose active modes report the given (code, reachableRange) pairs."""
+    return {"driveUnit": {"activeAssistModes": [
+        {"name": code, "reachableRange": rng} for code, rng in pairs
+    ]}}
+
+
+def test_range_band_runs_from_the_lowest_to_the_highest_mode():
+    # The Flow app shows it as "27 to 49 km (Turbo to Eco)".
+    band = reachable_range_band(BIKE)
+    assert band["min_km"] == 27.0
+    assert band["max_km"] == 49.0
+    assert band["text"] == "27\u201349 km"
+    assert band["min_modes"] == ["TURBO"]
+    assert band["max_modes"] == ["ECO"]
+    # every mode, in API order, so nothing has to be looked up elsewhere
+    assert list(band["ranges"].items()) == [
+        ("ECO", 49.0), ("TOUR", 36.0), ("AUTO", 33.0), ("eMTB+", 30.0), ("TURBO", 27.0),
+    ]
+
+
+def test_range_band_names_every_mode_on_a_tie():
+    # A real report (issue #78): ECO 80, TOUR 62, eMTB 37 and TURBO 37, where
+    # Flow showed 39 to 83. Both modes at the bottom are named, not just one.
+    band = reachable_range_band(_bike_with_ranges(
+        ("A100M00040", 80), ("A100M00030", 62), ("A100MSPIC7", 37), ("A100M00010", 37),
+    ))
+    assert band["text"] == "37\u201380 km"
+    assert band["min_modes"] == ["eMTB+", "TURBO"]
+    assert band["max_modes"] == ["ECO"]
+
+
+def test_range_band_collapses_to_one_figure_when_all_modes_agree():
+    band = reachable_range_band(_bike_with_ranges(
+        ("A100M00040", 60), ("A100M00030", 60), ("A100M00010", 60),
+    ))
+    assert band["text"] == "60 km"
+    assert band["min_km"] == band["max_km"] == 60.0
+    assert band["min_modes"] == band["max_modes"] == ["ECO", "TOUR", "TURBO"]
+
+
+def test_range_band_keeps_a_fraction_and_drops_a_trailing_zero():
+    band = reachable_range_band(_bike_with_ranges(("A100M00040", 62.5), ("A100M00010", 40)))
+    assert band["text"] == "40\u201362.5 km"
+
+
+def test_range_band_keeps_the_higher_figure_when_two_modes_share_a_name():
+    # Never seen on a real bike, but the band must not contradict its own
+    # "ranges": two codes that map to the same display name collapse to the
+    # higher figure, and min/max/modes are derived from what is listed.
+    band = reachable_range_band(_bike_with_ranges(
+        ("A100M0AUTO", 33), ("A100G0AUTO", 40), ("A100M00010", 27),
+    ))
+    assert band["ranges"] == {"AUTO": 40.0, "TURBO": 27.0}
+    assert band["min_km"] == 27.0 and band["max_km"] == 40.0
+    assert band["min_modes"] == ["TURBO"] and band["max_modes"] == ["AUTO"]
+    assert band["text"] == "27\u201340 km"
+
+
+def test_range_band_is_none_without_a_readable_range():
+    assert reachable_range_band({}) is None
+    assert reachable_range_band({"driveUnit": {}}) is None
+    assert reachable_range_band({"driveUnit": {"activeAssistModes": []}}) is None
+    # modes without a numeric reachableRange are skipped, like reachable_ranges()
+    assert reachable_range_band(_bike_with_ranges(("A100M00040", None))) is None
+    band = reachable_range_band(_bike_with_ranges(("A100M00040", None), ("A100M00010", 27)))
+    assert band["text"] == "27 km"
 
 
 def test_assist_mode_display_name_mapping_and_fallback():

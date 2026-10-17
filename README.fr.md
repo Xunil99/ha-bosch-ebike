@@ -324,7 +324,7 @@ ta consommation réelle (moyenne pondérée par la distance sur les derniers
 > Tant que moins de 3 sorties ou 30 km de données de consommation sont
 > disponibles, les capteurs restent vides.
 
-Les sorties dont l'énergie enregistrée est anormalement basse (moins de 2,5 Wh/km, ou 0 Wh, le plus souvent parce qu'elle n'a été saisie que partiellement) sont ignorées dans l'estimation, car elles feraient paraître l'autonomie trop élevée. Les attributs `tours_ignored` et `tours_ignored_sample` indiquent combien et lesquelles, chacune avec la source de son énergie (`cloud` = le compteur d'énergie du cloud Bosch, `ble_live` = le niveau de batterie en direct de la passerelle) ; `tours_used_by_source` compte les sorties utilisées par source, `wh_per_km_min` et `wh_per_km_max` montrent leur écart. Si presque toutes les sorties sont concernées, les capteurs restent vides jusqu'à ce qu'il y ait assez de sorties correctement enregistrées.
+Les sorties dont l'énergie enregistrée est anormalement basse (moins de 2,5 Wh/km, ou 0 Wh, le plus souvent parce qu'elle n'a été saisie que partiellement) sont ignorées dans l'estimation, car elles feraient paraître l'autonomie trop élevée. Les attributs `tours_ignored` et `tours_ignored_sample` indiquent combien et lesquelles, chacune avec la source de son énergie (`cloud` = le compteur d'énergie du cloud Bosch, `ble_live` = le niveau de batterie en direct de la passerelle) ; `tours_used_by_source` compte les sorties utilisées par source, `wh_per_km_min` et `wh_per_km_max` montrent leur écart. Les sorties de moins de 5 km ne sont pas utilisées non plus : une courte sortie dit peu de chose sur l'autonomie d'une longue et se mesure le moins précisément. `tours_too_short` les compte. Si presque toutes les sorties sont écartées, les capteurs restent vides jusqu'à ce qu'il y ait assez de sorties utilisables. L'autonomie officielle de Bosch par mode, et en une seule valeur (le capteur `Range Band`, par exemple « 37–80 km »), n'est pas concernée.
 
 ### Bilan de la session de charge
 
@@ -637,6 +637,7 @@ Ces entités proviennent de catégories Bosch Data Act supplémentaires (service
 | Entité | Type/unité | Description |
 |--------|------------|-------------|
 | Reachable Range {Eco/Tour/eMTB/Turbo} | sensor / km | Estimation officielle Bosch de l'autonomie par mode d'assistance (un capteur par mode actif) |
+| Range Band | sensor / texte | Les mêmes valeurs Bosch en une seule, du mode d'assistance le plus bas au plus haut (par exemple « 37–80 km »), comme dans l'app Flow |
 | Next Service Date | sensor / date | Prochaine révision sous forme de date (complète le Next Service Odometer en km) |
 | State of Health | sensor / % | État de santé de la batterie par batterie, issu du carnet d'entretien numérique |
 | Measured Capacity | sensor / Wh | Capacité de batterie mesurée par le revendeur, par batterie |

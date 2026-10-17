@@ -15,6 +15,19 @@ MIN_TOURS = 3
 MIN_KM = 30.0
 MIN_TOUR_KM = 0.5
 
+# Rides shorter than this stay out of the estimate (issue #78). A short ride
+# says little about how far a battery goes: it is mostly slow and flat, and
+# its per-kilometre figure is dominated by how coarsely its energy was
+# captured (a 3 km ride uses a few percent of the battery, so one SoC step or
+# one counter update is a large part of it). The distance-weighted average
+# already gives each short ride little weight, but a rider whose rides are ALL
+# short ends up with an estimate made of nothing else: one real report had 35
+# tours over 93 km, 2.7 km each, averaging 3.9 Wh/km while Bosch's own forecast
+# for that bike implied 5 to 10. For that rider no value is more honest than
+# one that only describes errands, and the Reachable Range sensors cover
+# planning a longer ride.
+MIN_ESTIMATE_TOUR_KM = 5.0
+
 # Impossible (issue #78): no real e-bike ride uses this little energy for this
 # much distance. This is the gate coordinator.py's _track_battery_consumption
 # applies before it PERSISTS a split of the cloud's energy counter across a
@@ -62,13 +75,15 @@ def compute_range_estimate(
     Walks activities newest-first, keeps tours that belong to the bike and
     have a usable consumption record, and accumulates until the distance
     window is filled (the tour crossing the threshold is still included).
-    A tour with 0 Wh or below ``MIN_REALISTIC_WH_PER_KM`` is not used but
-    counted, so it shows up in the diagnostics instead of vanishing.
+    A tour shorter than ``MIN_ESTIMATE_TOUR_KM`` is not used (counted as
+    ``tours_too_short``). A tour with 0 Wh or below ``MIN_REALISTIC_WH_PER_KM``
+    is not used either but counted as ignored, so both show up in the
+    diagnostics instead of vanishing.
 
     Always returns a dict: ``wh_per_km``, ``tours_used``, ``window_km``,
     ``newest_tour_date``, ``wh_per_km_min`` / ``wh_per_km_max`` (per-tour rates
-    of the tours used), ``tours_used_by_source``, ``tours_ignored`` and
-    ``tours_ignored_sample``. The source says where a tour's energy came from:
+    of the tours used), ``tours_used_by_source``, ``tours_too_short``,
+    ``tours_ignored`` and ``tours_ignored_sample``. The source says where a tour's energy came from:
     ``ble_live`` (live SoC of the bridge) or ``cloud`` (the cloud's energy
     counter). They fail differently, and which one produced the tours that
     were ignored, or that still feed the average, is the first thing to know
@@ -88,6 +103,7 @@ def compute_range_estimate(
     rate_min: float | None = None
     rate_max: float | None = None
     used_by_source: dict[str, int] = {}
+    too_short = 0
     ignored = 0
     ignored_sample: list[dict[str, Any]] = []
 
@@ -107,6 +123,11 @@ def compute_range_estimate(
         except (TypeError, ValueError):
             continue
         if km <= MIN_TOUR_KM:
+            continue
+        # Judged before the energy, so a short tour with an odd figure is
+        # only ever "too short" and never also "ignored".
+        if km < MIN_ESTIMATE_TOUR_KM:
+            too_short += 1
             continue
         # Only the live-SoC path stamps a source on its entries; everything
         # else is a split of the cloud's energy counter.
@@ -146,6 +167,7 @@ def compute_range_estimate(
         "wh_per_km_min": round(rate_min, 2) if rate_min is not None else None,
         "wh_per_km_max": round(rate_max, 2) if rate_max is not None else None,
         "tours_used_by_source": used_by_source,
+        "tours_too_short": too_short,
         "tours_ignored": ignored,
         "tours_ignored_sample": ignored_sample,
     }
@@ -168,6 +190,7 @@ def range_estimate_attributes(est: dict[str, Any] | None) -> dict[str, Any]:
         "wh_per_km_min": est.get("wh_per_km_min"),
         "wh_per_km_max": est.get("wh_per_km_max"),
         "tours_used_by_source": est.get("tours_used_by_source"),
+        "tours_too_short": est.get("tours_too_short"),
         "tours_ignored": est.get("tours_ignored"),
         "tours_ignored_sample": est.get("tours_ignored_sample"),
     }
@@ -204,6 +227,9 @@ def describe_range_estimate(est: dict[str, Any]) -> str:
         hi = est.get("wh_per_km_max")
         spread = f", per tour {lo:.2f} to {hi:.2f}" if lo is not None and hi is not None else ""
         text = f"{wh_per_km:.2f} Wh/km from {used} tours{sources} over {km:.1f} km{spread}"
+    too_short = est.get("tours_too_short") or 0
+    if too_short:
+        text += f"; {too_short} tours under {MIN_ESTIMATE_TOUR_KM:g} km not used"
     ignored = est.get("tours_ignored") or 0
     if not ignored:
         return text
