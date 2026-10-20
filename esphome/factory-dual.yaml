@@ -121,6 +121,10 @@ bosch_ebike_ldi_dual:
 # (%/min) from the rising SoC and extrapolate the remaining time to 80 % and to
 # 100 %. Because the two bikes charge independently, each bike has its own set of
 # rate-tracking globals (suffix _1 / _2) feeding its own template sensors below.
+# The rate is measured between two SoC step edges. The first step only aligns
+# the reference point (it starts somewhere inside a step), so the estimate
+# shows up after two steps, about 3 to 5 minutes at typical rates, instead of
+# starting from a wrong value.
 globals:
   # --- eBike 1 ---
   - id: chg_rate_1        # smoothed charging rate in %/min, -1 = unknown
@@ -135,6 +139,10 @@ globals:
     type: uint32_t
     restore_value: no
     initial_value: '0'
+  - id: chg_synced_1       # true once chg_last_soc_1 sits on a real SoC step edge
+    type: bool
+    restore_value: no
+    initial_value: 'false'
   # --- eBike 2 ---
   - id: chg_rate_2
     type: float
@@ -148,6 +156,10 @@ globals:
     type: uint32_t
     restore_value: no
     initial_value: '0'
+  - id: chg_synced_2
+    type: bool
+    restore_value: no
+    initial_value: 'false'
 
 sensor:
   # ===== eBike 1 (bike: 1) =====
@@ -169,17 +181,29 @@ sensor:
         - lambda: |-
             if (!id(charger_conn_1).state || std::isnan(x)) return;
             if (id(chg_last_soc_1) < 0) {
-              id(chg_last_soc_1) = x; id(chg_last_ms_1) = millis(); return;
+              id(chg_last_soc_1) = x; id(chg_last_ms_1) = millis();
+              id(chg_synced_1) = false; return;
             }
             float dsoc = x - id(chg_last_soc_1);
+            if (dsoc <= -1.0f) {           // SoC dropped: anchor again
+              id(chg_last_soc_1) = x; id(chg_last_ms_1) = millis();
+              id(chg_synced_1) = false; return;
+            }
             if (dsoc >= 1.0f) {
-              float dmin = (millis() - id(chg_last_ms_1)) / 60000.0f;
-              if (dmin > 0.01f) {
-                float r = dsoc / dmin;
-                if (r > 0)
-                  id(chg_rate_1) = (id(chg_rate_1) < 0) ? r
-                                                        : (0.3f * r + 0.7f * id(chg_rate_1));
+              // The reference point usually sits somewhere inside a 1 % step, so
+              // the first step is only partly measured. It only aligns the
+              // reference point to a step edge; the rate is measured from the
+              // second step on.
+              if (id(chg_synced_1)) {
+                float dmin = (millis() - id(chg_last_ms_1)) / 60000.0f;
+                if (dmin > 0.01f) {
+                  float r = dsoc / dmin;
+                  if (r > 0)
+                    id(chg_rate_1) = (id(chg_rate_1) < 0) ? r
+                                                      : (0.3f * r + 0.7f * id(chg_rate_1));
+                }
               }
+              id(chg_synced_1) = true;
               id(chg_last_soc_1) = x;
               id(chg_last_ms_1) = millis();
             }
@@ -205,17 +229,29 @@ sensor:
         - lambda: |-
             if (!id(charger_conn_2).state || std::isnan(x)) return;
             if (id(chg_last_soc_2) < 0) {
-              id(chg_last_soc_2) = x; id(chg_last_ms_2) = millis(); return;
+              id(chg_last_soc_2) = x; id(chg_last_ms_2) = millis();
+              id(chg_synced_2) = false; return;
             }
             float dsoc = x - id(chg_last_soc_2);
+            if (dsoc <= -1.0f) {           // SoC dropped: anchor again
+              id(chg_last_soc_2) = x; id(chg_last_ms_2) = millis();
+              id(chg_synced_2) = false; return;
+            }
             if (dsoc >= 1.0f) {
-              float dmin = (millis() - id(chg_last_ms_2)) / 60000.0f;
-              if (dmin > 0.01f) {
-                float r = dsoc / dmin;
-                if (r > 0)
-                  id(chg_rate_2) = (id(chg_rate_2) < 0) ? r
-                                                        : (0.3f * r + 0.7f * id(chg_rate_2));
+              // The reference point usually sits somewhere inside a 1 % step, so
+              // the first step is only partly measured. It only aligns the
+              // reference point to a step edge; the rate is measured from the
+              // second step on.
+              if (id(chg_synced_2)) {
+                float dmin = (millis() - id(chg_last_ms_2)) / 60000.0f;
+                if (dmin > 0.01f) {
+                  float r = dsoc / dmin;
+                  if (r > 0)
+                    id(chg_rate_2) = (id(chg_rate_2) < 0) ? r
+                                                      : (0.3f * r + 0.7f * id(chg_rate_2));
+                }
               }
+              id(chg_synced_2) = true;
               id(chg_last_soc_2) = x;
               id(chg_last_ms_2) = millis();
             }
