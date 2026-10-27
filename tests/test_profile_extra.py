@@ -292,6 +292,15 @@ def test_assist_mode_display_name_weirdojules_emtb_code():
     assert assist_mode_display_name("A100E3AAB0") == "eMTB"
 
 
+def test_assist_mode_display_name_cargo_line_code():
+    # Cargo Line drive unit BDU374Y, reported by @jaakode in issue #37.
+    assert assist_mode_display_name("A100E00009") == "CARGO"
+    # and it comes through as a named range sensor, not as a raw code
+    assert reachable_ranges({"driveUnit": {"activeAssistModes": [
+        {"name": "A100E00009", "reachableRange": 55}]}}) == [
+            {"name": "CARGO", "range_km": 55.0}]
+
+
 def test_reachable_ranges_unknown_code_kept_raw():
     assert reachable_ranges({"driveUnit": {"activeAssistModes": [
         {"name": "A100M99999", "reachableRange": 42}]}}) == [

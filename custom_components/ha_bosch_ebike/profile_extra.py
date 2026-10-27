@@ -79,6 +79,9 @@ ASSIST_MODE_NAMES: dict[str, str] = {
     # literal letter "O", and the corrected code fits the established
     # AAB0-for-eMTB pattern exactly).
     "A100E3AAB0": "eMTB",
+    # Cargo Line drive unit BDU374Y: the dedicated CARGO mode (reported by
+    # @jaakode, issue #37).
+    "A100E00009": "CARGO",
 }
 
 
