@@ -179,6 +179,12 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._bes2_serial = bes2_serial
         self._bes2_part = bes2_part
         self._initial_import_done = False
+        # While the activity list cannot be fetched (issue #95) these hold the
+        # text of the error that began the outage and when it began, None
+        # otherwise. They drive the log lines (one warning per outage, one info
+        # when it ends) and the diagnostics.
+        self._activities_error: str | None = None
+        self._activities_error_since: datetime | None = None
         # BES2 rebuilds its activity list from scratch on every poll instead of
         # merging into _all_activities, so "have I already seen this ride?" has
         # to be tracked separately there. None means "no poll has completed
@@ -1698,6 +1704,79 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             EVENT_NEW_ACTIVITY, build_new_activity_payload(activity, bike_id)
         )
 
+    @property
+    def activities_error(self) -> str | None:
+        """Why the activity list is unavailable right now, None while it is fine."""
+        return self._activities_error
+
+    @property
+    def activities_error_since(self) -> datetime | None:
+        """When the current activity list outage began, None while it is fine."""
+        return self._activities_error_since
+
+    @staticmethod
+    def _describe_fetch_error(err: Exception) -> str:
+        """One line for the log: error class, message and Bosch's own reply.
+
+        aiohttp's ClientResponseError prints as "404, message='Not Found',
+        url='...'"; api._get attaches the shortened response body as .body,
+        and that is the part that says what Bosch actually objected to.
+        """
+        text = f"{type(err).__name__}: {err}"
+        body = " ".join(str(getattr(err, "body", "") or "").split())
+        if body:
+            text += f" (Bosch replied: {body[:200]})"
+        return text
+
+    async def _fetch_activities_isolated(
+        self, fetch: Any
+    ) -> list[dict[str, Any]] | None:
+        """Run one activity-list request so that its failure cannot fail the poll.
+
+        The activity list is the one thing a poll fetches that nothing else
+        depends on: bikes, bike pass, service book, capacity testers and the
+        live-data sensors all come from other endpoints. On 2026-11-03 Bosch's
+        activity endpoint began answering 404 for every account (issue #95).
+        The request sat in the same try as get_bikes(), so every poll failed:
+        all cloud entities went unavailable, and a restart during the outage
+        left the entry stuck in "setup error, retrying" with nothing loaded.
+
+        An auth error still propagates, re-authentication is the only cure for
+        that. Anything else is remembered, logged once per outage (one warning
+        when it starts, one info when it ends) and retried on the next poll.
+        Returns None when the request failed.
+        """
+        try:
+            result = await fetch()
+        except AuthError:
+            raise
+        except Exception as err:  # noqa: BLE001
+            text = self._describe_fetch_error(err)
+            if self._activities_error is None:
+                self._activities_error_since = dt_util.utcnow()
+                _LOGGER.warning(
+                    "Bosch eBike: the activity list could not be fetched (%s). "
+                    "Bikes, service book and the other cloud data keep updating; "
+                    "the activities are retried on every poll and picked up as "
+                    "soon as Bosch answers again",
+                    text,
+                )
+            else:
+                _LOGGER.debug(
+                    "Bosch eBike: the activity list is still unavailable: %s", text
+                )
+            self._activities_error = text
+            return None
+        if self._activities_error is not None:
+            _LOGGER.info(
+                "Bosch eBike: the activity list is available again (it had been "
+                "failing since %s)",
+                self._activities_error_since,
+            )
+            self._activities_error = None
+            self._activities_error_since = None
+        return result
+
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch bikes and activities from Bosch API."""
         if self._system == SYSTEM_BES2:
@@ -1722,32 +1801,43 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
             if not self._initial_import_done:
                 # First run: import ALL activities
-                _LOGGER.info("Bosch eBike: Initial import — fetching all activities...")
-                imported = await self.api.get_all_activities()
-                # Stamp the untouched cloud distance before anything else
-                # ever writes to "distance" (gps_track/ble_live
-                # corrections) - _enrich_activities_with_live_data() needs
-                # a value it can trust is genuinely independent of its own
-                # corrections, not one persisted-but-stale marker like
-                # _distance_source (issue #31/#54 corroboration fix).
-                for a in imported:
-                    a["_cloud_distance_raw"] = a.get("distance")
-                # issue #57: never trust the cloud's own sort=-startTime
-                # ordering across pages - re-derive newest-first ourselves,
-                # the same defensive re-sort already used for the BES2
-                # endpoint's similarly unreliable ordering. Some accounts
-                # have been observed to have Bosch keep reporting a stale
-                # activity as "latest" indefinitely, even right after a
-                # fresh full import. Uses the exact same key as
-                # _newest_by_start_time() below, so the two never disagree
-                # on a startTime tie.
-                imported.sort(key=self._activity_sort_key, reverse=True)
-                self._all_activities = imported
-                self._initial_import_done = True
-                _LOGGER.info(
-                    "Bosch eBike: Initial import complete — %d activities loaded",
-                    len(self._all_activities),
+                if self._activities_error is None:
+                    _LOGGER.info(
+                        "Bosch eBike: Initial import — fetching all activities..."
+                    )
+                imported = await self._fetch_activities_isolated(
+                    self.api.get_all_activities
                 )
+                # None: the request failed (issue #95, already logged). The
+                # import is simply tried again on the next poll;
+                # _initial_import_done stays False, and that is what keeps the
+                # steps further down that derive persisted state from the
+                # activity list from running on an empty one.
+                if imported is not None:
+                    # Stamp the untouched cloud distance before anything else
+                    # ever writes to "distance" (gps_track/ble_live
+                    # corrections) - _enrich_activities_with_live_data() needs
+                    # a value it can trust is genuinely independent of its own
+                    # corrections, not one persisted-but-stale marker like
+                    # _distance_source (issue #31/#54 corroboration fix).
+                    for a in imported:
+                        a["_cloud_distance_raw"] = a.get("distance")
+                    # issue #57: never trust the cloud's own sort=-startTime
+                    # ordering across pages - re-derive newest-first ourselves,
+                    # the same defensive re-sort already used for the BES2
+                    # endpoint's similarly unreliable ordering. Some accounts
+                    # have been observed to have Bosch keep reporting a stale
+                    # activity as "latest" indefinitely, even right after a
+                    # fresh full import. Uses the exact same key as
+                    # _newest_by_start_time() below, so the two never disagree
+                    # on a startTime tie.
+                    imported.sort(key=self._activity_sort_key, reverse=True)
+                    self._all_activities = imported
+                    self._initial_import_done = True
+                    _LOGGER.info(
+                        "Bosch eBike: Initial import complete — %d activities loaded",
+                        len(self._all_activities),
+                    )
             else:
                 # Subsequent runs: fetch a small batch of recent activities
                 # rather than trusting a bare "latest" (limit=1) fetch -
@@ -1756,7 +1846,15 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 # for some accounts, which a single-item fetch has no way to
                 # ever notice or correct. Re-derive the true newest by
                 # comparing startTime ourselves.
-                recent = await self.api.get_recent_activities()
+                recent = await self._fetch_activities_isolated(
+                    self.api.get_recent_activities
+                )
+                if recent is None:
+                    # The request failed (issue #95, already logged). Carry on
+                    # as for a batch with nothing new: the merge below does
+                    # nothing for an empty list and leaves everything already
+                    # tracked as it is, and the next poll tries again.
+                    recent = []
                 # Same stamp as the initial import above, covering both the
                 # "latest" merge and the backfill items below (both are
                 # references into `recent`, not copies).
@@ -1965,36 +2063,50 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # Restore persisted consumption state on first run
         await self.async_load_persisted_state()
 
-        # Bike attribution via odometer-matching (only meaningful for multi-bike accounts;
-        # for single-bike accounts every activity is attributed to that bike).
-        # Runs BEFORE battery consumption tracking and live-data enrichment
-        # below, both of which need the current attribution to pick the right
-        # bike's capacity / live sensors per activity (issue #44). Getting
-        # this order wrong once already caused live enrichment to use stale
-        # attribution from the prior poll; the same applies to consumption.
-        new_attribution = self.attribute_activities_to_bikes(bikes, self._all_activities)
-        merged_attribution = merge_manual_overrides(new_attribution, self._manual_activity_bike)
-        state_changed = merged_attribution != self._activity_bike
-        if state_changed:
-            self._activity_bike = merged_attribution
+        # Everything in this block derives persisted state from the activity list,
+        # so it only runs on a poll where that list is current: the first import
+        # has succeeded AND this poll's request worked (issue #95). Before the
+        # first import _all_activities is empty, which does NOT mean "no rides";
+        # during an outage on a running instance the list is merely stale while
+        # the bike list is not. Either way the consumption tracker would move
+        # its baseline (_prev_delivered_wh, _prev_activity_ids) past rides it has
+        # not seen yet, so those rides later get no energy at all or the Wh is
+        # spread over the wrong ones, and the attribution would match odometers
+        # against a list that is missing the newest ride. The first current poll
+        # then gives the same result as before this change, when a failed poll
+        # skipped the whole block.
+        state_changed = False
+        if self._initial_import_done and self._activities_error is None:
+            # Bike attribution via odometer-matching (only meaningful for multi-bike accounts;
+            # for single-bike accounts every activity is attributed to that bike).
+            # Runs BEFORE battery consumption tracking and live-data enrichment
+            # below, both of which need the current attribution to pick the right
+            # bike's capacity / live sensors per activity (issue #44). Getting
+            # this order wrong once already caused live enrichment to use stale
+            # attribution from the prior poll; the same applies to consumption.
+            new_attribution = self.attribute_activities_to_bikes(bikes, self._all_activities)
+            merged_attribution = merge_manual_overrides(new_attribution, self._manual_activity_bike)
+            state_changed = merged_attribution != self._activity_bike
+            if state_changed:
+                self._activity_bike = merged_attribution
 
-        # Issue #47 follow-up: activities the odometer-matching above could
-        # not confidently assign to any bike, minus any the user has since
-        # manually assigned via the options flow.
-        self._unassigned_activities = compute_unassigned_activities(
-            self._all_activities, self._activity_bike, len(bikes)
-        )
+            # Issue #47 follow-up: activities the odometer-matching above could
+            # not confidently assign to any bike, minus any the user has since
+            # manually assigned via the options flow.
+            self._unassigned_activities = compute_unassigned_activities(
+                self._all_activities, self._activity_bike, len(bikes)
+            )
 
-        # Battery consumption tracking via Wh delta
-        if self._track_battery_consumption(bikes):
-            state_changed = True
+            # Battery consumption tracking via Wh delta
+            if self._track_battery_consumption(bikes):
+                state_changed = True
 
-        # Optional: override distance / consumption with live BLE values
-        # from the user-configured sensors. Replaces cloud-derived numbers
-        # for any activity where a fresh recorder sample exists at both
-        # tour start and end.
-        if await self._enrich_activities_with_live_data():
-            state_changed = True
+            # Optional: override distance / consumption with live BLE values
+            # from the user-configured sensors. Replaces cloud-derived numbers
+            # for any activity where a fresh recorder sample exists at both
+            # tour start and end.
+            if await self._enrich_activities_with_live_data():
+                state_changed = True
 
         # Service & maintenance reminders
         if self._check_service_and_maintenance(bikes):

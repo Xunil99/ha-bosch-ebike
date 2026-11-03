@@ -164,7 +164,23 @@ class BoschEBikeAPI:
                 _LOGGER.debug("401 received, refreshing token")
                 await self.refresh_access_token()
                 return await self._get(path, retry_on_401=False)
-            resp.raise_for_status()
+            if resp.status >= 400:
+                # raise_for_status() keeps only the status line, but Bosch's
+                # own reply is what tells an outage from a revoked consent or
+                # a moved endpoint (issue #95 was a bare "404 Not Found" on
+                # the activity list). Keep a short piece of it on the
+                # exception so the coordinator can put it in the log. Read it
+                # here, before raising; a failure to read must never replace
+                # the status error itself.
+                try:
+                    body = (await resp.text())[:300]
+                except Exception:  # noqa: BLE001
+                    body = ""
+                try:
+                    resp.raise_for_status()
+                except aiohttp.ClientResponseError as err:
+                    err.body = body
+                    raise
             return await resp.json()
 
     _PATH_UNRESOLVED = "__unresolved__"

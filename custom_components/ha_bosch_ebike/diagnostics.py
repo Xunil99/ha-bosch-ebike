@@ -63,6 +63,15 @@ async def async_get_config_entry_diagnostics(
     # GPS track points would be huge and contain location data.
     diag["coordinator"] = {
         "last_update_success": coordinator.last_update_success,
+        # Set while Bosch's activity list is failing (issue #95): the other
+        # cloud data keeps updating then, so last_update_success alone would
+        # look healthy.
+        "activities_error": coordinator.activities_error,
+        "activities_error_since": (
+            coordinator.activities_error_since.isoformat()
+            if coordinator.activities_error_since
+            else None
+        ),
         "battery_capacity_wh": data.get("battery_capacity_wh"),
         "bike_count": len(bikes),
         "bikes": async_redact_data(bikes, TO_REDACT),
