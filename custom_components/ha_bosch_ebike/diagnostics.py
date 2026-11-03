@@ -67,6 +67,14 @@ async def async_get_config_entry_diagnostics(
         # cloud data keeps updating then, so last_update_success alone would
         # look healthy.
         "activities_error": coordinator.activities_error,
+        # Which Digital Service Book API version answered ("v2" or "v1") and how
+        # many records each bike has: the only way to see on an instance whether
+        # the v2 first, v1 fallback logic did what it should.
+        "service_book_version": coordinator.api.service_book_version,
+        "service_record_counts": {
+            bike_id: len((records or {}).get("serviceRecords") or [])
+            for bike_id, records in (data.get("service_records") or {}).items()
+        },
         "activities_error_since": (
             coordinator.activities_error_since.isoformat()
             if coordinator.activities_error_since

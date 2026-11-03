@@ -11,6 +11,9 @@ BIKES_ENDPOINT = "/bike-profile/smart-system/v1/bikes"
 ACTIVITIES_ENDPOINT = "/activity/smart-system/v1/activities"
 BIKE_PASS_ENDPOINT = "/bike-pass/smart-system/v1/bike-passes"
 SERVICE_RECORDS_ENDPOINT = "/service-book/smart-system/v1/service-records"
+# Version 2 of the Digital Service Book API (spec 2.0.3): a superset of v1,
+# nothing removed or renamed. See BoschEBikeAPI.get_service_records.
+SERVICE_RECORDS_V2_ENDPOINT = "/service-book/smart-system/v2/service-records"
 
 CONF_SYSTEM = "system"
 SYSTEM_SMART = "smart_system"

@@ -1752,6 +1752,11 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             raise
         except Exception as err:  # noqa: BLE001
             text = self._describe_fetch_error(err)
+            # Whether the token carries the activity scopes is the first thing
+            # to ask when Bosch refuses a request that used to work (issue #95).
+            scope = getattr(self.api, "access_token_scope", None)
+            if scope:
+                text += f" [access token scope: {scope}]"
             if self._activities_error is None:
                 self._activities_error_since = dt_util.utcnow()
                 _LOGGER.warning(

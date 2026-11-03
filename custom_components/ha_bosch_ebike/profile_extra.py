@@ -269,7 +269,7 @@ def bike_label(bike: dict) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Digital Service Book — GET /service-book/smart-system/v1/service-records
+# Digital Service Book — GET /service-book/smart-system/{v2,v1}/service-records
 # ---------------------------------------------------------------------------
 
 def _newest_record(service_records: dict | None, record_type: str) -> dict | None:
@@ -283,12 +283,20 @@ def _newest_record(service_records: dict | None, record_type: str) -> dict | Non
                key=lambda r: str(_get(r, "attributes", "createdAt", default="")))
 
 
+# Record type of a dealer's battery capacity measurement. The Data Act
+# documentation names it BBP_MEASUREMENT (the v1 appendix and the v2 spec
+# alike). Up to 1.19.61 this looked for BATTERY_MEASUREMENT, a name that is in
+# neither, so the state of health sensors could never fill. Both are accepted:
+# the old name costs nothing.
+_BATTERY_MEASUREMENT_TYPES = ("BBP_MEASUREMENT", "BATTERY_MEASUREMENT")
+
+
 def battery_soh(service_records: dict | None, serial: str) -> dict | None:
-    """Newest BATTERY_MEASUREMENT for the given battery serialNumber."""
+    """Newest battery measurement record for the given battery serialNumber."""
     recs = _get(service_records, "serviceRecords", default=[]) or []
     matching = [
         r for r in recs
-        if isinstance(r, dict) and r.get("type") == "BATTERY_MEASUREMENT"
+        if isinstance(r, dict) and r.get("type") in _BATTERY_MEASUREMENT_TYPES
         and _get(r, "attributes", "details", "batteryMeasurement",
                  "battery", "serialNumber") == serial
     ]

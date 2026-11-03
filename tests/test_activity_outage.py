@@ -169,6 +169,7 @@ def act(activity_id, start):
 
 class FakeApi:
     access_token = "access"
+    access_token_scope = None
     refresh_token = "refresh"
 
     def __init__(self):
@@ -363,6 +364,27 @@ def test_the_log_carries_the_status_and_what_bosch_replied():
     assert len(warnings) == 1, warnings
     assert "404" in warnings[0] and "Not Found" in warnings[0]
     assert '{"title": "Not Found"}' in warnings[0], "Bosch's own reply is in the log"
+
+
+def test_the_warning_names_the_scope_of_the_access_token():
+    # Whether the token carries the activity scopes is the first thing to ask
+    # when Bosch refuses a request that used to work.
+    api, coord = _setup()
+    api.access_token_scope = "openid activity:summaries:read"
+    _poll(coord)
+    api.activities_error = NOT_FOUND
+    _poll(coord)
+    warning = _LOG.at(logging.WARNING)[0]
+    assert "[access token scope: openid activity:summaries:read]" in warning
+    assert "access token scope" in coord._activities_error, "and in the diagnostics text"
+
+
+def test_the_warning_has_no_scope_text_when_the_token_has_no_scope():
+    api, coord = _setup()
+    _poll(coord)
+    api.activities_error = NOT_FOUND
+    _poll(coord)
+    assert "access token scope" not in _LOG.at(logging.WARNING)[0]
 
 
 def test_a_long_outage_warns_once_and_recovery_is_reported_once():

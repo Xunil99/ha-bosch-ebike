@@ -434,8 +434,8 @@ def test_bike_label_missing_drive_unit_defaults_to_ebike():
 # Service Book — battery_soh
 # ---------------------------------------------------------------------------
 
-def _battery_record(serial, created_at, soh):
-    return {"id": serial + created_at, "type": "BATTERY_MEASUREMENT",
+def _battery_record(serial, created_at, soh, record_type="BATTERY_MEASUREMENT"):
+    return {"id": serial + created_at, "type": record_type,
             "attributes": {"createdAt": created_at,
                 "details": {"batteryMeasurement": {
                     "battery": {"serialNumber": serial, "partNumber": "PN",
@@ -471,6 +471,34 @@ def test_battery_soh_newest_created_at_wins():
         _battery_record("ABC", "2026-05-01T00:00:00Z", 80),
     ]}
     assert battery_soh(recs, "ABC")["soh_pct"] == 80
+
+
+def test_battery_soh_accepts_the_documented_bbp_measurement_type():
+    # The Data Act documentation (the v1 appendix and the v2 spec alike) names
+    # the record BBP_MEASUREMENT; 1.19.61 and earlier only looked for
+    # BATTERY_MEASUREMENT, a name that is in neither.
+    recs = {"serviceRecords": [
+        _battery_record("ABC", "2026-01-01T00:00:00Z", 90, record_type="BBP_MEASUREMENT")]}
+    assert battery_soh(recs, "ABC") == {
+        "soh_pct": 90, "measured_wh": 450, "nominal_wh": 500,
+        "full_charge_cycles": 100, "measured_at": "2026-01-01T00:00:00Z"}
+
+
+def test_battery_soh_newest_wins_across_both_type_names():
+    recs = {"serviceRecords": [
+        _battery_record("ABC", "2026-01-01T00:00:00Z", 90, record_type="BATTERY_MEASUREMENT"),
+        _battery_record("ABC", "2026-05-01T00:00:00Z", 80, record_type="BBP_MEASUREMENT"),
+        _battery_record("ABC", "2026-03-01T00:00:00Z", 85, record_type="BATTERY_MEASUREMENT"),
+    ]}
+    assert battery_soh(recs, "ABC")["soh_pct"] == 80
+
+
+def test_battery_soh_ignores_records_of_other_types():
+    recs = {"serviceRecords": [
+        _battery_record("ABC", "2026-01-01T00:00:00Z", 90, record_type="INSPECTION"),
+        _battery_record("ABC", "2026-02-01T00:00:00Z", 91, record_type="CUSTOMER_REPORT"),
+    ]}
+    assert battery_soh(recs, "ABC") is None
 
 
 # ---------------------------------------------------------------------------
