@@ -44,6 +44,7 @@ from .const import (
     CONF_BES2_PART,
 )
 from .coordinator import BoschEBikeCoordinator
+from .device_lookup import device_for_identifier
 from .profile_extra import bike_label as _bike_label
 
 _LOGGER = logging.getLogger(__name__)
@@ -269,30 +270,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # per-bike, that device has no entities left, but Home Assistant does
     # not auto-prune a device just because it lost its last entity - remove
     # it explicitly. No-op after the first run, once it no longer exists.
-    # Only remove it if it is genuinely empty: async_get_device/
-    # async_remove_device match by identifiers alone with no ownership
-    # check, and HA devices can in principle be shared across config
-    # entries/integrations (manual "combine devices"), so double-check no
-    # entity still points at it before deleting it from the registry.
+    # Only remove it if it is genuinely empty: HA devices can in principle be
+    # shared across config entries/integrations (manual "combine devices"),
+    # so double-check no entity still points at it before deleting it from
+    # the registry.
     device_registry = dr.async_get(hass)
-    ghost_identifier = (DOMAIN, entry.entry_id)
-    if hasattr(device_registry, "async_get_device_by_identifier"):
-        # HA >= 2026.8.0: ownership-scoped lookup, added alongside devices
-        # becoming shareable across config entries. async_get_device is
-        # deprecated as of this version (issue #80), so use the direct
-        # replacement here instead of the ambiguous identifier-only match.
-        ghost_device = device_registry.async_get_device_by_identifier(
-            identifier=ghost_identifier, config_entry_id=entry.entry_id
-        )
-    else:
-        # HA < 2026.8.0: async_get_device_by_identifier does not exist yet,
-        # and async_get_device is not deprecated on these versions either
-        # (the cross-config-entry device sharing it warns about was only
-        # introduced in 2026.8.0). Remove this branch once the project's
-        # minimum supported HA version reaches 2026.8.0.
-        ghost_device = device_registry.async_get_device(
-            identifiers={ghost_identifier}
-        )
+    ghost_device = device_for_identifier(
+        device_registry, (DOMAIN, entry.entry_id), entry.entry_id
+    )
     if ghost_device is not None:
         entity_registry = er.async_get(hass)
         if not er.async_entries_for_device(entity_registry, ghost_device.id):
@@ -419,7 +404,7 @@ async def ws_list_instances(
             # editors, since they all resolve their options through this
             # same WS call. Mirrors BoschEBikeOptionsFlowHandler's
             # _display_name_for_bike() in config_flow.py.
-            device = device_registry.async_get_device(identifiers={(DOMAIN, bid)})
+            device = device_for_identifier(device_registry, (DOMAIN, bid), entry_id)
             if device and (device.name_by_user or device.name):
                 label = device.name_by_user or device.name
             else:

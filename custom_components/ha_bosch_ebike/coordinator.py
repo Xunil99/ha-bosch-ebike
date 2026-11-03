@@ -1714,6 +1714,19 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """When the current activity list outage began, None while it is fine."""
         return self._activities_error_since
 
+    @property
+    def activities_unknown(self) -> bool:
+        """True while the activity list fails and none was loaded in this run.
+
+        An empty list then means "not loaded", not "no rides", so the ride
+        counters read unknown instead of 0. A 0 on a total_increasing sensor
+        makes the long term statistics add every ride again once Bosch
+        answers (issue #95). After one successful import the counters keep
+        their last value through an outage, and an account that really has no
+        rides still reads 0.
+        """
+        return self._activities_error is not None and not self._initial_import_done
+
     @staticmethod
     def _describe_fetch_error(err: Exception) -> str:
         """One line for the log: error class, message and Bosch's own reply.

@@ -138,6 +138,7 @@ _WANTED = _STATIC | {
     "_async_update_data",
     "_fetch_activities_isolated",
     "_recheck_recent_activity_distances",
+    "activities_unknown",
 }
 _nodes = [_method(name) for name in sorted(_WANTED)]
 for _node in _nodes:
@@ -236,6 +237,7 @@ class FakeCoordinator:
     _async_update_data = _ns["_async_update_data"]
     _fetch_activities_isolated = _ns["_fetch_activities_isolated"]
     _recheck_recent_activity_distances = _ns["_recheck_recent_activity_distances"]
+    activities_unknown = property(_ns["activities_unknown"])
     _describe_fetch_error = staticmethod(_ns["_describe_fetch_error"])
     _activity_sort_key = staticmethod(_ns["_activity_sort_key"])
     _newest_by_start_time = staticmethod(_ns["_newest_by_start_time"])
@@ -523,6 +525,77 @@ def test_the_import_failing_is_logged_once_and_the_import_message_is_not_repeate
     assert len(_LOG.at(logging.WARNING)) == 1
     announcements = [m for m in _LOG.at(logging.INFO) if "Initial import" in m]
     assert len(announcements) == 1, announcements
+
+
+# --- the ride counters during an outage ---------------------------------------------
+#
+# An empty list after a failed first import means "not loaded", not "no rides".
+# Total Rides is a total_increasing sensor: reading 0 there makes the long term
+# statistics add the whole history again as soon as Bosch answers, so
+# activities_unknown tells the sensors to read unknown instead
+# (tests/test_total_rides_outage.py covers the sensor side).
+
+
+def test_before_the_first_poll_the_counters_are_not_unknown():
+    # No outage is known yet, and eBike System 2 never sets one.
+    _, coord = _setup()
+    assert coord.activities_unknown is False
+
+
+def test_a_failing_list_before_any_import_makes_the_counters_unknown():
+    api, coord = _setup()
+    api.activities_error = NOT_FOUND
+    _poll(coord)
+    assert coord.activities_unknown is True
+
+
+def test_an_import_that_found_no_rides_is_not_unknown():
+    # An account that really has no rides keeps reading 0.
+    api, coord = _setup()
+    api.all_activities = []
+    api.recent = []
+    _poll(coord)
+    assert coord._initial_import_done is True
+    assert coord.activities_unknown is False
+
+
+def test_an_outage_after_the_import_keeps_the_counters():
+    api, coord = _setup()
+    _poll(coord)
+    api.activities_error = NOT_FOUND
+    _poll(coord)
+    assert coord._activities_error is not None
+    assert coord.activities_unknown is False, "the imported rides are still there to count"
+
+
+def test_the_counters_come_back_when_the_first_import_finally_works():
+    api, coord = _setup()
+    api.activities_error = NOT_FOUND
+    _poll(coord)
+    assert coord.activities_unknown is True
+    api.activities_error = None
+    _poll(coord)
+    assert coord.activities_unknown is False
+
+
+def test_ebike_system_2_can_never_reach_the_outage_flag():
+    # The aggregate sensors exist for eBike System 2 too. Its poll
+    # (_update_bes2) loads its trips on every run and neither uses the
+    # isolating helper nor sets the flags; if it did, its ride totals would
+    # turn unknown during an outage although the trips are loaded.
+    touched = {
+        node.attr
+        for node in ast.walk(_method("_update_bes2"))
+        if isinstance(node, ast.Attribute)
+        and node.attr
+        in {
+            "_fetch_activities_isolated",
+            "_activities_error",
+            "_activities_error_since",
+            "_initial_import_done",
+        }
+    }
+    assert not touched, f"_update_bes2 now touches the Smart System outage state: {touched}"
 
 
 # --- what must keep failing -------------------------------------------------------

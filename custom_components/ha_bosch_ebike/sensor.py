@@ -1094,6 +1094,8 @@ class BoschEBikeSensor(CoordinatorEntity[BoschEBikeCoordinator], SensorEntity):
     def native_value(self) -> Any:
         """Return the sensor value."""
         if self.entity_description.is_aggregate:
+            if self.coordinator.activities_unknown:
+                return None
             activities = _activities_for_bike(self.coordinator.data, self._bike_id)
             return self.entity_description.value_fn(activities)
 

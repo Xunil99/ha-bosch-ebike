@@ -50,6 +50,7 @@ from .const import (
     FLOW_PORTAL_URL,
     BES2_PORTAL_URL,
 )
+from .device_lookup import device_for_identifier
 from .profile_extra import bike_label
 
 _LOGGER = logging.getLogger(__name__)
@@ -314,7 +315,9 @@ class BoschEBikeOptionsFlowHandler(OptionsFlow):
         or was never renamed.
         """
         registry = dr.async_get(self.hass)
-        device = registry.async_get_device(identifiers={(DOMAIN, bike["id"])})
+        device = device_for_identifier(
+            registry, (DOMAIN, bike["id"]), self.config_entry.entry_id
+        )
         if device and (device.name_by_user or device.name):
             return device.name_by_user or device.name
         return bike_label(bike)
