@@ -563,6 +563,7 @@ Na Lovelace kartě je v ovládání mapy přepínač 📚. Když je aktivní, hl
 | Po nastavení se neobjeví žádné entity | Aktivuj přepínač sdílení dat v eBike Manageru (krok 5) |
 | BES2: hlášen úspěch, ale 0 kol | Aktivuj sdílení dat přes odkaz pro eBike Connect výše |
 | „Client not found“ při přihlašování | Použij „Service aktivieren“ v eBike Manageru (krok 4) a zkontroluj Client-ID na překlepy/mezery |
+| „Nastavení se nezdařilo, bude se zkoušet znovu“ po restartu, nebo Client-ID u Bosch už neexistuje | Od v1.19.64 Home Assistant vyzve k novému přihlášení (Nastavení → Zařízení a služby → Bosch eBike). Tam lze Client-ID změnit: pokud aplikace na portálu už neexistuje, nejdřív zaregistruj novou aplikaci (krok 1) a zadej její Client-ID. Entity a nastavení zůstanou zachovány |
 | „Invalid state“ / návrat se nezdařil | Je v HA zapnuté „My Home Assistant“? Redirect URI v portálu musí být `https://my.home-assistant.io/redirect/oauth` |
 | „Invalid parameters are given“ při kliknutí na „Service aktivieren“, nebo „Invalid parameter: redirect_uri“ od Bosch při autorizaci | Nemáš prohozené Redirect URI a Login URL v portálu Bosch? Zkontroluj krok 1 - obojí jsou adresy `my.home-assistant.io`, které vypadají podobně; každá hodnota musí být v poli s odpovídajícím názvem |
 | Najeté kilometry jsou nerealisticky vysoké | Odometr se dodává v metrech a automaticky se přepočítává na km |

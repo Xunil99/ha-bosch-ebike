@@ -573,6 +573,7 @@ En la tarjeta Lovelace hay un interruptor 📚 en los controles del mapa. Si est
 | Sin entidades tras la configuración | Activar el interruptor de compartición de datos en el eBike Manager (paso 5) |
 | BES2: se notifica éxito, pero 0 bicis | Activar la compartición de datos mediante el enlace de eBike Connect indicado arriba |
 | "Cliente no encontrado" al iniciar sesión | Usar "Service aktivieren" en el eBike Manager (paso 4) y comprobar errores tipográficos/espacios en el Client-ID |
+| "Error de configuración, se volverá a intentar" tras un reinicio, o el Client-ID ya no existe en Bosch | Desde v1.19.64 Home Assistant pide volver a iniciar sesión (Ajustes → Dispositivos y servicios → Bosch eBike). Allí se puede cambiar el Client-ID: si la app ya no existe en el portal, registra primero una nueva app (paso 1) e introduce su Client-ID. Las entidades y los ajustes se conservan |
 | "Invalid state" / falla el retorno | ¿Está "My Home Assistant" activado en HA? La Redirect URI en el portal debe ser `https://my.home-assistant.io/redirect/oauth` |
 | "Invalid parameters are given" al hacer clic en "Service aktivieren", o "Invalid parameter: redirect_uri" de Bosch al autorizar | ¿Has intercambiado Redirect URI y Login URL en el portal de Bosch? Revisa el paso 1 - ambas son direcciones `my.home-assistant.io` y se parecen; cada valor debe ir en el campo con el nombre correspondiente |
 | Kilometraje irrealmente alto | El odómetro se entrega en metros y se convierte automáticamente a km |

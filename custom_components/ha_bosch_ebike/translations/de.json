@@ -18,8 +18,14 @@
       },
       "reauth_confirm": {
         "title": "Bosch eBike neu anmelden",
-        "description": "Deine Bosch-Anmeldung ist abgelaufen. Klicke auf **Bestätigen**, um dich erneut anzumelden. Stelle sicher, dass deine Client-ID im [Flow Portal]({portal_url}) noch aktiv ist."
+        "description": "Deine Bosch-Anmeldung ist abgelaufen. Klicke auf **OK**, um dich erneut anzumelden. Stelle sicher, dass deine Client-ID im [Flow Portal]({portal_url}) noch aktiv ist.\n\nZeigt Bosch bei der Anmeldung „Client not found“, gibt es die App nicht mehr. Lege im Portal eine neue App an (Schritt 1 der README) und trage unten ihre neue Client-ID ein. Deine Entitäten und Einstellungen bleiben erhalten.",
+        "data": {
+          "client_id": "Client-ID"
+        }
       }
+    },
+    "error": {
+      "already_configured": "Diese Client-ID wird bereits von einem anderen Bosch-eBike-Eintrag verwendet."
     },
     "abort": {
       "already_configured": "Diese Client-ID ist bereits eingerichtet.",

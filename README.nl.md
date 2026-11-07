@@ -563,6 +563,7 @@ Op de Lovelace-kaart zit een 📚-toggle in de kaartbediening. Is die actief, da
 | Geen entiteiten na het instellen | De gegevensdeling-schakelaar in de eBike Manager activeren (stap 5) |
 | BES2: succes gemeld, maar 0 fietsen | Gegevensdeling activeren via de eBike Connect-link hierboven |
 | "Client niet gevonden" bij het inloggen | "Service aktivieren" in de eBike Manager gebruiken (stap 4) en de Client-ID controleren op typefouten/spaties |
+| "Instellen mislukt, wordt opnieuw geprobeerd" na een herstart, of de Client-ID bestaat niet meer bij Bosch | Vanaf v1.19.64 vraagt Home Assistant om opnieuw in te loggen (Instellingen → Apparaten & diensten → Bosch eBike). Daar kun je de Client-ID aanpassen: bestaat de app niet meer in het portaal, registreer dan eerst een nieuwe app (stap 1) en vul haar Client-ID in. Entiteiten en instellingen blijven behouden |
 | "Invalid state" / terugkeer mislukt | Is "My Home Assistant" ingeschakeld in HA? De redirect-URI in het portaal moet `https://my.home-assistant.io/redirect/oauth` zijn |
 | "Invalid parameters are given" bij het klikken op "Service aktivieren", of "Invalid parameter: redirect_uri" van Bosch bij het autoriseren | Redirect URI en Login URL in het Bosch-portaal verwisseld? Controleer stap 1 - beide zijn `my.home-assistant.io`-adressen die op elkaar lijken; elke waarde moet in het veld met de bijpassende naam staan |
 | Kilometerstand onrealistisch hoog | De odometer wordt in meters geleverd en automatisch omgerekend naar km |

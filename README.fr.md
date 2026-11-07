@@ -575,6 +575,7 @@ Sur la carte Lovelace, il y a une bascule 📚 dans les commandes de la carte. Q
 | Pas d'entités après la configuration | Activer l'interrupteur de partage de données dans l'eBike Manager (étape 5) |
 | BES2 : succès signalé, mais 0 vélo | Activer le partage de données via le lien eBike Connect ci-dessus |
 | « Client non trouvé » à la connexion | Utiliser « Service aktivieren » dans l'eBike Manager (étape 4) et vérifier les fautes de frappe/espaces du Client-ID |
+| « Échec de la configuration, nouvel essai » après un redémarrage, ou le Client-ID n'existe plus chez Bosch | Depuis v1.19.64, Home Assistant demande de te reconnecter (Paramètres → Appareils et services → Bosch eBike). Le Client-ID peut y être modifié : si l'app n'existe plus dans le portail, enregistre d'abord une nouvelle app (étape 1) et saisis son Client-ID. Les entités et les réglages sont conservés |
 | « Invalid state » / le retour échoue | « My Home Assistant » est-il activé dans HA ? La Redirect URI dans le portail doit être `https://my.home-assistant.io/redirect/oauth` |
 | « Invalid parameters are given » en cliquant sur « Service aktivieren », ou « Invalid parameter: redirect_uri » de Bosch lors de l'autorisation | As-tu inversé Redirect URI et Login URL dans le portail Bosch ? Vérifie l'étape 1 - les deux sont des adresses `my.home-assistant.io` qui se ressemblent ; chaque valeur doit aller dans le champ portant le nom correspondant |
 | Kilométrage anormalement élevé | L'odomètre est fourni en mètres et converti automatiquement en km |

@@ -18,8 +18,14 @@
       },
       "reauth_confirm": {
         "title": "Znovu přihlásit Bosch eBike",
-        "description": "Tvoje přihlášení k Bosch vypršelo. Klikni na **Odeslat** a přihlas se znovu. Zkontroluj, že je tvoje Client-ID na portálu [Flow Portal]({portal_url}) stále aktivní."
+        "description": "Tvoje přihlášení k Bosch vypršelo. Klikni na **Odeslat** a přihlas se znovu. Zkontroluj, že je tvoje Client-ID na portálu [Flow Portal]({portal_url}) stále aktivní.\n\nPokud Bosch při přihlášení zobrazí „Client not found“, aplikace už neexistuje. Zaregistruj na portálu novou aplikaci (krok 1 README) a níže zadej její novou Client-ID. Tvoje entity a nastavení zůstanou zachovány.",
+        "data": {
+          "client_id": "Client-ID"
+        }
       }
+    },
+    "error": {
+      "already_configured": "Toto Client-ID už používá jiný záznam Bosch eBike."
     },
     "abort": {
       "already_configured": "Toto Client-ID je již nakonfigurováno.",

@@ -18,8 +18,14 @@
       },
       "reauth_confirm": {
         "title": "Re-authenticate Bosch eBike",
-        "description": "Your Bosch login has expired. Click **Submit** to sign in again. Make sure your Client-ID is still active in the [Flow Portal]({portal_url})."
+        "description": "Your Bosch login has expired. Click **Submit** to sign in again. Make sure your Client-ID is still active in the [Flow Portal]({portal_url}).\n\nIf Bosch shows \"Client not found\" at the login, the app no longer exists. Register a new app in the portal (step 1 of the README) and enter its new Client-ID below. Your entities and settings stay as they are.",
+        "data": {
+          "client_id": "Client-ID"
+        }
       }
+    },
+    "error": {
+      "already_configured": "This Client-ID is already used by another Bosch eBike entry."
     },
     "abort": {
       "already_configured": "This Client-ID is already configured.",

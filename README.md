@@ -800,6 +800,7 @@ Auf der Lovelace-Karte gibt es einen 🌦️-Toggle in den Karten-Steuerelemente
 | Keine Entities nach Einrichtung | Datenfreigabe-Toggle im eBike Manager aktivieren (Schritt 5) |
 | BES2: Erfolg gemeldet, aber 0 Bikes | Datenfreigabe über den eBike-Connect-Link aktivieren, siehe Abschnitt „eBike System 2 (BES2) einrichten" |
 | „Client nicht gefunden" beim Login | „Service aktivieren" im eBike Manager nutzen (Schritt 4) und Client-ID auf Tippfehler/Leerzeichen prüfen |
+| „Einrichtungsfehler, wird erneut versucht“ nach einem Neustart, oder die Client-ID existiert bei Bosch nicht mehr | Ab v1.19.64 fordert Home Assistant zur erneuten Anmeldung auf (Einstellungen → Geräte & Dienste → Bosch eBike). Dort lässt sich die Client-ID ändern: Gibt es die App im Portal nicht mehr, zuerst eine neue App anlegen (Schritt 1) und ihre Client-ID eintragen. Entitäten und Einstellungen bleiben erhalten |
 | „Invalid state" / Rücksprung schlägt fehl | „My Home Assistant" in HA aktiviert? Redirect-URI im Portal muss `https://my.home-assistant.io/redirect/oauth` sein |
 | „Invalid parameters are given" beim Klick auf „Service aktivieren", oder „Invalid parameter: redirect_uri" von Bosch beim Autorisieren | Redirect URI und Login URL im Bosch-Portal vertauscht? Prüfe Schritt 1 - beide sind `my.home-assistant.io`-Adressen und sehen ähnlich aus, die Werte müssen exakt im Feld mit dem passenden Namen stehen |
 | Kilometerstand unrealistisch hoch | Der Odometer wird in Metern geliefert und automatisch in km umgerechnet |
@@ -1700,6 +1701,7 @@ The Lovelace card has a 🌦️ toggle in the map controls. When enabled, the ca
 | No entities after setup | Activate the data-sharing toggle in the eBike Manager (step 5) |
 | BES2: success reported, but 0 bikes | Activate data sharing via the eBike Connect link, see "Setting up eBike System 2 (BES2)" |
 | "Client not found" during login | Use "Service aktivieren" in the eBike Manager (step 4) and check the Client-ID for typos/spaces |
+| "Failed setup, will retry" after a restart, or the Client-ID no longer exists at Bosch | From v1.19.64 Home Assistant asks you to sign in again (Settings → Devices & Services → Bosch eBike). The Client-ID can be changed there: if the app no longer exists in the portal, register a new app first (step 1) and enter its Client-ID. Entities and settings are kept |
 | "Invalid state" / redirect back fails | Is "My Home Assistant" enabled in HA? The portal redirect URI must be `https://my.home-assistant.io/redirect/oauth` |
 | "Invalid parameters are given" when clicking "Service aktivieren", or "Invalid parameter: redirect_uri" from Bosch during authorize | Did you swap Redirect URI and Login URL in the Bosch portal? Check step 1 - both are `my.home-assistant.io` addresses and look similar; each value must go in the field with the matching name |
 | Odometer unrealistically high | The odometer is delivered in meters and automatically converted to km |

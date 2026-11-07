@@ -160,15 +160,46 @@ class BoschEBikeConfigFlow(AbstractOAuth2FlowHandler, domain=DOMAIN):
     async def async_step_reauth_confirm(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Confirm re-auth, then re-run the OAuth login with the stored Client-ID."""
-        if user_input is None:
-            return self.async_show_form(
-                step_id="reauth_confirm",
-                description_placeholders={"portal_url": self._portal_url},
-            )
-        if self._client_id:
-            self._register_impl(self._client_id)
-        return await self.async_step_pick_implementation()
+        """Confirm re-auth, then re-run the OAuth login with the Client-ID shown.
+
+        The stored Client-ID is offered and can be replaced. That matters when
+        Bosch no longer knows the app ("Client not found" at the login, issue
+        #98): the user registers a new app in the portal and continues with its
+        Client-ID, and the entry keeps all its entities.
+        """
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            client_id = (user_input.get(CONF_CLIENT_ID) or "").strip() or (
+                self._client_id or ""
+            ).strip()
+            if client_id and self._used_by_another_entry(client_id):
+                errors["base"] = "already_configured"
+            elif client_id:
+                self._client_id = client_id
+                self._register_impl(client_id)
+                return await self.async_step_pick_implementation()
+        suggested = (user_input or {}).get(CONF_CLIENT_ID, self._client_id or "")
+        return self.async_show_form(
+            step_id="reauth_confirm",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(
+                        CONF_CLIENT_ID, description={"suggested_value": suggested}
+                    ): str
+                }
+            ),
+            errors=errors,
+            description_placeholders={"portal_url": self._portal_url},
+        )
+
+    def _used_by_another_entry(self, client_id: str) -> bool:
+        """Whether another entry of this integration already uses the Client-ID."""
+        own_entry_id = self._get_reauth_entry().entry_id
+        return any(
+            entry.entry_id != own_entry_id
+            and client_id in (entry.unique_id, entry.data.get(CONF_CLIENT_ID))
+            for entry in self.hass.config_entries.async_entries(DOMAIN)
+        )
 
     def _register_impl(self, client_id: str) -> None:
         """Register a fresh PKCE implementation for the given Client-ID.
@@ -202,10 +233,16 @@ class BoschEBikeConfigFlow(AbstractOAuth2FlowHandler, domain=DOMAIN):
             "refresh_token": token.get("refresh_token"),
         }
 
-        # Re-auth: update the existing entry in place instead of creating a new one.
+        # Re-auth: update the existing entry in place instead of creating a new
+        # one. The new values are merged over the old data (data= alone would
+        # replace everything else stored there), and the unique id follows the
+        # Client-ID, which the user may have replaced.
         if self.source == SOURCE_REAUTH:
+            reauth_entry = self._get_reauth_entry()
             return self.async_update_reload_and_abort(
-                self._get_reauth_entry(), data=entry_data
+                reauth_entry,
+                unique_id=self._client_id,
+                data={**reauth_entry.data, **entry_data},
             )
 
         return self.async_create_entry(title="Bosch eBike", data=entry_data)

@@ -18,8 +18,14 @@
       },
       "reauth_confirm": {
         "title": "Bosch eBike opnieuw aanmelden",
-        "description": "Je Bosch-login is verlopen. Klik op **Verzenden** om opnieuw in te loggen. Zorg dat je Client-ID nog actief is in het [Flow-portaal]({portal_url})."
+        "description": "Je Bosch-login is verlopen. Klik op **Verzenden** om opnieuw in te loggen. Zorg dat je Client-ID nog actief is in het [Flow-portaal]({portal_url}).\n\nToont Bosch bij het inloggen „Client not found“, dan bestaat de app niet meer. Registreer in het portaal een nieuwe app (stap 1 van de README) en vul hieronder de nieuwe Client-ID in. Je entiteiten en instellingen blijven behouden.",
+        "data": {
+          "client_id": "Client-ID"
+        }
       }
+    },
+    "error": {
+      "already_configured": "Deze Client-ID wordt al gebruikt door een ander Bosch eBike-item."
     },
     "abort": {
       "already_configured": "Deze Client-ID is al geconfigureerd.",

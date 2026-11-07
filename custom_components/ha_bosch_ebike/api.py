@@ -32,6 +32,7 @@ from .const import (
     DRIVE_UNITS_PATH_CANDIDATES,
 )
 
+from .oauth_error import rejection_reason
 from .token_info import token_scope
 
 _LOGGER = logging.getLogger(__name__)
@@ -144,6 +145,21 @@ class BoschEBikeAPI:
             "refresh_token": self._refresh_token,
         }
         async with self._session.post(TOKEN_URL, data=data, timeout=self._TIMEOUT) as resp:
+            if resp.status >= 400:
+                # A refused login is not a failed request: the stored refresh
+                # token, or the Client-ID itself, is no longer valid and only a
+                # new sign-in helps. As an AuthError this starts the
+                # re-authentication; as the ClientResponseError that
+                # raise_for_status() makes of it, the setup retried forever
+                # without ever asking (issue #98). Read the reply before
+                # raising; failing to read it must not hide the status.
+                try:
+                    body = (await resp.text())[:500]
+                except Exception:  # noqa: BLE001
+                    body = ""
+                reason = rejection_reason(resp.status, body)
+                if reason is not None:
+                    raise AuthError(f"Bosch rejected the refresh token ({reason})")
             resp.raise_for_status()
             tokens = await resp.json()
         self._access_token = tokens["access_token"]

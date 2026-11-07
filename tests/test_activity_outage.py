@@ -626,6 +626,24 @@ def test_an_auth_error_during_the_first_import_asks_for_reauthentication_too():
         raise AssertionError("an auth error must not be mistaken for an outage")
 
 
+def test_a_rejected_login_on_the_bike_list_asks_for_reauthentication():
+    # Issue #98: refresh_access_token() now raises AuthError when Bosch rejects
+    # the refresh token or the Client-ID. The poll has to turn that into the
+    # request to sign in again, on a running instance and on the first poll
+    # after a restart (which used to end in "setup error, will retry").
+    for poll_before in (False, True):
+        api, coord = _setup()
+        if poll_before:
+            _poll(coord)
+        api.bikes_error = AuthError("Bosch rejected the refresh token (invalid_client)")
+        try:
+            _poll(coord)
+        except ConfigEntryAuthFailed as err:
+            assert "invalid_client" in str(err)
+        else:
+            raise AssertionError("a rejected login must ask for a new sign-in")
+
+
 def test_a_failing_bike_list_still_fails_the_update():
     # Without bikes there is nothing to show; only the activity list is optional.
     api, coord = _setup()
