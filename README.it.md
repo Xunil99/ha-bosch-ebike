@@ -5,13 +5,13 @@
 
 > [Deutsch](README.md) | [English](README.md#english) | [Nederlands](README.nl.md) | [Français](README.fr.md) | **Italiano** | [Español](README.es.md) | [Čeština](README.cs.md)
 
-> **⚠️ Nota di aggiornamento (da v1.17.6):** La cartella dell'integrazione ora si chiama `ha_bosch_ebike` (prima `bosch_ebike`). La tua configurazione, i dispositivi e le impostazioni restano invariati. Se dopo l'aggiornamento HACS sono presenti **entrambe** le cartelle in `config/custom_components/`, elimina una volta la vecchia `bosch_ebike` e riavvia Home Assistant.
+> **⚠️ Nota di aggiornamento (da v1.17.6):** La cartella dell'integrazione ora si chiama `ha_bosch_ebike` (prima `bosch_ebike`). La tua configurazione, i dispositivi e le impostazioni restano invariati. Se dopo l'aggiornamento (tramite HACS o Marketplace) sono presenti **entrambe** le cartelle in `config/custom_components/`, elimina una volta la vecchia `bosch_ebike` e riavvia Home Assistant.
 
 > ### ⚠️ Requisito regionale
 > Questa integrazione funziona **esclusivamente con un account Bosch SingleKey-ID registrato all'interno dell'UE**. Utilizza l'API ufficiale Bosch Data Act, la cui disponibilità è limitata agli account UE. Gli account di altre regioni vengono rifiutati dall'endpoint API e l'integrazione non può autenticarsi.
 
 > ### 🔌 Veri dati live via Bluetooth (smart system v19+)
-> Oltre all'integrazione HACS, questo repo contiene anche una **bridge BLE ESPHome** che trasforma un ESP32 in un ponte verso il **Bosch eBike Live Data Interface**. In questo modo SoC della batteria, velocità, chilometraggio & co. arrivano in tempo reale in Home Assistant. Da poco è disponibile anche una **bridge doppia**: un singolo ESP32 si collega così contemporaneamente a due eBike Bosch.
+> Oltre all'integrazione, questo repo contiene anche una **bridge BLE ESPHome** che trasforma un ESP32 in un ponte verso il **Bosch eBike Live Data Interface**. In questo modo SoC della batteria, velocità, chilometraggio & co. arrivano in tempo reale in Home Assistant. Da poco è disponibile anche una **bridge doppia**: un singolo ESP32 si collega così contemporaneamente a due eBike Bosch.
 >
 > 🚀 **Flash senza installare ESPHome**: collega un ESP32 (o ESP32-C3, ad es. "C3 Mini") via USB, apri in Chrome / Edge **[https://xunil99.github.io/ha-bosch-ebike/](https://xunil99.github.io/ha-bosch-ebike/)** e clicca su *Install*. L'installer riconosce automaticamente il chip e flasha il firmware adatto (inclusa la variante bridge doppia). La configurazione Wi-Fi avviene nello stesso passaggio nel browser. Guida completa (DE/EN) incl. abbinamento tramite l'app Flow: [`esphome/`](https://github.com/Xunil99/ha-bosch-ebike/tree/main/esphome).
 >
@@ -125,7 +125,7 @@ Copia la **Client-ID** – ti servirà tra poco.
 
 #### Passo 3: installare l'integrazione in Home Assistant
 
-Installa l'integrazione tramite **HACS** (vedi la sezione più sotto) e riavvia Home Assistant. Solo dopo il link di autorizzazione dell'eBike Manager può aprire il flusso di configurazione.
+Installa l'integrazione tramite il **Marketplace** (da Home Assistant 2026.11, sostituisce HACS) oppure tramite **HACS** (fino alla 2026.10), vedi la sezione più sotto, e riavvia Home Assistant. Solo dopo il link di autorizzazione dell'eBike Manager può aprire il flusso di configurazione.
 
 #### Passo 4: configurare l'integrazione (tramite "Service aktivieren")
 
@@ -186,9 +186,21 @@ L'integrazione include una card Lovelace interattiva per visualizzare le tue tra
 
 > **Nota:** Se dopo un aggiornamento la card non viene visualizzata correttamente, svuota la cache del browser con `Ctrl+Shift+R` (hard reload).
 
-> **Aggiornamento HACS per le card:** Tutte e quattro le card Lovelace (Map, Heatmap, Calendar, Dashboard) si trovano in un unico file JS (`bosch-ebike-map-card.js`) e vengono aggiornate automaticamente insieme all'integrazione. Dopo un aggiornamento di versione da HACS esegui un hard reload della cache del browser, altrimenti il selettore delle card potrebbe non mostrare ancora una nuova card.
+> **Aggiornamento delle card (HACS o Marketplace):** Tutte e quattro le card Lovelace (Map, Heatmap, Calendar, Dashboard) si trovano in un unico file JS (`bosch-ebike-map-card.js`) e vengono aggiornate automaticamente insieme all'integrazione. Dopo un aggiornamento di versione tramite HACS o Marketplace esegui un hard reload della cache del browser, altrimenti il selettore delle card potrebbe non mostrare ancora una nuova card.
 
-#### Installazione tramite HACS (alternativa)
+#### Installazione tramite Marketplace o HACS (alternativa)
+
+**Manualmente nel Marketplace** (da Home Assistant 2026.11, sostituisce HACS):
+
+1. Apri **Impostazioni → Marketplace**. Alla prima apertura devi accettare l'avviso.
+2. Clicca in alto a destra su **Aggiungi dal collegamento**
+3. Inserisci `https://github.com/Xunil99/ha-bosch-ebike` in **Collegamento GitHub** e clicca su **Aggiungi**. Serve una connessione a GitHub, il Marketplace la richiede.
+4. Se il **Tipo** non viene riconosciuto, scegli **Integrazione** e clicca di nuovo su **Aggiungi**
+5. Apri il repository nel Marketplace, clicca su **Installa** e riavvia Home Assistant
+
+Se avevi installato l'integrazione con HACS: al primo avvio con Home Assistant 2026.11 il Marketplace rileva automaticamente i tuoi contenuti HACS, aggiornamenti inclusi, e HACS viene rimosso.
+
+**Manualmente con HACS** (Home Assistant fino alla 2026.10):
 
 1. Apri HACS in Home Assistant
 2. Clicca su **"Repository personalizzati"** (tre puntini in alto a destra)
@@ -429,6 +441,8 @@ bike_id: bike-uuid-1
 
 Fasce di colore per giorno: vuoto, 1-10 km, 10-25 km, 25-50 km, 50+ km. I colori provengono dalle variabili del tema HA: i temi chiari assomigliano a GitHub light, in modalità scura viene caricata automaticamente la palette scura adatta.
 
+> **Progetti correlati:** Vuoi altre statistiche? [ebike-cards](https://github.com/JulianHock/ebike-cards) di [@JulianHock](https://github.com/JulianHock) completa queste card con statistiche delle uscite per settimana, mese o anno (anche tempo di guida e calorie), il confronto tra più bici, i trick per bici, l'ultima uscita, i record e un obiettivo annuale. Le card richiedono solo questa integrazione, si installano tramite Marketplace o HACS come repository personalizzato (categoria Dashboard) e per ora sono etichettate in tedesco. [Apri nel Marketplace o in HACS](https://my.home-assistant.io/redirect/hacs_repository/?owner=JulianHock&repository=ebike-cards&category=plugin)
+
 ### Mappa 3D – inseguimento chase-cam con slider temporale e posizione del sole
 
 La card `bosch-ebike-3d-map-card` è una mappa parallela alla classica mappa 2D. Si avvia con un elenco degli ultimi tour. Cliccando su un tour si apre la vista di dettaglio 3D con MapLibre e i vector tile gratuiti di OpenFreeMap: la **telecamera segue la bici in prospettiva in terza persona** ("chase-cam"), il bearing ruota in base alla direzione di marcia, pitch e zoom sono configurabili. Muovendo lo slider la telecamera segue il movimento. L'illuminazione della mappa si adatta alla posizione del sole all'ora del tour.
@@ -665,5 +679,7 @@ Licenza MIT – vedi [LICENSE](LICENSE) per i dettagli.
 ### Crediti
 
 Creato da [Volker Hauffe](https://github.com/Xunil99).
+
+**Julian ([@JulianHock](https://github.com/JulianHock)) ha creato le card complementari [ebike-cards](https://github.com/JulianHock/ebike-cards) e corretto le durate del Trick Check ([PR #93](https://github.com/Xunil99/ha-bosch-ebike/pull/93)).** Grazie!
 
 Questa integrazione utilizza l'API ufficiale [Bosch eBike Data Act](https://portal.bosch-ebike.com/data-act).

@@ -5,7 +5,7 @@
 This is a hobby project maintained by one person, without a long-term
 support branch. Security fixes are made against the latest release
 (integration and firmware alike); there's no backport policy for older
-versions. Updating to the latest release via HACS (integration) or
+versions. Updating to the latest release via the Marketplace or HACS (integration) or
 re-flashing the latest firmware build is the supported way to receive a fix.
 
 ## What counts as a security issue here

@@ -5,13 +5,13 @@
 
 > [Deutsch](README.md) | [English](README.md#english) | **Nederlands** | [Français](README.fr.md) | [Italiano](README.it.md) | [Español](README.es.md) | [Čeština](README.cs.md)
 
-> **⚠️ Update-opmerking (vanaf v1.17.6):** De integratiemap heet nu `ha_bosch_ebike` (voorheen `bosch_ebike`). Je installatie, apparaten en instellingen blijven ongewijzigd. Als na de HACS-update **beide** mappen in `config/custom_components/` staan, verwijder dan eenmalig de oude `bosch_ebike` en herstart Home Assistant.
+> **⚠️ Update-opmerking (vanaf v1.17.6):** De integratiemap heet nu `ha_bosch_ebike` (voorheen `bosch_ebike`). Je installatie, apparaten en instellingen blijven ongewijzigd. Als na de update (via HACS of de Marktplaats) **beide** mappen in `config/custom_components/` staan, verwijder dan eenmalig de oude `bosch_ebike` en herstart Home Assistant.
 
 > ### ⚠️ Regionale vereiste
 > Deze integratie werkt **uitsluitend met een Bosch SingleKey-ID-account dat binnen de EU is geregistreerd**. Ze gebruikt de officiële Bosch Data Act API, waarvan de beschikbaarheid beperkt is tot EU-accounts. Accounts uit andere regio's worden door het API-endpoint geweigerd en de integratie kan zich dan niet aanmelden.
 
 > ### 🔌 Echte live-data via Bluetooth (smart system v19+)
-> Dit repo bevat naast de HACS-integratie ook een **ESPHome-BLE-bridge** die van een ESP32 een brug naar het **Bosch eBike Live Data Interface** maakt. Daarmee stromen accu-SoC, snelheid, kilometerstand & co. in realtime naar Home Assistant. Sinds kort is er ook een **dual bridge**: één ESP32 verbindt zich daarmee gelijktijdig met twee Bosch eBikes.
+> Dit repo bevat naast de integratie ook een **ESPHome-BLE-bridge** die van een ESP32 een brug naar het **Bosch eBike Live Data Interface** maakt. Daarmee stromen accu-SoC, snelheid, kilometerstand & co. in realtime naar Home Assistant. Sinds kort is er ook een **dual bridge**: één ESP32 verbindt zich daarmee gelijktijdig met twee Bosch eBikes.
 >
 > 🚀 **Flashen zonder ESPHome-installatie**: sluit een ESP32 (of ESP32-C3, bijv. "C3 Mini") via USB aan, open in Chrome / Edge **[https://xunil99.github.io/ha-bosch-ebike/](https://xunil99.github.io/ha-bosch-ebike/)** en klik op *Install*. De installer herkent de chip automatisch en flasht de juiste firmware (ook de dual bridge-variant). De wifi-setup verloopt in dezelfde browserstap. Volledige handleiding (DE/EN) incl. koppelen via de Flow-app: [`esphome/`](https://github.com/Xunil99/ha-bosch-ebike/tree/main/esphome).
 >
@@ -125,7 +125,7 @@ Kopieer de **Client-ID** – je hebt hem zo meteen nodig.
 
 #### Stap 3: integratie installeren in Home Assistant
 
-Installeer de integratie via **HACS** (zie de sectie hieronder) en herstart Home Assistant. Pas daarna kan de vrijgave-link uit de eBike Manager de installatie-flow openen.
+Installeer de integratie via de **Marktplaats** (vanaf Home Assistant 2026.11, vervangt HACS) of via **HACS** (tot en met 2026.10), zie de sectie hieronder, en herstart Home Assistant. Pas daarna kan de vrijgave-link uit de eBike Manager de installatie-flow openen.
 
 #### Stap 4: integratie instellen (via "Service aktivieren")
 
@@ -186,9 +186,21 @@ De integratie bevat een interactieve Lovelace-kaart voor het weergeven van je GP
 
 > **Opmerking:** Wordt de kaart na een update niet correct weergegeven, leeg dan de browsercache met `Ctrl+Shift+R` (hard reload).
 
-> **HACS-update voor de kaarten:** Alle vier de Lovelace-kaarten (Map, Heatmap, Calendar, Dashboard) zitten in één JS-bestand (`bosch-ebike-map-card.js`) en worden automatisch met de integratie bijgewerkt. Voer na een versie-update vanuit HACS een hard reload van de browsercache uit, anders kan de kaartkiezer een nieuwe kaart nog niet tonen.
+> **Update van de kaarten (HACS of Marktplaats):** Alle vier de Lovelace-kaarten (Map, Heatmap, Calendar, Dashboard) zitten in één JS-bestand (`bosch-ebike-map-card.js`) en worden automatisch met de integratie bijgewerkt. Voer na een versie-update via HACS of de Marktplaats een hard reload van de browsercache uit, anders kan de kaartkiezer een nieuwe kaart nog niet tonen.
 
-#### HACS-installatie (alternatief)
+#### Installatie via Marktplaats of HACS (alternatief)
+
+**Handmatig in de Marktplaats** (vanaf Home Assistant 2026.11, vervangt HACS):
+
+1. Open **Instellingen → Marktplaats**. Bij de eerste keer moet je de waarschuwing accepteren.
+2. Klik rechtsboven op **Voeg toe via link**
+3. Vul bij **GitHub link** `https://github.com/Xunil99/ha-bosch-ebike` in en klik op **Voeg toe**. Daarvoor moet GitHub gekoppeld zijn, de Marktplaats vraagt ernaar.
+4. Wordt het **Type** niet herkend, kies dan **Integratie** en klik opnieuw op **Voeg toe**
+5. Open de repository in de Marktplaats, klik op **Installeren** en herstart Home Assistant
+
+Heb je de integratie eerder via HACS geïnstalleerd: bij de eerste start met Home Assistant 2026.11 neemt de Marktplaats je HACS-inhoud inclusief updates automatisch over en wordt HACS verwijderd.
+
+**Handmatig met HACS** (Home Assistant tot en met 2026.10):
 
 1. Open HACS in Home Assistant
 2. Klik op **"Custom repositories"** (drie puntjes rechtsboven)
@@ -420,6 +432,8 @@ bike_id: bike-uuid-1
 ```
 
 Kleurklassen per dag: leeg, 1-10 km, 10-25 km, 25-50 km, 50+ km. De kleuren komen uit de HA-theme-variabelen; lichte thema's ogen als GitHub-light, in donkere modus wordt automatisch het passende donkere palet geladen.
+
+> **Verwante projecten:** Nog meer statistieken? [ebike-cards](https://github.com/JulianHock/ebike-cards) van [@JulianHock](https://github.com/JulianHock) vult deze kaarten aan met een ritstatistiek per week, maand of jaar (ook rijtijd en calorieën), een vergelijking van meerdere fietsen, tricks per fiets, de laatste rit, records en een jaardoel. De kaarten hebben alleen deze integratie nodig, worden via de Marktplaats of HACS als aangepaste repository (categorie Dashboard) geïnstalleerd en zijn voorlopig in het Duits gelabeld. [Openen in de Marktplaats of HACS](https://my.home-assistant.io/redirect/hacs_repository/?owner=JulianHock&repository=ebike-cards&category=plugin)
 
 ### 3D-kaart – chase-cam-volgen met tijdschuif en zonnestand
 
@@ -657,5 +671,7 @@ MIT-licentie – zie [LICENSE](LICENSE) voor details.
 ### Credits
 
 Gemaakt door [Volker Hauffe](https://github.com/Xunil99).
+
+**Julian ([@JulianHock](https://github.com/JulianHock)) heeft de aanvullende dashboardkaarten [ebike-cards](https://github.com/JulianHock/ebike-cards) gebouwd en de duur in de Trick Check gecorrigeerd ([PR #93](https://github.com/Xunil99/ha-bosch-ebike/pull/93)).** Bedankt!
 
 Deze integratie gebruikt de officiële [Bosch eBike Data Act API](https://portal.bosch-ebike.com/data-act).

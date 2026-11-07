@@ -5,13 +5,13 @@
 
 > [Deutsch](README.md) | [English](README.md#english) | [Nederlands](README.nl.md) | [Français](README.fr.md) | [Italiano](README.it.md) | [Español](README.es.md) | **Čeština**
 
-> **⚠️ Poznámka k aktualizaci (od v1.17.6):** Složka integrace se nyní jmenuje `ha_bosch_ebike` (dříve `bosch_ebike`). Tvoje instalace, zařízení i nastavení zůstávají beze změny. Pokud po aktualizaci přes HACS existují v `config/custom_components/` **obě** složky, smaž jednorázově tu starou `bosch_ebike` a restartuj Home Assistant.
+> **⚠️ Poznámka k aktualizaci (od v1.17.6):** Složka integrace se nyní jmenuje `ha_bosch_ebike` (dříve `bosch_ebike`). Tvoje instalace, zařízení i nastavení zůstávají beze změny. Pokud po aktualizaci (přes HACS nebo Marketplace) existují v `config/custom_components/` **obě** složky, smaž jednorázově tu starou `bosch_ebike` a restartuj Home Assistant.
 
 > ### ⚠️ Regionální požadavek
 > Tato integrace funguje **výhradně s účtem Bosch SingleKey ID registrovaným v rámci EU**. Používá oficiální Bosch Data Act API, jehož dostupnost je omezena na účty z EU. Účty z jiných regionů koncový bod API odmítne a integrace se pak nedokáže přihlásit.
 
 > ### 🔌 Skutečná živá data přes Bluetooth (smart system v19+)
-> Tento repozitář obsahuje kromě integrace pro HACS také **ESPHome BLE bridge**, který z ESP32 udělá bridge k **Bosch eBike Live Data Interface**. Díky tomu proudí stav nabití baterie, rychlost, najeté kilometry a spol. v reálném čase do Home Assistantu. Nově je k dispozici i **dual bridge**, u kterého se jeden ESP32 připojí současně ke dvěma Bosch eBikes.
+> Tento repozitář obsahuje kromě integrace také **ESPHome BLE bridge**, který z ESP32 udělá bridge k **Bosch eBike Live Data Interface**. Díky tomu proudí stav nabití baterie, rychlost, najeté kilometry a spol. v reálném čase do Home Assistantu. Nově je k dispozici i **dual bridge**, u kterého se jeden ESP32 připojí současně ke dvěma Bosch eBikes.
 >
 > 🚀 **Flashování bez instalace ESPHome**: připoj ESP32 (nebo ESP32-C3, např. „C3 Mini“) přes USB, otevři v prohlížeči Chrome / Edge **[https://xunil99.github.io/ha-bosch-ebike/](https://xunil99.github.io/ha-bosch-ebike/)** a klikni na *Install*. Instalátor rozpozná čip automaticky a nahraje správný firmware (včetně varianty dual bridge). Nastavení Wi-Fi proběhne ve stejném kroku v prohlížeči. Kompletní návod (DE/EN) včetně párování přes aplikaci Flow: [`esphome/`](https://github.com/Xunil99/ha-bosch-ebike/tree/main/esphome).
 >
@@ -125,7 +125,7 @@ Zkopíruj si **Client-ID** – za chvíli ho budeš potřebovat.
 
 #### Krok 3: instalace integrace do Home Assistant
 
-Nainstaluj integraci přes **HACS** (viz sekce níže) a restartuj Home Assistant. Teprve potom může odkaz na uvolnění dat z eBike Manageru otevřít instalační flow.
+Nainstaluj integraci přes **Marketplace** (od Home Assistant 2026.11, nahrazuje HACS) nebo přes **HACS** (do verze 2026.10), viz sekce níže, a restartuj Home Assistant. Teprve potom může odkaz na uvolnění dat z eBike Manageru otevřít instalační flow.
 
 #### Krok 4: nastavení integrace (přes „Service aktivieren“)
 
@@ -186,9 +186,21 @@ Integrace obsahuje interaktivní Lovelace kartu pro zobrazení tvých GPS tras.
 
 > **Poznámka:** Pokud se karta po aktualizaci nezobrazuje správně, vyprázdni cache prohlížeče pomocí `Ctrl+Shift+R` (hard reload).
 
-> **HACS aktualizace karet:** Všechny čtyři Lovelace karty (Map, Heatmap, Calendar, Dashboard) jsou v jednom JS souboru (`bosch-ebike-map-card.js`) a aktualizují se automaticky spolu s integrací. Po aktualizaci verze z HACS proveď hard reload cache prohlížeče, jinak nemusí výběr karet novou kartu ještě nabídnout.
+> **Aktualizace karet (HACS nebo Marketplace):** Všechny čtyři Lovelace karty (Map, Heatmap, Calendar, Dashboard) jsou v jednom JS souboru (`bosch-ebike-map-card.js`) a aktualizují se automaticky spolu s integrací. Po aktualizaci verze přes HACS nebo Marketplace proveď hard reload cache prohlížeče, jinak nemusí výběr karet novou kartu ještě nabídnout.
 
-#### Instalace přes HACS (alternativa)
+#### Instalace přes Marketplace nebo HACS (alternativa)
+
+**Ručně v Marketplace** (od Home Assistant 2026.11, nahrazuje HACS):
+
+1. Otevři **Nastavení → Marketplace**. Při prvním otevření musíš potvrdit varování.
+2. Klikni vpravo nahoře na **Přidat z odkazu**
+3. Do pole **Odkaz na GitHub** zadej `https://github.com/Xunil99/ha-bosch-ebike` a klikni na **Přidat**. Je potřeba propojení s GitHubem, Marketplace si o něj řekne.
+4. Pokud se **Typ** nerozpozná, vyber **Integrace** a klikni znovu na **Přidat**
+5. Otevři repozitář v Marketplace, klikni na **Nainstalovat** a restartuj Home Assistant
+
+Pokud už máš integraci nainstalovanou přes HACS: při prvním startu s Home Assistant 2026.11 Marketplace automaticky převezme tvůj obsah z HACS včetně aktualizací a HACS se odstraní.
+
+**Ručně přes HACS** (Home Assistant do verze 2026.10):
 
 1. Otevři HACS v Home Assistant
 2. Klikni na **„Custom repositories“** (tři tečky vpravo nahoře)
@@ -420,6 +432,8 @@ bike_id: bike-uuid-1
 ```
 
 Barevné třídy podle dne: prázdný, 1-10 km, 10-25 km, 25-50 km, 50+ km. Barvy vycházejí z proměnných motivu HA; světlé motivy vypadají jako GitHub-light, v tmavém režimu se automaticky načte odpovídající tmavá paleta.
+
+> **Související projekty:** Chceš víc statistik? [ebike-cards](https://github.com/JulianHock/ebike-cards) od [@JulianHock](https://github.com/JulianHock) doplňuje tyto karty o statistiku jízd za týden, měsíc nebo rok (včetně doby jízdy a kalorií), porovnání více kol, triky podle kola, poslední jízdu, rekordy a roční cíl. Karty potřebují jen tuto integraci, instalují se přes Marketplace nebo HACS jako vlastní repozitář (kategorie Dashboard) a zatím mají německé popisky. [Otevřít v Marketplace nebo HACS](https://my.home-assistant.io/redirect/hacs_repository/?owner=JulianHock&repository=ebike-cards&category=plugin)
 
 ### 3D karta – sledování chase-cam s časovým posuvníkem a polohou Slunce
 
@@ -657,5 +671,7 @@ Licence MIT – podrobnosti viz [LICENSE](LICENSE).
 ### Poděkování
 
 Vytvořil [Volker Hauffe](https://github.com/Xunil99).
+
+**Julian ([@JulianHock](https://github.com/JulianHock)) vytvořil doplňkové karty [ebike-cards](https://github.com/JulianHock/ebike-cards) a opravil délky v Trick Checku ([PR #93](https://github.com/Xunil99/ha-bosch-ebike/pull/93)).** Díky!
 
 Tato integrace používá oficiální [Bosch eBike Data Act API](https://portal.bosch-ebike.com/data-act).

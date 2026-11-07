@@ -10,13 +10,13 @@
 >
 > *Bosch eBike Smart System & eBike System 2 (BES2) for Home Assistant – reads bike and ride data directly from the official Bosch Data Act API, with custom Lovelace cards and optional live data over Bluetooth.*
 
-> **⚠️ Update-Hinweis (ab v1.17.6):** Der Integrationsordner heißt jetzt `ha_bosch_ebike` (vorher `bosch_ebike`). Deine Einrichtung, Geräte und Einstellungen bleiben unverändert. Falls nach dem HACS-Update **beide** Ordner in `config/custom_components/` liegen, lösche den alten `bosch_ebike` einmalig und starte Home Assistant neu.
+> **⚠️ Update-Hinweis (ab v1.17.6):** Der Integrationsordner heißt jetzt `ha_bosch_ebike` (vorher `bosch_ebike`). Deine Einrichtung, Geräte und Einstellungen bleiben unverändert. Falls nach dem Update (über HACS oder den Marketplace) **beide** Ordner in `config/custom_components/` liegen, lösche den alten `bosch_ebike` einmalig und starte Home Assistant neu.
 
 > ### ⚠️ Regionale Voraussetzung
 > Diese Integration funktioniert **ausschließlich mit einem Bosch SingleKey-ID-Konto, das innerhalb der EU registriert ist**. Sie nutzt die offizielle Bosch Data Act API, deren Verfügbarkeit auf EU-Konten beschränkt ist. Konten aus anderen Regionen werden vom API-Endpoint abgelehnt und die Integration kann sich nicht anmelden.
 
 > ### 🔌 Echte Live-Daten per Bluetooth (smart system v19+)
-> Dieses Repo enthält neben der HACS-Integration auch eine **ESPHome-BLE-Bridge**, die einen ESP32 zur Brücke zum **Bosch eBike Live Data Interface** macht. Damit fließen Akku-SoC, Speed, Tachostand & Co. in Echtzeit nach Home Assistant. Seit Kurzem gibt es dafür auch eine **Dual-Bridge**: Ein einzelner ESP32 verbindet sich damit gleichzeitig mit zwei Bosch eBikes.
+> Dieses Repo enthält neben der Integration auch eine **ESPHome-BLE-Bridge**, die einen ESP32 zur Brücke zum **Bosch eBike Live Data Interface** macht. Damit fließen Akku-SoC, Speed, Tachostand & Co. in Echtzeit nach Home Assistant. Seit Kurzem gibt es dafür auch eine **Dual-Bridge**: Ein einzelner ESP32 verbindet sich damit gleichzeitig mit zwei Bosch eBikes.
 >
 > 🚀 **Flashen ohne ESPHome-Setup**: ESP32 (oder ESP32-C3, z. B. "C3 Mini") per USB anstecken und in Chrome / Edge **[https://xunil99.github.io/ha-bosch-ebike/](https://xunil99.github.io/ha-bosch-ebike/)** öffnen, *Install* klicken. Der Installer erkennt den Chip automatisch und flasht die passende Firmware (auch die Dual-Bridge-Variante). WLAN-Setup läuft im selben Browser-Schritt. Vollständige Anleitung (DE/EN) inkl. Pairing über die Flow App: [`esphome/`](https://github.com/Xunil99/ha-bosch-ebike/tree/main/esphome).
 >
@@ -175,7 +175,7 @@ Kopiere die **Client-ID** - du brauchst sie gleich.
 
 #### Schritt 3: Integration in Home Assistant installieren
 
-Installiere die Integration über **HACS** (Detailschritte im Abschnitt „HACS-Installation" weiter unten) und starte Home Assistant neu. Erst danach kann der Freigabe-Link aus dem eBike Manager den Einrichtungs-Flow öffnen.
+Installiere die Integration über den **Marketplace** (ab Home Assistant 2026.11, ersetzt HACS) oder über **HACS** (bis Home Assistant 2026.10), Detailschritte im Abschnitt „Installation über Marketplace oder HACS“ weiter unten, und starte Home Assistant neu. Erst danach kann der Freigabe-Link aus dem eBike Manager den Einrichtungs-Flow öffnen.
 
 #### Schritt 4: Integration einrichten (über „Service aktivieren")
 
@@ -257,7 +257,7 @@ Alle drei `show_*`-Flags sind standardmäßig aktiv (sichtbar); einzeln auf `fal
 
 > **Hinweis:** Wenn die Karte nach einem Update nicht korrekt angezeigt wird, leere den Browser-Cache mit `Ctrl+Shift+R` (Hard Reload).
 
-> **HACS-Update für die Karten:** Alle vier Lovelace-Karten (Map, Heatmap, Calendar, Dashboard) liegen in einer einzigen JS-Datei (`bosch-ebike-map-card.js`) und werden automatisch mit der Integration aktualisiert. Nach einem Versions-Update von HACS ein Hard Reload des Browser-Caches durchführen, sonst kann der Card-Picker eine neue Karte noch nicht anzeigen.
+> **Update der Karten (HACS oder Marketplace):** Alle vier Lovelace-Karten (Map, Heatmap, Calendar, Dashboard) liegen in einer einzigen JS-Datei (`bosch-ebike-map-card.js`) und werden automatisch mit der Integration aktualisiert. Nach einem Versions-Update über HACS oder den Marketplace ein Hard Reload des Browser-Caches durchführen, sonst kann der Card-Picker eine neue Karte noch nicht anzeigen.
 
 #### eBike System 2 (BES2) einrichten
 
@@ -274,13 +274,23 @@ Für **eBike System 2** ist die Einrichtung nahezu identisch zur obigen Smart-Sy
 
 Welche Daten BES2 liefert (und welche nicht), zeigt die Vergleichstabelle im Abschnitt **eBike System 2 (BES2)** weiter oben.
 
-#### HACS-Installation (Detailanleitung zu Schritt 3)
+#### Installation über Marketplace oder HACS (Detailanleitung zu Schritt 3)
 
 [![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=Xunil99&repository=ha-bosch-ebike&category=integration)
 
-Der Button öffnet direkt deine Home-Assistant-Instanz mit vorausgefülltem Repository und Kategorie (setzt HACS und eine verknüpfte "My Home Assistant"-Instanz voraus). Danach noch **Herunterladen** klicken und Home Assistant neu starten, weiter geht's ab Schritt 4 oben.
+Der Button öffnet direkt deine Home-Assistant-Instanz mit vorausgefülltem Repository und Kategorie (setzt eine verknüpfte "My Home Assistant"-Instanz und HACS bzw. ab Home Assistant 2026.11 den Marketplace voraus). Danach noch **Herunterladen** (HACS) bzw. **Installieren** (Marketplace) klicken und Home Assistant neu starten, weiter geht's ab Schritt 4 oben.
 
-Alternativ manuell:
+**Alternativ manuell im Marketplace** (ab Home Assistant 2026.11, ersetzt HACS):
+
+1. Öffne **Einstellungen → Marketplace**. Beim ersten Öffnen musst du die Warnung bestätigen.
+2. Klicke oben rechts auf **Über Link hinzufügen**
+3. Trage bei **GitHub-Link** `https://github.com/Xunil99/ha-bosch-ebike` ein und klicke auf **Hinzufügen**. Dafür muss GitHub verbunden sein, der Marketplace fragt danach.
+4. Wird der **Typ** nicht erkannt, wähle **Integration** und klicke noch einmal auf **Hinzufügen**
+5. Öffne das Repository im Marketplace, klicke auf **Installieren** und starte Home Assistant neu
+
+Wenn du die Integration bisher über HACS installiert hattest: Beim ersten Start mit Home Assistant 2026.11 übernimmt der Marketplace deine HACS-Inhalte samt Updates automatisch, HACS wird dabei entfernt.
+
+**Alternativ manuell mit HACS** (Home Assistant bis 2026.10):
 
 1. Öffne HACS in Home Assistant
 2. Klicke auf **"Benutzerdefinierte Repositories"** (drei Punkte oben rechts)
@@ -628,6 +638,8 @@ bike_id: bike-uuid-1
 
 Da Boschs API Trick-Daten pro Fahrt (nicht pro einzelnem Sprung mit eigenem GPS-Punkt oder Zeitstempel) liefert, entspricht eine Tabellenzeile "einer Trick-Art in einer Fahrt" - eine Fahrt mit einem Jump und zwei Wheelies erscheint als zwei Zeilen. Nicht zutreffende Werte (z. B. Winkel bei einem Jump) werden als "–" angezeigt und landen bei jeder Sortierung immer am Ende, nie an einem Extremwert.
 
+> **Verwandte Projekte:** Noch mehr Statistik? [ebike-cards](https://github.com/JulianHock/ebike-cards) von [@JulianHock](https://github.com/JulianHock) ergänzt diese Karten um eine Fahrstatistik pro Woche, Monat oder Jahr (auch Fahrzeit und Kalorien), den Vergleich mehrerer Bikes, Tricks je Bike, die letzte Tour, Bestwerte und ein Jahresziel. Die Karten brauchen nur diese Integration, werden über den Marketplace oder HACS als benutzerdefiniertes Repository (Kategorie Dashboard) installiert und sind derzeit auf Deutsch beschriftet. [Im Marketplace bzw. in HACS öffnen](https://my.home-assistant.io/redirect/hacs_repository/?owner=JulianHock&repository=ebike-cards&category=plugin)
+
 ### 3D-Karte - Chase-Cam-Verfolgung mit Zeit-Slider und Sonnenstand
 
 Die Card `bosch-ebike-3d-map-card` ist eine parallele Karte zur klassischen 2D-Map. Sie startet mit einer Liste der letzten Touren. Beim Klick auf eine Tour öffnet sich die 3D-Detailansicht mit MapLibre und kostenlosen OpenFreeMap-Vector-Tiles: die **Kamera folgt dem Bike in Third-Person-Perspektive** ("Chase-Cam"), Bearing dreht sich passend zur Fahrtrichtung, Pitch und Zoom sind konfigurierbar. Beim Slider-Bewegen schwenkt die Kamera mit. Die Kartenbeleuchtung passt sich dem Sonnenstand zur Tour-Zeit an.
@@ -920,7 +932,7 @@ Zusätzlich zu den Data-Act-Entitäten oben nutzt die Integration ab dieser Vers
 > ### ⚠️ Regional requirement
 > This integration only works with a Bosch SingleKey-ID account registered inside the EU. It uses the official Bosch Data Act API, whose availability is limited to EU accounts. Accounts from other regions are rejected by the API endpoint and the integration cannot authenticate.
 
-> **⚠️ Upgrade note (since v1.17.6):** The integration folder is now `ha_bosch_ebike` (was `bosch_ebike`). Your setup, devices and settings stay unchanged. If **both** folders exist in `config/custom_components/` after the HACS update, delete the old `bosch_ebike` once and restart Home Assistant.
+> **⚠️ Upgrade note (since v1.17.6):** The integration folder is now `ha_bosch_ebike` (was `bosch_ebike`). Your setup, devices and settings stay unchanged. If **both** folders exist in `config/custom_components/` after the update (via HACS or the Marketplace), delete the old `bosch_ebike` once and restart Home Assistant.
 
 <a name="en-inhalt"></a>**Contents:** [Description](#en-description) · [eBike System 2 (BES2)](#en-bes2) · [Features](#en-features) · [Setup Guide](#en-setup) · [Multiple bikes/accounts](#en-multiple-bikes) · [Cards](#en-pois) · [Charging](#en-charging) · [Maintenance](#en-maintenance) · [Range estimation](#en-range) · [Troubleshooting](#en-troubleshooting) · [Available Sensors](#en-sensors)
 
@@ -1064,7 +1076,7 @@ Copy the **Client-ID** - you will need it in a moment.
 
 #### Step 3: Install the Integration in Home Assistant
 
-Install the integration via **HACS** (see the "HACS Installation" section further down for the detailed steps) and restart Home Assistant. Only then can the consent link from the eBike Manager open the setup flow.
+Install the integration via the **Marketplace** (Home Assistant 2026.11 and later, replaces HACS) or via **HACS** (Home Assistant up to 2026.10); see the "Installation via Marketplace or HACS" section further down for the detailed steps. Then restart Home Assistant. Only then can the consent link from the eBike Manager open the setup flow.
 
 #### Step 4: Set up the integration (via "Service aktivieren")
 
@@ -1146,7 +1158,7 @@ All three `show_*` flags are visible by default; set any of them to `false` to h
 
 > **Note:** If the card doesn't display correctly after an update, clear your browser cache with `Ctrl+Shift+R` (hard reload).
 
-> **HACS update for the cards:** All four Lovelace cards (Map, Heatmap, Calendar, Dashboard) ship inside a single JS file (`bosch-ebike-map-card.js`) and update automatically with the integration. After a HACS version bump, hard-reload the browser cache, otherwise a newly added card may not show up in the card picker yet.
+> **Updating the cards (HACS or Marketplace):** All four Lovelace cards (Map, Heatmap, Calendar, Dashboard) ship inside a single JS file (`bosch-ebike-map-card.js`) and update automatically with the integration. After a version update through HACS or the Marketplace, hard-reload the browser cache, otherwise a newly added card may not show up in the card picker yet.
 
 #### Setting up eBike System 2 (BES2)
 
@@ -1163,13 +1175,23 @@ For **eBike System 2** the setup is nearly identical to the Smart System guide a
 
 Which data BES2 delivers (and which it does not) is shown in the comparison table in the **eBike System 2 (BES2)** section above.
 
-#### HACS Installation (detailed steps for Step 3)
+#### Installation via Marketplace or HACS (detailed steps for Step 3)
 
 [![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=Xunil99&repository=ha-bosch-ebike&category=integration)
 
-This button opens your Home Assistant instance with the repository and category pre-filled (requires HACS and a linked "My Home Assistant" instance). Click **Download**, restart Home Assistant, then continue from step 4 above.
+This button opens your Home Assistant instance with the repository and category pre-filled (requires a linked "My Home Assistant" instance and HACS, or the Marketplace from Home Assistant 2026.11). Then click **Download** (HACS) or **Install** (Marketplace), restart Home Assistant, and continue from step 4 above.
 
-Or manually:
+**Or manually in the Marketplace** (Home Assistant 2026.11 and later, replaces HACS):
+
+1. Open **Settings → Marketplace**. The first time, you have to accept the warning.
+2. Click **Add from link** in the top right
+3. Enter `https://github.com/Xunil99/ha-bosch-ebike` as **GitHub link** and click **Add**. This needs a GitHub connection, the Marketplace asks for it.
+4. If the **Type** is not detected, choose **Integration** and click **Add** again
+5. Open the repository in the Marketplace, click **Install** and restart Home Assistant
+
+If you installed the integration with HACS before: on the first start with Home Assistant 2026.11 the Marketplace takes over your HACS content, including updates, automatically, and HACS is removed.
+
+**Or manually with HACS** (Home Assistant up to 2026.10):
 
 1. Open HACS in Home Assistant
 2. Click **"Custom repositories"** (three dots in the top right)
@@ -1516,6 +1538,8 @@ bike_id: bike-uuid-1
 
 Since Bosch's API reports trick data per ride (not per individual jump with its own GPS point or timestamp), one table row corresponds to "one trick type within one ride" - a ride with a jump and two wheelies shows up as two rows. Values that don't apply (e.g. an angle for a jump) display as "–" and always sort to the end, in either direction, never at either extreme.
 
+> **Related projects:** Want more statistics? [ebike-cards](https://github.com/JulianHock/ebike-cards) by [@JulianHock](https://github.com/JulianHock) adds ride statistics per week, month or year (including ride time and calories), a comparison of several bikes, tricks per bike, the last ride, records and an annual goal. The cards only need this integration, are installed through the Marketplace or HACS as a custom repository (category Dashboard) and are labelled in German for now. [Open in the Marketplace or HACS](https://my.home-assistant.io/redirect/hacs_repository/?owner=JulianHock&repository=ebike-cards&category=plugin)
+
 ### 3D map card - chase-cam, time slider, sun-aware building shadows
 
 The card `bosch-ebike-3d-map-card` is a second, parallel card to the classic 2D map. It opens with a list of recent tours. Clicking a tour switches to the 3D detail view powered by MapLibre and free OpenFreeMap vector tiles: the camera follows the bike in a third-person chase-cam, bearing rotates to match the direction of travel, pitch and zoom are configurable. Dragging the slider pans the camera with it. Map lighting and a cast-shadow layer on the ground both update to match the sun position at the tour's actual time of day.
@@ -1810,5 +1834,7 @@ MIT License - see [LICENSE](LICENSE) for details.
 Built by [Volker Hauffe](https://github.com/Xunil99).
 
 **The eBike System 2 (BES2) support would not have been possible without the extensive beta testing by Habanatz** (pedelecforum.de). Thank you!
+
+**Julian ([@JulianHock](https://github.com/JulianHock)) built the companion dashboard cards [ebike-cards](https://github.com/JulianHock/ebike-cards) and fixed the Trick Check durations ([PR #93](https://github.com/Xunil99/ha-bosch-ebike/pull/93)).** Thank you!
 
 This integration uses the official [Bosch eBike Data Act API](https://portal.bosch-ebike.com/data-act).
