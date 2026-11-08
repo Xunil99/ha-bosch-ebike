@@ -401,7 +401,7 @@ class BoschEBikeOptionsFlowHandler(OptionsFlow):
                 self._live_sensors[self._bikes[0]["id"]] = legacy
 
         # Issue #47 follow-up: offer manual bike-assignment for activities
-        # the odometer heuristic could not match, capped to keep a single
+        # the automatic attribution could not match, capped to keep a single
         # options-flow run from turning into an unbounded step-walk.
         self._unassigned = (
             coordinator.data.get("unassigned_activities", [])

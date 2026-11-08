@@ -8,6 +8,7 @@ from homeassistant.components.diagnostics import async_redact_data
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
+from .activity_attribution import summarize_attribution
 from .const import DOMAIN
 from .coordinator import BoschEBikeCoordinator
 
@@ -86,6 +87,15 @@ async def async_get_config_entry_diagnostics(
         "activity_count": len(all_activities),
         "latest_activity": async_redact_data(
             data.get("latest_activity") or {}, TO_REDACT
+        ),
+        # How far the bikeId Bosch delivers with each ride could be used to
+        # pick the bike: with_bike_id / bike_id_known should both equal
+        # activities on a normal account. Counts only, no ids.
+        "bike_attribution": summarize_attribution(
+            bikes,
+            all_activities,
+            data.get("activity_bike") or {},
+            coordinator.manual_activity_bike,
         ),
         "consumption_entries": len(consumption),
         "consumption_sample": dict(list(consumption.items())[:3]),

@@ -509,9 +509,9 @@ async def ws_assign_activity(
     Same persisted override mechanism the options flow's assignment wizard
     uses (see coordinator.async_assign_activities and
     unassigned_activities.merge_manual_overrides): a manual assignment
-    always wins over the odometer heuristic, so this also CORRECTS rides
-    the heuristic confidently but wrongly attributed - not just ones it
-    could not attribute at all, which is all the wizard ever offered.
+    always wins over the automatic attribution, so this also CORRECTS rides
+    that were confidently but wrongly attributed - not just ones that
+    could not be attributed at all, which is all the wizard ever offered.
     """
     activity_id = msg["activity_id"]
     bike_id = msg["bike_id"]

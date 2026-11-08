@@ -46,6 +46,7 @@ from .range_estimate import (
     ble_distance_implausible,
     MIN_PLAUSIBLE_WH_PER_KM,
 )
+from .activity_attribution import DEFAULT_TOLERANCE_M, attribute_activities
 from .unassigned_activities import compute_unassigned_activities, merge_manual_overrides
 from .trick_check import parse_trick_check
 from .activity_event import build_new_activity_payload
@@ -482,70 +483,19 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     def attribute_activities_to_bikes(
         bikes: list[dict[str, Any]],
         activities: list[dict[str, Any]],
-        tolerance_m: float = 1500.0,
+        tolerance_m: float = DEFAULT_TOLERANCE_M,
     ) -> dict[str, str]:
-        """Attribute each activity to a bike via odometer matching.
+        """Attribute each activity to a bike: by Bosch's bikeId, else by odometer.
 
-        Heuristic: bikes report their current ``driveUnit.odometer`` (in meters);
-        activities expose ``startOdometer`` and ``distance``. We process activities
-        from newest to oldest, find the bike whose current odometer is closest to
-        ``startOdometer + distance`` (within ``tolerance_m``), then "unwind" that
-        bike's odometer back to ``startOdometer`` to attribute the next-older
-        activity. Activities that cannot be matched within tolerance are skipped.
+        With two or more ``bikes``, an activity whose ``bikeId`` is the id of one
+        of them belongs to that bike. The others, and every activity of a
+        single-bike account, are attributed as they always were. The rules and
+        their reasons are in activity_attribution.attribute_activities, which has
+        no Home Assistant import so the test suite can run it.
 
-        Returns a dict ``{activity_id: bike_id}``. Single-bike accounts always
-        attribute every activity to that one bike. Empty dict if no bikes have
-        ``odometer`` data.
+        Returns a dict ``{activity_id: bike_id}``.
         """
-        bike_odos: dict[str, float] = {}
-        for bike in bikes:
-            bid = bike.get("id")
-            odo = (bike.get("driveUnit") or {}).get("odometer")
-            if bid and isinstance(odo, (int, float)):
-                bike_odos[bid] = float(odo)
-        if not bike_odos:
-            return {}
-
-        # Single bike → trivial attribution
-        if len(bike_odos) == 1:
-            only_bike = next(iter(bike_odos.keys()))
-            return {
-                a["id"]: only_bike
-                for a in activities
-                if a.get("id")
-            }
-
-        sorted_acts = sorted(
-            [a for a in activities if a.get("id") and a.get("startOdometer") is not None],
-            key=lambda a: a.get("startTime", ""),
-            reverse=True,
-        )
-
-        attribution: dict[str, str] = {}
-        for act in sorted_acts:
-            try:
-                start_odo = float(act["startOdometer"])
-                distance = float(act.get("distance", 0) or 0)
-            except (TypeError, ValueError):
-                continue
-            end_odo = start_odo + distance
-
-            best_bike: str | None = None
-            best_diff = float("inf")
-            for bid, odo in bike_odos.items():
-                diff = abs(odo - end_odo)
-                if diff < best_diff:
-                    best_diff = diff
-                    best_bike = bid
-
-            if best_bike is None or best_diff > tolerance_m:
-                continue
-
-            attribution[act["id"]] = best_bike
-            # "Unwind" bike's odometer back to before this activity
-            bike_odos[best_bike] = start_odo
-
-        return attribution
+        return attribute_activities(bikes, activities, tolerance_m)
 
     def battery_capacity_wh(self, bike_id: str | None) -> float:
         """Effective battery capacity in Wh for *bike_id*.
@@ -1694,11 +1644,12 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         Callers are responsible for firing this only for genuinely new rides
         (see the event's comment in const.py) and for calling it only after
-        bike attribution has run for this poll - the activity dicts
-        themselves never carry a bikeId, it lives in the separate
-        _activity_bike mapping, so bike_id has to be passed in. The payload
-        itself is built by activity_event.py, which is import-free of Home
-        Assistant so the test suite can cover it.
+        bike attribution has run for this poll - the activity dict holds
+        Bosch's own bikeId, but the bike a ride counts for is what the
+        attribution decided (a manual assignment can overrule Bosch), and that
+        lives in the separate _activity_bike mapping, so bike_id has to be
+        passed in. The payload itself is built by activity_event.py, which is
+        import-free of Home Assistant so the test suite can cover it.
         """
         self.hass.bus.async_fire(
             EVENT_NEW_ACTIVITY, build_new_activity_payload(activity, bike_id)
@@ -1713,6 +1664,11 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     def activities_error_since(self) -> datetime | None:
         """When the current activity list outage began, None while it is fine."""
         return self._activities_error_since
+
+    @property
+    def manual_activity_bike(self) -> dict[str, str]:
+        """Rides the user assigned to a bike by hand; they overrule everything else."""
+        return dict(self._manual_activity_bike)
 
     @property
     def activities_unknown(self) -> bool:
@@ -2095,8 +2051,9 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # skipped the whole block.
         state_changed = False
         if self._initial_import_done and self._activities_error is None:
-            # Bike attribution via odometer-matching (only meaningful for multi-bike accounts;
-            # for single-bike accounts every activity is attributed to that bike).
+            # Bike attribution: by the bikeId Bosch delivers with a ride, else by
+            # odometer-matching (only meaningful for multi-bike accounts; for
+            # single-bike accounts every activity is attributed to that bike).
             # Runs BEFORE battery consumption tracking and live-data enrichment
             # below, both of which need the current attribution to pick the right
             # bike's capacity / live sensors per activity (issue #44). Getting
@@ -2108,9 +2065,9 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if state_changed:
                 self._activity_bike = merged_attribution
 
-            # Issue #47 follow-up: activities the odometer-matching above could
-            # not confidently assign to any bike, minus any the user has since
-            # manually assigned via the options flow.
+            # Issue #47 follow-up: activities neither the bikeId nor the
+            # odometer-matching above could assign to a bike, minus any the
+            # user has since manually assigned via the options flow.
             self._unassigned_activities = compute_unassigned_activities(
                 self._all_activities, self._activity_bike, len(bikes)
             )
@@ -2394,7 +2351,7 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """Manually assign one or more activities to a bike (issue #47 follow-up).
 
         Called by the options flow's activity-assignment wizard. Merged keys
-        always take precedence over the odometer heuristic (see
+        always take precedence over the automatic attribution (see
         merge_manual_overrides) and persist across restarts.
         """
         self._manual_activity_bike.update(mapping)

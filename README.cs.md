@@ -221,9 +221,9 @@ Integrace podporuje jak více účtů, tak více kol na jeden účet.
 
 **Více kol pod jedním účtem** (např. dvě kola se stejným SingleKey ID):
 - Integrace automaticky vytvoří vlastní senzory pro každé kolo (pohonná jednotka, baterie, servis atd.).
-- Jízdy se automaticky přiřazují ke správnému kolu pomocí heuristiky (porovnání stavu `odometer` konkrétního kola s hodnotou `startOdometer + distance` dané jízdy).
+- Jízdy se přiřazují ke kolu, jehož `bikeId` Bosch k jízdě dodává. Pokud chybí nebo nepatří žádnému kolu účtu, nastoupí heuristika (porovnání stavu `odometer` konkrétního kola s hodnotou `startOdometer + distance` dané jízdy).
 
-**Kola připojit odděleně** (Smart System, alternativa k automatickému přiřazení): Bosch uvolňuje data pro každé kolo a každou aplikaci zvlášť (krok 5 nastavení). Pokud pro stejný účet vytvoříš dvě registrace aplikace, každou s vlastním Client-ID, a v eBike Manageru uvolníš každé kolo vždy jen pro jednu ze dvou aplikací, vzniknou v Home Assistant dvě instance s jedním kolem. Každá jízda pak jednoznačně patří svému kolu a není co přiřazovat. Vyplatí se to, když automatické přiřazení podle stavu `odometer` opakovaně nedokáže některé jízdy jednoznačně přiřadit. Postupuj jako u **Více účtů Bosch**, jen se u obou instancí přihlas stejným účtem Bosch. Tip od [@JulianHock](https://github.com/JulianHock).
+**Kola připojit odděleně** (Smart System, alternativa k automatickému přiřazení): Bosch uvolňuje data pro každé kolo a každou aplikaci zvlášť (krok 5 nastavení). Pokud pro stejný účet vytvoříš dvě registrace aplikace, každou s vlastním Client-ID, a v eBike Manageru uvolníš každé kolo vždy jen pro jednu ze dvou aplikací, vzniknou v Home Assistant dvě instance s jedním kolem. Každá jízda pak jednoznačně patří svému kolu a není co přiřazovat. Postupuj jako u **Více účtů Bosch**, jen se u obou instancí přihlas stejným účtem Bosch. Tip od [@JulianHock](https://github.com/JulianHock).
 
 **Filtr v kartě:** Jakmile existuje více než jeden účet a/nebo více než jedno kolo, zobrazí karta Lovelace nad seznamem automaticky dvě výběrová pole:
 - **Účet** (viditelné pouze při více účtech)

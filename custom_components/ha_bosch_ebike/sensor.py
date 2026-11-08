@@ -966,8 +966,8 @@ async def async_setup_entry(
         # Maintenance overview (count of items due/overdue + full list as attributes)
         entities.append(BoschMaintenanceOverviewSensor(coordinator, bike_id, drive_name))
 
-    # Account-level diagnostic: activities the odometer-based attribution
-    # could not match to any bike. Only meaningful (and only ever non-empty)
+    # Account-level diagnostic: activities the attribution (the bikeId Bosch
+    # delivers, else the odometer) could not match to any bike. Only meaningful (and only ever non-empty)
     # for multi-bike Smart System accounts.
     if not is_bes2 and len(bikes) > 1:
         entities.append(
