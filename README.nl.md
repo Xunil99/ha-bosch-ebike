@@ -223,6 +223,8 @@ De integratie ondersteunt zowel meerdere accounts als meerdere fietsen per accou
 - De integratie maakt automatisch eigen sensoren per fiets aan (drive unit, accu, service enz.).
 - Tours worden via een heuristiek (vergelijking van de fietsspecifieke `odometer`-stand met `startOdometer + distance` van de betreffende tour) automatisch aan de juiste fiets toegewezen.
 
+**Fietsen gescheiden koppelen** (Smart System, alternatief voor de automatische toewijzing): Bosch geeft de gegevens vrij per fiets en per app (stap 5 van de installatie). Maak je voor hetzelfde account twee app-registraties met elk een eigen Client-ID aan en geef je in de eBike Manager elke fiets maar voor één van de twee apps vrij, dan krijg je in Home Assistant twee instanties met elk één fiets. Elke tour hoort dan duidelijk bij zijn fiets en er valt niets toe te wijzen. Dat loont als de automatische toewijzing via de kilometerstand bij jou steeds weer tours niet eenduidig kan toewijzen. Ga te werk zoals bij **Meerdere Bosch-accounts**, maar log bij beide instanties in met hetzelfde Bosch-account. Tip van [@JulianHock](https://github.com/JulianHock).
+
 **Filter in de kaart:** Zodra er meer dan één account en/of meer dan één fiets is, toont de Lovelace-kaart automatisch twee keuzevelden boven de lijst:
 - **Account** (alleen zichtbaar bij meerdere accounts)
 - **Fiets** (alleen zichtbaar bij meerdere fietsen)

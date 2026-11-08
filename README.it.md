@@ -223,6 +223,8 @@ L'integrazione supporta sia più account sia più bici per account.
 - L'integrazione crea automaticamente sensori separati per ogni bici (drive unit, batteria, service ecc.).
 - I tour vengono assegnati automaticamente alla bici giusta tramite un'euristica (confronto del valore `odometer` specifico della bici con `startOdometer + distance` del rispettivo tour).
 
+**Integrare le bici separatamente** (Smart System, alternativa all'assegnazione automatica): Bosch condivide i dati per bici e per app (passo 5 dell'installazione). Se per lo stesso account registri due app, ciascuna con una propria Client-ID, e nell'eBike Manager condividi ogni bici con una sola delle due app, in Home Assistant ottieni due istanze con una bici ciascuna. Ogni tour appartiene allora chiaramente alla propria bici e non resta nulla da assegnare. È utile se l'assegnazione automatica tramite chilometraggio continua a non riuscire ad assegnare con certezza alcuni tour. Procedi come descritto in **Più account Bosch**, ma accedi con lo stesso account Bosch per entrambe le istanze. Consiglio di [@JulianHock](https://github.com/JulianHock).
+
 **Filtri nella card:** Non appena è presente più di un account e/o più di una bici, la card Lovelace mostra automaticamente due campi di selezione sopra la lista:
 - **Account** (visibile solo con più account)
 - **Bici** (visibile solo con più bici)

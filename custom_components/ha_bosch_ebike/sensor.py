@@ -985,10 +985,24 @@ def _create_battery_sensors(
     prefix: str,
     bat_name: str,
 ) -> list[BoschEBikeSensor]:
-    """Create sensor entities for a single battery."""
+    """Create sensor entities for a single battery.
+
+    The translation keys are there so that a card (or any script reading the
+    entity registry) can find these sensors without relying on their entity
+    IDs, which Home Assistant keeps from the time the entity was created and
+    which users rename. They are deliberately the same for every battery of a
+    bike: what tells two batteries apart is the product name in the entity
+    name and the battery number in the unique ID, so a reader that wants the
+    total over a bike has to collect every entity of the device with that key.
+
+    There is deliberately no entry for these keys in strings.json: with
+    has_entity_name Home Assistant would show the translated name instead of
+    the literal one below, and that would drop the battery's product name.
+    """
     descs = [
         BoschBikeSensorDescription(
             key=f"{prefix}_wh_lifetime",
+            translation_key="battery_wh_lifetime",
             name=f"{bat_name} Wh Lifetime",
             native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
             device_class=SensorDeviceClass.ENERGY,
@@ -998,6 +1012,7 @@ def _create_battery_sensors(
         ),
         BoschBikeSensorDescription(
             key=f"{prefix}_charge_cycles_total",
+            translation_key="battery_charge_cycles",
             name=f"{bat_name} Charge Cycles",
             icon="mdi:battery-sync",
             state_class=SensorStateClass.TOTAL_INCREASING,
@@ -1005,6 +1020,7 @@ def _create_battery_sensors(
         ),
         BoschBikeSensorDescription(
             key=f"{prefix}_charge_cycles_on_bike",
+            translation_key="battery_cycles_on_bike",
             name=f"{bat_name} Cycles On Bike",
             icon="mdi:battery-sync",
             state_class=SensorStateClass.TOTAL_INCREASING,
@@ -1012,6 +1028,7 @@ def _create_battery_sensors(
         ),
         BoschBikeSensorDescription(
             key=f"{prefix}_charge_cycles_off_bike",
+            translation_key="battery_cycles_off_bike",
             name=f"{bat_name} Cycles Off Bike",
             icon="mdi:battery-sync",
             state_class=SensorStateClass.TOTAL_INCREASING,
@@ -1758,11 +1775,14 @@ class BoschMaxAltitudeSensor(CoordinatorEntity[BoschEBikeCoordinator], SensorEnt
     """Max altitude of this bike's own latest ride.
 
     Reads coordinator.data["latest_activity_details_by_bike"][bike_id] and
-    returns profile_extra.max_altitude(details) in metres. Uses a literal
-    name, so no translation_key is required.
+    returns profile_extra.max_altitude(details) in metres. The name is a
+    literal one; the translation key only lets a card find the sensor without
+    relying on its entity ID, like the other last_ride_* sensors. It has no
+    entry in strings.json on purpose, so the name stays as it is.
     """
 
     _attr_has_entity_name = True
+    _attr_translation_key = "last_ride_max_altitude"
     _attr_native_unit_of_measurement = UnitOfLength.METERS
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_icon = "mdi:image-filter-hdr"

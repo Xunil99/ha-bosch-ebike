@@ -315,6 +315,8 @@ Die Integration unterstützt sowohl mehrere Konten als auch mehrere Bikes pro Ko
 - Die Integration legt automatisch eigene Sensoren pro Bike an (Drive Unit, Akku, Service usw.).
 - Touren werden über eine Heuristik (Abgleich des bike-spezifischen `odometer`-Stands mit `startOdometer + distance` der jeweiligen Tour) automatisch dem richtigen Bike zugeordnet.
 
+**Bikes getrennt einbinden** (Smart System, Alternative zur automatischen Zuordnung): Bosch gibt die Daten pro Bike und App frei (Schritt 5 der Einrichtung). Legst Du für dasselbe Konto zwei App-Registrierungen mit je eigener Client-ID an und gibst im eBike Manager jedes Bike nur für eine der beiden Apps frei, entstehen in Home Assistant zwei Instanzen mit je einem Bike. Jede Tour gehört dann eindeutig zu ihrem Bike und es gibt nichts zuzuordnen. Das lohnt sich, wenn die automatische Zuordnung über den Kilometerstand bei Dir wiederholt Touren nicht eindeutig zuordnen kann. Gehe wie unter **Mehrere Bosch-Konten** vor, melde Dich aber bei beiden Instanzen mit demselben Bosch-Konto an. Tipp von [@JulianHock](https://github.com/JulianHock).
+
 **Filter in der Karte:** Sobald mehr als ein Konto und/oder mehr als ein Bike vorhanden ist, blendet die Lovelace-Karte automatisch zwei Auswahlfelder über der Liste ein:
 - **Konto** (nur sichtbar bei mehreren Konten)
 - **Bike** (nur sichtbar bei mehreren Bikes)
@@ -1216,6 +1218,8 @@ The integration supports both multiple accounts and multiple bikes per account.
 **Multiple bikes under one account** (e.g. two bikes sharing the same SingleKey ID):
 - The integration automatically creates per-bike sensors (drive unit, battery, service, etc.).
 - Rides are attributed to the correct bike via a heuristic (matching each bike's reported `odometer` against the activity's `startOdometer + distance`).
+
+**Keeping the bikes apart** (Smart System, an alternative to the automatic attribution): Bosch releases the data per bike and app (setup step 5). If you register two apps for the same account, each with its own Client-ID, and release each bike in the eBike Manager for only one of the two apps, Home Assistant ends up with two instances of one bike each. Every ride then clearly belongs to its bike and there is nothing left to assign. This is worth it if the odometer-based attribution keeps failing to attribute some of your rides clearly. Proceed as described under **Multiple Bosch accounts**, but sign in with the same Bosch account for both instances. Tip from [@JulianHock](https://github.com/JulianHock).
 
 **Card filter:** Once more than one account and/or more than one bike is present, the Lovelace card automatically shows two extra dropdowns above the activity list:
 - **Account** (visible only with multiple accounts)

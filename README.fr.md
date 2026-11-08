@@ -223,6 +223,8 @@ L'intégration prend en charge aussi bien plusieurs comptes que plusieurs vélos
 - L'intégration crée automatiquement des capteurs distincts par vélo (drive unit, batterie, service, etc.).
 - Les sorties sont attribuées automatiquement au bon vélo via une heuristique (comparaison de la valeur `odometer` propre au vélo avec `startOdometer + distance` de la sortie concernée).
 
+**Intégrer les vélos séparément** (Smart System, alternative à l'attribution automatique) : Bosch partage les données par vélo et par app (étape 5 de l'installation). Si tu crées pour le même compte deux inscriptions d'app, chacune avec son propre Client-ID, et que tu ne partages dans l'eBike Manager chaque vélo qu'avec l'une des deux apps, Home Assistant obtient deux instances d'un vélo chacune. Chaque sortie appartient alors clairement à son vélo et il n'y a plus rien à attribuer. C'est utile quand l'attribution automatique par le kilométrage n'arrive pas, de façon répétée, à attribuer clairement certaines de tes sorties. Procède comme pour **Plusieurs comptes Bosch**, mais connecte-toi avec le même compte Bosch pour les deux instances. Astuce de [@JulianHock](https://github.com/JulianHock).
+
 **Filtre dans la carte :** Dès qu'il y a plus d'un compte et/ou plus d'un vélo, la carte Lovelace affiche automatiquement deux champs de sélection au-dessus de la liste :
 - **Compte** (visible uniquement avec plusieurs comptes)
 - **Vélo** (visible uniquement avec plusieurs vélos)
