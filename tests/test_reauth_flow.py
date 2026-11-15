@@ -17,6 +17,7 @@ away everything else stored in the entry, and the unique id is the Client-ID.
 import __future__
 import ast
 import asyncio
+import importlib.util
 import json
 from pathlib import Path
 from types import SimpleNamespace
@@ -65,7 +66,13 @@ class _Vol:
         return mapping
 
 
+# entry_title.py imports nothing from Home Assistant, so the real function is loaded.
+_title_spec = importlib.util.spec_from_file_location("entry_title", _PACKAGE / "entry_title.py")
+_entry_title = importlib.util.module_from_spec(_title_spec)
+_title_spec.loader.exec_module(_entry_title)
+
 _ns: dict[str, Any] = {
+    "unique_title": _entry_title.unique_title,
     "Any": Any,
     "vol": _Vol,
     "CONF_CLIENT_ID": "client_id",
@@ -93,10 +100,10 @@ exec(  # noqa: S102 - executing our own source, see the module docstring
 )
 
 
-def entry(entry_id, client_id=None, unique_id=None, **more):
+def entry(entry_id, client_id=None, unique_id=None, title="Bosch eBike", **more):
     data = {"client_id": client_id} if client_id else {}
     data.update(more)
-    return SimpleNamespace(entry_id=entry_id, unique_id=unique_id, data=data)
+    return SimpleNamespace(entry_id=entry_id, unique_id=unique_id, title=title, data=data)
 
 
 class FakeFlow:
@@ -260,12 +267,13 @@ def test_the_old_data_object_is_not_modified():
 
 
 def test_a_new_entry_is_still_created_as_before():
+    # Another account is already set up, so the new one gets the next free title.
     flow, _ = _flow(source="user", client_id="euda-fresh")
     _run(flow.async_oauth_create_entry({"token": {"access_token": "a", "refresh_token": "r"}}))
     assert flow.updates == []
     assert flow.created == [
         {
-            "title": "Bosch eBike",
+            "title": "Bosch eBike 2",
             "data": {
                 "client_id": "euda-fresh",
                 "system": "smart",
@@ -274,6 +282,23 @@ def test_a_new_entry_is_still_created_as_before():
             },
         }
     ]
+
+
+def test_the_first_account_keeps_the_plain_title_and_a_third_takes_the_next_number():
+    # Nothing set up yet: "Bosch eBike". Two set up already: "Bosch eBike 3".
+    flow = FakeFlow([], None, source="user", client_id="euda-first")
+    _run(flow.async_oauth_create_entry({"token": {"access_token": "a", "refresh_token": "r"}}))
+    assert flow.created[0]["title"] == "Bosch eBike"
+    others = [entry("a", "c1", "c1"), entry("b", "c2", "c2", title="Bosch eBike 2")]
+    flow = FakeFlow(others, None, source="user", client_id="euda-third")
+    _run(flow.async_oauth_create_entry({"token": {"access_token": "a", "refresh_token": "r"}}))
+    assert flow.created[0]["title"] == "Bosch eBike 3"
+
+
+def test_a_renamed_account_does_not_use_up_the_default_title():
+    flow = FakeFlow([entry("a", "c1", "c1", title="Sam")], None, source="user", client_id="euda-x")
+    _run(flow.async_oauth_create_entry({"token": {"access_token": "a", "refresh_token": "r"}}))
+    assert flow.created[0]["title"] == "Bosch eBike"
 
 
 # --- the texts ---------------------------------------------------------------------------------

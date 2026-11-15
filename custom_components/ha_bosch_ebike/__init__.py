@@ -44,7 +44,7 @@ from .const import (
     CONF_BES2_PART,
 )
 from .coordinator import BoschEBikeCoordinator
-from .device_lookup import device_for_identifier
+from .device_lookup import device_for_bike, device_for_identifier
 from .profile_extra import bike_label as _bike_label
 
 _LOGGER = logging.getLogger(__name__)
@@ -404,7 +404,7 @@ async def ws_list_instances(
             # editors, since they all resolve their options through this
             # same WS call. Mirrors BoschEBikeOptionsFlowHandler's
             # _display_name_for_bike() in config_flow.py.
-            device = device_for_identifier(device_registry, (DOMAIN, bid), entry_id)
+            device = device_for_bike(device_registry, DOMAIN, bid, entry_id)
             if device and (device.name_by_user or device.name):
                 label = device.name_by_user or device.name
             else:

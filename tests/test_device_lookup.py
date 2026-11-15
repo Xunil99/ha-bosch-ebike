@@ -24,6 +24,7 @@ _spec = importlib.util.spec_from_file_location(
 device_lookup = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(device_lookup)
 device_for_identifier = device_lookup.device_for_identifier
+device_for_bike = device_lookup.device_for_bike
 
 DOMAIN = "ha_bosch_ebike"
 BIKE = (DOMAIN, "bike-1")
@@ -123,12 +124,17 @@ def test_no_direct_async_get_device_is_left_in_the_package():
     )
 
 
+_HELPERS = ("device_for_identifier", "device_for_bike")
+
+
 def _calls_to_helper(filename):
+    # Both helpers go through device_for_identifier; device_for_bike also finds
+    # the entry-scoped device of a shared bike's second account (shared_bike.py).
     tree = ast.parse((_PACKAGE / filename).read_text(encoding="utf-8"))
     imported = any(
         isinstance(n, ast.ImportFrom)
         and n.module == "device_lookup"
-        and any(a.name == "device_for_identifier" for a in n.names)
+        and any(a.name in _HELPERS for a in n.names)
         for n in ast.walk(tree)
     )
     calls = [
@@ -136,7 +142,7 @@ def _calls_to_helper(filename):
         for n in ast.walk(tree)
         if isinstance(n, ast.Call)
         and isinstance(n.func, ast.Name)
-        and n.func.id == "device_for_identifier"
+        and n.func.id in _HELPERS
     ]
     return imported, calls
 
@@ -154,8 +160,12 @@ def test_every_lookup_names_the_config_entry_it_belongs_to():
     for filename in ("__init__.py", "config_flow.py"):
         _, calls = _calls_to_helper(filename)
         for call in calls:
-            assert len(call.args) == 3, f"{filename}:{call.lineno} needs three arguments"
-            entry = ast.unparse(call.args[2])
+            # device_for_identifier(registry, identifier, entry_id) and
+            # device_for_bike(registry, domain, bike_id, entry_id): the entry is
+            # always the last argument.
+            expected = 3 if call.func.id == "device_for_identifier" else 4
+            assert len(call.args) == expected, f"{filename}:{call.lineno} needs {expected} arguments"
+            entry = ast.unparse(call.args[-1])
             assert entry.split(".")[-1] == "entry_id", (
                 f"{filename}:{call.lineno} scopes the lookup with {entry}"
             )
@@ -171,6 +181,45 @@ def test_the_helper_imports_nothing_from_home_assistant():
         elif isinstance(node, ast.ImportFrom) and node.level == 0:
             imported.add((node.module or "").split(".")[0])
     assert imported <= {"__future__", "typing"}, imported
+
+
+def test_a_shared_bikes_second_account_finds_its_entry_scoped_device():
+    # shared_bike.py gives the second account's device the identifier
+    # "<bike>_<entry>". The label lookups (account picker, options flow) have to
+    # find it, or the second account's bike shows without its own device name.
+    scoped = (DOMAIN, "bike-1_entry-b")
+    registry = OwnershipRegistry(
+        {(BIKE, "entry-a"): "device-a", (scoped, "entry-b"): "device-b"}
+    )
+    assert device_for_bike(registry, DOMAIN, "bike-1", "entry-a") == "device-a"
+    assert device_for_bike(registry, DOMAIN, "bike-1", "entry-b") == "device-b"
+
+
+def test_the_plain_device_wins_over_the_scoped_one():
+    scoped = (DOMAIN, "bike-1_entry-a")
+    registry = OwnershipRegistry(
+        {(BIKE, "entry-a"): "plain", (scoped, "entry-a"): "scoped"}
+    )
+    assert device_for_bike(registry, DOMAIN, "bike-1", "entry-a") == "plain"
+
+
+def test_an_unknown_bike_has_no_device():
+    assert device_for_bike(OwnershipRegistry({}), DOMAIN, "bike-1", "entry-a") is None
+
+
+def test_the_label_lookups_use_the_bike_helper():
+    # Pinned from the source: __init__.py and config_flow.py import Home Assistant.
+    for name, function in (("__init__.py", "ws_list_instances"), ("config_flow.py", "_display_name_for_bike")):
+        tree = ast.parse((_PACKAGE / name).read_text(encoding="utf-8"))
+        node = next(
+            n for n in ast.walk(tree)
+            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name == function
+        )
+        called = {
+            n.func.id for n in ast.walk(node)
+            if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
+        }
+        assert "device_for_bike" in called, f"{name}:{function} looks the device up without the scoped identifier"
 
 
 if __name__ == "__main__":

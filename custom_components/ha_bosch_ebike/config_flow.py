@@ -50,7 +50,8 @@ from .const import (
     FLOW_PORTAL_URL,
     BES2_PORTAL_URL,
 )
-from .device_lookup import device_for_identifier
+from .device_lookup import device_for_bike
+from .entry_title import unique_title
 from .profile_extra import bike_label
 
 _LOGGER = logging.getLogger(__name__)
@@ -245,7 +246,14 @@ class BoschEBikeConfigFlow(AbstractOAuth2FlowHandler, domain=DOMAIN):
                 data={**reauth_entry.data, **entry_data},
             )
 
-        return self.async_create_entry(title="Bosch eBike", data=entry_data)
+        # The first free "Bosch eBike", "Bosch eBike 2", ...: a second account
+        # would otherwise be indistinguishable from the first in device names
+        # and in the card's account picker. The user can rename the entry.
+        title = unique_title(
+            "Bosch eBike",
+            (entry.title for entry in self.hass.config_entries.async_entries(DOMAIN)),
+        )
+        return self.async_create_entry(title=title, data=entry_data)
 
 
 class BoschEBikeOptionsFlowHandler(OptionsFlow):
@@ -352,8 +360,8 @@ class BoschEBikeOptionsFlowHandler(OptionsFlow):
         or was never renamed.
         """
         registry = dr.async_get(self.hass)
-        device = device_for_identifier(
-            registry, (DOMAIN, bike["id"]), self.config_entry.entry_id
+        device = device_for_bike(
+            registry, DOMAIN, bike["id"], self.config_entry.entry_id
         )
         if device and (device.name_by_user or device.name):
             return device.name_by_user or device.name

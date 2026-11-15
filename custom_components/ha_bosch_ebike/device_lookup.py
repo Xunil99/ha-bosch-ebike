@@ -30,3 +30,20 @@ def device_for_identifier(
             identifier=identifier, config_entry_id=config_entry_id
         )
     return registry.async_get_device(identifiers={identifier})
+
+
+def device_for_bike(registry: Any, domain: str, bike_id: str, config_entry_id: str) -> Any:
+    """The device of a bike for one config entry, or None.
+
+    A bike's device carries the plain identifier (domain, bike_id). The second
+    account of a shared bike gets an identifier scoped to its entry
+    (domain, "<bike_id>_<entry_id>", see shared_bike.py), so that is tried
+    when the plain one is not registered for this entry. The label lookups
+    (account picker, options flow) use this to show the device's own name.
+    """
+    device = device_for_identifier(registry, (domain, bike_id), config_entry_id)
+    if device is None:
+        device = device_for_identifier(
+            registry, (domain, f"{bike_id}_{config_entry_id}"), config_entry_id
+        )
+    return device
