@@ -8,7 +8,11 @@
 > **⚠️ Poznámka k aktualizaci (od v1.17.6):** Složka integrace se nyní jmenuje `ha_bosch_ebike` (dříve `bosch_ebike`). Tvoje instalace, zařízení i nastavení zůstávají beze změny. Pokud po aktualizaci (přes HACS nebo Marketplace) existují v `config/custom_components/` **obě** složky, smaž jednorázově tu starou `bosch_ebike` a restartuj Home Assistant.
 
 > ### ⚠️ Regionální požadavek
-> Tato integrace funguje **výhradně s účtem Bosch SingleKey ID registrovaným v rámci EU**. Používá oficiální Bosch Data Act API, jehož dostupnost je omezena na účty z EU. Účty z jiných regionů koncový bod API odmítne a integrace se pak nedokáže přihlásit.
+> Tato integrace je určena pro účet Bosch SingleKey ID **registrovaný v rámci EU**. Používá oficiální Bosch Data Act API, které Bosch poskytuje pro účty z EU. Pro jiné regiony neexistuje žádný příslib: účty odtamtud může koncový bod API odmítnout a integrace se pak nedokáže přihlásit. Zpráva z praxe níže ukazuje, že s účtem z USA to fungovat může.
+>
+> **Zpráva z praxe z USA (listopad 2026):** S účtem SingleKey ID registrovaným v USA (Smart System) nastavení funguje úplně: zaregistrovat aplikaci v portálu Data Act, nastavit integraci **a potom aktivovat sdílení dat (krok 5)**. Bez kroku 5 sice přihlášení uspěje, ale Bosch vrací **0 kol a 0 jízd bez chybového hlášení**: nejdříve dokonči krok 5 a znovu načti integraci, než usoudíš na regionální blokaci.
+>
+> Dokud sdílení dat chybí, zobrazuje Home Assistant v **Nastavení → Systém → Opravy** zprávu **„Bosch pro … neuvádí žádné kolo“**. Zmizí, jakmile Bosch kolo uvede.
 
 > ### 🔌 Skutečná živá data přes Bluetooth (smart system v19+)
 > Tento repozitář obsahuje kromě integrace také **ESPHome BLE bridge**, který z ESP32 udělá bridge k **Bosch eBike Live Data Interface**. Díky tomu proudí stav nabití baterie, rychlost, najeté kilometry a spol. v reálném čase do Home Assistantu. Nově je k dispozici i **dual bridge**, u kterého se jeden ESP32 připojí současně ke dvěma Bosch eBikes.
@@ -218,6 +222,8 @@ Integrace podporuje jak více účtů, tak více kol na jeden účet.
 1. Pro každý účet vytvoř v portálu Bosch Data Act vlastní registraci aplikace s vlastním Client-ID
 2. Přidej integraci vícekrát (**Nastavení → Zařízení a služby → + Přidat integraci → Bosch eBike**) a pokaždé zadej jiné Client-ID
 3. Každá instance má vlastní senzory a jízdy
+
+**Jedno kolo, více účtů** (přes „Sdílet eBike“ v aplikaci Flow, např. rodinné kolo): Bosch hlásí totéž kolo u každého účtu, jízdy ale patří účtu, jehož smartphone byl při jízdě připojen. Nastav každý účet jako u **Více účtů Bosch**. Nejdříve nastavená instance si ponechá své senzory a jejich historii beze změny. Každá další instance dostane pro toto kolo vlastní zařízení s názvem instance v titulku (např. „Cargo Line (Sam)“) a vlastní senzory, takže jízdy obou účtů jsou vidět vedle sebe. Další instance se zpočátku jmenují „Bosch eBike 2“, „Bosch eBike 3“ atd.; přejmenuj instanci v Home Assistant (**Nastavení → Zařízení a služby → Bosch eBike → ⋮ → Přejmenovat**) a její název se objeví v titulku zařízení.
 
 **Více kol pod jedním účtem** (např. dvě kola se stejným SingleKey ID):
 - Integrace automaticky vytvoří vlastní senzory pro každé kolo (pohonná jednotka, baterie, servis atd.).

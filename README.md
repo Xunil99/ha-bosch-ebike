@@ -13,9 +13,11 @@
 > **⚠️ Update-Hinweis (ab v1.17.6):** Der Integrationsordner heißt jetzt `ha_bosch_ebike` (vorher `bosch_ebike`). Deine Einrichtung, Geräte und Einstellungen bleiben unverändert. Falls nach dem Update (über HACS oder den Marketplace) **beide** Ordner in `config/custom_components/` liegen, lösche den alten `bosch_ebike` einmalig und starte Home Assistant neu.
 
 > ### ⚠️ Regionale Voraussetzung
-> Diese Integration funktioniert **ausschließlich mit einem Bosch SingleKey-ID-Konto, das innerhalb der EU registriert ist**. Sie nutzt die offizielle Bosch Data Act API, deren Verfügbarkeit auf EU-Konten beschränkt ist. Konten aus anderen Regionen werden vom API-Endpoint abgelehnt und die Integration kann sich nicht anmelden.
+> Diese Integration ist für ein Bosch SingleKey-ID-Konto gedacht, das **innerhalb der EU registriert ist**. Sie nutzt die offizielle Bosch Data Act API, die Bosch für EU-Konten bereitstellt. Für andere Regionen gibt es keine Zusage: Konten von dort werden unter Umständen vom API-Endpoint abgelehnt, und die Integration kann sich dann nicht anmelden. Der Erfahrungsbericht unten zeigt, dass es mit einem US-Konto funktionieren kann.
 >
 > **Erfahrungsbericht USA (November 2026):** Mit einem in den USA registrierten SingleKey-ID-Konto (Smart System) funktioniert die Einrichtung vollständig: App im Data-Act-Portal registrieren, Integration einrichten **und anschließend die Datenfreigabe (Schritt 5) aktivieren**. Ohne Schritt 5 ist die Anmeldung zwar erfolgreich, Bosch liefert aber **0 Bikes und 0 Fahrten ohne Fehlermeldung**: Bitte erst Schritt 5 erledigen und die Integration neu laden, bevor du von einer Regionssperre ausgehst.
+>
+> Fehlt die Datenfreigabe, zeigt Home Assistant unter **Einstellungen → System → Reparaturen** die Meldung **„Bosch nennt kein Bike für …“**. Sie verschwindet, sobald Bosch ein Bike nennt.
 
 > ### 🔌 Echte Live-Daten per Bluetooth (smart system v19+)
 > Dieses Repo enthält neben der Integration auch eine **ESPHome-BLE-Bridge**, die einen ESP32 zur Brücke zum **Bosch eBike Live Data Interface** macht. Damit fließen Akku-SoC, Speed, Tachostand & Co. in Echtzeit nach Home Assistant. Seit Kurzem gibt es dafür auch eine **Dual-Bridge**: Ein einzelner ESP32 verbindet sich damit gleichzeitig mit zwei Bosch eBikes.
@@ -272,7 +274,7 @@ Für **eBike System 2** ist die Einrichtung nahezu identisch zur obigen Smart-Sy
 
 > **Voraussetzung für BES2:** ein **eBike-Connect-Konto** ([ebike-connect.com](https://www.ebike-connect.com)) statt der SingleKey ID. Die Data-Act-Verfügbarkeit ist weiterhin auf **EU-Konten** beschränkt.
 
-> **Integration meldet Erfolg, aber 0 Bikes?** Anders als beim Smart System (dort kommt bei fehlender Freigabe ein 403 Forbidden) antwortet die BES2-API bei fehlender Freigabe oft einfach mit einer leeren Bike-Liste, ohne Fehler. `last_update_success: true` bei `bike_count: 0` in den Diagnose-Daten ist also **kein Zeichen eines Integrations-Fehlers**, sondern fast immer, dass die Datenfreigabe über den obigen Link noch nicht aktiviert wurde.
+> **Integration meldet Erfolg, aber 0 Bikes?** Anders als beim Smart System (dort kommt bei fehlender Freigabe meist ein 403 Forbidden, bei einem US-Konto aber ebenfalls eine leere Liste) antwortet die BES2-API bei fehlender Freigabe oft einfach mit einer leeren Bike-Liste, ohne Fehler. Home Assistant zeigt dann unter **Einstellungen → System → Reparaturen** die Meldung „Bosch nennt kein Bike für …“. `last_update_success: true` bei `bike_count: 0` in den Diagnose-Daten ist also **kein Zeichen eines Integrations-Fehlers**, sondern fast immer, dass die Datenfreigabe über den obigen Link noch nicht aktiviert wurde.
 
 Welche Daten BES2 liefert (und welche nicht), zeigt die Vergleichstabelle im Abschnitt **eBike System 2 (BES2)** weiter oben.
 
@@ -313,7 +315,7 @@ Die Integration unterstützt sowohl mehrere Konten als auch mehrere Bikes pro Ko
 2. Füge die Integration mehrfach hinzu (**Einstellungen → Geräte & Dienste → + Integration hinzufügen → Bosch eBike**) und gib dabei jeweils die andere Client-ID ein
 3. Jede Instanz hat ihre eigenen Sensoren und Touren
 
-**Ein Bike, mehrere Konten** (über „eBike teilen“ in der Flow-App, z. B. ein Familienrad): Bosch meldet dasselbe Bike unter jedem Konto, die Touren gehören aber dem Konto, dessen Smartphone bei der Fahrt verbunden war. Richte jedes Konto wie unter **Mehrere Bosch-Konten** ein. Die zuerst eingerichtete Instanz behält ihre Sensoren und deren Verlauf unverändert. Jede weitere Instanz bekommt für dieses Bike ein eigenes Gerät mit dem Namen der Instanz im Titel (z. B. „Cargo Line (Sam)“) und eigene Sensoren, sodass die Touren beider Konten nebeneinander sichtbar sind.
+**Ein Bike, mehrere Konten** (über „eBike teilen“ in der Flow-App, z. B. ein Familienrad): Bosch meldet dasselbe Bike unter jedem Konto, die Touren gehören aber dem Konto, dessen Smartphone bei der Fahrt verbunden war. Richte jedes Konto wie unter **Mehrere Bosch-Konten** ein. Die zuerst eingerichtete Instanz behält ihre Sensoren und deren Verlauf unverändert. Jede weitere Instanz bekommt für dieses Bike ein eigenes Gerät mit dem Namen der Instanz im Titel (z. B. „Cargo Line (Sam)“) und eigene Sensoren, sodass die Touren beider Konten nebeneinander sichtbar sind. Weitere Instanzen heißen zunächst „Bosch eBike 2“, „Bosch eBike 3“ usw.; benenne die Instanz in Home Assistant um (**Einstellungen → Geräte & Dienste → Bosch eBike → ⋮ → Umbenennen**), dann steht ihr Name im Gerätetitel.
 
 **Mehrere Bikes unter einem Konto** (z. B. zwei Bikes mit derselben SingleKey ID):
 - Die Integration legt automatisch eigene Sensoren pro Bike an (Drive Unit, Akku, Service usw.).
@@ -803,7 +805,7 @@ Auf der Lovelace-Karte gibt es einen 🌦️-Toggle in den Karten-Steuerelemente
 
 | Problem | Lösung |
 |---------|--------|
-| Keine Entities nach Einrichtung | Datenfreigabe-Toggle im eBike Manager aktivieren (Schritt 5) |
+| Keine Entities nach Einrichtung | Datenfreigabe-Toggle im eBike Manager aktivieren (Schritt 5); unter Reparaturen steht dazu „Bosch nennt kein Bike für …“ |
 | BES2: Erfolg gemeldet, aber 0 Bikes | Datenfreigabe über den eBike-Connect-Link aktivieren, siehe Abschnitt „eBike System 2 (BES2) einrichten" |
 | „Client nicht gefunden" beim Login | „Service aktivieren" im eBike Manager nutzen (Schritt 4) und Client-ID auf Tippfehler/Leerzeichen prüfen |
 | „Einrichtungsfehler, wird erneut versucht“ nach einem Neustart, oder die Client-ID existiert bei Bosch nicht mehr | Ab v1.19.64 fordert Home Assistant zur erneuten Anmeldung auf (Einstellungen → Geräte & Dienste → Bosch eBike). Dort lässt sich die Client-ID ändern: Gibt es die App im Portal nicht mehr, zuerst eine neue App anlegen (Schritt 1) und ihre Client-ID eintragen. Entitäten und Einstellungen bleiben erhalten |
@@ -937,9 +939,11 @@ Zusätzlich zu den Data-Act-Entitäten oben nutzt die Integration ab dieser Vers
 ## English
 
 > ### ⚠️ Regional requirement
-> This integration only works with a Bosch SingleKey-ID account registered inside the EU. It uses the official Bosch Data Act API, whose availability is limited to EU accounts. Accounts from other regions are rejected by the API endpoint and the integration cannot authenticate.
+> This integration is meant for a Bosch SingleKey ID account **registered inside the EU**. It uses the official Bosch Data Act API, which Bosch provides for EU accounts. There is no promise for other regions: accounts from there may be rejected by the API endpoint, and the integration then cannot sign in. The field report below shows that a US account can work.
 >
 > **Field report, US (November 2026):** with a SingleKey ID account registered in the **United States** (Smart System), setup works completely: register the app in the Data Act portal, set up the integration, **then activate data sharing (Step 5)**. Before Step 5 the login succeeds but Bosch returns **0 bikes and 0 rides with no error**, so finish Step 5 and reload the integration before concluding your region is blocked.
+>
+> While the data sharing is missing, Home Assistant shows the repair **"Bosch lists no bike for …"** under **Settings → System → Repairs**. It disappears as soon as Bosch lists a bike.
 
 > **⚠️ Upgrade note (since v1.17.6):** The integration folder is now `ha_bosch_ebike` (was `bosch_ebike`). Your setup, devices and settings stay unchanged. If **both** folders exist in `config/custom_components/` after the update (via HACS or the Marketplace), delete the old `bosch_ebike` once and restart Home Assistant.
 
@@ -1180,7 +1184,7 @@ For **eBike System 2** the setup is nearly identical to the Smart System guide a
 
 > **BES2 prerequisite:** an **eBike Connect account** ([ebike-connect.com](https://www.ebike-connect.com)) instead of SingleKey ID. Data Act availability is still limited to **EU accounts**.
 
-> **Integration reports success, but 0 bikes?** Unlike the Smart System (a missing consent there returns a 403 Forbidden), the BES2 API often simply responds with an empty bike list when access has not been granted, with no error. `last_update_success: true` with `bike_count: 0` in the diagnostics is therefore **not a sign of an integration bug** - it almost always means the data-sharing step above has not been completed yet.
+> **Integration reports success, but 0 bikes?** Unlike the Smart System (a missing consent there usually returns a 403 Forbidden, but an empty list for a US account), the BES2 API often simply responds with an empty bike list when access has not been granted, with no error. Home Assistant then shows the repair "Bosch lists no bike for …" under **Settings → System → Repairs**. `last_update_success: true` with `bike_count: 0` in the diagnostics is therefore **not a sign of an integration bug** - it almost always means the data-sharing step above has not been completed yet.
 
 Which data BES2 delivers (and which it does not) is shown in the comparison table in the **eBike System 2 (BES2)** section above.
 
@@ -1221,7 +1225,7 @@ The integration supports both multiple accounts and multiple bikes per account.
 2. Add the integration multiple times (**Settings → Devices & Services → + Add Integration → Bosch eBike**) using a different Client-ID each time
 3. Each instance has its own sensors and rides.
 
-**One bike, several accounts** (via "Share eBike" in the Flow app, e.g. a family bike): Bosch reports the same bike under every account, but each ride belongs to the account whose smartphone was connected during it. Set up every account as described under **Multiple Bosch accounts**. The instance set up first keeps its sensors and their history unchanged. Every further instance gets its own device for that bike, with the instance name in the title (e.g. "Cargo Line (Sam)"), and its own sensors, so the rides of both accounts show up side by side.
+**One bike, several accounts** (via "Share eBike" in the Flow app, e.g. a family bike): Bosch reports the same bike under every account, but each ride belongs to the account whose smartphone was connected during it. Set up every account as described under **Multiple Bosch accounts**. The instance set up first keeps its sensors and their history unchanged. Every further instance gets its own device for that bike, with the instance name in the title (e.g. "Cargo Line (Sam)"), and its own sensors, so the rides of both accounts show up side by side. Further instances are called "Bosch eBike 2", "Bosch eBike 3" and so on at first; rename the instance in Home Assistant (**Settings → Devices & Services → Bosch eBike → ⋮ → Rename**) and its name shows in the device title.
 
 **Multiple bikes under one account** (e.g. two bikes sharing the same SingleKey ID):
 - The integration automatically creates per-bike sensors (drive unit, battery, service, etc.).
@@ -1710,7 +1714,7 @@ The Lovelace card has a 🌦️ toggle in the map controls. When enabled, the ca
 
 | Problem | Solution |
 |---------|----------|
-| No entities after setup | Activate the data-sharing toggle in the eBike Manager (step 5) |
+| No entities after setup | Activate the data-sharing toggle in the eBike Manager (step 5); the repair "Bosch lists no bike for …" says the same |
 | BES2: success reported, but 0 bikes | Activate data sharing via the eBike Connect link, see "Setting up eBike System 2 (BES2)" |
 | "Client not found" during login | Use "Service aktivieren" in the eBike Manager (step 4) and check the Client-ID for typos/spaces |
 | "Failed setup, will retry" after a restart, or the Client-ID no longer exists at Bosch | From v1.19.64 Home Assistant asks you to sign in again (Settings → Devices & Services → Bosch eBike). The Client-ID can be changed there: if the app no longer exists in the portal, register a new app first (step 1) and enter its Client-ID. Entities and settings are kept |

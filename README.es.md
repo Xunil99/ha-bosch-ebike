@@ -8,7 +8,11 @@
 > **⚠️ Nota de actualización (desde v1.17.6):** La carpeta de la integración ahora se llama `ha_bosch_ebike` (antes `bosch_ebike`). Tu configuración, dispositivos y ajustes permanecen sin cambios. Si tras la actualización (por HACS o Marketplace) existen **ambas** carpetas en `config/custom_components/`, elimina una vez la antigua `bosch_ebike` y reinicia Home Assistant.
 
 > ### ⚠️ Requisito regional
-> Esta integración funciona **exclusivamente con una cuenta Bosch SingleKey-ID registrada dentro de la UE**. Utiliza la API oficial Bosch Data Act, cuya disponibilidad está limitada a cuentas de la UE. Las cuentas de otras regiones son rechazadas por el endpoint de la API y la integración no puede iniciar sesión.
+> Esta integración está pensada para una cuenta Bosch SingleKey ID **registrada dentro de la UE**. Utiliza la API oficial Bosch Data Act, que Bosch ofrece para cuentas de la UE. No hay garantía para otras regiones: el endpoint de la API puede rechazar las cuentas de allí, y entonces la integración no puede iniciar sesión. El informe de campo siguiente muestra que con una cuenta de EE. UU. puede funcionar.
+>
+> **Informe de campo EE. UU. (noviembre de 2026):** con una cuenta SingleKey ID registrada en EE. UU. (Smart System) la instalación funciona por completo: registrar la app en el portal Data Act, configurar la integración **y después activar el uso compartido de datos (paso 5)**. Sin el paso 5 el inicio de sesión funciona, pero Bosch devuelve **0 bicis y 0 recorridos sin mensaje de error**: completa primero el paso 5 y recarga la integración antes de suponer un bloqueo regional.
+>
+> Mientras falte el uso compartido de datos, Home Assistant muestra en **Ajustes → Sistema → Reparaciones** el aviso **«Bosch no indica ninguna bici para …»**. Desaparece en cuanto Bosch indica una bici.
 
 > ### 🔌 Datos reales en vivo por Bluetooth (smart system v19+)
 > Además de la integración, este repositorio contiene un **puente BLE para ESPHome** que convierte un ESP32 en una pasarela hacia el **Bosch eBike Live Data Interface**. Con él, el SoC de la batería, la velocidad, el cuentakilómetros y demás fluyen en tiempo real hacia Home Assistant. Desde hace poco existe además un **puente dual**: un único ESP32 se conecta así simultáneamente a dos eBikes Bosch.
@@ -218,6 +222,8 @@ La integración admite tanto varias cuentas como varias bicis por cuenta.
 1. Crea para cada cuenta un registro de app propio con su propio Client-ID en el portal Bosch Data Act
 2. Añade la integración varias veces (**Ajustes → Dispositivos y servicios → + Añadir integración → Bosch eBike**) introduciendo cada vez el otro Client-ID
 3. Cada instancia tiene sus propios sensores y recorridos
+
+**Una bici, varias cuentas** (mediante «Compartir eBike» en la app Flow, p. ej. una bici familiar): Bosch indica la misma bici en cada cuenta, pero los recorridos pertenecen a la cuenta cuyo smartphone estaba conectado durante el recorrido. Configura cada cuenta como se describe en **Varias cuentas Bosch**. La instancia configurada primero conserva sus sensores y su historial sin cambios. Cada instancia adicional recibe para esta bici un dispositivo propio con el nombre de la instancia en el título (p. ej. «Cargo Line (Sam)») y sensores propios, de modo que los recorridos de ambas cuentas se ven uno junto al otro. Las instancias adicionales se llaman al principio «Bosch eBike 2», «Bosch eBike 3», etc.; cambia el nombre de la instancia en Home Assistant (**Ajustes → Dispositivos y servicios → Bosch eBike → ⋮ → Renombrar**) y su nombre aparece en el título del dispositivo.
 
 **Varias bicis bajo una cuenta** (p. ej. dos bicis con el mismo SingleKey ID):
 - La integración crea automáticamente sensores propios por bici (drive unit, batería, mantenimiento, etc.).
