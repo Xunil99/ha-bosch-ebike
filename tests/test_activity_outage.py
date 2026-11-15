@@ -110,6 +110,7 @@ _ns: dict[str, Any] = {
     "AuthError": AuthError,
     "ConfigEntryAuthFailed": ConfigEntryAuthFailed,
     "UpdateFailed": UpdateFailed,
+    "ClientResponseError": FakeResponseError,
     "SYSTEM_BES2": "bes2",
     "SYSTEM_SMART": "smart",
     "_LOGGER": _logger,
@@ -274,9 +275,14 @@ class FakeCoordinator:
         self.attribution_calls = []
         self.tracker_calls = []
         self.enrichment_calls = 0
+        self.no_bikes_calls = []
         self.persisted_state_loads = 0
         self.saves = 0
         self.fired = []
+
+    # The repair issue for "Bosch names no bike" (issue #100), reduced to a record.
+    def _sync_no_bikes_issue(self, bikes):
+        self.no_bikes_calls.append(bikes)
 
     # The hand-offs that derive or persist state from the activity list.
     def attribute_activities_to_bikes(self, bikes, activities):
@@ -654,6 +660,45 @@ def test_a_failing_bike_list_still_fails_the_update():
         assert "500" in str(err)
     else:
         raise AssertionError("a failing bike list must fail the update")
+
+
+def test_the_poll_reports_the_bike_list_to_the_repair_issue():
+    # Issue #100: an empty list (data sharing not active) and a list with bikes
+    # take the same path; the issue helper decides which of the two it is.
+    api, coord = _setup()
+    _poll(coord)
+    assert coord.no_bikes_calls == [api.bikes]
+    api.bikes = []
+    _poll(coord)
+    assert coord.no_bikes_calls[-1] == []
+
+
+def test_a_403_on_the_bike_list_raises_the_issue_and_the_poll_still_fails():
+    # The other face of the missing data sharing: the token is valid, but the
+    # bike is not shared (yet), and Bosch answers 403 instead of an empty list.
+    api, coord = _setup()
+    api.bikes_error = FakeResponseError(403, "Forbidden", "https://example/bikes")
+    try:
+        _poll(coord)
+    except UpdateFailed as err:
+        assert "403" in str(err)
+    else:
+        raise AssertionError("a 403 on the bike list must still fail the update")
+    assert coord.no_bikes_calls == [[]]
+
+
+def test_another_error_on_the_bike_list_leaves_the_repair_issue_alone():
+    # A server error says nothing about the data sharing; the issue must
+    # neither appear nor disappear on it.
+    for error in (FakeResponseError(500, "Server Error", "https://example/bikes"),
+                  FakeResponseError(404, "Not Found", "https://example/bikes")):
+        api, coord = _setup()
+        api.bikes_error = error
+        try:
+            _poll(coord)
+        except UpdateFailed:
+            pass
+        assert coord.no_bikes_calls == [], error.status
 
 
 # --- the log line -----------------------------------------------------------------

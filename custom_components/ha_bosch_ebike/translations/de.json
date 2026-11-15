@@ -314,5 +314,11 @@
         }
       }
     }
+  },
+  "issues": {
+    "no_bikes": {
+      "title": "Bosch nennt kein Bike für {account}",
+      "description": "Home Assistant ist bei Bosch angemeldet, aber Bosch nennt für dieses Konto kein Bike, daher gibt es weder Bikes noch Touren. Meist ist die Datenfreigabe noch nicht aktiv: Öffne den Bosch eBike Manager, aktiviere dort die Datenfreigabe für diese App (Data Act, Schritt 5 der Einrichtung im README) und lade die Integration neu. Diese Meldung verschwindet, sobald Bosch ein Bike nennt."
+    }
   }
 }

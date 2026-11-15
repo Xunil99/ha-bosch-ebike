@@ -11,6 +11,8 @@ from typing import Any
 
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.config_entries import ConfigEntry
+from aiohttp import ClientResponseError
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.event import async_call_later
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
@@ -36,6 +38,7 @@ from .const import (
     CONF_LIVE_SENSORS,
 )
 from .energy_cost import compute_energy_windows
+from . import no_bikes
 from .live_enrichment import get_state_at, parse_iso_utc
 from .range_estimate import (
     compute_range_estimate,
@@ -1198,6 +1201,31 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         return state_changed
 
+    def _sync_no_bikes_issue(self, bikes: list[dict[str, Any]] | None) -> None:
+        """Show a repair issue while Bosch names no bike for this account.
+
+        A login that works with the data sharing not active yet looks like an
+        empty account, not like an error (issue #100). The issue says what is
+        missing and clears itself once a bike shows up.
+        """
+        entry = self.config_entry
+        if entry is None:
+            return
+        issue = no_bikes.issue_id(entry.entry_id)
+        no_bikes.apply(
+            bikes,
+            create=lambda: ir.async_create_issue(
+                self.hass,
+                DOMAIN,
+                issue,
+                is_fixable=False,
+                severity=ir.IssueSeverity.WARNING,
+                translation_key=no_bikes.TRANSLATION_KEY,
+                translation_placeholders={"account": entry.title},
+            ),
+            delete=lambda: ir.async_delete_issue(self.hass, DOMAIN, issue),
+        )
+
     async def _update_bes2(self) -> dict[str, Any]:
         """Fetch + normalize eBike System 2 data into the BES3-shaped dict."""
         from . import bes2
@@ -1219,6 +1247,7 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             raise UpdateFailed(f"Error fetching BES2 bikes: {err}") from err
 
         bikes = [bes2.normalize_bike(b) for b in (raw_bikes or []) if isinstance(b, dict)]
+        self._sync_no_bikes_issue(bikes)
 
         # Token-persistence is intentionally not handled here: unlike the BES3
         # path (where it is inlined in _async_update_data), api._get
@@ -1771,7 +1800,15 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         new_activities = self._pending_new_activities
 
         try:
-            bikes = await self.api.get_bikes()
+            try:
+                bikes = await self.api.get_bikes()
+            except ClientResponseError as err:
+                if err.status == 403:
+                    # Token valid, but the bike is not shared (yet): the same
+                    # missing data sharing as an empty list (issue #100).
+                    self._sync_no_bikes_issue([])
+                raise
+            self._sync_no_bikes_issue(bikes)
 
             if not self._initial_import_done:
                 # First run: import ALL activities

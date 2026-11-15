@@ -345,6 +345,15 @@ def _make_update_listener(entry: ConfigEntry):
     return _async_entry_updated
 
 
+async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Clear this entry's repair issue when the entry is deleted (a reload keeps it)."""
+    from homeassistant.helpers import issue_registry as ir
+
+    from .no_bikes import issue_id
+
+    ir.async_delete_issue(hass, DOMAIN, issue_id(entry.entry_id))
+
+
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
     if unload_ok := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):

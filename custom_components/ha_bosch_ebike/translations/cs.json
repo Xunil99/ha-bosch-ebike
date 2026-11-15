@@ -314,5 +314,11 @@
         }
       }
     }
+  },
+  "issues": {
+    "no_bikes": {
+      "title": "Bosch pro {account} neuvádí žádné kolo",
+      "description": "Home Assistant je u Bosch přihlášen, ale Bosch pro tento účet neuvádí žádné kolo, takže nejsou k dispozici žádná kola ani jízdy. Obvykle ještě není aktivní sdílení dat: otevřete Bosch eBike Manager, aktivujte tam sdílení dat pro tuto aplikaci (Data Act, krok 5 nastavení v README) a znovu načtěte integraci. Tato zpráva zmizí, jakmile Bosch kolo uvede."
+    }
   }
 }

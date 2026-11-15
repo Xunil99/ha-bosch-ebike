@@ -314,5 +314,11 @@
         }
       }
     }
+  },
+  "issues": {
+    "no_bikes": {
+      "title": "Bosch lists no bike for {account}",
+      "description": "Home Assistant is signed in to Bosch, but Bosch lists no bike for this account, so there are no bikes and no rides. Usually the data sharing is not active yet: open the Bosch eBike Manager, activate the data sharing for this app (Data Act, step 5 of the setup in the README) and reload the integration. This message disappears as soon as Bosch lists a bike."
+    }
   }
 }

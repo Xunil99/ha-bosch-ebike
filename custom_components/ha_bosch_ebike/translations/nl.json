@@ -314,5 +314,11 @@
         }
       }
     }
+  },
+  "issues": {
+    "no_bikes": {
+      "title": "Bosch vermeldt geen fiets voor {account}",
+      "description": "Home Assistant is aangemeld bij Bosch, maar Bosch vermeldt geen fiets voor dit account, dus er zijn geen fietsen en geen ritten. Meestal is de gegevensdeling nog niet actief: open de Bosch eBike Manager, activeer daar de gegevensdeling voor deze app (Data Act, stap 5 van de installatie in de README) en laad de integratie opnieuw. Dit bericht verdwijnt zodra Bosch een fiets vermeldt."
+    }
   }
 }
