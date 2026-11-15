@@ -26,6 +26,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
 from .coordinator import BoschEBikeCoordinator
+from .shared_bike import scope_for_entry
 from .profile_extra import software_update_available, theft_status
 
 
@@ -52,7 +53,7 @@ async def async_setup_entry(
         entities.append(BoschTheftReportedBinarySensor(coordinator, bike_id, drive_name))
         entities.append(BoschSoftwareUpdateBinarySensor(coordinator, bike_id, drive_name))
 
-    async_add_entities(entities)
+    async_add_entities(scope_for_entry(hass, entry, entities))
 
 
 class _BoschBikeBinarySensor(CoordinatorEntity[BoschEBikeCoordinator], BinarySensorEntity):

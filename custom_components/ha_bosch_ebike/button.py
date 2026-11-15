@@ -16,6 +16,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import DOMAIN
 from .coordinator import BoschEBikeCoordinator
+from .shared_bike import scope_for_entry
 
 
 def _safe_get(data: dict, *keys: str, default: Any = None) -> Any:
@@ -172,7 +173,7 @@ async def async_setup_entry(
             BoschServiceDueResetButton(coordinator, bike_id, drive_name)
         )
 
-    async_add_entities(entities)
+    async_add_entities(scope_for_entry(hass, entry, entities))
 
 
 class BoschServiceDueResetButton(ButtonEntity):

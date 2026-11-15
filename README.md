@@ -311,6 +311,8 @@ Die Integration unterstützt sowohl mehrere Konten als auch mehrere Bikes pro Ko
 2. Füge die Integration mehrfach hinzu (**Einstellungen → Geräte & Dienste → + Integration hinzufügen → Bosch eBike**) und gib dabei jeweils die andere Client-ID ein
 3. Jede Instanz hat ihre eigenen Sensoren und Touren
 
+**Ein Bike, mehrere Konten** (über „eBike teilen“ in der Flow-App, z. B. ein Familienrad): Bosch meldet dasselbe Bike unter jedem Konto, die Touren gehören aber dem Konto, dessen Smartphone bei der Fahrt verbunden war. Richte jedes Konto wie unter **Mehrere Bosch-Konten** ein. Die zuerst eingerichtete Instanz behält ihre Sensoren und deren Verlauf unverändert. Jede weitere Instanz bekommt für dieses Bike ein eigenes Gerät mit dem Namen der Instanz im Titel (z. B. „Cargo Line (Sam)“) und eigene Sensoren, sodass die Touren beider Konten nebeneinander sichtbar sind.
+
 **Mehrere Bikes unter einem Konto** (z. B. zwei Bikes mit derselben SingleKey ID):
 - Die Integration legt automatisch eigene Sensoren pro Bike an (Drive Unit, Akku, Service usw.).
 - Touren werden dem Bike zugeordnet, dessen `bikeId` Bosch mit der Tour liefert. Fehlt sie oder gehört sie zu keinem Bike des Kontos, greift eine Heuristik (Abgleich des bike-spezifischen `odometer`-Stands mit `startOdometer + distance` der jeweiligen Tour).
@@ -1214,6 +1216,8 @@ The integration supports both multiple accounts and multiple bikes per account.
 1. Create a separate app registration with its own Client-ID for each account in the Bosch Data Act Portal
 2. Add the integration multiple times (**Settings → Devices & Services → + Add Integration → Bosch eBike**) using a different Client-ID each time
 3. Each instance has its own sensors and rides.
+
+**One bike, several accounts** (via "Share eBike" in the Flow app, e.g. a family bike): Bosch reports the same bike under every account, but each ride belongs to the account whose smartphone was connected during it. Set up every account as described under **Multiple Bosch accounts**. The instance set up first keeps its sensors and their history unchanged. Every further instance gets its own device for that bike, with the instance name in the title (e.g. "Cargo Line (Sam)"), and its own sensors, so the rides of both accounts show up side by side.
 
 **Multiple bikes under one account** (e.g. two bikes sharing the same SingleKey ID):
 - The integration automatically creates per-bike sensors (drive unit, battery, service, etc.).

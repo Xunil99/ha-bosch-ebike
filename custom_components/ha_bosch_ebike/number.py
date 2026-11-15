@@ -14,6 +14,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
 from .coordinator import BoschEBikeCoordinator
+from .shared_bike import scope_for_entry
 
 
 async def async_setup_entry(
@@ -66,7 +67,7 @@ async def async_setup_entry(
         drive_name = (bike.get("driveUnit") or {}).get("productName") or "eBike"
         entities.append(BoschServiceDueKmEntity(coordinator, bike["id"], drive_name))
 
-    async_add_entities(entities)
+    async_add_entities(scope_for_entry(hass, entry, entities))
 
 
 class BatteryCapacityNumber(NumberEntity):

@@ -43,6 +43,7 @@ from .charge_rate_estimate import (
 from .charge_session import SUMMARY_KEYS as CHARGE_SUMMARY_KEYS, iso_or_none
 from .const import DOMAIN
 from .coordinator import BoschEBikeCoordinator
+from .shared_bike import scope_for_entry
 from .profile_extra import (
     assist_mode_stats,
     battery_soh,
@@ -974,7 +975,7 @@ async def async_setup_entry(
             BoschUnassignedActivitiesSensor(coordinator, entry.entry_id)
         )
 
-    async_add_entities(entities)
+    async_add_entities(scope_for_entry(hass, entry, entities))
 
 
 def _create_battery_sensors(
