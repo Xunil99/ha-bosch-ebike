@@ -14,6 +14,8 @@
 
 > ### ⚠️ Regionale Voraussetzung
 > Diese Integration funktioniert **ausschließlich mit einem Bosch SingleKey-ID-Konto, das innerhalb der EU registriert ist**. Sie nutzt die offizielle Bosch Data Act API, deren Verfügbarkeit auf EU-Konten beschränkt ist. Konten aus anderen Regionen werden vom API-Endpoint abgelehnt und die Integration kann sich nicht anmelden.
+>
+> **Erfahrungsbericht USA (November 2026):** Mit einem in den USA registrierten SingleKey-ID-Konto (Smart System) funktioniert die Einrichtung vollständig: App im Data-Act-Portal registrieren, Integration einrichten **und anschließend die Datenfreigabe (Schritt 5) aktivieren**. Ohne Schritt 5 ist die Anmeldung zwar erfolgreich, Bosch liefert aber **0 Bikes und 0 Fahrten ohne Fehlermeldung**: Bitte erst Schritt 5 erledigen und die Integration neu laden, bevor du von einer Regionssperre ausgehst.
 
 > ### 🔌 Echte Live-Daten per Bluetooth (smart system v19+)
 > Dieses Repo enthält neben der Integration auch eine **ESPHome-BLE-Bridge**, die einen ESP32 zur Brücke zum **Bosch eBike Live Data Interface** macht. Damit fließen Akku-SoC, Speed, Tachostand & Co. in Echtzeit nach Home Assistant. Seit Kurzem gibt es dafür auch eine **Dual-Bridge**: Ein einzelner ESP32 verbindet sich damit gleichzeitig mit zwei Bosch eBikes.
@@ -934,6 +936,8 @@ Zusätzlich zu den Data-Act-Entitäten oben nutzt die Integration ab dieser Vers
 
 > ### ⚠️ Regional requirement
 > This integration only works with a Bosch SingleKey-ID account registered inside the EU. It uses the official Bosch Data Act API, whose availability is limited to EU accounts. Accounts from other regions are rejected by the API endpoint and the integration cannot authenticate.
+>
+> **Field report, US (November 2026):** with a SingleKey ID account registered in the **United States** (Smart System), setup works completely: register the app in the Data Act portal, set up the integration, **then activate data sharing (Step 5)**. Before Step 5 the login succeeds but Bosch returns **0 bikes and 0 rides with no error**, so finish Step 5 and reload the integration before concluding your region is blocked.
 
 > **⚠️ Upgrade note (since v1.17.6):** The integration folder is now `ha_bosch_ebike` (was `bosch_ebike`). Your setup, devices and settings stay unchanged. If **both** folders exist in `config/custom_components/` after the update (via HACS or the Marketplace), delete the old `bosch_ebike` once and restart Home Assistant.
 
