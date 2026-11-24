@@ -6,6 +6,30 @@ import base64
 import json
 
 
+def _claims(token: str | None) -> dict | None:
+    """The decoded middle part of a JWT, or None. Never raises."""
+    try:
+        payload = str(token).split(".")[1]
+        payload += "=" * (-len(payload) % 4)
+        claims = json.loads(base64.urlsafe_b64decode(payload))
+    except Exception:  # noqa: BLE001
+        return None
+    return claims if isinstance(claims, dict) else None
+
+
+def token_type(token: str | None) -> str | None:
+    """Keycloak's "typ" of a refresh token: "Offline", "Refresh", "other" or None.
+
+    Tells from the diagnostics whether Bosch granted offline_access (COBI):
+    an offline token reads "Offline". Only these two names are passed on, so
+    nothing else from the token can reach the diagnostics file.
+    """
+    claims = _claims(token)
+    if claims is None or "typ" not in claims:
+        return None
+    return claims["typ"] if claims["typ"] in ("Offline", "Refresh") else "other"
+
+
 def token_scope(token: str | None) -> str | None:
     """The "scope" claim of a JWT access token, or None if there is none.
 

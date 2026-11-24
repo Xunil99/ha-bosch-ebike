@@ -8,9 +8,11 @@ from homeassistant.components.diagnostics import async_redact_data
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
+from . import cobi
 from .activity_attribution import summarize_attribution
-from .const import DOMAIN
+from .const import CONF_KC_IDP_HINT, CONF_SYSTEM, DOMAIN, authorize_params
 from .coordinator import BoschEBikeCoordinator
+from .token_info import token_type
 
 # Keys that are redacted recursively before the dump leaves the instance.
 # Secrets (tokens, client id) plus location/identity data (GPS, serials).
@@ -32,7 +34,38 @@ TO_REDACT = {
     "frameNumberPosition",
     "address",
     "description",
+    # COBI: the normalized hubs carry their serial under "serial". The COBI
+    # block below never dumps them; this is the safety net.
+    "serial",
+    "cobi_hubs",
 }
+
+
+def _cobi_block(entry: ConfigEntry, coordinator: BoschEBikeCoordinator) -> dict[str, Any]:
+    """What a COBI account reports: field names and counts only.
+
+    Promised in issue #101: no positions, no serial numbers, no ids, no
+    timestamps. That is why the generic dump of bikes and the latest
+    activity is not used here, and why the error text is scrubbed (Bosch's
+    reply may carry a timestamp or a trace id).
+    """
+    activities = coordinator.data.get("all_activities") or []
+    return {
+        "system": "cobi",
+        "last_update_success": coordinator.last_update_success,
+        **coordinator.cobi_diagnostics(),
+        "estimated_durations": sum(
+            1 for a in activities if a.get("_cobi_duration_estimated")
+        ),
+        "activities_error": cobi.scrub_text(coordinator.activities_error),
+        # Scope names only, from the access token; and whether the refresh
+        # token is an offline one (offline_access granted).
+        "scope_granted": coordinator.api.access_token_scope,
+        "refresh_token_type": token_type(coordinator.api.refresh_token),
+        "kc_idp_hint_used": authorize_params(
+            entry.data.get(CONF_SYSTEM), entry.data.get(CONF_KC_IDP_HINT)
+        ).get("kc_idp_hint"),
+    }
 
 
 async def async_get_config_entry_diagnostics(
@@ -52,6 +85,10 @@ async def async_get_config_entry_diagnostics(
 
     if coordinator is None or coordinator.data is None:
         diag["coordinator"] = None
+        return diag
+
+    if getattr(coordinator, "is_cobi", False):
+        diag["coordinator"] = _cobi_block(entry, coordinator)
         return diag
 
     data = coordinator.data

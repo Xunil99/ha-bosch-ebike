@@ -302,6 +302,16 @@ def test_the_diagnostics_survive_garbage():
     assert cobi.diagnostics_summary([long_key], [])["hub_fields"] == ["ok"], "absurd keys are not echoed"
 
 
+def test_error_texts_lose_times_and_ids_but_keep_the_status():
+    text = cobi.scrub_text(
+        "ClientResponseError: 404, message='Not Found' (Bosch replied: "
+        '{"timestamp":"2026-11-24T09:12:33.123Z","at":"09:12:33","traceId":"98765432123456789"})'
+    )
+    assert "404" in text and "Not Found" in text
+    assert "2026" not in text and "09:12" not in text and "98765" not in text
+    assert cobi.scrub_text(None) is None
+
+
 if __name__ == "__main__":
     tests = [(n, f) for n, f in sorted(globals().items()) if n.startswith("test_") and callable(f)]
     failed = 0

@@ -17,6 +17,7 @@ function tolerates missing, None and wrong-typed input and never raises.
 from __future__ import annotations
 
 import math
+import re
 from collections import Counter
 from datetime import datetime, timedelta
 from typing import Any, Iterable
@@ -319,3 +320,21 @@ def diagnostics_summary(raw_hubs: Any, raw_activities: Any) -> dict[str, Any]:
         "bike_type_counts": dict(bike_types),
         "duration_unit": {"verdict": verdict, "counts": unit_counts},
     }
+
+
+_TIME_RE = re.compile(r"\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?)?")
+_CLOCK_RE = re.compile(r"\d{2}:\d{2}:\d{2}")
+_LONG_NUMBER_RE = re.compile(r"\d{6,}")
+
+
+def scrub_text(text: Any) -> str | None:
+    """An error text without dates, times and long numbers (ids, serials).
+
+    Status codes and words stay readable; this is for the diagnostics file,
+    which promises no timestamps and no ids.
+    """
+    if text is None:
+        return None
+    text = _TIME_RE.sub("<time>", str(text))
+    text = _CLOCK_RE.sub("<time>", text)
+    return _LONG_NUMBER_RE.sub("<number>", text)
