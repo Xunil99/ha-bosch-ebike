@@ -49,6 +49,37 @@ De integratie ondersteunt nu **ook** het oudere **eBike System 2 (BES2)**, niet 
 
 Deze entiteiten bestaan voor BES2-fietsen eenvoudigweg niet.
 
+### 🆕 COBI (SmartphoneHub, bèta)
+
+Vanaf versie 1.20.0b1 (voorlopige versie) leest de integratie ook **COBI**, dus de **SmartphoneHub met de COBI.Bike app**. Bosch biedt daarvoor in het Data Act portaal een eigen interface, de "Activity & Hub API (COBI)". Smart System en eBike System 2 blijven ongewijzigd: het systeem wordt per item van de integratie gekozen.
+
+**Wat je krijgt**
+
+- Sensoren voor de laatste rit: datum, start, einde, afstand, duur, hoogtemeters, gemiddelde snelheid, maximale snelheid en dagen sinds de laatste rit
+- Totalen over alle ritten: aantal, afstand (opgeteld uit je ritten), duur, hoogtemeters en gemiddelde snelheid
+- Afstand en aantal ritten voor deze week (vanaf maandag), deze maand en dit jaar
+- Eén apparaat per SmartphoneHub met serienummer, rol (eigenaar of gast) en activeringsdatum
+- De gebeurtenis `ha_bosch_ebike_new_activity` bij elke nieuwe rit
+
+**Wat ontbreekt omdat Bosch het voor COBI niet levert:** accu, kilometerstand van de fiets, motor, route op de kaart, hartslag, calorieën, cadans en vermogen. De kaarten (2D, 3D, heatmap) blijven voor COBI leeg.
+
+**Instellen**
+
+1. Maak in het Bosch Data Act portaal een app aan zoals beschreven in stap 1 (dezelfde redirect URI en login URL als bij het Smart System). Je meldt je daar aan met je SingleKey ID. Gebruik je het Smart System al, dan kun je dezelfde app en Client-ID gebruiken.
+2. Voeg in Home Assistant de integratie toe en kies in de eerste stap **"COBI (SmartphoneHub, COBI.Bike app)"**.
+3. Voer de Client-ID in en meld je aan bij Bosch.
+
+De gegevens worden elke 30 minuten opgehaald. Ze veranderen pas als de COBI.Bike app een rit heeft geüpload. Direct ophalen kan met de actie `homeassistant.update_entity` op een van de sensoren.
+
+Toont Home Assistant onder **Instellingen → Systeem → Reparaties** de melding **"Bosch vermeldt geen gegevens van COBI voor …"**, dan heeft Bosch geen hub en geen rit geleverd. Meestal is de gegevensdeling dan nog niet actief.
+
+**Opmerkingen bij de bèta**
+
+- De installatiestap heeft een ingeklapt gedeelte **"Geavanceerd (alleen om te testen)"** met het veld **"Aanmeldroute (kc_idp_hint)"**. Laat het leeg. Het is er alleen om een andere aanmeldroute te proberen als aanmelden met SingleKey ID niet lukt.
+- Het diagnosebestand helpt bij het testen: **Instellingen → Apparaten & diensten → Bosch eBike → ⋮ → Diagnostische gegevens downloaden**. Voor COBI bevat het alleen veldnamen en aantallen: geen posities, geen serienummers en geen tijdstempels.
+- Bosch vermeldt niet in welke eenheid de rijtijd wordt geleverd. De integratie herkent dat zelf. Ontbreekt de rijtijd, dan toont de sensor de tijd van begin tot einde van de rit (attribuut `estimated`).
+- Ritten zonder motor (BIOBIKE) tellen mee. Het attribuut `rides_by_bike_type` van de totaalsensoren toont de verdeling.
+
 ### Functies
 
 - **Fietsgegevens:** kilometerstand, motoruren (totaal & met ondersteuning), maximale ondersteuningssnelheid, actieve ondersteuningsmodi, loophulpsnelheid, kilometerstand volgende servicebeurt

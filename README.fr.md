@@ -49,6 +49,37 @@ L'intégration prend désormais **aussi** en charge l'ancien **eBike System 2 (B
 
 Ces entités n'existent tout simplement pas pour les vélos BES2.
 
+### 🆕 COBI (SmartphoneHub, bêta)
+
+À partir de la version 1.20.0b1 (préversion), l'intégration lit aussi **COBI**, à savoir le **SmartphoneHub avec l'app COBI.Bike**. Bosch propose pour cela une interface dédiée dans le portail Data Act, l'« Activity & Hub API (COBI) ». Smart System et eBike System 2 ne changent pas : le système se choisit pour chaque entrée de l'intégration.
+
+**Ce que tu obtiens**
+
+- Des capteurs pour la dernière sortie : date, début, fin, distance, durée, dénivelé positif, vitesse moyenne, vitesse maximale et jours depuis la dernière sortie
+- Des totaux sur toutes les sorties : nombre, distance (additionnée à partir de tes sorties), durée, dénivelé positif et vitesse moyenne
+- La distance et le nombre de sorties pour cette semaine (à partir du lundi), ce mois et cette année
+- Un appareil par SmartphoneHub avec son numéro de série, son rôle (propriétaire ou invité) et sa date d'activation
+- L'événement `ha_bosch_ebike_new_activity` à chaque nouvelle sortie
+
+**Ce qui manque parce que Bosch ne le fournit pas pour COBI :** batterie, compteur kilométrique du vélo, moteur, tracé sur la carte, fréquence cardiaque, calories, cadence et puissance. Les cartes (2D, 3D, heatmap) restent vides pour COBI.
+
+**Configuration**
+
+1. Crée une app dans le portail Bosch Data Act comme décrit à l'étape 1 (même redirect URI et même login URL que pour le Smart System). Tu t'y connectes avec ton SingleKey ID. Si tu utilises déjà le Smart System, tu peux reprendre la même app et le même Client-ID.
+2. Ajoute l'intégration dans Home Assistant et choisis **« COBI (SmartphoneHub, COBI.Bike app) »** à la première étape.
+3. Saisis le Client-ID et connecte ton compte chez Bosch.
+
+Les données sont récupérées toutes les 30 minutes. Elles ne changent qu'après que l'app COBI.Bike a transmis une sortie. Pour les récupérer tout de suite, utilise l'action `homeassistant.update_entity` sur l'un des capteurs.
+
+Si Home Assistant affiche sous **Paramètres → Système → Réparations** le message indiquant que Bosch ne fournit aucune donnée COBI, Bosch n'a renvoyé ni hub ni sortie. Le plus souvent, le partage des données n'est pas encore actif.
+
+**Remarques sur la bêta**
+
+- L'étape de configuration contient une section repliée **« Advanced (for testing only) »** avec le champ **« Login route (kc_idp_hint) »**. Ne le remplis pas. Il sert uniquement à essayer une autre voie de connexion si la connexion avec SingleKey ID ne fonctionne pas.
+- Le fichier de diagnostic aide pour les tests : **Paramètres → Appareils et services → Bosch eBike → ⋮ → Télécharger les diagnostics**. Pour COBI, il ne contient que des noms de champs et des nombres : aucune position, aucun numéro de série et aucun horodatage.
+- Bosch n'indique pas dans quelle unité la durée de roulage est fournie. L'intégration la détecte automatiquement. Si la durée manque, le capteur affiche le temps entre le début et la fin de la sortie (attribut `estimated`).
+- Les sorties sans moteur (BIOBIKE) sont comptées. L'attribut `rides_by_bike_type` des capteurs de totaux montre la répartition.
+
 ### Fonctionnalités
 
 - **Données du vélo :** kilométrage, heures moteur (total & avec assistance), vitesse maximale d'assistance, modes d'assistance actifs, vitesse de l'aide à la poussée, kilométrage du prochain entretien

@@ -49,6 +49,37 @@ Integrace nyní podporuje **také** starší **eBike System 2 (BES2)**, nejen Sm
 
 Tyto entity pro kola s BES2 jednoduše neexistují.
 
+### 🆕 COBI (SmartphoneHub, beta)
+
+Od verze 1.20.0b1 (předběžná verze) integrace čte také **COBI**, tedy **SmartphoneHub s aplikací COBI.Bike**. Bosch k tomu nabízí na portálu Data Act vlastní rozhraní, „Activity & Hub API (COBI)“. Smart System a eBike System 2 se nemění: systém se volí pro každou položku integrace zvlášť.
+
+**Co získáš**
+
+- Senzory poslední jízdy: datum, začátek, konec, vzdálenost, doba, převýšení, průměrná rychlost, maximální rychlost a dny od poslední jízdy
+- Součty za všechny jízdy: počet, vzdálenost (sečtená z tvých jízd), doba, převýšení a průměrná rychlost
+- Vzdálenost a počet jízd za tento týden (od pondělí), tento měsíc a tento rok
+- Jedno zařízení pro každý SmartphoneHub se sériovým číslem, rolí (vlastník nebo host) a datem aktivace
+- Událost `ha_bosch_ebike_new_activity` při každé nové jízdě
+
+**Co chybí, protože to Bosch pro COBI nedodává:** baterie, stav tachometru kola, motor, trasa na mapě, tep, kalorie, kadence a výkon. Mapy (2D, 3D, heatmap) zůstávají pro COBI prázdné.
+
+**Nastavení**
+
+1. Na portálu Bosch Data Act vytvoř aplikaci podle kroku 1 (stejná redirect URI a login URL jako u Smart System). Přihlašuješ se tam svým SingleKey ID. Pokud už používáš Smart System, můžeš použít stejnou aplikaci a stejné Client-ID.
+2. V Home Assistant přidej integraci a v prvním kroku zvol **„COBI (SmartphoneHub, aplikace COBI.Bike)“**.
+3. Zadej Client-ID a přihlas se u Bosch.
+
+Data se načítají každých 30 minut. Mění se teprve poté, co aplikace COBI.Bike nahraje jízdu. Okamžitě je načteš akcí `homeassistant.update_entity` na jeden ze senzorů.
+
+Pokud Home Assistant v **Nastavení → Systém → Opravy** ukáže zprávu **„Bosch pro … neuvádí žádná data COBI“**, Bosch nevrátil žádný hub ani žádnou jízdu. Obvykle ještě není aktivní sdílení dat.
+
+**Poznámky k betě**
+
+- Krok nastavení má sbalenou sekci **„Rozšířené (jen pro testování)“** s polem **„Způsob přihlášení (kc_idp_hint)“**. Nech ho prázdné. Slouží jen k vyzkoušení jiného způsobu přihlášení, pokud přihlášení přes SingleKey ID nefunguje.
+- Při testování pomáhá diagnostický soubor: **Nastavení → Zařízení a služby → Bosch eBike → ⋮ → Stáhnout diagnostiku**. Pro COBI obsahuje jen názvy polí a počty: žádné polohy, žádná sériová čísla a žádná časová razítka.
+- Bosch neuvádí, v jaké jednotce dodává dobu jízdy. Integrace ji pozná sama. Pokud doba jízdy chybí, senzor ukazuje čas od začátku do konce jízdy (atribut `estimated`).
+- Jízdy bez motoru (BIOBIKE) se počítají. Atribut `rides_by_bike_type` souhrnných senzorů ukazuje rozdělení.
+
 ### Funkce
 
 - **Data o kole:** najeté kilometry, motohodiny (celkem a s podporou), maximální rychlost podpory, aktivní režimy podpory, rychlost asistence při vedení, najeté kilometry do příští servisní prohlídky

@@ -87,6 +87,37 @@ Nicht verfügbare Funktionen erzeugen für BES2-Bikes **gar keine** Entitäten �
 
 <a name="de-funktionen"></a>
 
+### 🆕 COBI (SmartphoneHub, Beta)
+
+Ab Version 1.20.0b1 (Vorabversion) liest die Integration auch **COBI**, also den **SmartphoneHub mit der COBI.Bike App**. Bosch stellt dafür im Data Act Portal eine eigene Schnittstelle bereit, die „Activity & Hub API (COBI)“. Smart System und eBike System 2 sind davon nicht betroffen: Das System wird pro Integrationseintrag gewählt.
+
+**Was du bekommst**
+
+- Sensoren zur letzten Fahrt: Datum, Start, Ende, Strecke, Dauer, Höhenmeter, Durchschnittsgeschwindigkeit, Höchstgeschwindigkeit und Tage seit der letzten Fahrt
+- Summen über alle Fahrten: Anzahl, Strecke (aus deinen Fahrten summiert), Dauer, Höhenmeter und Durchschnittsgeschwindigkeit
+- Strecke und Anzahl der Fahrten für diese Woche (ab Montag), diesen Monat und dieses Jahr
+- Ein Gerät je SmartphoneHub mit Seriennummer, Rolle (Besitzer oder Gast) und Aktivierungsdatum
+- Das Ereignis `ha_bosch_ebike_new_activity` bei jeder neuen Fahrt
+
+**Was fehlt, weil Bosch es für COBI nicht liefert:** Akku, Kilometerstand des Bikes, Motor, Strecke auf der Karte, Puls, Kalorien, Trittfrequenz und Leistung. Die Karten (2D, 3D, Heatmap) bleiben für COBI leer.
+
+**Einrichtung**
+
+1. Lege im Bosch Data Act Portal eine App an, wie in Schritt 1 beschrieben (gleiche Redirect URI und Login URL wie beim Smart System). Du meldest dich dort mit deiner SingleKey ID an. Nutzt du schon das Smart System, kannst du dieselbe App und Client-ID verwenden.
+2. Füge in Home Assistant die Integration hinzu und wähle im ersten Schritt **„COBI (SmartphoneHub, COBI.Bike App)“**.
+3. Gib die Client-ID ein und melde dich bei Bosch an.
+
+Die Daten werden alle 30 Minuten abgerufen. Sie ändern sich erst, wenn die COBI.Bike App eine Fahrt übertragen hat. Sofort abrufen kannst du mit der Aktion `homeassistant.update_entity` auf einen der Sensoren.
+
+Zeigt Home Assistant unter **Einstellungen → System → Reparaturen** die Meldung **„Bosch nennt für … keine Daten von COBI“**, hat Bosch weder einen Hub noch eine Fahrt geliefert. Meist fehlt dann noch die Datenfreigabe.
+
+**Hinweise zur Beta**
+
+- Im Einrichtungsschritt gibt es den eingeklappten Bereich **„Erweitert (nur zum Testen)“** mit dem Feld **„Anmeldeweg (kc_idp_hint)“**. Lass es leer. Es ist nur dafür da, einen anderen Anmeldeweg auszuprobieren, falls die Anmeldung mit SingleKey ID nicht klappt.
+- Die Diagnosedatei hilft beim Testen: **Einstellungen → Geräte & Dienste → Bosch eBike → ⋮ → Diagnose herunterladen**. Für COBI enthält sie nur Feldnamen und Anzahlen, keine Positionen, keine Seriennummern und keine Zeitstempel.
+- Bosch nennt nicht, in welcher Einheit die Fahrzeit geliefert wird. Die Integration erkennt das selbst. Fehlt die Fahrzeit, steht die Zeit von Start bis Ende der Fahrt im Sensor (Attribut `estimated`).
+- Fahrten ohne Motor (BIOBIKE) zählen mit. Das Attribut `rides_by_bike_type` der Gesamtsensoren zeigt die Aufteilung.
+
 ### Funktionen
 
 - **Bike-Daten:** Kilometerstand, Motorstunden (gesamt & mit Unterstützung), maximale Unterstützungsgeschwindigkeit, aktive Unterstützungsmodi, Schiebehilfe-Geschwindigkeit, nächster Service-Kilometerstand
@@ -996,6 +1027,37 @@ Features that are not available create **no** entities at all for BES2 bikes —
 **Without the persistent and meticulous beta testing by Habanatz** (pedelecforum.de), eBike System 2 (BES2) support would not have been possible. Many thanks!
 
 <a name="en-features"></a>
+
+### 🆕 COBI (SmartphoneHub, beta)
+
+From version 1.20.0b1 (prerelease) the integration also reads **COBI**, the **SmartphoneHub with the COBI.Bike app**. Bosch offers a separate interface for it in the Data Act portal, the "Activity & Hub API (COBI)". Smart System and eBike System 2 are not affected: the system is chosen per integration entry.
+
+**What you get**
+
+- Sensors for the last ride: date, start, end, distance, duration, elevation gain, average speed, maximum speed and days since the last ride
+- Totals over all rides: count, distance (summed up from your rides), duration, elevation gain and average speed
+- Distance and number of rides for this week (from Monday), this month and this year
+- One device per SmartphoneHub with its serial number, role (owner or guest) and activation date
+- The event `ha_bosch_ebike_new_activity` for every new ride
+
+**What is missing because Bosch does not provide it for COBI:** battery, the bike's odometer, motor, route on the map, heart rate, calories, cadence and power. The maps (2D, 3D, heatmap) stay empty for COBI.
+
+**Setup**
+
+1. Register an app in the Bosch Data Act portal as described in step 1 (same redirect URI and login URL as for the Smart System). You sign in there with your SingleKey ID. If you already use the Smart System, you can use the same app and Client-ID.
+2. Add the integration in Home Assistant and choose **"COBI (SmartphoneHub, COBI.Bike app)"** in the first step.
+3. Enter the Client-ID and sign in at Bosch.
+
+The data is fetched every 30 minutes. It only changes after the COBI.Bike app has uploaded a ride. To fetch right away, run the action `homeassistant.update_entity` on one of the sensors.
+
+If Home Assistant shows **"Bosch lists no COBI data for …"** under **Settings → System → Repairs**, Bosch returned neither a hub nor a ride. Usually the data sharing is not active yet.
+
+**Notes on the beta**
+
+- The setup step has a collapsed section **"Advanced (for testing only)"** with the field **"Login route (kc_idp_hint)"**. Leave it empty. It is only there to try another login route if signing in with SingleKey ID does not work.
+- The diagnostics file helps with testing: **Settings → Devices & services → Bosch eBike → ⋮ → Download diagnostics**. For COBI it contains field names and counts only: no positions, no serial numbers and no timestamps.
+- Bosch does not say in which unit the riding time is delivered. The integration detects it by itself. If the riding time is missing, the sensor shows the time from start to end of the ride (attribute `estimated`).
+- Rides without a motor (BIOBIKE) are counted. The attribute `rides_by_bike_type` of the total sensors shows the split.
 
 ### Features
 
