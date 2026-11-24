@@ -18,6 +18,8 @@ SERVICE_RECORDS_V2_ENDPOINT = "/service-book/smart-system/v2/service-records"
 CONF_SYSTEM = "system"
 SYSTEM_SMART = "smart_system"
 SYSTEM_BES2 = "ebike_system_2"
+# COBI: SmartphoneHub with the COBI.Bike app ("Activity & Hub API (COBI)").
+SYSTEM_COBI = "cobi"
 DEFAULT_SYSTEM = SYSTEM_SMART
 
 # eBike System 2 (BES2 / eBike Connect)
@@ -25,6 +27,12 @@ BES2_KC_IDP_HINT = "ebike-connect"
 BES2_BIKES_ENDPOINT = "/bike-profile/ebike-system-2/v1/bikes"
 BES2_ACTIVITIES_ENDPOINT = "/activity/ebike-system-2/v1/activities"
 BES2_STATISTICS_ENDPOINT = "/activity/ebike-system-2/v1/statistics"
+
+# COBI (SmartphoneHub). Both lists come whole, without pagination.
+COBI_HUBS_ENDPOINT = "/cobi/v1/hubs"
+COBI_ACTIVITIES_ENDPOINT = "/cobi/v1/activities"
+# COBI data only changes after the COBI.Bike app synced a ride.
+COBI_SCAN_INTERVAL = 30  # minutes
 
 # Config keys for the BES2 drive-unit fallback identification
 CONF_BES2_SERIAL = "bes2_drive_unit_serial"
@@ -61,8 +69,44 @@ BES2_PORTAL_URL = (
     "&kc_idp_hint=ebike-connect"
 )
 
-# OAuth2 scope requested during authorization.
+# OAuth2 scope requested during authorization (the Smart System default).
 OAUTH_SCOPE = "openid"
+
+# Optional Keycloak identity provider hint stored with a COBI entry. It
+# overrides the table below, so a tester can try another login route without
+# a new release (only offered with "Advanced mode" in the user profile).
+CONF_KC_IDP_HINT = "kc_idp_hint"
+
+# What the authorize URL carries per system. The Smart System and COBI use
+# the SingleKey ID login of the realm (no hint); eBike System 2 goes through
+# the eBike Connect identity provider. COBI asks for offline_access: the COBI
+# spec lists it for both endpoints and describes it as a refresh token that
+# never expires while it is used at least once every 180 days.
+SYSTEM_AUTH = {
+    SYSTEM_SMART: {"kc_idp_hint": None, "scope": OAUTH_SCOPE},
+    SYSTEM_BES2: {"kc_idp_hint": BES2_KC_IDP_HINT, "scope": OAUTH_SCOPE},
+    SYSTEM_COBI: {"kc_idp_hint": None, "scope": "openid offline_access"},
+}
+
+
+def authorize_params(system: str | None, kc_idp_hint: str | None = None) -> dict:
+    """Scope and identity provider hint for the authorize URL of a system."""
+    auth = SYSTEM_AUTH.get(system or SYSTEM_SMART, SYSTEM_AUTH[SYSTEM_SMART])
+    params = {"scope": auth["scope"]}
+    hint = (kc_idp_hint or "").strip() or auth["kc_idp_hint"]
+    if hint:
+        params["kc_idp_hint"] = hint
+    return params
+
+
+def entry_unique_id(system: str | None, client_id: str) -> str:
+    """The config entry's unique id.
+
+    The Client-ID for the Smart System and eBike System 2, as always. COBI
+    gets a prefix: a SingleKey ID user may use the same portal app for the
+    Smart System and for COBI, and both entries must be able to exist.
+    """
+    return f"cobi:{client_id}" if system == SYSTEM_COBI else client_id
 
 CONF_CLIENT_ID = "client_id"
 

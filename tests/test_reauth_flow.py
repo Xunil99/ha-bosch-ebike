@@ -58,8 +58,13 @@ class _Required:
         self.description = description
 
 
+class _Optional(_Required):
+    pass
+
+
 class _Vol:
     Required = _Required
+    Optional = _Optional
 
     @staticmethod
     def Schema(mapping):  # noqa: N802 - mirrors voluptuous
@@ -71,8 +76,17 @@ _title_spec = importlib.util.spec_from_file_location("entry_title", _PACKAGE / "
 _entry_title = importlib.util.module_from_spec(_title_spec)
 _title_spec.loader.exec_module(_entry_title)
 
+# const.py imports nothing either; the auth table and the unique id helper are real.
+_const_spec = importlib.util.spec_from_file_location("const", _PACKAGE / "const.py")
+const = importlib.util.module_from_spec(_const_spec)
+_const_spec.loader.exec_module(const)
+
 _ns: dict[str, Any] = {
     "unique_title": _entry_title.unique_title,
+    "authorize_params": const.authorize_params,
+    "entry_unique_id": const.entry_unique_id,
+    "CONF_KC_IDP_HINT": const.CONF_KC_IDP_HINT,
+    "SYSTEM_COBI": const.SYSTEM_COBI,
     "Any": Any,
     "vol": _Vol,
     "CONF_CLIENT_ID": "client_id",
@@ -83,6 +97,7 @@ _ns: dict[str, Any] = {
     "ConfigFlowResult": dict,
 }
 _names = [
+    "async_step_credentials",
     "async_step_reauth",
     "async_step_reauth_confirm",
     "_used_by_another_entry",
@@ -107,6 +122,7 @@ def entry(entry_id, client_id=None, unique_id=None, title="Bosch eBike", **more)
 
 
 class FakeFlow:
+    async_step_credentials = _ns["async_step_credentials"]
     async_step_reauth = _ns["async_step_reauth"]
     async_step_reauth_confirm = _ns["async_step_reauth_confirm"]
     _used_by_another_entry = _ns["_used_by_another_entry"]
@@ -122,6 +138,10 @@ class FakeFlow:
         self.source = source
         self._client_id = client_id
         self._system = "smart"
+        self._kc_idp_hint = None
+        self.show_advanced_options = False
+        self._entries = entries
+        self.unique_id = None
         self.registered = []
         self.forms = []
         self.updates = []
@@ -132,6 +152,13 @@ class FakeFlow:
 
     def _register_impl(self, client_id):
         self.registered.append(client_id)
+
+    async def async_set_unique_id(self, unique_id):
+        self.unique_id = unique_id
+
+    def _abort_if_unique_id_configured(self):
+        if any(e.unique_id == self.unique_id for e in self._entries):
+            raise _Abort("already_configured")
 
     async def async_step_pick_implementation(self):
         return {"type": "external", "client_id": self._client_id}
@@ -147,6 +174,10 @@ class FakeFlow:
     def async_create_entry(self, **kwargs):
         self.created.append(kwargs)
         return {"type": "create_entry", **kwargs}
+
+
+class _Abort(Exception):
+    pass
 
 
 def _flow(entries=None, **kwargs):
@@ -299,6 +330,131 @@ def test_a_renamed_account_does_not_use_up_the_default_title():
     flow = FakeFlow([entry("a", "c1", "c1", title="Sam")], None, source="user", client_id="euda-x")
     _run(flow.async_oauth_create_entry({"token": {"access_token": "a", "refresh_token": "r"}}))
     assert flow.created[0]["title"] == "Bosch eBike"
+
+
+# --- COBI: a third system on the same login -----------------------------------------
+
+
+def _cobi_flow(entries, **kwargs):
+    flow = FakeFlow(entries, None, source="user", **kwargs)
+    flow._system = "cobi"
+    return flow
+
+
+def test_cobi_can_be_added_next_to_a_smart_system_entry_with_the_same_client_id():
+    # A SingleKey ID user registers one portal app and uses it for both.
+    smart = entry("smart", "euda-1", "euda-1", system="smart_system")
+    flow = _cobi_flow([smart], client_id=None)
+    result = _run(flow.async_step_credentials({"client_id": " euda-1 "}))
+    assert flow.unique_id == "cobi:euda-1"
+    assert flow.registered == ["euda-1"] and result["type"] == "external"
+
+
+def test_a_second_cobi_entry_with_the_same_client_id_is_refused():
+    other = entry("other", "euda-1", "cobi:euda-1", system="cobi")
+    flow = _cobi_flow([other], client_id=None)
+    try:
+        _run(flow.async_step_credentials({"client_id": "euda-1"}))
+    except _Abort as err:
+        assert str(err) == "already_configured"
+    else:
+        raise AssertionError("a duplicate COBI entry must abort")
+
+
+def test_smart_and_bes2_keep_the_plain_client_id_as_unique_id():
+    for system in ("smart_system", "ebike_system_2"):
+        flow = FakeFlow([], None, source="user", client_id=None)
+        flow._system = system
+        _run(flow.async_step_credentials({"client_id": "euda-1"}))
+        assert flow.unique_id == "euda-1", system
+
+
+def test_the_login_hint_field_is_offered_only_for_cobi_in_advanced_mode():
+    def fields(system, advanced):
+        flow = FakeFlow([], None, source="user", client_id=None)
+        flow._system = system
+        flow.show_advanced_options = advanced
+        result = _run(flow.async_step_credentials())
+        return [f.key for f in result["data_schema"]]
+
+    assert fields("cobi", True) == ["client_id", "kc_idp_hint"]
+    assert fields("cobi", False) == ["client_id"]
+    assert fields("smart_system", True) == ["client_id"]
+
+
+def test_a_typed_login_hint_is_kept_and_stored_with_the_entry():
+    flow = _cobi_flow([], client_id=None)
+    flow.show_advanced_options = True
+    _run(flow.async_step_credentials({"client_id": "euda-1", "kc_idp_hint": " singlekey "}))
+    assert flow._kc_idp_hint == "singlekey"
+    _run(flow.async_oauth_create_entry({"token": {"access_token": "a", "refresh_token": "r"}}))
+    (created,) = flow.created
+    assert created["title"] == "Bosch COBI"
+    assert created["data"]["system"] == "cobi"
+    assert created["data"]["kc_idp_hint"] == "singlekey"
+
+
+def test_a_cobi_entry_without_hint_stores_none():
+    flow = _cobi_flow([], client_id="euda-1")
+    _run(flow.async_oauth_create_entry({"token": {"access_token": "a", "refresh_token": "r"}}))
+    assert "kc_idp_hint" not in flow.created[0]["data"]
+    flow = FakeFlow([], None, source="user", client_id="euda-1")
+    _run(flow.async_oauth_create_entry({"token": {"access_token": "a", "refresh_token": "r"}}))
+    assert "kc_idp_hint" not in flow.created[0]["data"], "Smart System entries look as before"
+
+
+def test_the_reauth_of_a_cobi_entry_does_not_find_itself_or_the_smart_entry():
+    own = entry("own", "euda-1", "cobi:euda-1", system="cobi", kc_idp_hint="x")
+    smart = entry("smart", "euda-1", "euda-1", system="smart_system")
+    flow = FakeFlow([own, smart], own, client_id=None)
+    _run(flow.async_step_reauth(dict(own.data)))
+    assert flow._system == "cobi" and flow._kc_idp_hint == "x", "the stored hint is used again"
+    result = _run(flow.async_step_reauth_confirm({"client_id": "euda-1"}))
+    assert result["type"] == "external", result
+
+
+def test_the_reauth_of_a_cobi_entry_refuses_another_cobi_entrys_client_id():
+    own = entry("own", "euda-1", "cobi:euda-1", system="cobi")
+    other = entry("other", "euda-2", "cobi:euda-2", system="cobi")
+    flow = FakeFlow([own, other], own, client_id=None)
+    _run(flow.async_step_reauth(dict(own.data)))
+    result = _run(flow.async_step_reauth_confirm({"client_id": "euda-2"}))
+    assert result["errors"] == {"base": "already_configured"}
+
+
+def test_the_reauth_of_a_smart_entry_is_not_blocked_by_a_cobi_entry():
+    own = entry("own", "euda-1", "euda-1", system="smart_system")
+    cobi_entry = entry("cobi", "euda-2", "cobi:euda-2", system="cobi")
+    flow = FakeFlow([own, cobi_entry], own, client_id=None)
+    _run(flow.async_step_reauth(dict(own.data)))
+    result = _run(flow.async_step_reauth_confirm({"client_id": "euda-2"}))
+    assert result["type"] == "external", "a COBI entry does not block the Smart System"
+
+
+def test_the_finished_cobi_reauth_keeps_the_prefixed_unique_id():
+    own = entry("own", "euda-1", "cobi:euda-1", system="cobi")
+    flow = FakeFlow([own], own, client_id="euda-9")
+    flow._system = "cobi"
+    _run(flow.async_oauth_create_entry({"token": {"access_token": "a", "refresh_token": "r"}}))
+    ((_, kwargs),) = flow.updates
+    assert kwargs["unique_id"] == "cobi:euda-9"
+
+
+# --- the authorize parameters ------------------------------------------------------------
+
+
+def test_the_authorize_parameters_per_system():
+    assert const.authorize_params("smart_system") == {"scope": "openid"}
+    assert const.authorize_params("ebike_system_2") == {"scope": "openid", "kc_idp_hint": "ebike-connect"}
+    assert const.authorize_params("cobi") == {"scope": "openid offline_access"}
+    assert const.authorize_params("cobi", " my-idp ") == {"scope": "openid offline_access", "kc_idp_hint": "my-idp"}
+    assert const.authorize_params("unknown") == {"scope": "openid"}
+
+
+def test_the_pkce_implementation_reads_the_table():
+    src = _FLOW.read_text(encoding="utf-8")
+    assert "authorize_params(" in src
+    assert "BES2_KC_IDP_HINT if" not in src, "no hint chosen inline any more"
 
 
 # --- the texts ---------------------------------------------------------------------------------

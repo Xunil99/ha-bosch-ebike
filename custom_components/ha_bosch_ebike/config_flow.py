@@ -40,15 +40,18 @@ from .const import (
     CONF_LIVE_ODOMETER_ENTITY,
     CONF_LIVE_SOC_ENTITY,
     CONF_LIVE_SENSORS,
+    CONF_KC_IDP_HINT,
     CONF_SYSTEM,
     SYSTEM_SMART,
     SYSTEM_BES2,
-    BES2_KC_IDP_HINT,
+    SYSTEM_COBI,
     AUTH_URL,
     TOKEN_URL,
     OAUTH_SCOPE,
     FLOW_PORTAL_URL,
     BES2_PORTAL_URL,
+    authorize_params,
+    entry_unique_id,
 )
 from .device_lookup import device_for_bike
 from .entry_title import unique_title
@@ -58,7 +61,7 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class BoschPkceImplementation(LocalOAuth2ImplementationWithPkce):
-    """PKCE OAuth2 implementation that requests the openid scope."""
+    """PKCE OAuth2 implementation with the scope and hint of the chosen system."""
 
     @property
     def name(self) -> str:
@@ -66,13 +69,11 @@ class BoschPkceImplementation(LocalOAuth2ImplementationWithPkce):
 
     @property
     def extra_authorize_data(self) -> dict[str, Any]:
-        # Must keep the PKCE params from the parent and add our scope.
-        data = {"scope": OAUTH_SCOPE}
+        # Scope and Keycloak hint come from SYSTEM_AUTH in const.py (eBike
+        # System 2 logs in through the eBike Connect identity provider, COBI
+        # asks for offline_access). Must keep the parent's PKCE params.
+        data = dict(getattr(self, "_auth_params", None) or {"scope": OAUTH_SCOPE})
         data.update(super().extra_authorize_data)
-        # eBike System 2 accounts authenticate via the eBike Connect identity
-        # provider, selected by this Keycloak hint on the authorize URL.
-        if getattr(self, "_kc_idp_hint", None):
-            data["kc_idp_hint"] = self._kc_idp_hint
         return data
 
 
@@ -86,6 +87,8 @@ class BoschEBikeConfigFlow(AbstractOAuth2FlowHandler, domain=DOMAIN):
         super().__init__()
         self._client_id: str | None = None
         self._system: str = SYSTEM_SMART
+        # COBI only: a login hint the user typed (advanced mode), else None.
+        self._kc_idp_hint: str | None = None
 
     @property
     def logger(self) -> logging.Logger:
@@ -115,7 +118,7 @@ class BoschEBikeConfigFlow(AbstractOAuth2FlowHandler, domain=DOMAIN):
         # description on this step, this prevents a MISSING_VALUE crash.
         return self.async_show_menu(
             step_id="user",
-            menu_options=["smart_system", "ebike_system_2"],
+            menu_options=["smart_system", "ebike_system_2", "cobi"],
             description_placeholders={"portal_url": self._portal_url},
         )
 
@@ -133,20 +136,40 @@ class BoschEBikeConfigFlow(AbstractOAuth2FlowHandler, domain=DOMAIN):
         self._system = SYSTEM_BES2
         return await self.async_step_credentials()
 
+    async def async_step_cobi(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """COBI (SmartphoneHub with the COBI.Bike app) selected."""
+        self._system = SYSTEM_COBI
+        return await self.async_step_credentials()
+
     async def async_step_credentials(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Enter the Client-ID, then start the OAuth login."""
+        """Enter the Client-ID, then start the OAuth login.
+
+        COBI in advanced mode also offers the Keycloak login hint, so a
+        tester can try another login route without a new release.
+        """
         if user_input is not None:
             self._client_id = user_input[CONF_CLIENT_ID].strip()
-            await self.async_set_unique_id(self._client_id)
+            if self._system == SYSTEM_COBI:
+                self._kc_idp_hint = (
+                    (user_input.get(CONF_KC_IDP_HINT) or "").strip() or None
+                )
+            await self.async_set_unique_id(
+                entry_unique_id(self._system, self._client_id)
+            )
             self._abort_if_unique_id_configured()
             self._register_impl(self._client_id)
             return await self.async_step_pick_implementation()
 
+        schema: dict[Any, Any] = {vol.Required(CONF_CLIENT_ID): str}
+        if self._system == SYSTEM_COBI and self.show_advanced_options:
+            schema[vol.Optional(CONF_KC_IDP_HINT)] = str
         return self.async_show_form(
             step_id="credentials",
-            data_schema=vol.Schema({vol.Required(CONF_CLIENT_ID): str}),
+            data_schema=vol.Schema(schema),
             description_placeholders={"portal_url": self._portal_url},
         )
 
@@ -156,6 +179,8 @@ class BoschEBikeConfigFlow(AbstractOAuth2FlowHandler, domain=DOMAIN):
         """Re-authenticate an existing entry (e.g. refresh token expired)."""
         self._client_id = entry_data.get(CONF_CLIENT_ID)
         self._system = entry_data.get(CONF_SYSTEM, SYSTEM_SMART)
+        # A login hint stored with a COBI entry applies to the new login too.
+        self._kc_idp_hint = entry_data.get(CONF_KC_IDP_HINT)
         return await self.async_step_reauth_confirm()
 
     async def async_step_reauth_confirm(
@@ -194,27 +219,39 @@ class BoschEBikeConfigFlow(AbstractOAuth2FlowHandler, domain=DOMAIN):
         )
 
     def _used_by_another_entry(self, client_id: str) -> bool:
-        """Whether another entry of this integration already uses the Client-ID."""
+        """Whether another entry of this integration already uses the Client-ID.
+
+        COBI and the other two systems may share a Client-ID (one portal app
+        for one SingleKey ID), so a Client-ID only collides within the same
+        group: the unique id says so for current entries, the system stored
+        in the data for entries from before unique ids existed.
+        """
         own_entry_id = self._get_reauth_entry().entry_id
+        wanted = entry_unique_id(self._system, client_id)
+        is_cobi = self._system == SYSTEM_COBI
         return any(
             entry.entry_id != own_entry_id
-            and client_id in (entry.unique_id, entry.data.get(CONF_CLIENT_ID))
+            and (
+                entry.unique_id == wanted
+                or (
+                    entry.data.get(CONF_CLIENT_ID) == client_id
+                    and (entry.data.get(CONF_SYSTEM) == SYSTEM_COBI) == is_cobi
+                )
+            )
             for entry in self.hass.config_entries.async_entries(DOMAIN)
         )
 
     def _register_impl(self, client_id: str) -> None:
         """Register a fresh PKCE implementation for the given Client-ID.
 
-        For eBike System 2 the implementation carries the eBike Connect
-        Keycloak hint so the authorize URL routes to the right identity
-        provider; Smart System leaves it unset.
+        The implementation carries scope and Keycloak hint of the chosen
+        system (SYSTEM_AUTH in const.py); a hint stored with a COBI entry
+        takes precedence.
         """
         impl = BoschPkceImplementation(
             self.hass, DOMAIN, client_id, AUTH_URL, TOKEN_URL
         )
-        impl._kc_idp_hint = (
-            BES2_KC_IDP_HINT if self._system == SYSTEM_BES2 else None
-        )
+        impl._auth_params = authorize_params(self._system, self._kc_idp_hint)
         self.async_register_implementation(self.hass, impl)
 
     async def async_oauth_create_entry(
@@ -233,6 +270,8 @@ class BoschEBikeConfigFlow(AbstractOAuth2FlowHandler, domain=DOMAIN):
             "access_token": token.get("access_token"),
             "refresh_token": token.get("refresh_token"),
         }
+        if self._system == SYSTEM_COBI and self._kc_idp_hint:
+            entry_data[CONF_KC_IDP_HINT] = self._kc_idp_hint
 
         # Re-auth: update the existing entry in place instead of creating a new
         # one. The new values are merged over the old data (data= alone would
@@ -242,7 +281,7 @@ class BoschEBikeConfigFlow(AbstractOAuth2FlowHandler, domain=DOMAIN):
             reauth_entry = self._get_reauth_entry()
             return self.async_update_reload_and_abort(
                 reauth_entry,
-                unique_id=self._client_id,
+                unique_id=entry_unique_id(self._system, self._client_id),
                 data={**reauth_entry.data, **entry_data},
             )
 
@@ -250,7 +289,7 @@ class BoschEBikeConfigFlow(AbstractOAuth2FlowHandler, domain=DOMAIN):
         # would otherwise be indistinguishable from the first in device names
         # and in the card's account picker. The user can rename the entry.
         title = unique_title(
-            "Bosch eBike",
+            "Bosch COBI" if self._system == SYSTEM_COBI else "Bosch eBike",
             (entry.title for entry in self.hass.config_entries.async_entries(DOMAIN)),
         )
         return self.async_create_entry(title=title, data=entry_data)

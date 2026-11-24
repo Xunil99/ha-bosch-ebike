@@ -22,14 +22,15 @@ from .const import (
     SERVICE_RECORDS_ENDPOINT,
     SERVICE_RECORDS_V2_ENDPOINT,
     SYSTEM_SMART,
-    SYSTEM_BES2,
-    BES2_KC_IDP_HINT,
     BES2_BIKES_ENDPOINT,
     BES2_ACTIVITIES_ENDPOINT,
     BES2_STATISTICS_ENDPOINT,
     CAPACITY_TESTERS_PATH_CANDIDATES,
     BATTERIES_PATH_CANDIDATES,
     DRIVE_UNITS_PATH_CANDIDATES,
+    COBI_HUBS_ENDPOINT,
+    COBI_ACTIVITIES_ENDPOINT,
+    authorize_params,
 )
 
 from .oauth_error import rejection_reason
@@ -96,10 +97,10 @@ class BoschEBikeAPI:
             f"&redirect_uri={redirect_uri}"
             f"&code_challenge={challenge}"
             f"&code_challenge_method=S256"
-            f"&scope=openid"
         )
-        if self._system == SYSTEM_BES2:
-            params += f"&kc_idp_hint={BES2_KC_IDP_HINT}"
+        # Scope and identity provider hint per system: SYSTEM_AUTH in const.py,
+        # the same table the config flow uses.
+        params += "&" + urllib.parse.urlencode(authorize_params(self._system))
         return f"{AUTH_URL}{params}"
 
     # -- Token management --
@@ -487,6 +488,34 @@ class BoschEBikeAPI:
         """Fetch BES2 lifetime/aggregate statistics (totals, monthly)."""
         data = await self._get(BES2_STATISTICS_ENDPOINT)
         return data if isinstance(data, dict) else {}
+
+    # -- COBI (SmartphoneHub with the COBI.Bike app) --
+
+    @staticmethod
+    def _cobi_list(data: Any, key: str) -> list[dict[str, Any]]:
+        """The list under `key` of a COBI response (or a bare list), else [].
+
+        The spec wraps both lists in an object ({"hubs": [...]},
+        {"activities": [...]}); a bare list is accepted too, anything else
+        counts as empty rather than as an error.
+        """
+        items = data.get(key) if isinstance(data, dict) else data
+        if not isinstance(items, list):
+            return []
+        return [item for item in items if isinstance(item, dict)]
+
+    async def get_hubs_cobi(self) -> list[dict[str, Any]]:
+        """All COBI hubs of the account (one request, no pagination)."""
+        return self._cobi_list(await self._get(COBI_HUBS_ENDPOINT), "hubs")
+
+    async def get_activities_cobi(self) -> list[dict[str, Any]]:
+        """All COBI rides of the account (one request, no pagination).
+
+        Around 250 bytes per ride, so even 2000 rides stay near 0.5 MB.
+        """
+        return self._cobi_list(
+            await self._get(COBI_ACTIVITIES_ENDPOINT), "activities"
+        )
 
     async def get_all_activity_details(
         self, activity_ids: list[str], progress_callback: Any = None
