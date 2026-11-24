@@ -839,7 +839,6 @@ async def _async_setup_cobi(
     account.extend(
         BoschCobiPeriodSensor(coordinator, desc, title) for desc in COBI_PERIOD_SENSORS
     )
-    # The account device first: every hub device points at it (via_device).
     async_add_entities(scope_for_entry(hass, entry, account))
 
     hubs = [
@@ -1450,7 +1449,9 @@ class BoschCobiHubSensor(CoordinatorEntity[BoschEBikeCoordinator], SensorEntity)
             manufacturer="Bosch",
             model=f"SmartphoneHub ({part})" if part else "SmartphoneHub",
             serial_number=serial,
-            via_device=(DOMAIN, coordinator.cobi_account_id),
+            # No via_device link to the account device: Home Assistant
+            # 2026.10 deprecates the (domain, id) form in favour of a
+            # registry device id, which older versions do not know.
         )
 
     def _hub(self) -> dict[str, Any] | None:

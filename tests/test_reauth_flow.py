@@ -87,6 +87,8 @@ _ns: dict[str, Any] = {
     "entry_unique_id": const.entry_unique_id,
     "CONF_KC_IDP_HINT": const.CONF_KC_IDP_HINT,
     "SYSTEM_COBI": const.SYSTEM_COBI,
+    "CONF_ADVANCED": "advanced",
+    "section": lambda schema, options: ("section", schema, options),
     "Any": Any,
     "vol": _Vol,
     "CONF_CLIENT_ID": "client_id",
@@ -139,7 +141,6 @@ class FakeFlow:
         self._client_id = client_id
         self._system = "smart"
         self._kc_idp_hint = None
-        self.show_advanced_options = False
         self._entries = entries
         self.unique_id = None
         self.registered = []
@@ -369,23 +370,24 @@ def test_smart_and_bes2_keep_the_plain_client_id_as_unique_id():
         assert flow.unique_id == "euda-1", system
 
 
-def test_the_login_hint_field_is_offered_only_for_cobi_in_advanced_mode():
-    def fields(system, advanced):
+def test_the_login_hint_field_is_offered_only_for_cobi_in_a_collapsed_section():
+    def form(system):
         flow = FakeFlow([], None, source="user", client_id=None)
         flow._system = system
-        flow.show_advanced_options = advanced
-        result = _run(flow.async_step_credentials())
-        return [f.key for f in result["data_schema"]]
+        return _run(flow.async_step_credentials())["data_schema"]
 
-    assert fields("cobi", True) == ["client_id", "kc_idp_hint"]
-    assert fields("cobi", False) == ["client_id"]
-    assert fields("smart_system", True) == ["client_id"]
+    schema = form("cobi")
+    assert [f.key for f in schema] == ["client_id", "advanced"]
+    kind, inner, options = schema[next(f for f in schema if f.key == "advanced")]
+    assert kind == "section" and options == {"collapsed": True}
+    assert [f.key for f in inner] == ["kc_idp_hint"]
+    assert [f.key for f in form("smart_system")] == ["client_id"]
+    assert [f.key for f in form("ebike_system_2")] == ["client_id"]
 
 
 def test_a_typed_login_hint_is_kept_and_stored_with_the_entry():
     flow = _cobi_flow([], client_id=None)
-    flow.show_advanced_options = True
-    _run(flow.async_step_credentials({"client_id": "euda-1", "kc_idp_hint": " singlekey "}))
+    _run(flow.async_step_credentials({"client_id": "euda-1", "advanced": {"kc_idp_hint": " singlekey "}}))
     assert flow._kc_idp_hint == "singlekey"
     _run(flow.async_oauth_create_entry({"token": {"access_token": "a", "refresh_token": "r"}}))
     (created,) = flow.created

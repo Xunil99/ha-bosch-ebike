@@ -14,11 +14,18 @@
         "title": "Bosch eBike instellen",
         "description": "Voer de **Client-ID** in uit je app-registratie in het [Bosch Data Act-portaal]({portal_url}).\n\nAfhankelijk van je systeem registreer je de app via een andere login: **Smart System** en **COBI** met SingleKey ID, **eBike System 2** via de eBike Connect-login.\n\nNa het verzenden word je naar de Bosch-login geleid en automatisch teruggebracht naar Home Assistant. De gegevensdeling activeer je daarna per fiets in de Bosch eBike Manager.",
         "data": {
-          "client_id": "Client-ID",
-          "kc_idp_hint": "Aanmeldroute (kc_idp_hint, optioneel)"
+          "client_id": "Client-ID"
         },
-        "data_description": {
-          "kc_idp_hint": "Alleen om te testen: een hint voor de identiteitsprovider bij de Bosch login (Keycloak). Laat het leeg om aan te melden met SingleKey ID."
+        "sections": {
+          "advanced": {
+            "name": "Geavanceerd (alleen om te testen)",
+            "data": {
+              "kc_idp_hint": "Aanmeldroute (kc_idp_hint, optioneel)"
+            },
+            "data_description": {
+              "kc_idp_hint": "Alleen om te testen: een hint voor de identiteitsprovider bij de Bosch login (Keycloak). Laat het leeg om aan te melden met SingleKey ID."
+            }
+          }
         }
       },
       "reauth_confirm": {

@@ -14,11 +14,18 @@
         "title": "Bosch eBike Setup",
         "description": "Enter the **Client-ID** from your app registration in the [Bosch Data Act Portal]({portal_url}).\n\nDepending on your system you register the app via a different login: **Smart System** and **COBI** with SingleKey ID, **eBike System 2** with the eBike Connect login.\n\nAfter submitting you'll be sent to the Bosch login and returned to Home Assistant automatically. You then activate data sharing per bike in the Bosch eBike Manager.",
         "data": {
-          "client_id": "Client-ID",
-          "kc_idp_hint": "Login route (kc_idp_hint, optional)"
+          "client_id": "Client-ID"
         },
-        "data_description": {
-          "kc_idp_hint": "Only for testing: an identity provider hint for the Bosch login (Keycloak). Leave it empty to sign in with SingleKey ID."
+        "sections": {
+          "advanced": {
+            "name": "Advanced (for testing only)",
+            "data": {
+              "kc_idp_hint": "Login route (kc_idp_hint, optional)"
+            },
+            "data_description": {
+              "kc_idp_hint": "Only for testing: an identity provider hint for the Bosch login (Keycloak). Leave it empty to sign in with SingleKey ID."
+            }
+          }
         }
       },
       "reauth_confirm": {

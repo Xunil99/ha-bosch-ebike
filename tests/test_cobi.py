@@ -333,8 +333,9 @@ def test_every_language_has_the_cobi_texts():
         assert step["user"]["menu_options"]["cobi"].startswith("COBI"), name
         assert "**COBI**" in step["credentials"]["description"], name
         assert "{portal_url}" in step["credentials"]["description"], name
-        assert step["credentials"]["data"]["kc_idp_hint"], name
-        assert step["credentials"]["data_description"]["kc_idp_hint"], name
+        advanced = step["credentials"]["sections"]["advanced"]
+        assert advanced["name"] and advanced["data"]["kc_idp_hint"], name
+        assert advanced["data_description"]["kc_idp_hint"], name
         issue = d["issues"]["no_cobi_data"]
         assert "{account}" in issue["title"] and issue["description"], name
         sensors = d["entity"]["sensor"]
@@ -348,7 +349,7 @@ def test_the_new_texts_have_no_dashes():
     for name in _TEXT_FILES:
         d = _text(name)
         texts = [d["issues"]["no_cobi_data"]["title"], d["issues"]["no_cobi_data"]["description"],
-                 d["config"]["step"]["credentials"]["data_description"]["kc_idp_hint"]]
+                 d["config"]["step"]["credentials"]["sections"]["advanced"]["data_description"]["kc_idp_hint"]]
         for text in texts:
             assert " - " not in text and "\u2013" not in text and "\u2014" not in text, (name, text)
 

@@ -24,6 +24,11 @@ from homeassistant.config_entries import (
     OptionsFlow,
 )
 from homeassistant.core import callback
+
+try:
+    from homeassistant.data_entry_flow import section
+except ImportError:  # Home Assistant before 2024.8: no collapsible sections
+    section = None
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.config_entry_oauth2_flow import (
     AbstractOAuth2FlowHandler,
@@ -58,6 +63,9 @@ from .entry_title import unique_title
 from .profile_extra import bike_label
 
 _LOGGER = logging.getLogger(__name__)
+
+# Collapsed section of the COBI credentials step holding the login hint.
+CONF_ADVANCED = "advanced"
 
 
 class BoschPkceImplementation(LocalOAuth2ImplementationWithPkce):
@@ -148,15 +156,17 @@ class BoschEBikeConfigFlow(AbstractOAuth2FlowHandler, domain=DOMAIN):
     ) -> ConfigFlowResult:
         """Enter the Client-ID, then start the OAuth login.
 
-        COBI in advanced mode also offers the Keycloak login hint, so a
-        tester can try another login route without a new release.
+        COBI also offers the Keycloak login hint in a collapsed section, so a
+        tester can try another login route without a new release. A section
+        rather than "advanced mode": Home Assistant 2026.10 deprecates
+        show_advanced_options and always answers True during that period.
         """
         if user_input is not None:
             self._client_id = user_input[CONF_CLIENT_ID].strip()
             if self._system == SYSTEM_COBI:
-                self._kc_idp_hint = (
-                    (user_input.get(CONF_KC_IDP_HINT) or "").strip() or None
-                )
+                advanced = user_input.get(CONF_ADVANCED) or {}
+                hint = advanced.get(CONF_KC_IDP_HINT) or user_input.get(CONF_KC_IDP_HINT)
+                self._kc_idp_hint = (hint or "").strip() or None
             await self.async_set_unique_id(
                 entry_unique_id(self._system, self._client_id)
             )
@@ -165,8 +175,14 @@ class BoschEBikeConfigFlow(AbstractOAuth2FlowHandler, domain=DOMAIN):
             return await self.async_step_pick_implementation()
 
         schema: dict[Any, Any] = {vol.Required(CONF_CLIENT_ID): str}
-        if self._system == SYSTEM_COBI and self.show_advanced_options:
-            schema[vol.Optional(CONF_KC_IDP_HINT)] = str
+        if self._system == SYSTEM_COBI:
+            if section is not None:
+                schema[vol.Optional(CONF_ADVANCED)] = section(
+                    vol.Schema({vol.Optional(CONF_KC_IDP_HINT): str}),
+                    {"collapsed": True},
+                )
+            else:
+                schema[vol.Optional(CONF_KC_IDP_HINT)] = str
         return self.async_show_form(
             step_id="credentials",
             data_schema=vol.Schema(schema),

@@ -14,11 +14,18 @@
         "title": "Nastavení Bosch eBike",
         "description": "Zadej **Client-ID** z registrace aplikace na portálu [Bosch Data Act Portal]({portal_url}).\n\nAplikaci registruješ podle systému přes různá přihlášení: **Smart System** a **COBI** pomocí SingleKey ID, **eBike System 2** přes přihlášení eBike Connect.\n\nPo odeslání budeš přesměrován na přihlášení Bosch a automaticky vrácen zpět do Home Assistant. Sdílení dat pak aktivuješ pro každé kolo zvlášť v Bosch eBike Manageru.",
         "data": {
-          "client_id": "Client-ID",
-          "kc_idp_hint": "Způsob přihlášení (kc_idp_hint, volitelné)"
+          "client_id": "Client-ID"
         },
-        "data_description": {
-          "kc_idp_hint": "Jen pro testování: nápověda poskytovatele identity pro přihlášení Bosch (Keycloak). Pro přihlášení přes SingleKey ID nech pole prázdné."
+        "sections": {
+          "advanced": {
+            "name": "Rozšířené (jen pro testování)",
+            "data": {
+              "kc_idp_hint": "Způsob přihlášení (kc_idp_hint, volitelné)"
+            },
+            "data_description": {
+              "kc_idp_hint": "Jen pro testování: nápověda poskytovatele identity pro přihlášení Bosch (Keycloak). Pro přihlášení přes SingleKey ID nech pole prázdné."
+            }
+          }
         }
       },
       "reauth_confirm": {

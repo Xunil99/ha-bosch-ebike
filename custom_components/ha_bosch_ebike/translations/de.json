@@ -14,11 +14,18 @@
         "title": "Bosch eBike Einrichtung",
         "description": "Gib die **Client-ID** aus deiner App-Registrierung im [Bosch Data Act Portal]({portal_url}) ein.\n\nDie App legst du je nach System mit unterschiedlichem Login an: **Smart System** und **COBI** mit SingleKey ID, **eBike System 2** über den eBike-Connect-Login.\n\nNach dem Absenden wirst du zur Bosch-Anmeldung geleitet und automatisch zu Home Assistant zurückgeführt. Die Datenfreigabe aktivierst du anschließend pro Bike im Bosch eBike Manager.",
         "data": {
-          "client_id": "Client-ID",
-          "kc_idp_hint": "Anmeldeweg (kc_idp_hint, optional)"
+          "client_id": "Client-ID"
         },
-        "data_description": {
-          "kc_idp_hint": "Nur zum Testen: Hinweis auf den Identitätsanbieter für die Bosch Anmeldung (Keycloak). Für die Anmeldung mit SingleKey ID leer lassen."
+        "sections": {
+          "advanced": {
+            "name": "Erweitert (nur zum Testen)",
+            "data": {
+              "kc_idp_hint": "Anmeldeweg (kc_idp_hint, optional)"
+            },
+            "data_description": {
+              "kc_idp_hint": "Nur zum Testen: Hinweis auf den Identitätsanbieter für die Bosch Anmeldung (Keycloak). Für die Anmeldung mit SingleKey ID leer lassen."
+            }
+          }
         }
       },
       "reauth_confirm": {
