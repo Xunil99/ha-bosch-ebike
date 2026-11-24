@@ -6,14 +6,19 @@
         "description": "Který systém eBike chceš integrovat?",
         "menu_options": {
           "smart_system": "Smart System (novější modely)",
-          "ebike_system_2": "eBike System 2 (starší modely, eBike Connect)"
+          "ebike_system_2": "eBike System 2 (starší modely, eBike Connect)",
+          "cobi": "COBI (SmartphoneHub, aplikace COBI.Bike)"
         }
       },
       "credentials": {
         "title": "Nastavení Bosch eBike",
-        "description": "Zadej **Client-ID** z registrace aplikace na portálu [Bosch Data Act Portal]({portal_url}).\n\nAplikaci registruješ podle systému přes různá přihlášení: **Smart System** pomocí SingleKey ID, **eBike System 2** přes přihlášení eBike Connect.\n\nPo odeslání budeš přesměrován na přihlášení Bosch a automaticky vrácen zpět do Home Assistant. Sdílení dat pak aktivuješ pro každé kolo zvlášť v Bosch eBike Manageru.",
+        "description": "Zadej **Client-ID** z registrace aplikace na portálu [Bosch Data Act Portal]({portal_url}).\n\nAplikaci registruješ podle systému přes různá přihlášení: **Smart System** a **COBI** pomocí SingleKey ID, **eBike System 2** přes přihlášení eBike Connect.\n\nPo odeslání budeš přesměrován na přihlášení Bosch a automaticky vrácen zpět do Home Assistant. Sdílení dat pak aktivuješ pro každé kolo zvlášť v Bosch eBike Manageru.",
         "data": {
-          "client_id": "Client-ID"
+          "client_id": "Client-ID",
+          "kc_idp_hint": "Způsob přihlášení (kc_idp_hint, volitelné)"
+        },
+        "data_description": {
+          "kc_idp_hint": "Jen pro testování: nápověda poskytovatele identity pro přihlášení Bosch (Keycloak). Pro přihlášení přes SingleKey ID nech pole prázdné."
         }
       },
       "reauth_confirm": {
@@ -250,6 +255,34 @@
       },
       "drive_unit_thermal_derating": {
         "name": "Tepelné omezení motoru"
+      },
+      "distance_week": {
+        "name": "Vzdálenost tento týden"
+      },
+      "distance_month": {
+        "name": "Vzdálenost tento měsíc"
+      },
+      "distance_year": {
+        "name": "Vzdálenost tento rok"
+      },
+      "rides_week": {
+        "name": "Jízdy tento týden"
+      },
+      "rides_month": {
+        "name": "Jízdy tento měsíc"
+      },
+      "rides_year": {
+        "name": "Jízdy tento rok"
+      },
+      "cobi_hub_role": {
+        "name": "Role",
+        "state": {
+          "owner": "Vlastník",
+          "guest": "Host"
+        }
+      },
+      "cobi_hub_activated_at": {
+        "name": "Aktivováno"
       }
     },
     "number": {
@@ -319,6 +352,10 @@
     "no_bikes": {
       "title": "Bosch pro {account} neuvádí žádné kolo",
       "description": "Home Assistant je u Bosch přihlášen, ale Bosch pro tento účet neuvádí žádné kolo, takže nejsou k dispozici žádná kola ani jízdy. Obvykle ještě není aktivní sdílení dat: otevřete Bosch eBike Manager, aktivujte tam sdílení dat pro tuto aplikaci (Data Act, krok 5 nastavení v README) a znovu načtěte integraci. Tato zpráva zmizí, jakmile Bosch kolo uvede."
+    },
+    "no_cobi_data": {
+      "title": "Bosch pro {account} neuvádí žádná data COBI",
+      "description": "Home Assistant je u Bosch přihlášen, ale Bosch pro tento účet neuvádí žádný SmartphoneHub ani žádnou jízdu. Obvykle ještě není aktivní sdílení dat pro COBI: zkontroluj na portálu Bosch Data Act, zda tato aplikace smí číst data COBI, a znovu načti integraci. Tato zpráva zmizí, jakmile Bosch uvede hub nebo jízdu."
     }
   }
 }

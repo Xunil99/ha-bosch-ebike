@@ -6,14 +6,19 @@
         "description": "Welches eBike-System möchtest du einbinden?",
         "menu_options": {
           "smart_system": "Smart System (neuere Modelle)",
-          "ebike_system_2": "eBike System 2 (ältere Modelle, eBike Connect)"
+          "ebike_system_2": "eBike System 2 (ältere Modelle, eBike Connect)",
+          "cobi": "COBI (SmartphoneHub, COBI.Bike App)"
         }
       },
       "credentials": {
         "title": "Bosch eBike Einrichtung",
-        "description": "Gib die **Client-ID** aus deiner App-Registrierung im [Bosch Data Act Portal]({portal_url}) ein.\n\nDie App legst du je nach System mit unterschiedlichem Login an: **Smart System** mit SingleKey ID, **eBike System 2** über den eBike-Connect-Login.\n\nNach dem Absenden wirst du zur Bosch-Anmeldung geleitet und automatisch zu Home Assistant zurückgeführt. Die Datenfreigabe aktivierst du anschließend pro Bike im Bosch eBike Manager.",
+        "description": "Gib die **Client-ID** aus deiner App-Registrierung im [Bosch Data Act Portal]({portal_url}) ein.\n\nDie App legst du je nach System mit unterschiedlichem Login an: **Smart System** und **COBI** mit SingleKey ID, **eBike System 2** über den eBike-Connect-Login.\n\nNach dem Absenden wirst du zur Bosch-Anmeldung geleitet und automatisch zu Home Assistant zurückgeführt. Die Datenfreigabe aktivierst du anschließend pro Bike im Bosch eBike Manager.",
         "data": {
-          "client_id": "Client-ID"
+          "client_id": "Client-ID",
+          "kc_idp_hint": "Anmeldeweg (kc_idp_hint, optional)"
+        },
+        "data_description": {
+          "kc_idp_hint": "Nur zum Testen: Hinweis auf den Identitätsanbieter für die Bosch Anmeldung (Keycloak). Für die Anmeldung mit SingleKey ID leer lassen."
         }
       },
       "reauth_confirm": {
@@ -250,6 +255,34 @@
       },
       "drive_unit_thermal_derating": {
         "name": "Motor-Thermodrosselung"
+      },
+      "distance_week": {
+        "name": "Strecke diese Woche"
+      },
+      "distance_month": {
+        "name": "Strecke diesen Monat"
+      },
+      "distance_year": {
+        "name": "Strecke dieses Jahr"
+      },
+      "rides_week": {
+        "name": "Fahrten diese Woche"
+      },
+      "rides_month": {
+        "name": "Fahrten diesen Monat"
+      },
+      "rides_year": {
+        "name": "Fahrten dieses Jahr"
+      },
+      "cobi_hub_role": {
+        "name": "Rolle",
+        "state": {
+          "owner": "Besitzer",
+          "guest": "Gast"
+        }
+      },
+      "cobi_hub_activated_at": {
+        "name": "Aktiviert am"
       }
     },
     "number": {
@@ -319,6 +352,10 @@
     "no_bikes": {
       "title": "Bosch nennt kein Bike für {account}",
       "description": "Home Assistant ist bei Bosch angemeldet, aber Bosch nennt für dieses Konto kein Bike, daher gibt es weder Bikes noch Touren. Meist ist die Datenfreigabe noch nicht aktiv: Öffne den Bosch eBike Manager, aktiviere dort die Datenfreigabe für diese App (Data Act, Schritt 5 der Einrichtung im README) und lade die Integration neu. Diese Meldung verschwindet, sobald Bosch ein Bike nennt."
+    },
+    "no_cobi_data": {
+      "title": "Bosch nennt für {account} keine Daten von COBI",
+      "description": "Home Assistant ist bei Bosch angemeldet, aber Bosch nennt für dieses Konto weder einen SmartphoneHub noch eine Fahrt. Meist ist die Datenfreigabe für COBI noch nicht aktiv: Prüfe im Bosch Data Act Portal, ob diese App die Daten von COBI lesen darf, und lade die Integration neu. Diese Meldung verschwindet, sobald Bosch einen Hub oder eine Fahrt nennt."
     }
   }
 }

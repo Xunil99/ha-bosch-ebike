@@ -6,14 +6,19 @@
         "description": "Which eBike system would you like to integrate?",
         "menu_options": {
           "smart_system": "Smart System (newer models)",
-          "ebike_system_2": "eBike System 2 (older models, eBike Connect)"
+          "ebike_system_2": "eBike System 2 (older models, eBike Connect)",
+          "cobi": "COBI (SmartphoneHub, COBI.Bike app)"
         }
       },
       "credentials": {
         "title": "Bosch eBike Setup",
-        "description": "Enter the **Client-ID** from your app registration in the [Bosch Data Act Portal]({portal_url}).\n\nDepending on your system you register the app via a different login: **Smart System** with SingleKey ID, **eBike System 2** with the eBike Connect login.\n\nAfter submitting you'll be sent to the Bosch login and returned to Home Assistant automatically. You then activate data sharing per bike in the Bosch eBike Manager.",
+        "description": "Enter the **Client-ID** from your app registration in the [Bosch Data Act Portal]({portal_url}).\n\nDepending on your system you register the app via a different login: **Smart System** and **COBI** with SingleKey ID, **eBike System 2** with the eBike Connect login.\n\nAfter submitting you'll be sent to the Bosch login and returned to Home Assistant automatically. You then activate data sharing per bike in the Bosch eBike Manager.",
         "data": {
-          "client_id": "Client-ID"
+          "client_id": "Client-ID",
+          "kc_idp_hint": "Login route (kc_idp_hint, optional)"
+        },
+        "data_description": {
+          "kc_idp_hint": "Only for testing: an identity provider hint for the Bosch login (Keycloak). Leave it empty to sign in with SingleKey ID."
         }
       },
       "reauth_confirm": {
@@ -250,6 +255,34 @@
       },
       "drive_unit_thermal_derating": {
         "name": "Drive Unit Thermal Derating"
+      },
+      "distance_week": {
+        "name": "Distance this week"
+      },
+      "distance_month": {
+        "name": "Distance this month"
+      },
+      "distance_year": {
+        "name": "Distance this year"
+      },
+      "rides_week": {
+        "name": "Rides this week"
+      },
+      "rides_month": {
+        "name": "Rides this month"
+      },
+      "rides_year": {
+        "name": "Rides this year"
+      },
+      "cobi_hub_role": {
+        "name": "Role",
+        "state": {
+          "owner": "Owner",
+          "guest": "Guest"
+        }
+      },
+      "cobi_hub_activated_at": {
+        "name": "Activated"
       }
     },
     "number": {
@@ -319,6 +352,10 @@
     "no_bikes": {
       "title": "Bosch lists no bike for {account}",
       "description": "Home Assistant is signed in to Bosch, but Bosch lists no bike for this account, so there are no bikes and no rides. Usually the data sharing is not active yet: open the Bosch eBike Manager, activate the data sharing for this app (Data Act, step 5 of the setup in the README) and reload the integration. This message disappears as soon as Bosch lists a bike."
+    },
+    "no_cobi_data": {
+      "title": "Bosch lists no COBI data for {account}",
+      "description": "Home Assistant is signed in to Bosch, but Bosch lists neither a SmartphoneHub nor a ride for this account. Usually the data sharing for COBI is not active yet: check in the Bosch Data Act portal that this app may read the COBI data, then reload the integration. This message disappears as soon as Bosch lists a hub or a ride."
     }
   }
 }

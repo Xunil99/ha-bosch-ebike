@@ -6,14 +6,19 @@
         "description": "Welk eBike-systeem wil je integreren?",
         "menu_options": {
           "smart_system": "Smart System (nieuwere modellen)",
-          "ebike_system_2": "eBike System 2 (oudere modellen, eBike Connect)"
+          "ebike_system_2": "eBike System 2 (oudere modellen, eBike Connect)",
+          "cobi": "COBI (SmartphoneHub, COBI.Bike app)"
         }
       },
       "credentials": {
         "title": "Bosch eBike instellen",
-        "description": "Voer de **Client-ID** in uit je app-registratie in het [Bosch Data Act-portaal]({portal_url}).\n\nAfhankelijk van je systeem registreer je de app via een andere login: **Smart System** met SingleKey ID, **eBike System 2** via de eBike Connect-login.\n\nNa het verzenden word je naar de Bosch-login geleid en automatisch teruggebracht naar Home Assistant. De gegevensdeling activeer je daarna per fiets in de Bosch eBike Manager.",
+        "description": "Voer de **Client-ID** in uit je app-registratie in het [Bosch Data Act-portaal]({portal_url}).\n\nAfhankelijk van je systeem registreer je de app via een andere login: **Smart System** en **COBI** met SingleKey ID, **eBike System 2** via de eBike Connect-login.\n\nNa het verzenden word je naar de Bosch-login geleid en automatisch teruggebracht naar Home Assistant. De gegevensdeling activeer je daarna per fiets in de Bosch eBike Manager.",
         "data": {
-          "client_id": "Client-ID"
+          "client_id": "Client-ID",
+          "kc_idp_hint": "Aanmeldroute (kc_idp_hint, optioneel)"
+        },
+        "data_description": {
+          "kc_idp_hint": "Alleen om te testen: een hint voor de identiteitsprovider bij de Bosch login (Keycloak). Laat het leeg om aan te melden met SingleKey ID."
         }
       },
       "reauth_confirm": {
@@ -250,6 +255,34 @@
       },
       "drive_unit_thermal_derating": {
         "name": "Motor thermische derating"
+      },
+      "distance_week": {
+        "name": "Afstand deze week"
+      },
+      "distance_month": {
+        "name": "Afstand deze maand"
+      },
+      "distance_year": {
+        "name": "Afstand dit jaar"
+      },
+      "rides_week": {
+        "name": "Ritten deze week"
+      },
+      "rides_month": {
+        "name": "Ritten deze maand"
+      },
+      "rides_year": {
+        "name": "Ritten dit jaar"
+      },
+      "cobi_hub_role": {
+        "name": "Rol",
+        "state": {
+          "owner": "Eigenaar",
+          "guest": "Gast"
+        }
+      },
+      "cobi_hub_activated_at": {
+        "name": "Geactiveerd op"
       }
     },
     "number": {
@@ -319,6 +352,10 @@
     "no_bikes": {
       "title": "Bosch vermeldt geen fiets voor {account}",
       "description": "Home Assistant is aangemeld bij Bosch, maar Bosch vermeldt geen fiets voor dit account, dus er zijn geen fietsen en geen ritten. Meestal is de gegevensdeling nog niet actief: open de Bosch eBike Manager, activeer daar de gegevensdeling voor deze app (Data Act, stap 5 van de installatie in de README) en laad de integratie opnieuw. Dit bericht verdwijnt zodra Bosch een fiets vermeldt."
+    },
+    "no_cobi_data": {
+      "title": "Bosch vermeldt geen gegevens van COBI voor {account}",
+      "description": "Home Assistant is aangemeld bij Bosch, maar Bosch vermeldt voor dit account geen SmartphoneHub en geen rit. Meestal is de gegevensdeling voor COBI nog niet actief: controleer in het Bosch Data Act portaal of deze app de gegevens van COBI mag lezen en laad de integratie opnieuw. Dit bericht verdwijnt zodra Bosch een hub of een rit vermeldt."
     }
   }
 }

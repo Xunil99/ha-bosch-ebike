@@ -312,6 +312,47 @@ def test_error_texts_lose_times_and_ids_but_keep_the_status():
     assert cobi.scrub_text(None) is None
 
 
+# --- texts ----------------------------------------------------------------------------
+
+_TEXT_FILES = ["strings.json"] + [f"translations/{lang}.json" for lang in ("en", "de", "nl", "cs")]
+_COBI_SENSOR_KEYS = (
+    "distance_week", "distance_month", "distance_year",
+    "rides_week", "rides_month", "rides_year",
+    "cobi_hub_role", "cobi_hub_activated_at",
+)
+
+
+def _text(name):
+    return json.loads((_ROOT / "custom_components" / "ha_bosch_ebike" / name).read_text(encoding="utf-8"))
+
+
+def test_every_language_has_the_cobi_texts():
+    for name in _TEXT_FILES:
+        d = _text(name)
+        step = d["config"]["step"]
+        assert step["user"]["menu_options"]["cobi"].startswith("COBI"), name
+        assert "**COBI**" in step["credentials"]["description"], name
+        assert "{portal_url}" in step["credentials"]["description"], name
+        assert step["credentials"]["data"]["kc_idp_hint"], name
+        assert step["credentials"]["data_description"]["kc_idp_hint"], name
+        issue = d["issues"]["no_cobi_data"]
+        assert "{account}" in issue["title"] and issue["description"], name
+        sensors = d["entity"]["sensor"]
+        for key in _COBI_SENSOR_KEYS:
+            assert sensors[key]["name"], f"{name}: {key}"
+        assert set(sensors["cobi_hub_role"]["state"]) == {"owner", "guest"}, name
+
+
+def test_the_new_texts_have_no_dashes():
+    # Public texts: no dashes as punctuation.
+    for name in _TEXT_FILES:
+        d = _text(name)
+        texts = [d["issues"]["no_cobi_data"]["title"], d["issues"]["no_cobi_data"]["description"],
+                 d["config"]["step"]["credentials"]["data_description"]["kc_idp_hint"]]
+        for text in texts:
+            assert " - " not in text and "\u2013" not in text and "\u2014" not in text, (name, text)
+
+
 if __name__ == "__main__":
     tests = [(n, f) for n, f in sorted(globals().items()) if n.startswith("test_") and callable(f)]
     failed = 0
