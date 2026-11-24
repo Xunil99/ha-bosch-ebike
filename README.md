@@ -114,7 +114,7 @@ Zeigt Home Assistant unter **Einstellungen → System → Reparaturen** die Meld
 **Hinweise zur Beta**
 
 - Im Einrichtungsschritt gibt es den eingeklappten Bereich **„Erweitert (nur zum Testen)“** mit dem Feld **„Anmeldeweg (kc_idp_hint)“**. Lass es leer. Es ist nur dafür da, einen anderen Anmeldeweg auszuprobieren, falls die Anmeldung mit SingleKey ID nicht klappt.
-- Die Diagnosedatei hilft beim Testen: **Einstellungen → Geräte & Dienste → Bosch eBike → ⋮ → Diagnose herunterladen**. Für COBI enthält sie nur Feldnamen und Anzahlen, keine Positionen, keine Seriennummern und keine Zeitstempel.
+- Die Diagnosedatei hilft beim Testen: **Einstellungen → Geräte & Dienste → Bosch eBike → ⋮ → Diagnose herunterladen**. Der Teil der Integration enthält für COBI nur Feldnamen und Anzahlen, keine Positionen und keine Seriennummern. Home Assistant ergänzt allgemeine Angaben wie Version und Zeitzone.
 - Bosch nennt nicht, in welcher Einheit die Fahrzeit geliefert wird. Die Integration erkennt das selbst. Fehlt die Fahrzeit, steht die Zeit von Start bis Ende der Fahrt im Sensor (Attribut `estimated`).
 - Fahrten ohne Motor (BIOBIKE) zählen mit. Das Attribut `rides_by_bike_type` der Gesamtsensoren zeigt die Aufteilung.
 
@@ -1055,7 +1055,7 @@ If Home Assistant shows **"Bosch lists no COBI data for …"** under **Settings 
 **Notes on the beta**
 
 - The setup step has a collapsed section **"Advanced (for testing only)"** with the field **"Login route (kc_idp_hint)"**. Leave it empty. It is only there to try another login route if signing in with SingleKey ID does not work.
-- The diagnostics file helps with testing: **Settings → Devices & services → Bosch eBike → ⋮ → Download diagnostics**. For COBI it contains field names and counts only: no positions, no serial numbers and no timestamps.
+- The diagnostics file helps with testing: **Settings → Devices & services → Bosch eBike → ⋮ → Download diagnostics**. For COBI, the part written by the integration contains field names and counts only: no positions and no serial numbers. Home Assistant adds general details such as its version and time zone.
 - Bosch does not say in which unit the riding time is delivered. The integration detects it by itself. If the riding time is missing, the sensor shows the time from start to end of the ride (attribute `estimated`).
 - Rides without a motor (BIOBIKE) are counted. The attribute `rides_by_bike_type` of the total sensors shows the split.
 

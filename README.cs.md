@@ -76,7 +76,7 @@ Pokud Home Assistant v **Nastavení → Systém → Opravy** ukáže zprávu **�
 **Poznámky k betě**
 
 - Krok nastavení má sbalenou sekci **„Rozšířené (jen pro testování)“** s polem **„Způsob přihlášení (kc_idp_hint)“**. Nech ho prázdné. Slouží jen k vyzkoušení jiného způsobu přihlášení, pokud přihlášení přes SingleKey ID nefunguje.
-- Při testování pomáhá diagnostický soubor: **Nastavení → Zařízení a služby → Bosch eBike → ⋮ → Stáhnout diagnostiku**. Pro COBI obsahuje jen názvy polí a počty: žádné polohy, žádná sériová čísla a žádná časová razítka.
+- Při testování pomáhá diagnostický soubor: **Nastavení → Zařízení a služby → Bosch eBike → ⋮ → Stáhnout diagnostiku**. Pro COBI obsahuje část zapsaná integrací jen názvy polí a počty: žádné polohy a žádná sériová čísla. Home Assistant přidává obecné údaje, jako je verze a časové pásmo.
 - Bosch neuvádí, v jaké jednotce dodává dobu jízdy. Integrace ji pozná sama. Pokud doba jízdy chybí, senzor ukazuje čas od začátku do konce jízdy (atribut `estimated`).
 - Jízdy bez motoru (BIOBIKE) se počítají. Atribut `rides_by_bike_type` souhrnných senzorů ukazuje rozdělení.
 

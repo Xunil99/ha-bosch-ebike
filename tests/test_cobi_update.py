@@ -295,6 +295,10 @@ def test_a_failing_hub_list_fails_the_poll():
         _poll(coord)
     except UpdateFailed as err:
         assert "COBI hubs" in str(err)
+        # With wrong consent or scope the hub list is the first request to
+        # fail; the log line is then the tester's only evidence.
+        assert '{"title": "Not Found"}' in str(err), "Bosch's own reply is kept"
+        assert "[access token scope: openid offline_access]" in str(err)
     else:
         raise AssertionError("expected UpdateFailed")
 

@@ -76,7 +76,7 @@ Si Home Assistant muestra en **Ajustes → Sistema → Reparaciones** el aviso d
 **Notas sobre la beta**
 
 - El paso de configuración tiene una sección plegada **"Advanced (for testing only)"** con el campo **"Login route (kc_idp_hint)"**. Déjalo vacío. Solo sirve para probar otra vía de inicio de sesión si el inicio de sesión con SingleKey ID no funciona.
-- El archivo de diagnóstico ayuda en las pruebas: **Ajustes → Dispositivos y servicios → Bosch eBike → ⋮ → Descargar diagnósticos**. Para COBI solo contiene nombres de campos y recuentos: ninguna posición, ningún número de serie y ninguna marca de tiempo.
+- El archivo de diagnóstico ayuda en las pruebas: **Ajustes → Dispositivos y servicios → Bosch eBike → ⋮ → Descargar diagnósticos**. Para COBI, la parte escrita por la integración solo contiene nombres de campos y recuentos: ninguna posición y ningún número de serie. Home Assistant añade datos generales como su versión y la zona horaria.
 - Bosch no indica en qué unidad entrega el tiempo de pedaleo. La integración lo detecta sola. Si falta el tiempo de pedaleo, el sensor muestra el tiempo entre el inicio y el fin del recorrido (atributo `estimated`).
 - Los recorridos sin motor (BIOBIKE) cuentan. El atributo `rides_by_bike_type` de los sensores de totales muestra el reparto.
 

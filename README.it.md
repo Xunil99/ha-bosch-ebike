@@ -76,7 +76,7 @@ Se Home Assistant mostra in **Impostazioni → Sistema → Riparazioni** il mess
 **Note sulla beta**
 
 - Il passo di configurazione ha una sezione chiusa **"Advanced (for testing only)"** con il campo **"Login route (kc_idp_hint)"**. Lascialo vuoto. Serve solo per provare un'altra via di accesso se l'accesso con SingleKey ID non funziona.
-- Il file di diagnostica aiuta nei test: **Impostazioni → Dispositivi e servizi → Bosch eBike → ⋮ → Scarica diagnostica**. Per COBI contiene solo nomi di campi e conteggi: nessuna posizione, nessun numero di serie e nessun timestamp.
+- Il file di diagnostica aiuta nei test: **Impostazioni → Dispositivi e servizi → Bosch eBike → ⋮ → Scarica diagnostica**. Per COBI la parte scritta dall'integrazione contiene solo nomi di campi e conteggi: nessuna posizione e nessun numero di serie. Home Assistant aggiunge informazioni generali come versione e fuso orario.
 - Bosch non indica in quale unità fornisce il tempo di guida. L'integrazione la riconosce da sola. Se il tempo di guida manca, il sensore mostra il tempo dall'inizio alla fine del giro (attributo `estimated`).
 - I giri senza motore (BIOBIKE) vengono contati. L'attributo `rides_by_bike_type` dei sensori dei totali mostra la suddivisione.
 

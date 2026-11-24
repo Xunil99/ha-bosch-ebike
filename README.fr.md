@@ -76,7 +76,7 @@ Si Home Assistant affiche sous **Paramètres → Système → Réparations** le 
 **Remarques sur la bêta**
 
 - L'étape de configuration contient une section repliée **« Advanced (for testing only) »** avec le champ **« Login route (kc_idp_hint) »**. Ne le remplis pas. Il sert uniquement à essayer une autre voie de connexion si la connexion avec SingleKey ID ne fonctionne pas.
-- Le fichier de diagnostic aide pour les tests : **Paramètres → Appareils et services → Bosch eBike → ⋮ → Télécharger les diagnostics**. Pour COBI, il ne contient que des noms de champs et des nombres : aucune position, aucun numéro de série et aucun horodatage.
+- Le fichier de diagnostic aide pour les tests : **Paramètres → Appareils et services → Bosch eBike → ⋮ → Télécharger les diagnostics**. Pour COBI, la partie écrite par l'intégration ne contient que des noms de champs et des nombres : aucune position et aucun numéro de série. Home Assistant ajoute des informations générales comme sa version et le fuseau horaire.
 - Bosch n'indique pas dans quelle unité la durée de roulage est fournie. L'intégration la détecte automatiquement. Si la durée manque, le capteur affiche le temps entre le début et la fin de la sortie (attribut `estimated`).
 - Les sorties sans moteur (BIOBIKE) sont comptées. L'attribut `rides_by_bike_type` des capteurs de totaux montre la répartition.
 

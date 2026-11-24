@@ -1476,7 +1476,15 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         except AuthError as err:
             raise ConfigEntryAuthFailed(str(err)) from err
         except Exception as err:  # noqa: BLE001
-            raise UpdateFailed(f"Error fetching COBI hubs: {err}") from err
+            # With a missing consent or scope this is the first request to
+            # fail, and the entry then retries its setup with nothing loaded:
+            # the log line is all a tester has, so it carries Bosch's own
+            # reply and the token scope (the issue #95 pattern).
+            text = self._describe_fetch_error(err)
+            scope = getattr(self.api, "access_token_scope", None)
+            if scope:
+                text += f" [access token scope: {scope}]"
+            raise UpdateFailed(f"Error fetching COBI hubs: {text}") from err
         self._cobi_raw_hubs = list(raw_hubs or [])
         hubs = [
             hub for hub in (cobi.normalize_hub(raw) for raw in self._cobi_raw_hubs)

@@ -76,7 +76,7 @@ Toont Home Assistant onder **Instellingen → Systeem → Reparaties** de meldin
 **Opmerkingen bij de bèta**
 
 - De installatiestap heeft een ingeklapt gedeelte **"Geavanceerd (alleen om te testen)"** met het veld **"Aanmeldroute (kc_idp_hint)"**. Laat het leeg. Het is er alleen om een andere aanmeldroute te proberen als aanmelden met SingleKey ID niet lukt.
-- Het diagnosebestand helpt bij het testen: **Instellingen → Apparaten & diensten → Bosch eBike → ⋮ → Diagnostische gegevens downloaden**. Voor COBI bevat het alleen veldnamen en aantallen: geen posities, geen serienummers en geen tijdstempels.
+- Het diagnosebestand helpt bij het testen: **Instellingen → Apparaten & diensten → Bosch eBike → ⋮ → Diagnostische gegevens downloaden**. Voor COBI bevat het deel van de integratie alleen veldnamen en aantallen: geen posities en geen serienummers. Home Assistant voegt algemene gegevens toe, zoals versie en tijdzone.
 - Bosch vermeldt niet in welke eenheid de rijtijd wordt geleverd. De integratie herkent dat zelf. Ontbreekt de rijtijd, dan toont de sensor de tijd van begin tot einde van de rit (attribuut `estimated`).
 - Ritten zonder motor (BIOBIKE) tellen mee. Het attribuut `rides_by_bike_type` van de totaalsensoren toont de verdeling.
 
