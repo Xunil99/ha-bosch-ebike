@@ -137,6 +137,7 @@ _STATIC = {
 }
 _WANTED = _STATIC | {
     "_async_update_data",
+    "_persist_refreshed_tokens",
     "_fetch_activities_isolated",
     "_recheck_recent_activity_distances",
     "activities_unknown",
@@ -236,6 +237,7 @@ class _Entry:
 
 class FakeCoordinator:
     _async_update_data = _ns["_async_update_data"]
+    _persist_refreshed_tokens = _ns["_persist_refreshed_tokens"]
     _fetch_activities_isolated = _ns["_fetch_activities_isolated"]
     _recheck_recent_activity_distances = _ns["_recheck_recent_activity_distances"]
     activities_unknown = property(_ns["activities_unknown"])

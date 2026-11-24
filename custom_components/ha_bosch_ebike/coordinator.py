@@ -1249,11 +1249,6 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         bikes = [bes2.normalize_bike(b) for b in (raw_bikes or []) if isinstance(b, dict)]
         self._sync_no_bikes_issue(bikes)
 
-        # Token-persistence is intentionally not handled here: unlike the BES3
-        # path (where it is inlined in _async_update_data), api._get
-        # auto-refreshes the access token transparently. Persisting refreshed
-        # tokens for the BES2 path is deferred to a later phase.
-
         activities: list[dict[str, Any]] = []
         # Distinguishes "no rides" from "the fetch failed", which the empty
         # list alone cannot. The new-ride detection below needs that: seeding
@@ -1780,10 +1775,42 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self._activities_error_since = None
         return result
 
+    def _persist_refreshed_tokens(self) -> None:
+        """Write a refreshed token pair back into the config entry.
+
+        api._get refreshes an expired access token on its own, and Bosch may
+        rotate the refresh token with it. Until the new pair is in the entry
+        it exists only in memory, and a restart would log in with the old one
+        and end in a reauthentication. Writes only when a token changed, so a
+        poll without a refresh costs no storage write.
+        """
+        entry = self.config_entry
+        if entry is None:
+            return
+        if (
+            self.api.access_token == entry.data.get("access_token")
+            and self.api.refresh_token == entry.data.get("refresh_token")
+        ):
+            return
+        self.hass.config_entries.async_update_entry(
+            entry,
+            data={
+                **entry.data,
+                "access_token": self.api.access_token,
+                "refresh_token": self.api.refresh_token,
+            },
+        )
+
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch bikes and activities from Bosch API."""
         if self._system == SYSTEM_BES2:
-            return await self._update_bes2()
+            # In a finally: api._get may have refreshed the tokens before a
+            # later request of the same poll failed, and the refresh token it
+            # replaced may already be void at Bosch.
+            try:
+                return await self._update_bes2()
+            finally:
+                self._persist_refreshed_tokens()
 
         # Rides spotted for the first time, as (id, activity) pairs. They are
         # collected here but only turned into events much further down, once
@@ -1993,21 +2020,7 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         except Exception as err:
             raise UpdateFailed(f"Error fetching data: {err}") from err
 
-        # Persist updated tokens back to the config entry, but only when they
-        # actually changed (a token refresh happened). Writing on every poll
-        # would cause needless storage writes.
-        if (
-            self.api.access_token != self.config_entry.data.get("access_token")
-            or self.api.refresh_token != self.config_entry.data.get("refresh_token")
-        ):
-            self.hass.config_entries.async_update_entry(
-                self.config_entry,
-                data={
-                    **self.config_entry.data,
-                    "access_token": self.api.access_token,
-                    "refresh_token": self.api.refresh_token,
-                },
-            )
+        self._persist_refreshed_tokens()
 
         latest_activity = self._all_activities[0] if self._all_activities else None
 
