@@ -37,6 +37,9 @@ async def async_setup_entry(
 ) -> None:
     """Create the per-bike Data Act binary sensors from a config entry."""
     coordinator: BoschEBikeCoordinator = hass.data[DOMAIN][entry.entry_id]
+    # COBI has no bike: no GPS, battery, odometer, bike pass or service book.
+    if coordinator.is_cobi:
+        return
 
     # eBike System 2 has no bike-pass / service-book endpoints, so theft and
     # software-update would always be unknown. Skip the platform entirely.

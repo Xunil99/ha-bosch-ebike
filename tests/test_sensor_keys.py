@@ -46,6 +46,23 @@ BES2_TUPLES = {
     "TRICK_SENSORS",
     "BES2_STATISTICS_SENSORS",
 }
+# COBI builds its entities in its own branch of async_setup_entry: existing
+# ride and total descriptions picked by an allowlist, plus these tuples.
+COBI_TUPLES = {
+    "COBI_PERIOD_SENSORS",
+    "COBI_HUB_SENSORS",
+}
+# What the COBI account device has to offer (plan E8, issue #101).
+COBI_EXPECTED_ACCOUNT_KEYS = {
+    "last_ride_date", "last_ride_start_time", "last_ride_end_time",
+    "last_ride_distance", "last_ride_duration", "last_ride_elevation_gain",
+    "last_ride_avg_speed", "last_ride_max_speed", "days_since_last_ride",
+    "total_rides", "total_distance_activities", "total_duration",
+    "total_elevation_gain", "avg_speed_all_rides",
+    "distance_week", "distance_month", "distance_year",
+    "rides_week", "rides_month", "rides_year",
+}
+COBI_EXPECTED_HUB_KEYS = {"cobi_hub_role", "cobi_hub_activated_at"}
 
 
 def _description_tuples() -> dict[str, list[dict]]:
@@ -119,7 +136,7 @@ LOOPS = _setup_loop_bodies()
 
 def test_every_tuple_is_classified() -> None:
     """A newly added *_SENSORS tuple has to be assigned to a system."""
-    classified = SMART_SYSTEM_TUPLES | BES2_TUPLES
+    classified = SMART_SYSTEM_TUPLES | BES2_TUPLES | COBI_TUPLES
     assert classified == set(TUPLES), (
         "sensor.py and this test disagree about which description tuples exist: "
         f"only in sensor.py {set(TUPLES) - classified}, "
@@ -237,6 +254,74 @@ def test_lifetime_sums_carry_total_increasing() -> None:
             "SensorStateClass.TOTAL_INCREASING - without it this sensor "
             "cannot be used in a statistics card or history graph"
         )
+
+
+def _module_tuple_of_strings(name: str) -> tuple[str, ...]:
+    for node in _TREE.body:
+        targets = (
+            [node.target] if isinstance(node, ast.AnnAssign)
+            else node.targets if isinstance(node, ast.Assign) else []
+        )
+        if any(isinstance(t, ast.Name) and t.id == name for t in targets):
+            return tuple(ast.literal_eval(node.value))
+    raise AssertionError(f"sensor.py defines no {name}")
+
+
+def test_cobi_gets_exactly_the_promised_sensors() -> None:
+    allowed = (
+        set(_module_tuple_of_strings("COBI_ACTIVITY_KEYS"))
+        | set(_module_tuple_of_strings("COBI_AGGREGATE_KEYS"))
+    )
+    existing = {d["key"] for n in ("ACTIVITY_SENSORS", "AGGREGATE_SENSORS") for d in TUPLES[n]}
+    assert allowed <= existing, f"allowlist names keys that do not exist: {allowed - existing}"
+    account = allowed | {d["key"] for d in TUPLES["COBI_PERIOD_SENSORS"]}
+    assert account == COBI_EXPECTED_ACCOUNT_KEYS, (
+        f"missing {COBI_EXPECTED_ACCOUNT_KEYS - account}, extra {account - COBI_EXPECTED_ACCOUNT_KEYS}"
+    )
+    assert {d["key"] for d in TUPLES["COBI_HUB_SENSORS"]} == COBI_EXPECTED_HUB_KEYS
+
+
+def test_cobi_keys_are_unique_on_their_device() -> None:
+    keys = (
+        list(_module_tuple_of_strings("COBI_ACTIVITY_KEYS"))
+        + list(_module_tuple_of_strings("COBI_AGGREGATE_KEYS"))
+        + [d["key"] for d in TUPLES["COBI_PERIOD_SENSORS"]]
+    )
+    assert len(keys) == len(set(keys)), sorted(k for k in keys if keys.count(k) > 1)
+
+
+def test_cobi_returns_before_the_bike_loop() -> None:
+    """COBI has no bikes; its branch must not fall through into the bike code."""
+    setup = next(
+        n for n in _TREE.body
+        if isinstance(n, ast.AsyncFunctionDef) and n.name == "async_setup_entry"
+    )
+    first_if = next(n for n in setup.body if isinstance(n, ast.If))
+    assert "is_cobi" in ast.unparse(first_if.test), "the first branch is the COBI one"
+    assert isinstance(first_if.body[-1], ast.Return), "and it returns"
+
+
+def test_the_other_platforms_create_nothing_for_cobi() -> None:
+    package = _SENSOR.parent
+    for platform in ("binary_sensor", "button", "date", "number", "device_tracker"):
+        tree = ast.parse((package / f"{platform}.py").read_text(encoding="utf-8"))
+        setup = next(
+            n for n in tree.body
+            if isinstance(n, ast.AsyncFunctionDef) and n.name == "async_setup_entry"
+        )
+        first_if = next((n for n in setup.body if isinstance(n, ast.If)), None)
+        assert first_if is not None and "is_cobi" in ast.unparse(first_if.test), (
+            f"{platform}: the first branch of async_setup_entry is not the COBI one"
+        )
+        assert isinstance(first_if.body[-1], ast.Return), platform
+
+
+def test_cobi_unique_ids_share_the_device_prefix() -> None:
+    """scope_for_entry re-scopes by "<device id>_" prefix; a GUEST hub seen
+    by two accounts in one Home Assistant needs that to get its own ids."""
+    src = _SRC
+    assert 'f"cobi_hub_{serial}"' in src
+    assert 'f"cobi_hub_{serial}_' in src
 
 
 if __name__ == "__main__":

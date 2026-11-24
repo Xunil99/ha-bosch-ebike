@@ -151,6 +151,9 @@ async def async_setup_entry(
 ) -> None:
     """Set up Bosch eBike buttons from a config entry."""
     coordinator: BoschEBikeCoordinator = hass.data[DOMAIN][entry.entry_id]
+    # COBI has no bike: no GPS, battery, odometer, bike pass or service book.
+    if coordinator.is_cobi:
+        return
 
     bikes = coordinator.data.get("bikes", [])
     entities: list[ButtonEntity] = []

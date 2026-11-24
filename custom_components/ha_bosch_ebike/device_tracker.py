@@ -34,6 +34,9 @@ async def async_setup_entry(
 ) -> None:
     """Create the per-bike last-known-location tracker from a config entry."""
     coordinator: BoschEBikeCoordinator = hass.data[DOMAIN][entry.entry_id]
+    # COBI has no bike: no GPS, battery, odometer, bike pass or service book.
+    if coordinator.is_cobi:
+        return
 
     # The only location Bosch provides is the theft location from the bike
     # pass, which eBike System 2 does not expose. Skip the tracker for BES2.

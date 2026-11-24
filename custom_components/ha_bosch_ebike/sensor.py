@@ -41,6 +41,7 @@ from .charge_rate_estimate import (
     estimate_time_to_target,
 )
 from .charge_session import SUMMARY_KEYS as CHARGE_SUMMARY_KEYS, iso_or_none
+from . import cobi
 from .const import DOMAIN
 from .coordinator import BoschEBikeCoordinator
 from .shared_bike import scope_for_entry
@@ -679,6 +680,181 @@ TRICK_SENSORS: tuple[BoschBikeSensorDescription, ...] = (
 )
 
 
+# --- COBI (SmartphoneHub with the COBI.Bike app) ------------------------------
+#
+# COBI delivers rides and hubs only. Its account device reuses the ride and
+# total descriptions above for the fields COBI has (allowlists below), plus
+# calendar period totals; each hub gets a device of its own.
+
+COBI_ACTIVITY_KEYS: tuple[str, ...] = (
+    "last_ride_date",
+    "last_ride_start_time",
+    "last_ride_end_time",
+    "last_ride_distance",
+    "last_ride_duration",
+    "last_ride_elevation_gain",
+    "last_ride_avg_speed",
+    "last_ride_max_speed",
+    "days_since_last_ride",
+)
+COBI_AGGREGATE_KEYS: tuple[str, ...] = (
+    "total_rides",
+    # The total distance summed up from the rides (COBI has no odometer).
+    "total_distance_activities",
+    "total_duration",
+    "total_elevation_gain",
+    "avg_speed_all_rides",
+)
+
+
+@dataclass(frozen=True, kw_only=True)
+class BoschCobiPeriodDescription(SensorEntityDescription):
+    """A calendar period total of a COBI account (see cobi.period_totals)."""
+
+    period: str  # "week" | "month" | "year"
+    field: str  # "distance_km" | "rides"
+
+
+COBI_PERIOD_SENSORS: tuple[BoschCobiPeriodDescription, ...] = (
+    BoschCobiPeriodDescription(
+        key="distance_week",
+        translation_key="distance_week",
+        name="Distance this week",
+        native_unit_of_measurement=UnitOfLength.KILOMETERS,
+        device_class=SensorDeviceClass.DISTANCE,
+        state_class=SensorStateClass.TOTAL,
+        icon="mdi:map-marker-distance",
+        period="week",
+        field="distance_km",
+    ),
+    BoschCobiPeriodDescription(
+        key="distance_month",
+        translation_key="distance_month",
+        name="Distance this month",
+        native_unit_of_measurement=UnitOfLength.KILOMETERS,
+        device_class=SensorDeviceClass.DISTANCE,
+        state_class=SensorStateClass.TOTAL,
+        icon="mdi:map-marker-distance",
+        period="month",
+        field="distance_km",
+    ),
+    BoschCobiPeriodDescription(
+        key="distance_year",
+        translation_key="distance_year",
+        name="Distance this year",
+        native_unit_of_measurement=UnitOfLength.KILOMETERS,
+        device_class=SensorDeviceClass.DISTANCE,
+        state_class=SensorStateClass.TOTAL,
+        icon="mdi:map-marker-distance",
+        period="year",
+        field="distance_km",
+    ),
+    BoschCobiPeriodDescription(
+        key="rides_week",
+        translation_key="rides_week",
+        name="Rides this week",
+        state_class=SensorStateClass.TOTAL,
+        icon="mdi:counter",
+        period="week",
+        field="rides",
+    ),
+    BoschCobiPeriodDescription(
+        key="rides_month",
+        translation_key="rides_month",
+        name="Rides this month",
+        state_class=SensorStateClass.TOTAL,
+        icon="mdi:counter",
+        period="month",
+        field="rides",
+    ),
+    BoschCobiPeriodDescription(
+        key="rides_year",
+        translation_key="rides_year",
+        name="Rides this year",
+        state_class=SensorStateClass.TOTAL,
+        icon="mdi:counter",
+        period="year",
+        field="rides",
+    ),
+)
+
+
+@dataclass(frozen=True, kw_only=True)
+class BoschCobiHubDescription(SensorEntityDescription):
+    """A sensor of one COBI hub, reading the normalized hub dict."""
+
+    value_fn: Callable[[dict], Any]
+
+
+COBI_HUB_SENSORS: tuple[BoschCobiHubDescription, ...] = (
+    BoschCobiHubDescription(
+        key="cobi_hub_role",
+        translation_key="cobi_hub_role",
+        name="Role",
+        device_class=SensorDeviceClass.ENUM,
+        options=["owner", "guest"],
+        entity_category=EntityCategory.DIAGNOSTIC,
+        icon="mdi:account-key",
+        value_fn=lambda hub: hub.get("role"),
+    ),
+    BoschCobiHubDescription(
+        key="cobi_hub_activated_at",
+        translation_key="cobi_hub_activated_at",
+        name="Activated",
+        device_class=SensorDeviceClass.TIMESTAMP,
+        icon="mdi:calendar-check",
+        value_fn=lambda hub: _parse_timestamp(hub.get("activated_at")),
+    ),
+)
+
+
+def _cobi_account_device(coordinator: BoschEBikeCoordinator, title: str) -> DeviceInfo:
+    return DeviceInfo(
+        identifiers={(DOMAIN, coordinator.cobi_account_id)},
+        name=title,
+        manufacturer="Bosch",
+        model="COBI",
+    )
+
+
+async def _async_setup_cobi(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    coordinator: BoschEBikeCoordinator,
+    async_add_entities: AddEntitiesCallback,
+) -> None:
+    """Entities of a COBI account: one account device plus one per hub.
+
+    The account sensors are created unconditionally, never depending on
+    whether rides are loaded yet; otherwise a start during an outage of the
+    ride list would leave them missing. Hubs are known after the first poll
+    (a failing hub list fails the setup), a hub added later needs a reload.
+    """
+    title = entry.title or "Bosch COBI"
+    account: list[SensorEntity] = [
+        BoschCobiSensor(coordinator, desc, title)
+        for desc in (*ACTIVITY_SENSORS, *AGGREGATE_SENSORS)
+        if desc.key in COBI_ACTIVITY_KEYS or desc.key in COBI_AGGREGATE_KEYS
+    ]
+    account.extend(
+        BoschCobiPeriodSensor(coordinator, desc, title) for desc in COBI_PERIOD_SENSORS
+    )
+    # The account device first: every hub device points at it (via_device).
+    async_add_entities(scope_for_entry(hass, entry, account))
+
+    hubs = [
+        h for h in (coordinator.data.get("cobi_hubs") or [])
+        if isinstance(h, dict) and h.get("serial")
+    ]
+    hub_entities: list[SensorEntity] = [
+        BoschCobiHubSensor(coordinator, desc, hub, numbered=len(hubs) > 1)
+        for hub in hubs
+        for desc in COBI_HUB_SENSORS
+    ]
+    if hub_entities:
+        async_add_entities(scope_for_entry(hass, entry, hub_entities))
+
+
 def _bike_has_trick_data(data: dict, bike_id: str) -> bool:
     """True if any of this bike's rides carries parsed Trick Check data.
 
@@ -699,6 +875,10 @@ async def async_setup_entry(
 ) -> None:
     """Set up Bosch eBike sensors from a config entry."""
     coordinator: BoschEBikeCoordinator = hass.data[DOMAIN][entry.entry_id]
+
+    if coordinator.is_cobi:
+        await _async_setup_cobi(hass, entry, coordinator, async_add_entities)
+        return
 
     entities: list[BoschEBikeSensor] = []
 
@@ -1164,6 +1344,132 @@ class BoschEBikeSensor(CoordinatorEntity[BoschEBikeCoordinator], SensorEntity):
         if source is None:
             return None
         return attrs_fn(source) or None
+
+
+class BoschCobiSensor(BoschEBikeSensor):
+    """A ride or total sensor on the account device of a COBI entry.
+
+    Same descriptions and values as for the other systems: COBI rides are
+    normalized into the Smart System summary shape, and with no bike
+    attribution every ride counts for the account.
+    """
+
+    # Which attributes carry the bike type and the duration estimate.
+    _BIKE_TYPE_KEYS = ("last_ride_date", "last_ride_distance")
+    _BY_TYPE_KEYS = ("total_rides", "total_distance_activities")
+
+    def __init__(
+        self,
+        coordinator: BoschEBikeCoordinator,
+        description: BoschBikeSensorDescription,
+        title: str,
+    ) -> None:
+        super().__init__(coordinator, description, coordinator.cobi_account_id, title)
+        self._attr_device_info = _cobi_account_device(coordinator, title)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        key = self.entity_description.key
+        activities = self.coordinator.data.get("all_activities") or []
+        if key in self._BIKE_TYPE_KEYS and activities:
+            return {"bike_type": activities[0].get("_cobi_bike_type")}
+        if key == "last_ride_duration" and activities:
+            # True when Bosch sent no usable moving time and the wall clock
+            # time of the ride stands in for it.
+            return {"estimated": bool(activities[0].get("_cobi_duration_estimated"))}
+        if key in self._BY_TYPE_KEYS and not self.coordinator.activities_unknown:
+            return {"rides_by_bike_type": cobi.rides_by_bike_type(activities)}
+        if key == "total_duration" and not self.coordinator.activities_unknown:
+            return {
+                "estimated_rides": sum(
+                    1 for a in activities if a.get("_cobi_duration_estimated")
+                )
+            }
+        return None
+
+
+class BoschCobiPeriodSensor(CoordinatorEntity[BoschEBikeCoordinator], SensorEntity):
+    """Distance or ride count of this week, month or year (local time)."""
+
+    entity_description: BoschCobiPeriodDescription
+    _attr_has_entity_name = True
+
+    def __init__(
+        self,
+        coordinator: BoschEBikeCoordinator,
+        description: BoschCobiPeriodDescription,
+        title: str,
+    ) -> None:
+        super().__init__(coordinator)
+        self.entity_description = description
+        self._attr_unique_id = f"{coordinator.cobi_account_id}_{description.key}"
+        self._attr_device_info = _cobi_account_device(coordinator, title)
+
+    def _period(self) -> dict[str, Any]:
+        totals = cobi.period_totals(
+            self.coordinator.data.get("all_activities") or [], dt_util.now()
+        )
+        return totals[self.entity_description.period]
+
+    @property
+    def native_value(self) -> Any:
+        if self.coordinator.activities_unknown:
+            return None
+        return self._period()[self.entity_description.field]
+
+    @property
+    def last_reset(self) -> datetime | None:
+        return self._period()["start"]
+
+
+class BoschCobiHubSensor(CoordinatorEntity[BoschEBikeCoordinator], SensorEntity):
+    """A sensor of one COBI SmartphoneHub, on the hub's own device."""
+
+    entity_description: BoschCobiHubDescription
+    _attr_has_entity_name = True
+
+    def __init__(
+        self,
+        coordinator: BoschEBikeCoordinator,
+        description: BoschCobiHubDescription,
+        hub: dict[str, Any],
+        numbered: bool = False,
+    ) -> None:
+        super().__init__(coordinator)
+        self.entity_description = description
+        serial = hub["serial"]
+        self._serial = serial
+        suffix = description.key.removeprefix("cobi_hub_")
+        # Same prefix as the device id, so scope_for_entry can give a GUEST
+        # hub that two accounts in this Home Assistant see its own ids.
+        self._attr_unique_id = f"cobi_hub_{serial}_{suffix}"
+        part = hub.get("part")
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, f"cobi_hub_{serial}")},
+            name=f"SmartphoneHub {serial[-4:]}" if numbered else "SmartphoneHub",
+            manufacturer="Bosch",
+            model=f"SmartphoneHub ({part})" if part else "SmartphoneHub",
+            serial_number=serial,
+            via_device=(DOMAIN, coordinator.cobi_account_id),
+        )
+
+    def _hub(self) -> dict[str, Any] | None:
+        return next(
+            (
+                h for h in (self.coordinator.data.get("cobi_hubs") or [])
+                if isinstance(h, dict) and h.get("serial") == self._serial
+            ),
+            None,
+        )
+
+    @property
+    def available(self) -> bool:
+        return super().available and self._hub() is not None
+
+    @property
+    def native_value(self) -> Any:
+        hub = self._hub()
+        return self.entity_description.value_fn(hub) if hub else None
 
 
 class BoschReachableRangeSensor(CoordinatorEntity[BoschEBikeCoordinator], SensorEntity):
