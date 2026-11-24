@@ -112,6 +112,7 @@ _ns: dict[str, Any] = {
     "UpdateFailed": UpdateFailed,
     "ClientResponseError": FakeResponseError,
     "SYSTEM_BES2": "bes2",
+    "SYSTEM_COBI": "cobi",
     "SYSTEM_SMART": "smart",
     "_LOGGER": _logger,
     "dt_util": _FakeDtUtil,

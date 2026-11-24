@@ -46,7 +46,12 @@ class UpdateFailed(Exception):
     pass
 
 
-_ns: dict[str, Any] = {"Any": Any, "SYSTEM_BES2": "ebike_system_2", "UpdateFailed": UpdateFailed}
+_ns: dict[str, Any] = {
+    "Any": Any,
+    "SYSTEM_BES2": "ebike_system_2",
+    "SYSTEM_COBI": "cobi",
+    "UpdateFailed": UpdateFailed,
+}
 _node = _method("_async_update_data")
 exec(  # noqa: S102 - executing our own source
     compile(
@@ -119,6 +124,9 @@ class FakeCoordinator:
     async def _update_bes2(self):
         return await self._bes2_behaviour(self)
 
+    async def _update_cobi(self):
+        return await self._bes2_behaviour(self)
+
 
 async def _refresh_then_succeed(coord):
     # What api._get does on a 401: new access token, rotated refresh token.
@@ -170,6 +178,17 @@ def test_bes2_poll_without_a_refresh_writes_nothing():
     assert coord.hass.config_entries.updated == [], (
         "no storage write on every poll, only when a token changed"
     )
+
+
+def test_the_cobi_poll_writes_refreshed_tokens_back_too():
+    for behaviour in (_refresh_then_succeed, _refresh_then_fail):
+        coord = FakeCoordinator(behaviour)
+        coord._system = "cobi"
+        try:
+            asyncio.run(coord._async_update_data())
+        except UpdateFailed:
+            pass
+        assert coord.config_entry.data["refresh_token"] == "refresh-new", behaviour.__name__
 
 
 def test_both_paths_use_the_same_helper():

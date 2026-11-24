@@ -24,6 +24,8 @@ from .const import (
     DOMAIN,
     SYSTEM_SMART,
     SYSTEM_BES2,
+    SYSTEM_COBI,
+    COBI_SCAN_INTERVAL,
     DEFAULT_SCAN_INTERVAL,
     DEFAULT_BATTERY_CAPACITY_WH,
     SERVICE_WARN_DAYS,
@@ -38,7 +40,7 @@ from .const import (
     CONF_LIVE_SENSORS,
 )
 from .energy_cost import compute_energy_windows
-from . import no_bikes
+from . import cobi, no_bikes
 from .live_enrichment import get_state_at, parse_iso_utc
 from .range_estimate import (
     compute_range_estimate,
@@ -55,6 +57,10 @@ from .trick_check import parse_trick_check
 from .activity_event import build_new_activity_payload
 
 _LOGGER = logging.getLogger(__name__)
+
+# Repair issue (translation key and id prefix) while a COBI account lists
+# neither a hub nor a ride.
+COBI_NO_DATA_ISSUE = "no_cobi_data"
 
 # How long a bike's most-recently-attributed activity stays eligible to
 # receive further deliveredWhOverLifetime delta (see _track_battery_consumption's
@@ -176,7 +182,13 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             hass,
             _LOGGER,
             name=DOMAIN,
-            update_interval=timedelta(minutes=DEFAULT_SCAN_INTERVAL),
+            # COBI data only changes after the COBI.Bike app synced a ride.
+            update_interval=timedelta(
+                minutes=(
+                    COBI_SCAN_INTERVAL if system == SYSTEM_COBI
+                    else DEFAULT_SCAN_INTERVAL
+                )
+            ),
         )
         self.api = api
         self._system = system
@@ -195,6 +207,12 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # yet" - the first one only seeds the set, so setup never fires a burst
         # of events for rides that happened before the integration existed.
         self._bes2_seen_activity_ids: set[str] | None = None
+        # The same for COBI, which also gets its whole ride list every poll.
+        self._cobi_seen_activity_ids: set[str] | None = None
+        # The raw COBI answers of the last successful fetches, read only by
+        # the diagnostics (field names and counts, see cobi.diagnostics_summary).
+        self._cobi_raw_hubs: list[dict[str, Any]] = []
+        self._cobi_raw_activities: list[dict[str, Any]] | None = None
         # BES2 trip detail responses, shared between the several per-ride
         # activities one trip is split into (issue #88). trip_id ->
         # (monotonic fetch time, raw detail). See _bes2_trip_detail.
@@ -328,6 +346,30 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         consumption, range estimate) that BES2 has no data for.
         """
         return self._system == SYSTEM_BES2
+
+    @property
+    def is_cobi(self) -> bool:
+        """True for a COBI account (SmartphoneHub with the COBI.Bike app).
+
+        COBI has hubs and rides only: no bike, battery, odometer or track.
+        The platforms create the COBI entities in their own branch.
+        """
+        return self._system == SYSTEM_COBI
+
+    @property
+    def cobi_account_id(self) -> str:
+        """Device id of a COBI account; also the bike_id of its ride events.
+
+        Built from the entry id, which survives a reauth with a new
+        Client-ID (issue #98), so the entities keep their unique ids.
+        """
+        return f"cobi_{self.config_entry.entry_id}"
+
+    def cobi_diagnostics(self) -> dict[str, Any]:
+        """Field names and counts of the last COBI answers (no values)."""
+        return cobi.diagnostics_summary(
+            self._cobi_raw_hubs, self._cobi_raw_activities or []
+        )
 
     async def async_load_persisted_state(self) -> None:
         """Restore battery consumption state from disk (once at startup)."""
@@ -1419,6 +1461,117 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "drive_unit_field_data": self._drive_unit_field_data,
         }
 
+    async def _update_cobi(self) -> dict[str, Any]:
+        """Fetch COBI hubs and rides into the shape the platforms read.
+
+        A failing hub list fails the poll. The ride list goes through
+        _fetch_activities_isolated (issue #95): when it fails, the last good
+        list stays, and after one successful fetch the totals never drop to
+        unknown or 0. Rides have no hub, so everything ride related is per
+        account. There is no bike, so "bikes" is empty and every per-bike
+        loop of the platforms creates nothing.
+        """
+        try:
+            raw_hubs = await self.api.get_hubs_cobi()
+        except AuthError as err:
+            raise ConfigEntryAuthFailed(str(err)) from err
+        except Exception as err:  # noqa: BLE001
+            raise UpdateFailed(f"Error fetching COBI hubs: {err}") from err
+        self._cobi_raw_hubs = list(raw_hubs or [])
+        hubs = [
+            hub for hub in (cobi.normalize_hub(raw) for raw in self._cobi_raw_hubs)
+            if hub is not None
+        ]
+
+        try:
+            raw_acts = await self._fetch_activities_isolated(
+                self.api.get_activities_cobi
+            )
+        except AuthError as err:
+            raise ConfigEntryAuthFailed(str(err)) from err
+        activities_fetched = raw_acts is not None
+        if activities_fetched:
+            self._cobi_raw_activities = list(raw_acts)
+            # One verdict for the whole list, not per ride (see cobi.py).
+            unit, _counts = cobi.detect_duration_unit(self._cobi_raw_activities)
+            activities = [
+                act for act in (
+                    cobi.normalize_activity(raw, unit)
+                    for raw in self._cobi_raw_activities
+                )
+                if act is not None
+            ]
+            activities.sort(key=lambda a: str(a.get("startTime") or ""), reverse=True)
+            self._all_activities = activities
+            # Without this, activities_unknown would set every total to
+            # unknown during any later outage of the ride list.
+            self._initial_import_done = True
+
+            # New-ride events: the first successful fetch only seeds the set,
+            # so neither the setup nor a fetch that failed until now turns
+            # the whole history into "new" rides.
+            seen = {a["id"] for a in activities}
+            if self._cobi_seen_activity_ids is None:
+                self._cobi_seen_activity_ids = seen
+            else:
+                fresh = seen - self._cobi_seen_activity_ids
+                self._cobi_seen_activity_ids |= seen
+                for activity in reversed(activities):
+                    if activity["id"] in fresh:
+                        self._fire_new_activity(activity, self.cobi_account_id)
+
+            # Only a real answer says anything about the data sharing.
+            self._sync_no_cobi_data_issue(cobi.data_missing(hubs, activities))
+
+        return {
+            "bikes": [],
+            "cobi_hubs": hubs,
+            "latest_activity": self._all_activities[0] if self._all_activities else None,
+            "all_activities": self._all_activities,
+            "latest_activity_details": None,
+            "latest_activity_details_by_bike": {},
+            "activity_consumption": {},
+            "activity_bike": {},
+            "maintenance": {},
+            "service_overrides": {},
+            "battery_capacity_wh": {},
+            "range_estimate": None,
+            "energy_window": {},
+            "bike_pass": {},
+            "service_records": {},
+            "unassigned_activities": [],
+            "capacity_testers": {},
+            "battery_field_data": {},
+            "drive_unit_field_data": {},
+        }
+
+    def _sync_no_cobi_data_issue(self, missing: bool) -> None:
+        """Show a repair issue while Bosch lists neither a hub nor a ride.
+
+        Same pattern as _sync_no_bikes_issue, with its own text: for COBI it
+        is the data sharing of the COBI account that is missing, not a bike
+        in the eBike Manager. Clears itself, and never fails the poll.
+        """
+        entry = self.config_entry
+        if entry is None:
+            return
+        issue = f"{COBI_NO_DATA_ISSUE}_{entry.entry_id}"
+        try:
+            if missing:
+                ir.async_create_issue(
+                    self.hass,
+                    DOMAIN,
+                    issue,
+                    is_fixable=False,
+                    severity=ir.IssueSeverity.WARNING,
+                    translation_key=COBI_NO_DATA_ISSUE,
+                    translation_placeholders={"account": entry.title},
+                )
+            else:
+                ir.async_delete_issue(self.hass, DOMAIN, issue)
+        except Exception:  # noqa: BLE001
+            _LOGGER.exception("Bosch eBike: could not update the COBI data issue")
+
     async def _bes2_trip_detail(
         self, trip_id: str, fresh: bool = False
     ) -> dict[str, Any]:
@@ -1458,6 +1611,9 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         ``bes2.normalize_track`` into the same point shape the Smart System
         detail already has.
         """
+        if self._system == SYSTEM_COBI:
+            # COBI rides have no track; the map and heatmap get none.
+            return {"activityDetails": []}
         if self._system == SYSTEM_BES2:
             from . import bes2
             # A ride split out of a multi-ride trip (issue #88) has no detail
@@ -1803,11 +1959,13 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch bikes and activities from Bosch API."""
-        if self._system == SYSTEM_BES2:
+        if self._system in (SYSTEM_BES2, SYSTEM_COBI):
             # In a finally: api._get may have refreshed the tokens before a
             # later request of the same poll failed, and the refresh token it
             # replaced may already be void at Bosch.
             try:
+                if self._system == SYSTEM_COBI:
+                    return await self._update_cobi()
                 return await self._update_bes2()
             finally:
                 self._persist_refreshed_tokens()
