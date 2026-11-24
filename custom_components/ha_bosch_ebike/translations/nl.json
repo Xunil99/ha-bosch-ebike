@@ -363,6 +363,10 @@
     "no_cobi_data": {
       "title": "Bosch vermeldt geen gegevens van COBI voor {account}",
       "description": "Home Assistant is aangemeld bij Bosch, maar Bosch vermeldt voor dit account geen SmartphoneHub en geen rit. Meestal is de gegevensdeling voor COBI nog niet actief: controleer in het Bosch Data Act portaal of deze app de gegevens van COBI mag lezen en laad de integratie opnieuw. Dit bericht verdwijnt zodra Bosch een hub of een rit vermeldt."
+    },
+    "cobi_request_rejected": {
+      "title": "Bosch weigert de gegevens van COBI voor {account}",
+      "description": "Home Assistant is aangemeld bij Bosch, maar Bosch weigert de gegevens van COBI te leveren (de SmartphoneHub of de ritten). Controleer in het Bosch Data Act portaal of de gegevensdeling voor je app actief is en laad de integratie opnieuw. Ritten die Bosch nog wel levert, worden verder bijgewerkt. Dit bericht verdwijnt zodra Bosch de geweigerde gegevens levert."
     }
   }
 }

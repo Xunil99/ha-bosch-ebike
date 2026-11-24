@@ -363,6 +363,10 @@
     "no_cobi_data": {
       "title": "Bosch lists no COBI data for {account}",
       "description": "Home Assistant is signed in to Bosch, but Bosch lists neither a SmartphoneHub nor a ride for this account. Usually the data sharing for COBI is not active yet: check in the Bosch Data Act portal that this app may read the COBI data, then reload the integration. This message disappears as soon as Bosch lists a hub or a ride."
+    },
+    "cobi_request_rejected": {
+      "title": "Bosch refuses the COBI data for {account}",
+      "description": "Home Assistant is signed in to Bosch, but Bosch refuses to hand out the COBI data (the SmartphoneHub or the rides). Check in the Bosch Data Act portal that the data sharing for your app is active, then reload the integration. Rides that Bosch still delivers keep updating. This message disappears as soon as Bosch delivers the refused data."
     }
   }
 }

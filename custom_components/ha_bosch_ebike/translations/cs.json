@@ -363,6 +363,10 @@
     "no_cobi_data": {
       "title": "Bosch pro {account} neuvádí žádná data COBI",
       "description": "Home Assistant je u Bosch přihlášen, ale Bosch pro tento účet neuvádí žádný SmartphoneHub ani žádnou jízdu. Obvykle ještě není aktivní sdílení dat pro COBI: zkontroluj na portálu Bosch Data Act, zda tato aplikace smí číst data COBI, a znovu načti integraci. Tato zpráva zmizí, jakmile Bosch uvede hub nebo jízdu."
+    },
+    "cobi_request_rejected": {
+      "title": "Bosch odmítá vydat data COBI pro {account}",
+      "description": "Home Assistant je u Bosch přihlášen, ale Bosch odmítá vydat data COBI (SmartphoneHub nebo jízdy). Zkontroluj na portálu Bosch Data Act, zda je sdílení dat pro tvou aplikaci aktivní, a znovu načti integraci. Jízdy, které Bosch dál dodává, se nadále aktualizují. Tato zpráva zmizí, jakmile Bosch odmítnutá data dodá."
     }
   }
 }

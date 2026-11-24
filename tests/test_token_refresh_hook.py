@@ -316,6 +316,30 @@ def test_the_coordinator_hooks_its_token_write_into_the_client():
     )
 
 
+# --- the Accept header (issue #101) ------------------------------------------------
+
+
+class RecordingSession:
+    def __init__(self):
+        self.headers = []
+
+    def get(self, url, headers=None, timeout=None):
+        self.headers.append(dict(headers or {}))
+        return _Ctx(FakeResponse(200, {"ok": 1}))
+
+
+def test_every_request_asks_for_json():
+    # The COBI hub list answered a bare 400 (issue #101); asking for JSON
+    # explicitly is harmless for every system and rules one cause out.
+    session = RecordingSession()
+    api = FakeApi(session)
+    result, err = _run(api, "/cobi/v1/hubs")
+    assert err is None and result == {"ok": 1}, (result, err)
+    assert session.headers == [{
+        "Authorization": "Bearer access-old", "Accept": "application/json",
+    }], session.headers
+
+
 if __name__ == "__main__":
     tests = [(n, f) for n, f in sorted(globals().items()) if n.startswith("test_")]
     failed = 0

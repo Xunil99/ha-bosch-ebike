@@ -231,7 +231,12 @@ class BoschEBikeAPI:
         if not self._access_token:
             raise AuthError("Not authenticated")
         sent_token = self._access_token
-        headers = {"Authorization": f"Bearer {sent_token}"}
+        # Accept: every endpoint answers JSON. Saying so is harmless and
+        # rules out one cause of the bare 400 on the COBI hub list (#101).
+        headers = {
+            "Authorization": f"Bearer {sent_token}",
+            "Accept": "application/json",
+        }
         url = f"{API_BASE_URL}{path}"
         async with self._session.get(url, headers=headers, timeout=self._TIMEOUT) as resp:
             if resp.status == 401 and retry_on_401:

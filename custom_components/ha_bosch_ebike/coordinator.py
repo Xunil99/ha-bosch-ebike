@@ -61,6 +61,9 @@ _LOGGER = logging.getLogger(__name__)
 # Repair issue (translation key and id prefix) while a COBI account lists
 # neither a hub nor a ride.
 COBI_NO_DATA_ISSUE = "no_cobi_data"
+# Repair issue while Bosch refuses the COBI hub or ride list with 400 or 403
+# (issue #101: a 400 on /hubs right after a good sign in).
+COBI_REJECTED_ISSUE = "cobi_request_rejected"
 
 # How long a bike's most-recently-attributed activity stays eligible to
 # receive further deliveredWhOverLifetime delta (see _track_battery_consumption's
@@ -218,6 +221,13 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # the diagnostics (field names and counts, see cobi.diagnostics_summary).
         self._cobi_raw_hubs: list[dict[str, Any]] = []
         self._cobi_raw_activities: list[dict[str, Any]] | None = None
+        # Outcome of the last request per COBI endpoint ("hubs",
+        # "activities"): result, scrubbed reply, time. For the diagnostics.
+        self._cobi_fetch_status: dict[str, dict[str, Any]] = {}
+        # Per endpoint: Bosch refused the last decisive request (400/403).
+        # Set by a refusal, cleared only by a success; an outage (5xx, a
+        # timeout) leaves it as it is. Drives the COBI_REJECTED_ISSUE hint.
+        self._cobi_rejected: dict[str, bool] = {}
         # BES2 trip detail responses, shared between the several per-ride
         # activities one trip is split into (issue #88). trip_id ->
         # (monotonic fetch time, raw detail). See _bes2_trip_detail.
@@ -371,10 +381,19 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         return f"cobi_{self.config_entry.entry_id}"
 
     def cobi_diagnostics(self) -> dict[str, Any]:
-        """Field names and counts of the last COBI answers (no values)."""
-        return cobi.diagnostics_summary(
-            self._cobi_raw_hubs, self._cobi_raw_activities or []
-        )
+        """Field names and counts of the last COBI answers (no values).
+
+        Plus the outcome of the last request per endpoint, with Bosch's
+        scrubbed reply and the age in minutes only.
+        """
+        return {
+            **cobi.diagnostics_summary(
+                self._cobi_raw_hubs, self._cobi_raw_activities or []
+            ),
+            "fetch_status": cobi.fetch_status_summary(
+                self._cobi_fetch_status, dt_util.utcnow()
+            ),
+        }
 
     async def async_load_persisted_state(self) -> None:
         """Restore battery consumption state from disk (once at startup)."""
@@ -1466,40 +1485,99 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "drive_unit_field_data": self._drive_unit_field_data,
         }
 
+    def _record_cobi_fetch(self, endpoint: str, err: BaseException | None) -> None:
+        """Remember the outcome of one COBI request (see _cobi_fetch_status)."""
+        result = cobi.fetch_result(err)
+        self._cobi_fetch_status[endpoint] = {**result, "at": dt_util.utcnow()}
+        if err is None:
+            self._cobi_rejected[endpoint] = False
+        elif cobi.refused(result["result"]):
+            self._cobi_rejected[endpoint] = True
+
+    async def _fetch_cobi_hubs(self) -> tuple[list[dict[str, Any]] | None, str | None]:
+        """Fetch the hub list without letting its failure fail the poll.
+
+        Issue #101: Bosch answered the hub list with a bare 400 right after
+        a good sign in, the setup failed, and the rides, which nothing about
+        the hubs depends on, were never fetched. Returns (hubs, None), or
+        (None, error text) when the request failed; the caller keeps the last
+        good hubs then. Logged like the ride list: one warning when the
+        outage starts (with Bosch's reply and the token scope, the tester's
+        only evidence), one info when it ends.
+
+        An auth error still propagates (re-authentication), and so does a 401
+        that api._get could not cure with a token refresh, as before.
+        """
+        previous = self._cobi_fetch_status.get("hubs")
+        failing_before = previous is not None and previous.get("result") != "ok"
+        try:
+            raw_hubs = await self.api.get_hubs_cobi()
+        except AuthError:
+            raise
+        except Exception as err:  # noqa: BLE001
+            self._record_cobi_fetch("hubs", err)
+            text = self._describe_fetch_error(err)
+            scope = getattr(self.api, "access_token_scope", None)
+            scope_text = f" [access token scope: {scope}]" if scope else ""
+            if getattr(err, "status", None) == 401:
+                raise UpdateFailed(
+                    f"Error fetching COBI hubs: {text}{scope_text}"
+                ) from err
+            if failing_before:
+                _LOGGER.debug(
+                    "Bosch eBike: the COBI hub list is still unavailable: %s", text
+                )
+            else:
+                _LOGGER.warning(
+                    "Bosch eBike: the COBI hub list could not be fetched (%s%s). "
+                    "The rides keep updating; the hubs are retried on every poll",
+                    text,
+                    scope_text,
+                )
+            return None, text
+        self._record_cobi_fetch("hubs", None)
+        if failing_before:
+            _LOGGER.info("Bosch eBike: the COBI hub list is available again")
+        return list(raw_hubs or []), None
+
     async def _update_cobi(self) -> dict[str, Any]:
         """Fetch COBI hubs and rides into the shape the platforms read.
 
-        A failing hub list fails the poll. The ride list goes through
-        _fetch_activities_isolated (issue #95): when it fails, the last good
-        list stays, and after one successful fetch the totals never drop to
-        unknown or 0. Rides have no hub, so everything ride related is per
-        account. There is no bike, so "bikes" is empty and every per-bike
-        loop of the platforms creates nothing.
+        Neither list fails the poll on its own. The hub list goes through
+        _fetch_cobi_hubs (issue #101): when it fails, the last good hubs
+        stay. The ride list goes through _fetch_activities_isolated (issue
+        #95): when it fails, the last good list stays, and after one
+        successful fetch the totals never drop to unknown or 0. Only when
+        both fail does the poll fail, with both errors in the message. Rides
+        have no hub, so everything ride related is per account. There is no
+        bike, so "bikes" is empty and every per-bike loop of the platforms
+        creates nothing.
         """
         try:
-            raw_hubs = await self.api.get_hubs_cobi()
+            raw_hubs, hubs_error = await self._fetch_cobi_hubs()
         except AuthError as err:
             raise ConfigEntryAuthFailed(str(err)) from err
-        except Exception as err:  # noqa: BLE001
-            # With a missing consent or scope this is the first request to
-            # fail, and the entry then retries its setup with nothing loaded:
-            # the log line is all a tester has, so it carries Bosch's own
-            # reply and the token scope (the issue #95 pattern).
-            text = self._describe_fetch_error(err)
-            scope = getattr(self.api, "access_token_scope", None)
-            if scope:
-                text += f" [access token scope: {scope}]"
-            raise UpdateFailed(f"Error fetching COBI hubs: {text}") from err
-        self._cobi_raw_hubs = list(raw_hubs or [])
+        hubs_fetched = raw_hubs is not None
+        if hubs_fetched:
+            self._cobi_raw_hubs = raw_hubs
         hubs = [
             hub for hub in (cobi.normalize_hub(raw) for raw in self._cobi_raw_hubs)
             if hub is not None
         ]
 
+        async def fetch_activities() -> list[dict[str, Any]]:
+            try:
+                result = await self.api.get_activities_cobi()
+            except AuthError:
+                raise
+            except Exception as err:  # noqa: BLE001
+                self._record_cobi_fetch("activities", err)
+                raise
+            self._record_cobi_fetch("activities", None)
+            return result
+
         try:
-            raw_acts = await self._fetch_activities_isolated(
-                self.api.get_activities_cobi
-            )
+            raw_acts = await self._fetch_activities_isolated(fetch_activities)
         except AuthError as err:
             raise ConfigEntryAuthFailed(str(err)) from err
         activities_fetched = raw_acts is not None
@@ -1533,8 +1611,20 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     if activity["id"] in fresh:
                         self._fire_new_activity(activity, self.cobi_account_id)
 
-            # Only a real answer says anything about the data sharing.
-            self._sync_no_cobi_data_issue(cobi.data_missing(hubs, activities))
+            # Only a real answer on both lists says anything about the data
+            # sharing; a failed hub list leaves the hubs at the last state.
+            if hubs_fetched:
+                self._sync_no_cobi_data_issue(cobi.data_missing(hubs, activities))
+
+        self._sync_cobi_rejected_issue(any(self._cobi_rejected.values()))
+        if not hubs_fetched and not activities_fetched:
+            # The setup then retries with nothing loaded, and the log line is
+            # all a tester has: both of Bosch's replies, and the token scope
+            # (already at the end of the activity error).
+            raise UpdateFailed(
+                f"Error fetching COBI hubs and activities: hubs: {hubs_error}; "
+                f"activities: {self._activities_error}"
+            )
 
         return {
             "bikes": [],
@@ -1584,6 +1674,34 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 ir.async_delete_issue(self.hass, DOMAIN, issue)
         except Exception:  # noqa: BLE001
             _LOGGER.exception("Bosch eBike: could not update the COBI data issue")
+
+    def _sync_cobi_rejected_issue(self, rejected: bool) -> None:
+        """Show a repair issue while Bosch refuses a COBI list with 400 or 403.
+
+        Issue #101: a good sign in, then a 400 on the hub list. Most likely
+        the data sharing for this app is not (yet) active in the Data Act
+        portal. Clears itself once the refused list loads again, and never
+        fails the poll.
+        """
+        entry = self.config_entry
+        if entry is None:
+            return
+        issue = f"{COBI_REJECTED_ISSUE}_{entry.entry_id}"
+        try:
+            if rejected:
+                ir.async_create_issue(
+                    self.hass,
+                    DOMAIN,
+                    issue,
+                    is_fixable=False,
+                    severity=ir.IssueSeverity.WARNING,
+                    translation_key=COBI_REJECTED_ISSUE,
+                    translation_placeholders={"account": entry.title},
+                )
+            else:
+                ir.async_delete_issue(self.hass, DOMAIN, issue)
+        except Exception:  # noqa: BLE001
+            _LOGGER.exception("Bosch eBike: could not update the COBI rejected issue")
 
     async def _bes2_trip_detail(
         self, trip_id: str, fresh: bool = False

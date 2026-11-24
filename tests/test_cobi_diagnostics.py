@@ -105,6 +105,18 @@ ERROR = (
 )
 
 
+NOW = __import__("datetime").datetime(2026, 11, 24, 10, 0, tzinfo=__import__("datetime").timezone.utc)
+HUB_REPLY = (
+    '{"errors":[{"code":400,"title":"BAD_REQUEST","detail":"Error"}],'
+    '"timestamp":"2026-11-24T09:12:33.123Z","traceId":"98765432123456789"}'
+)
+STATUSES = {
+    "hubs": cobi.fetch_result(SimpleNamespace(status=400, body=HUB_REPLY)) | {
+        "at": NOW - __import__("datetime").timedelta(minutes=12)},
+    "activities": cobi.fetch_result(None) | {"at": NOW},
+}
+
+
 def _coordinator(error=ERROR):
     unit, _ = cobi.detect_duration_unit(RAW_ACTS)
     acts = [cobi.normalize_activity(a, unit) for a in RAW_ACTS]
@@ -126,7 +138,11 @@ def _coordinator(error=ERROR):
         activities_error=error,
         activities_error_since=None,
         manual_activity_bike={},
-        cobi_diagnostics=lambda: cobi.diagnostics_summary(RAW_HUBS, RAW_ACTS),
+        # The coordinator method merges both; see BoschEBikeCoordinator.cobi_diagnostics.
+        cobi_diagnostics=lambda: {
+            **cobi.diagnostics_summary(RAW_HUBS, RAW_ACTS),
+            "fetch_status": cobi.fetch_status_summary(STATUSES, NOW),
+        },
     )
 
 
@@ -156,6 +172,9 @@ def test_the_cobi_block_has_the_planned_fields():
     assert d["kc_idp_hint_used"] is None
     assert "500" in d["activities_error"], "the status stays readable"
     assert "bikes" not in d and "latest_activity" not in d, "the generic dump is replaced"
+    hubs = d["fetch_status"]["hubs"]
+    assert hubs["result"] == 400 and "BAD_REQUEST" in hubs["reply"] and hubs["minutes_ago"] == 12
+    assert d["fetch_status"]["activities"] == {"result": "ok", "reply": None, "minutes_ago": 0}
 
 
 def test_a_stored_hint_is_reported():

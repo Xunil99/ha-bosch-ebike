@@ -828,7 +828,8 @@ async def _async_setup_cobi(
     The account sensors are created unconditionally, never depending on
     whether rides are loaded yet; otherwise a start during an outage of the
     ride list would leave them missing. Hubs are known after the first poll
-    (a failing hub list fails the setup), a hub added later needs a reload.
+    (a hub list that fails at setup leaves none), a hub added later needs a
+    reload.
     """
     title = entry.title or "Bosch COBI"
     account: list[SensorEntity] = [

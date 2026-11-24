@@ -6,12 +6,15 @@ test_activity_outage.py). cobi.py has no Home Assistant imports and is loaded
 for real.
 
 What the COBI poll has to get right:
-* hubs and rides come from two requests; a failing hub list fails the poll,
-  a failing ride list must not (issue #95: keep the last good list, never
-  drop the totals to 0, warn once);
+* hubs and rides come from two requests; neither failing list fails the poll
+  on its own (issue #95 for the rides, issue #101 for the hubs: keep the last
+  good list, never drop the totals to 0, warn once); only both failing does,
+  and the message names both;
 * new-ride events only from the second successful fetch on, once per ride;
 * refreshed tokens are written back to the entry, also when the poll fails;
-* the repair hint for "no COBI data" only while hubs AND rides are empty.
+* the repair hint for "no COBI data" only while hubs AND rides are empty;
+* the repair hint for a refused request (400/403) while either list is
+  refused, and the per-endpoint status for the diagnostics.
 """
 import __future__
 import ast
@@ -103,6 +106,8 @@ _NAMES = [
     "_fetch_activities_isolated",
     "_describe_fetch_error",
     "_persist_refreshed_tokens",
+    "_record_cobi_fetch",
+    "_fetch_cobi_hubs",
     "activities_unknown",
     "cobi_account_id",
 ]
@@ -143,10 +148,14 @@ HUB = {"serialNumber": "24173107182521", "partNumber": "8017", "role": "OWNER",
 
 
 class FakeResponseError(Exception):
-    def __init__(self, status):
+    def __init__(self, status, body='{"title": "Not Found"}'):
         super().__init__(f"{status}, message='Not Found', url='https://api.bosch-ebike.com/cobi/v1/activities'")
         self.status = status
-        self.body = '{"title": "Not Found"}'
+        self.body = body
+
+
+# What the tester of issue #101 got on the hub list.
+BAD_REQUEST = '{"errors":[{"code":400,"title":"BAD_REQUEST","detail":"Error"}]}'
 
 
 class FakeApi:
@@ -205,6 +214,8 @@ class FakeCoordinator:
     _fetch_activities_isolated = _ns["_fetch_activities_isolated"]
     _describe_fetch_error = staticmethod(_ns["_describe_fetch_error"])
     _persist_refreshed_tokens = _ns["_persist_refreshed_tokens"]
+    _record_cobi_fetch = _ns["_record_cobi_fetch"]
+    _fetch_cobi_hubs = _ns["_fetch_cobi_hubs"]
     activities_unknown = property(_ns["activities_unknown"])
     cobi_account_id = property(_ns["cobi_account_id"])
 
@@ -220,14 +231,20 @@ class FakeCoordinator:
         self._cobi_seen_activity_ids = None
         self._cobi_raw_hubs = []
         self._cobi_raw_activities = None
+        self._cobi_fetch_status = {}
+        self._cobi_rejected = {}
         self.fired = []
         self.issue_calls = []
+        self.rejected_calls = []
 
     def _fire_new_activity(self, activity, bike_id):
         self.fired.append((activity.get("id"), bike_id))
 
     def _sync_no_cobi_data_issue(self, missing):
         self.issue_calls.append(missing)
+
+    def _sync_cobi_rejected_issue(self, rejected):
+        self.rejected_calls.append(rejected)
 
 
 def _setup():
@@ -288,17 +305,58 @@ def test_a_failing_ride_list_on_the_first_poll_makes_the_totals_unknown():
 # --- (d) the hub list fails / auth -----------------------------------------------------------
 
 
-def test_a_failing_hub_list_fails_the_poll():
+def test_a_failing_hub_list_does_not_fail_the_poll():
+    # Issue #101: /hubs answered 400, the setup failed and no ride was shown.
     api, coord = _setup()
+    api.hubs_error = FakeResponseError(400, BAD_REQUEST)
+    data = _poll(coord)
+    assert data["cobi_hubs"] == [], "no hub known yet"
+    assert [a["id"] for a in data["all_activities"]] == ["r2", "r1"], "rides still load"
+    assert coord._initial_import_done and not coord.activities_unknown
+    warnings = _LOG.at(logging.WARNING)
+    assert len(warnings) == 1 and "BAD_REQUEST" in warnings[0], warnings
+    assert "[access token scope: openid offline_access]" in warnings[0]
+
+
+def test_a_failing_hub_list_keeps_the_last_good_hubs_and_warns_once():
+    api, coord = _setup()
+    _poll(coord)
     api.hubs_error = FakeResponseError(503)
+    for _ in range(3):
+        data = _poll(coord)
+    assert [h["serial"] for h in data["cobi_hubs"]] == ["24173107182521"]
+    assert len(_LOG.at(logging.WARNING)) == 1, "one warning per outage"
+    api.hubs_error = None
+    _poll(coord)
+    assert len([m for m in _LOG.at(logging.INFO) if "hub list is available again" in m]) == 1
+
+
+def test_both_lists_failing_fails_the_poll_and_names_both():
+    api, coord = _setup()
+    api.hubs_error = FakeResponseError(400, BAD_REQUEST)
+    api.rides_error = FakeResponseError(503, '{"title": "Service Unavailable"}')
+    try:
+        _poll(coord)
+    except UpdateFailed as err:
+        text = str(err)
+        assert "COBI hubs" in text and "activities" in text
+        # With wrong consent or scope the log line is the tester's only evidence.
+        assert BAD_REQUEST in text, "Bosch's reply on the hubs is kept"
+        assert "Service Unavailable" in text, "Bosch's reply on the rides is kept"
+        assert text.count("[access token scope: openid offline_access]") == 1, text
+    else:
+        raise AssertionError("expected UpdateFailed")
+
+
+def test_a_401_on_the_hub_list_still_fails_the_poll():
+    # A second 401 after a token refresh comes out of api._get as a plain
+    # HTTP 401; it is not an outage to ride out.
+    api, coord = _setup()
+    api.hubs_error = FakeResponseError(401)
     try:
         _poll(coord)
     except UpdateFailed as err:
         assert "COBI hubs" in str(err)
-        # With wrong consent or scope the hub list is the first request to
-        # fail; the log line is then the tester's only evidence.
-        assert '{"title": "Not Found"}' in str(err), "Bosch's own reply is kept"
-        assert "[access token scope: openid offline_access]" in str(err)
     else:
         raise AssertionError("expected UpdateFailed")
 
@@ -353,6 +411,7 @@ def test_a_refreshed_token_pair_is_written_back_when_the_poll_fails():
     api, coord = _setup()
     api.refresh_on_call = True
     api.hubs_error = FakeResponseError(503)
+    api.rides_error = FakeResponseError(503)
     try:
         _poll(coord)
     except UpdateFailed:
@@ -379,6 +438,71 @@ def test_the_no_data_hint_is_not_raised_while_the_rides_cannot_be_fetched():
     api.rides_error = FakeResponseError(404)
     _poll(coord)
     assert coord.issue_calls == [], "an outage says nothing about the data sharing"
+
+
+def test_the_no_data_hint_is_not_raised_while_the_hubs_cannot_be_fetched():
+    api, coord = _setup()
+    api.rides = []
+    api.hubs_error = FakeResponseError(400, BAD_REQUEST)
+    _poll(coord)
+    assert coord.issue_calls == [], "a refused hub list says nothing about the data sharing"
+
+
+# --- (h) the hint for a refused request and the per-endpoint status ---------------------
+
+
+def test_a_refused_hub_list_raises_the_rejected_hint_and_success_clears_it():
+    api, coord = _setup()
+    api.hubs_error = FakeResponseError(400, BAD_REQUEST)
+    _poll(coord)
+    assert coord.rejected_calls[-1] is True
+    api.hubs_error = None
+    _poll(coord)
+    assert coord.rejected_calls[-1] is False, "clears itself"
+
+
+def test_a_403_on_the_ride_list_raises_the_rejected_hint():
+    api, coord = _setup()
+    api.rides_error = FakeResponseError(403)
+    _poll(coord)
+    assert coord.rejected_calls[-1] is True
+
+
+def test_an_outage_neither_raises_nor_clears_the_rejected_hint():
+    api, coord = _setup()
+    api.hubs_error = FakeResponseError(503)
+    _poll(coord)
+    assert coord.rejected_calls[-1] is False, "a 503 is not a refusal"
+    api.hubs_error = FakeResponseError(400, BAD_REQUEST)
+    _poll(coord)
+    api.hubs_error = TimeoutError()
+    _poll(coord)
+    assert coord.rejected_calls[-1] is True, "a timeout says nothing, the hint stays"
+
+
+def test_the_rejected_hint_is_raised_also_when_both_lists_fail():
+    api, coord = _setup()
+    api.hubs_error = FakeResponseError(400, BAD_REQUEST)
+    api.rides_error = FakeResponseError(400, BAD_REQUEST)
+    try:
+        _poll(coord)
+    except UpdateFailed:
+        pass
+    assert coord.rejected_calls[-1] is True
+
+
+def test_the_status_of_each_endpoint_is_recorded():
+    api, coord = _setup()
+    api.hubs_error = FakeResponseError(400, BAD_REQUEST)
+    _poll(coord)
+    hubs = coord._cobi_fetch_status["hubs"]
+    acts = coord._cobi_fetch_status["activities"]
+    assert hubs["result"] == 400 and "BAD_REQUEST" in hubs["reply"]
+    assert acts["result"] == "ok" and acts["reply"] is None
+    assert hubs["at"] == _FakeDtUtil.utcnow()
+    api.hubs_error = TimeoutError()
+    _poll(coord)
+    assert coord._cobi_fetch_status["hubs"]["result"] == "TimeoutError"
 
 
 if __name__ == "__main__":

@@ -338,3 +338,68 @@ def scrub_text(text: Any) -> str | None:
     text = _TIME_RE.sub("<time>", str(text))
     text = _CLOCK_RE.sub("<time>", text)
     return _LONG_NUMBER_RE.sub("<number>", text)
+
+
+# --- status of the last fetch per endpoint (issue #101) ---------------------
+
+ENDPOINTS = ("hubs", "activities")
+# Statuses with which Bosch refuses a request outright. Issue #101: the hub
+# list answered 400 (not in Bosch's COBI spec) right after a good sign in.
+_REFUSED = (400, 403)
+_MAX_REPLY = 300
+
+
+def _http_status(err: Any) -> int | None:
+    status = getattr(err, "status", None)
+    if isinstance(status, bool) or not isinstance(status, int):
+        return None
+    return status
+
+
+def fetch_result(err: BaseException | Any | None) -> dict[str, Any]:
+    """The outcome of one request, for the diagnostics and the repair hint.
+
+    result is "ok", the HTTP status, or the error class name (a timeout, a
+    network error). reply is Bosch's own answer (api._get keeps it on the
+    exception as .body), scrubbed like every error text of the diagnostics
+    and cut to a few hundred characters.
+    """
+    if err is None:
+        return {"result": "ok", "reply": None}
+    status = _http_status(err)
+    body = " ".join(str(getattr(err, "body", "") or "").split())
+    reply = scrub_text(body)[:_MAX_REPLY] if body else None
+    return {
+        "result": status if status is not None else type(err).__name__,
+        "reply": reply,
+    }
+
+
+def refused(result: Any) -> bool:
+    """True for a result with which Bosch refused the request (400 or 403)."""
+    return not isinstance(result, bool) and result in _REFUSED
+
+
+def fetch_status_summary(statuses: Any, now: datetime) -> dict[str, Any]:
+    """Per endpoint: result, scrubbed reply and whole minutes since the fetch.
+
+    No timestamp: the diagnostics file promises none. None for an endpoint
+    that was not fetched yet.
+    """
+    statuses = statuses if isinstance(statuses, dict) else {}
+    summary: dict[str, Any] = {}
+    for endpoint in ENDPOINTS:
+        status = statuses.get(endpoint)
+        if not isinstance(status, dict):
+            summary[endpoint] = None
+            continue
+        at = status.get("at")
+        minutes = None
+        if isinstance(at, datetime) and at.tzinfo is not None:
+            minutes = max(0, int((now - at).total_seconds() // 60))
+        summary[endpoint] = {
+            "result": status.get("result"),
+            "reply": status.get("reply"),
+            "minutes_ago": minutes,
+        }
+    return summary

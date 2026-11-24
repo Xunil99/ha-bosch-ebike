@@ -312,6 +312,54 @@ def test_error_texts_lose_times_and_ids_but_keep_the_status():
     assert cobi.scrub_text(None) is None
 
 
+# --- status of the last fetch per endpoint (issue #101) -------------------------------
+
+
+class _HttpError(Exception):
+    def __init__(self, status, body=None):
+        super().__init__(f"{status}, message='Bad Request'")
+        self.status = status
+        if body is not None:
+            self.body = body
+
+
+def test_a_fetch_result_keeps_status_and_a_scrubbed_short_reply():
+    body = ('{"errors":[{"code":400,"title":"BAD_REQUEST","detail":"Error"}],'
+            '"timestamp":"2026-11-24T09:12:33Z","traceId":"98765432123456789"}' + "x" * 500)
+    result = cobi.fetch_result(_HttpError(400, body))
+    assert result["result"] == 400
+    assert "BAD_REQUEST" in result["reply"]
+    assert "2026" not in result["reply"] and "98765" not in result["reply"]
+    assert len(result["reply"]) <= 300
+    assert cobi.fetch_result(None) == {"result": "ok", "reply": None}
+    assert cobi.fetch_result(TimeoutError()) == {"result": "TimeoutError", "reply": None}
+    assert cobi.fetch_result(_HttpError(503))["reply"] is None
+    assert cobi.fetch_result(_HttpError(True))["result"] == "_HttpError", "a bool is no status"
+
+
+def test_only_400_and_403_count_as_refused():
+    assert cobi.refused(400) and cobi.refused(403)
+    for other in ("ok", 401, 404, 500, 503, "TimeoutError", None):
+        assert not cobi.refused(other), other
+
+
+def test_the_fetch_status_summary_has_minutes_only():
+    now = datetime(2026, 11, 24, 10, 0, tzinfo=timezone.utc)
+    statuses = {
+        "hubs": {"result": 400, "reply": "BAD_REQUEST", "at": now - timedelta(minutes=31, seconds=20)},
+        "activities": {"result": "ok", "reply": None, "at": now},
+    }
+    summary = cobi.fetch_status_summary(statuses, now)
+    assert summary == {
+        "hubs": {"result": 400, "reply": "BAD_REQUEST", "minutes_ago": 31},
+        "activities": {"result": "ok", "reply": None, "minutes_ago": 0},
+    }
+    assert cobi.fetch_status_summary({}, now) == {"hubs": None, "activities": None}
+    assert cobi.fetch_status_summary(None, now) == {"hubs": None, "activities": None}
+    broken = cobi.fetch_status_summary({"hubs": {"result": "ok", "at": "yesterday"}}, now)
+    assert broken["hubs"] == {"result": "ok", "reply": None, "minutes_ago": None}
+
+
 # --- texts ----------------------------------------------------------------------------
 
 _TEXT_FILES = ["strings.json"] + [f"translations/{lang}.json" for lang in ("en", "de", "nl", "cs")]
@@ -338,6 +386,8 @@ def test_every_language_has_the_cobi_texts():
         assert advanced["data_description"]["kc_idp_hint"], name
         issue = d["issues"]["no_cobi_data"]
         assert "{account}" in issue["title"] and issue["description"], name
+        rejected = d["issues"]["cobi_request_rejected"]
+        assert "{account}" in rejected["title"] and "Data Act" in rejected["description"], name
         sensors = d["entity"]["sensor"]
         for key in _COBI_SENSOR_KEYS:
             assert sensors[key]["name"], f"{name}: {key}"
@@ -349,6 +399,8 @@ def test_the_new_texts_have_no_dashes():
     for name in _TEXT_FILES:
         d = _text(name)
         texts = [d["issues"]["no_cobi_data"]["title"], d["issues"]["no_cobi_data"]["description"],
+                 d["issues"]["cobi_request_rejected"]["title"],
+                 d["issues"]["cobi_request_rejected"]["description"],
                  d["config"]["step"]["credentials"]["sections"]["advanced"]["data_description"]["kc_idp_hint"]]
         for text in texts:
             assert " - " not in text and "\u2013" not in text and "\u2014" not in text, (name, text)

@@ -363,6 +363,10 @@
     "no_cobi_data": {
       "title": "Bosch nennt für {account} keine Daten von COBI",
       "description": "Home Assistant ist bei Bosch angemeldet, aber Bosch nennt für dieses Konto weder einen SmartphoneHub noch eine Fahrt. Meist ist die Datenfreigabe für COBI noch nicht aktiv: Prüfe im Bosch Data Act Portal, ob diese App die Daten von COBI lesen darf, und lade die Integration neu. Diese Meldung verschwindet, sobald Bosch einen Hub oder eine Fahrt nennt."
+    },
+    "cobi_request_rejected": {
+      "title": "Bosch lehnt den Abruf der Daten von COBI für {account} ab",
+      "description": "Home Assistant ist bei Bosch angemeldet, aber Bosch lehnt den Abruf der Daten von COBI ab (SmartphoneHub oder Fahrten). Prüfe im Bosch Data Act Portal, ob die Datenfreigabe für deine App aktiv ist, und lade die Integration neu. Fahrten, die Bosch weiterhin liefert, werden weiter aktualisiert. Diese Meldung verschwindet, sobald Bosch die abgelehnten Daten liefert."
     }
   }
 }
