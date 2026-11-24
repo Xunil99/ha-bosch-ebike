@@ -80,7 +80,15 @@ _ns: dict[str, Any] = {
     "rejection_reason": oauth_error.rejection_reason,
     "_LOGGER": logging.getLogger("test_token_refresh_hook"),
 }
-for _name in ("_get", "refresh_access_token"):
+_API_METHODS = {
+    n.name for n in _API_CLASS.body
+    if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
+}
+# _refresh_after_401 holds the refresh lock (see the concurrency tests below);
+# it is optional so the file still loads, and fails, against the old client.
+for _name in ("_get", "refresh_access_token", "_refresh_after_401"):
+    if _name not in _API_METHODS:
+        continue
     exec(  # noqa: S102 - executing our own source
         compile(
             ast.Module(body=[_method(_API_CLASS, _name)], type_ignores=[]),
@@ -145,10 +153,13 @@ _HOOK = "token_listener"
 class FakeApi:
     _get = _ns["_get"]
     refresh_access_token = _ns["refresh_access_token"]
+    if "_refresh_after_401" in _ns:
+        _refresh_after_401 = _ns["_refresh_after_401"]
     _TIMEOUT = "timeout"
 
     def __init__(self, session):
         self._session = session
+        self._refresh_lock = asyncio.Lock()
         self._client_id = "cid"
         self._access_token = "access-old"
         self._refresh_token = "refresh-old"
@@ -227,6 +238,72 @@ def test_without_a_listener_the_refresh_still_works():
     setattr(api, _HOOK, None)
     result, err = _run(api)
     assert err is None and result == {"ok": 1}, (result, err)
+
+
+# --- two requests hitting a 401 at the same time -----------------------------------
+#
+# A poll and a GPS import (or two requests of one poll) can both get a 401 for
+# the same expired token. Without a lock both refreshed with the same refresh
+# token; once Bosch has rotated it on the first refresh, the second is refused
+# and the entry ends in a reauthentication. With the lock the second caller
+# sees that the token changed while it waited and only repeats its request.
+
+
+class ConcurrentSession:
+    """401 for the expired token, 200 for any other; every step yields."""
+
+    def __init__(self):
+        self.refreshes = 0
+
+    def get(self, url, headers=None, timeout=None):
+        expired = headers["Authorization"].endswith("access-old")
+        return _YieldingCtx(FakeResponse(401) if expired else FakeResponse(200, {"url": url}))
+
+    def post(self, url, data=None, timeout=None):
+        self.refreshes += 1
+        n = self.refreshes
+        return _YieldingCtx(FakeResponse(
+            200, {"access_token": f"access-new{n}", "refresh_token": f"refresh-new{n}"}
+        ))
+
+
+class _YieldingCtx(_Ctx):
+    async def __aenter__(self):
+        for _ in range(3):
+            await asyncio.sleep(0)
+        return await super().__aenter__()
+
+
+async def _both(api):
+    return await asyncio.gather(api._get("/bikes"), api._get("/activities"))
+
+
+def test_two_concurrent_401s_refresh_only_once():
+    session = ConcurrentSession()
+    api = FakeApi(session)
+    first, second = asyncio.run(_both(api))
+    assert session.refreshes == 1, f"{session.refreshes} refreshes for one expired token"
+    assert first == {"url": "https://api.example/bikes"}, first
+    assert second == {"url": "https://api.example/activities"}, second
+    assert api.seen == [("access-new1", "refresh-new1")], api.seen
+
+
+def test_a_later_401_after_the_refresh_refreshes_again():
+    # The lock must not swallow a genuine second expiry: a 401 for the
+    # current token (not one that was replaced meanwhile) still refreshes.
+    session = ConcurrentSession()
+    api = FakeApi(session)
+    asyncio.run(_both(api))
+    api._access_token = "access-old"  # expired again
+    asyncio.run(api._get("/bikes"))
+    assert session.refreshes == 2, session.refreshes
+
+
+def test_the_client_creates_its_refresh_lock():
+    assert any(
+        line.strip().startswith("self._refresh_lock") and "asyncio.Lock()" in line
+        for line in _INIT_SRC.splitlines()
+    ), "BoschEBikeAPI.__init__ must create self._refresh_lock = asyncio.Lock()"
 
 
 def test_the_coordinator_hooks_its_token_write_into_the_client():

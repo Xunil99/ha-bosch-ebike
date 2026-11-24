@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import base64
 import secrets
@@ -71,6 +72,11 @@ class BoschEBikeAPI:
         # may already be void by then. Not called by the login flows, whose
         # caller stores the tokens itself.
         self.token_listener: Callable[[], None] | None = None
+        # Serialises token refreshes of this client. A poll and a GPS import,
+        # or two requests of one poll, can get a 401 for the same expired
+        # token; refreshing twice with the same refresh token fails once
+        # Bosch has rotated it on the first refresh. See _refresh_after_401.
+        self._refresh_lock = asyncio.Lock()
         # See CAPACITY_TESTERS_PATH_CANDIDATES in const.py for why this
         # exists: {discovery_key: winning_path_template}. In-memory only —
         # rebuilt (and re-probed) on every HA/integration restart, which is
@@ -206,16 +212,30 @@ class BoschEBikeAPI:
 
     # -- API calls --
 
+    async def _refresh_after_401(self, sent_token: str | None) -> None:
+        """Refresh after a 401, unless another request already did.
+
+        sent_token is the access token the refused request carried. If it is
+        no longer the current one when the lock is ours, another caller
+        refreshed while we waited, and the caller only repeats its request.
+        """
+        async with self._refresh_lock:
+            if self._access_token != sent_token:
+                _LOGGER.debug("401 received, token already refreshed meanwhile")
+                return
+            _LOGGER.debug("401 received, refreshing token")
+            await self.refresh_access_token()
+
     async def _get(self, path: str, retry_on_401: bool = True) -> Any:
         """GET request with Bearer auth and auto-refresh on 401."""
         if not self._access_token:
             raise AuthError("Not authenticated")
-        headers = {"Authorization": f"Bearer {self._access_token}"}
+        sent_token = self._access_token
+        headers = {"Authorization": f"Bearer {sent_token}"}
         url = f"{API_BASE_URL}{path}"
         async with self._session.get(url, headers=headers, timeout=self._TIMEOUT) as resp:
             if resp.status == 401 and retry_on_401:
-                _LOGGER.debug("401 received, refreshing token")
-                await self.refresh_access_token()
+                await self._refresh_after_401(sent_token)
                 return await self._get(path, retry_on_401=False)
             if resp.status >= 400:
                 # raise_for_status() keeps only the status line, but Bosch's
