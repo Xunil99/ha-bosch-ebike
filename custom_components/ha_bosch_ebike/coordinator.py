@@ -191,6 +191,11 @@ class BoschEBikeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             ),
         )
         self.api = api
+        # Save a refreshed token pair the moment the client has it, not only
+        # at fixed points of a poll: a request after the refresh may still
+        # fail, and requests outside the poll (GPS import, CSV export, the
+        # track service) refresh too.
+        self.api.token_listener = self._persist_refreshed_tokens
         self._system = system
         self._bes2_serial = bes2_serial
         self._bes2_part = bes2_part

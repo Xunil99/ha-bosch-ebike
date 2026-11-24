@@ -126,6 +126,7 @@ class FakeApi:
         self._client_id = "euda-test"
         self._access_token = "old-access"
         self._refresh_token = refresh_token
+        self.token_listener = None
 
 
 def _refresh(response=None, error=None, refresh_token="old-refresh"):

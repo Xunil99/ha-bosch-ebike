@@ -8,7 +8,7 @@ import secrets
 import logging
 import time
 import urllib.parse
-from typing import Any
+from typing import Any, Callable
 
 import aiohttp
 
@@ -64,6 +64,13 @@ class BoschEBikeAPI:
         self._refresh_token = refresh_token
         self._system = system
         self._code_verifier: str | None = None
+        # Called after every successful refresh_access_token, so the owner can
+        # save the new pair at once (the coordinator writes it into the config
+        # entry). Bosch may rotate the refresh token with each refresh; a pair
+        # kept only in memory is lost on a restart, and the old refresh token
+        # may already be void by then. Not called by the login flows, whose
+        # caller stores the tokens itself.
+        self.token_listener: Callable[[], None] | None = None
         # See CAPACITY_TESTERS_PATH_CANDIDATES in const.py for why this
         # exists: {discovery_key: winning_path_template}. In-memory only —
         # rebuilt (and re-probed) on every HA/integration restart, which is
@@ -166,6 +173,12 @@ class BoschEBikeAPI:
         self._access_token = tokens["access_token"]
         if "refresh_token" in tokens:
             self._refresh_token = tokens["refresh_token"]
+        if self.token_listener is not None:
+            # A failed save must not turn a good refresh into a failed request.
+            try:
+                self.token_listener()
+            except Exception:  # noqa: BLE001
+                _LOGGER.exception("Bosch eBike: could not save the refreshed tokens")
         return tokens
 
     @property
