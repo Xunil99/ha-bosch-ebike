@@ -133,6 +133,62 @@ def test_main_entry_keeps_ids_even_if_the_other_entry_owns_a_same_bike_device():
     assert second._attr_unique_id == f"entry-b_{UID}"
 
 
+class UndefinedType:
+    """Stand-in for Home Assistant's Undefined sentinel (matched by type name)."""
+
+
+Undefined = UndefinedType()
+
+
+class DataclassDeviceInfo:
+    """Mimics DeviceInfo from Home Assistant 2026.12: a dataclass whose item
+    access is deprecated (stops working in 2027.12) and whose unset fields hold
+    the Undefined sentinel (issue #102). Item access fails here so any use of
+    it shows up as a test failure."""
+
+    def __init__(self, identifiers, name=Undefined):
+        self.identifiers = identifiers
+        self.name = name
+
+    def __getitem__(self, key):
+        raise AssertionError(f"deprecated DeviceInfo[{key!r}] read")
+
+    def __setitem__(self, key, value):
+        raise AssertionError(f"deprecated DeviceInfo[{key!r}] write")
+
+    def get(self, key, default=None):
+        raise AssertionError(f"deprecated DeviceInfo.get({key!r})")
+
+    def __contains__(self, key):
+        raise AssertionError(f"deprecated {key!r} in DeviceInfo")
+
+
+def test_dataclass_device_info_is_scoped_through_attributes():
+    entity = FakeEntity(UID, BIKE)
+    entity._attr_device_info = DataclassDeviceInfo({(DOMAIN, BIKE)}, name="Cargo Line")
+    _scope([entity], taken=[UID], entry_id="entry-b", label="Sam")
+    assert entity._attr_unique_id == f"entry-b_{UID}"
+    assert entity._attr_device_info.identifiers == {(DOMAIN, f"{BIKE}_entry-b")}
+    assert entity._attr_device_info.name == "Cargo Line (Sam)"
+
+
+def test_dataclass_device_info_without_name_keeps_name_unset():
+    entity = FakeEntity(UID, BIKE)
+    entity._attr_device_info = DataclassDeviceInfo({(DOMAIN, BIKE)})
+    _scope([entity], taken=[UID], entry_id="entry-b")
+    assert entity._attr_device_info.identifiers == {(DOMAIN, f"{BIKE}_entry-b")}
+    assert entity._attr_device_info.name is Undefined
+
+
+def test_dataclass_device_info_of_unshared_bike_is_left_alone():
+    entity = FakeEntity(UID, BIKE)
+    entity._attr_device_info = DataclassDeviceInfo({(DOMAIN, BIKE)}, name="Cargo Line")
+    _scope([entity], taken=[])
+    assert entity._attr_unique_id == UID
+    assert entity._attr_device_info.identifiers == {(DOMAIN, BIKE)}
+    assert entity._attr_device_info.name == "Cargo Line"
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_") and callable(fn):

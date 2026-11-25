@@ -50,8 +50,9 @@ def scope_shared_bike_entities(
     exact match would hand its plain ID to whichever entry is faster.
     """
     for entity in entities:
+        device_info = entity._attr_device_info
         bike_ids = [
-            t[1] for t in entity._attr_device_info["identifiers"] if _is_own(t, domain)
+            t[1] for t in _info_get(device_info, "identifiers") or () if _is_own(t, domain)
         ]
         if not any(
             uid.startswith(f"{bike_id}_")
@@ -60,14 +61,52 @@ def scope_shared_bike_entities(
         ):
             continue
         entity._attr_unique_id = f"{entry_id}_{entity._attr_unique_id}"
-        device_info = entity._attr_device_info
-        device_info["identifiers"] = {
+        _info_set(device_info, "identifiers", {
             (domain, f"{t[1]}_{entry_id}") if _is_own(t, domain) else t
-            for t in device_info["identifiers"]
-        }
-        if device_info.get("name"):
-            device_info["name"] = f"{device_info['name']} ({account_label})"
+            for t in _info_get(device_info, "identifiers") or ()
+        })
+        name = _info_get(device_info, "name")
+        if name:
+            _info_set(device_info, "name", f"{name} ({account_label})")
     return entities
+
+
+def _info_get(device_info: Any, key: str) -> Any:
+    """Read a device info field on every Home Assistant version.
+
+    Up to 2026.11 DeviceInfo is a TypedDict (a plain dict). From 2026.12 it is
+    a dataclass whose item access is deprecated and stops working in 2027.12,
+    with unset fields holding the Undefined sentinel (issue #102).
+    """
+    if isinstance(device_info, dict):
+        return device_info.get(key)
+    value = getattr(device_info, key, None)
+    return None if _is_undefined(value) else value
+
+
+def _info_set(device_info: Any, key: str, value: Any) -> None:
+    """Set a device info field on every Home Assistant version."""
+    if isinstance(device_info, dict):
+        device_info[key] = value
+    else:
+        setattr(device_info, key, value)
+
+
+def _is_undefined(value: Any) -> bool:
+    """True for Home Assistant's Undefined sentinel.
+
+    Imported lazily so the module stays importable without Home Assistant
+    (tests). The sentinel is truthy, so it must never reach a plain `if`.
+    """
+    try:
+        # Since 2026.12; the old UNDEFINED alias is deprecated there.
+        from homeassistant.helpers.typing import Undefined
+    except ImportError:  # older Home Assistant or no Home Assistant at all
+        Undefined = None
+    if Undefined is not None and value is Undefined:
+        return True
+    # Before 2026.12 the sentinel is UndefinedType.UNDEFINED.
+    return type(value).__name__ == "UndefinedType"
 
 
 def _is_own(identifier: tuple, domain: str) -> bool:
